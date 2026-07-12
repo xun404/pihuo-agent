@@ -1,0 +1,29 @@
+{
+  "name": "router-agents",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mastra Leader coordinating CLI coding agents (Claude Code, Codex, OpenCode) — macOS desktop command center",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @router-agents/desktop",
+    "desktop": "npm run desktop -w @router-agents/desktop",
+    "dev:electron": "npm run desktop -w @router-agents/desktop",
+    "dev:mastra": "npm run dev:api -w @router-agents/mastra-app",
+    "dev:mastra:studio": "npm run dev -w @router-agents/mastra-app",
+    "dev:all": "npm run desktop",
+    "test": "npm run test -w @router-agents/core && npm run test -w @router-agents/adapters",
+    "build": "npm run build -w @router-agents/shared && npm run build -w @router-agents/core && npm run build -w @router-agents/adapters && npm run build -w @router-agents/mastra-app && npm run build -w @router-agents/desktop",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "gui": "open design/gui/index.html"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^36.3.1"
+  }
+}
