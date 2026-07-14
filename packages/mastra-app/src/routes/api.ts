@@ -8,7 +8,13 @@ import {
   getSharedStore,
   globalActivityLog,
 } from '@router-agents/core'
-import { applyHealthReport, listAcpModels, parseHealthDepth } from '@router-agents/adapters'
+import {
+  applyHealthReport,
+  parseHealthDepth,
+  getAcpSessionManager,
+  workerExecutionConfigChanged,
+} from '@router-agents/adapters'
+import { refreshWorkerModels } from '../worker-models.js'
 import { checkOneWorker, checkWorkersBatch } from '../workers-health.js'
 import { getWorkerScheduler } from '../scheduler.js'
 import type {
@@ -134,7 +140,11 @@ export const apiRoutes = [
     handler: async (c) => {
       const id = c.req.param('id')
       const body = (await c.req.json()) as { enabled: boolean }
+      const previous = store.listWorkers().find((candidate) => candidate.id === id)
       const worker = store.setWorkerEnabled(id, Boolean(body.enabled))
+      if (previous && workerExecutionConfigChanged(previous, worker)) {
+        getAcpSessionManager().invalidateWorker(worker.id)
+      }
       return c.json({ worker })
     },
   }),
@@ -161,42 +171,21 @@ export const apiRoutes = [
       const id = c.req.param('id')
       const worker = store.listWorkers().find((w) => w.id === id)
       if (!worker) return c.json({ error: 'not found' }, 404)
-      const active = store.getActive()
-      const result = await listAcpModels(worker, { cwd: active.project?.rootPath })
-      const checkedAt = new Date().toISOString()
-      if (result.ok && result.models.length > 0) {
-        store.setWorkerAvailableModels(id, result.models)
-        store.upsertWorker(
-          applyHealthReport(worker, {
-            status: 'healthy',
-            level: 'acp_handshake',
-            checkedAt,
-            message: `ACP 可用 · ${result.models.length} 个模型`,
-            hints: [],
-          }),
-        )
-      } else {
-        const msg = result.error ?? 'ACP 模型列表不可用'
-        store.upsertWorker(
-          applyHealthReport(worker, {
-            status: 'unhealthy',
-            level: 'acp_handshake',
-            checkedAt,
-            message: msg,
-            hints: ['可稍后重试更新模型列表', '或手动填写 model id'],
-            detail: { errorCode: 'ACP_MODELS' },
-          }),
-        )
+      try {
+        const active = store.getActive()
+        const refResult = await refreshWorkerModels(id, active.project?.rootPath)
+        return c.json({
+          ok: refResult.ok,
+          models: refResult.models ?? [],
+          error: refResult.error,
+          worker: refResult.worker,
+          snapshot: store.snapshot(),
+          cached: refResult.cached,
+          stale: refResult.stale,
+        })
+      } catch (e) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500)
       }
-      const updated = store.listWorkers().find((w) => w.id === id) ?? worker
-      return c.json({
-        ok: result.ok,
-        models: result.models.length ? result.models : updated.availableModels ?? [],
-        error: result.error,
-        worker: updated,
-        snapshot: store.snapshot(),
-        cached: !result.ok && Boolean(updated.availableModels?.length),
-      })
     },
   }),
 
@@ -206,7 +195,11 @@ export const apiRoutes = [
       const id = c.req.param('id')
       const body = (await c.req.json()) as { model?: string | null }
       try {
+        const previous = store.listWorkers().find((candidate) => candidate.id === id)
         const worker = store.setWorkerModel(id, body.model)
+        if (previous && workerExecutionConfigChanged(previous, worker)) {
+          getAcpSessionManager().invalidateWorker(worker.id)
+        }
         return c.json({ worker, snapshot: store.snapshot() })
       } catch (e) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 404)
@@ -286,7 +279,13 @@ export const apiRoutes = [
         description: body.description ?? 'Custom ACP/CLI worker',
         health: 'unknown',
       }
+      const previous = body.id
+        ? store.listWorkers().find((candidate) => candidate.id === body.id)
+        : undefined
       store.upsertWorkerLogged(worker)
+      if (previous && workerExecutionConfigChanged(previous, worker)) {
+        getAcpSessionManager().invalidateWorker(worker.id)
+      }
       return c.json({ worker })
     },
   }),

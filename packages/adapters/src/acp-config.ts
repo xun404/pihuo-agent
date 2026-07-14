@@ -11,7 +11,7 @@ export interface AcpSpawnConfig {
   kind: WorkerRegistration['kind']
   primaryRole: WorkerRegistration['primaryRole']
   roles: WorkerRegistration['roles']
-  /** ACP session model (session/set_model) */
+  /** ACP session model (session/set_config_option) */
   model?: string
 }
 

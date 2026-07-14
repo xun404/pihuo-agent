@@ -19,10 +19,8 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^1.2.1",
     "@router-agents/shared": "0.1.0"
-  },
-  "optionalDependencies": {
-    "@mastra/acp": "latest"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",

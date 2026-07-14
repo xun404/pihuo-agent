@@ -1,12 +1,12 @@
 import type { WorkerModelOption, WorkerRegistration } from '@router-agents/shared'
 import type { AcpSpawnConfig } from './acp-config.js'
+import { formatWorkerModelError, isModelDisabledError } from './acp-errors.js'
 import { probeWorkerHealth } from './health.js'
 import { resolveWorkerCwd } from './presets.js'
+import { prepareOpenCodeAcpEnv, OPENCODE_SAFE_DEFAULT_MODEL } from './opencode-acp-env.js'
+import { withAcpSession, type AcpSessionHandle, type AcpPromptResult } from './acp-session.js'
+import { rmSync } from 'node:fs'
 
-/**
- * Probe whether the worker command looks runnable (binary on PATH / npx present).
- * Uses the shared health probe (presence/version) — does not authenticate remote CLIs.
- */
 export async function defaultCanRunAcp(
   config: AcpSpawnConfig,
   timeoutMs = 3000,
@@ -30,104 +30,126 @@ export async function defaultCanRunAcp(
 }
 
 export interface RunAcpTaskOptions {
-  /**
-   * When set, used instead of spawning ACP (tests / dry-run).
-   */
   execute?: (
     config: AcpSpawnConfig,
     task: string,
   ) => Promise<{ ok: boolean; output?: string; error?: string }>
-  /**
-   * Permission callback — maps to approval queue in the app layer.
-   */
   onPermissionRequest?: (request: {
     title: string
     options: { optionId: string; name: string }[]
   }) => Promise<{ outcome: 'selected' | 'cancelled'; optionId?: string }>
+  signal?: AbortSignal
 }
 
-/**
- * Live ACP path: dynamically imports `@mastra/acp` createACPTool and executes one task.
- * Passes optional `model` for session/set_model after session creation.
- */
 export async function runAcpTask(
   config: AcpSpawnConfig,
   task: string,
   options: RunAcpTaskOptions = {},
-): Promise<{ ok: boolean; output?: string; error?: string }> {
+): Promise<{ ok: boolean; output?: string; error?: string; modelUsed?: string }> {
   if (options.execute) {
     return options.execute(config, task)
   }
 
+  let isolatedHome: string | undefined
+
   try {
-    const acp = await import('@mastra/acp')
-    const createACPTool =
-      (acp as unknown as {
-        createACPTool?: (opts: Record<string, unknown>) => {
-          execute?: (input: { task: string }) => Promise<unknown>
-        }
-      }).createACPTool
+    let spawnConfig = config
+    let modelUsed: string | undefined
+    let effectivePinned = config.model?.trim() || undefined
 
-    if (typeof createACPTool !== 'function') {
-      return {
-        ok: false,
-        error:
-          '@mastra/acp loaded but createACPTool is missing. Upgrade @mastra/acp or check package exports.',
+    if (config.kind === 'opencode') {
+      const prep = prepareOpenCodeAcpEnv({
+        baseEnv: { ...process.env, ...config.env },
+        model: config.model,
+      })
+      console.info(`[acp] ${config.workerName}: ${prep.hint}`)
+      isolatedHome = prep.isolatedHome
+      spawnConfig = {
+        ...config,
+        command: config.command,
+        args: config.args?.length ? [...config.args] : ['acp'],
+        env: prep.env as Record<string, string>,
       }
     }
 
-    const tool = createACPTool({
-      id: `acp-${config.workerId}`,
-      description: `ACP worker ${config.workerName}`,
-      command: config.command,
-      args: config.args,
-      cwd: config.cwd,
-      env: config.env,
-      persistSession: false,
-      ...(config.model ? { model: config.model } : {}),
-      onPermissionRequest: options.onPermissionRequest
-        ? async (request: {
-            title?: string
-            options?: { optionId: string; name: string }[]
-          }) => {
-            const res = await options.onPermissionRequest!({
-              title: request.title ?? 'Permission required',
-              options: request.options ?? [],
-            })
-            if (res.outcome === 'cancelled' || !res.optionId) {
-              return { outcome: { outcome: 'cancelled' as const } }
-            }
-            return {
-              outcome: {
-                outcome: 'selected' as const,
-                optionId: res.optionId,
-              },
-            }
+    const result = await withAcpSession(
+      { spawn: spawnConfig, signal: options.signal },
+      {
+        onPermissionRequest: options.onPermissionRequest,
+      },
+      async (handle) => {
+        if (effectivePinned) {
+          const validOption = handle.modelOptions.models.find(
+            (m) => m.modelId === effectivePinned,
+          )
+          if (!validOption) {
+            throw new Error(
+              `Model "${effectivePinned}" is not in the agent's available config options`,
+            )
           }
-        : undefined,
-    })
 
-    if (typeof tool.execute !== 'function') {
+          try {
+            const modelOptId =
+              handle.configOptions.find(
+                (o) =>
+                  o.type === 'select' &&
+                  'options' in o &&
+                  Array.isArray(o.options) &&
+                  o.options.some((ov) => {
+                    if ('group' in ov) {
+                      return ov.options.some((s) => s.value === effectivePinned)
+                    }
+                    return 'value' in ov && ov.value === effectivePinned
+                  }),
+              )?.id ?? ''
+            if (!modelOptId) {
+              throw new Error(`Cannot find config option id for model "${effectivePinned}"`)
+            }
+            await handle.setConfigOption(modelOptId, effectivePinned)
+            modelUsed = effectivePinned
+          } catch (e) {
+            throw new Error(
+              `Failed to set model "${effectivePinned}": ${e instanceof Error ? e.message : e}`,
+            )
+          }
+        }
+
+        const promptResult: AcpPromptResult = await handle.prompt(task)
+        modelUsed = modelUsed ?? handle.modelOptions.currentModelId
+
+        return promptResult
+      },
+    )
+
+    if (!result.ok && result.error) {
       return {
         ok: false,
-        error: 'createACPTool() did not return an executable tool',
+        output: result.output,
+        modelUsed,
+        error: formatWorkerModelError({
+          workerName: config.workerName,
+          kind: config.kind,
+          model: config.model ?? modelUsed,
+          rawError: result.error,
+        }),
       }
     }
 
-    const raw = await tool.execute({ task })
-    const output =
-      typeof raw === 'string'
-        ? raw
-        : raw && typeof raw === 'object' && 'output' in (raw as object)
-          ? String((raw as { output: unknown }).output)
-          : JSON.stringify(raw)
-
-    return { ok: true, output }
+    return { ...result, modelUsed }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return {
       ok: false,
-      error: `ACP run via @mastra/acp failed: ${msg}`,
+      error: formatWorkerModelError({
+        workerName: config.workerName,
+        kind: config.kind,
+        model: config.model,
+        rawError: `ACP run failed: ${msg}`,
+      }),
+    }
+  } finally {
+    if (isolatedHome) {
+      try { rmSync(isolatedHome, { recursive: true, force: true }) } catch {}
     }
   }
 }
@@ -138,12 +160,11 @@ export interface ListAcpModelsResult {
   error?: string
 }
 
-/**
- * Spawn ACP agent briefly and list selectable models via getAvailableModels().
- * @see https://mastra.ai — AcpAgent.getAvailableModels
- */
 export async function listAcpModels(
-  worker: Pick<WorkerRegistration, 'id' | 'name' | 'command' | 'args' | 'env' | 'kind'>,
+  worker: Pick<
+    WorkerRegistration,
+    'id' | 'name' | 'command' | 'args' | 'env' | 'kind' | 'model'
+  >,
   opts?: { cwd?: string; timeoutMs?: number },
 ): Promise<ListAcpModelsResult> {
   const timeoutMs =
@@ -152,83 +173,58 @@ export async function listAcpModels(
   const cwd = opts?.cwd ?? resolveWorkerCwd(undefined)
 
   try {
-    const acp = await import('@mastra/acp')
-    const AcpAgent = (
-      acp as unknown as {
-        AcpAgent?: new (opts: Record<string, unknown>) => {
-          getAvailableModels: () => Promise<
-            Array<{ modelId?: string; name?: string; description?: string | null }>
-          >
-        }
-      }
-    ).AcpAgent
+    let env: Record<string, string>
 
-    if (typeof AcpAgent !== 'function') {
-      return {
-        ok: false,
-        models: [],
-        error: '@mastra/acp AcpAgent is not available',
-      }
+    if (worker.kind === 'opencode') {
+      // Model discovery uses real HOME so all user-configured providers appear
+      env = { ...process.env, ...worker.env } as Record<string, string>
+    } else {
+      env = { ...process.env, ...worker.env } as Record<string, string>
     }
 
-    const agent = new AcpAgent({
-      id: `models-${worker.id}`,
-      name: worker.name,
-      description: `List models for ${worker.name}`,
+    const spawnConfig: AcpSpawnConfig = {
       command: worker.command,
-      args: worker.args,
+      args: [...(worker.args ?? [])],
       cwd,
-      env: { ...process.env, ...worker.env },
-      persistSession: false,
-    })
-
-    let timedOut = false
-    const listPromise = agent.getAvailableModels().then((models) => {
-      // Ignore late resolution after timeout so callers don't double-apply success
-      if (timedOut) return [] as typeof models
-      return models
-    })
-    const models = await Promise.race([
-      listPromise,
-      new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          timedOut = true
-          reject(
-            new Error(
-              `ACP 拉取模型超时（${Math.round(timeoutMs / 1000)}s）。进程可能仍在启动/下载；可稍后重试，或手动填写 model id。`,
-            ),
-          )
-        }, timeoutMs)
-      }),
-    ])
-
-    const normalized: WorkerModelOption[] = (models ?? [])
-      .map((m) => ({
-        modelId: String(m.modelId ?? '').trim(),
-        name: String(m.name ?? m.modelId ?? '').trim() || String(m.modelId ?? ''),
-        description: m.description ? String(m.description) : undefined,
-      }))
-      .filter((m) => m.modelId)
-
-    if (normalized.length === 0) {
-      return {
-        ok: false,
-        models: [],
-        error: 'ACP 未返回可用模型列表（agent 可能不暴露 models）',
-      }
+      env,
+      workerId: worker.id,
+      workerName: worker.name,
+      kind: worker.kind,
+      primaryRole: 'general',
+      roles: ['general'],
     }
 
-    return { ok: true, models: normalized }
+    const aborter = new AbortController()
+    const timer = setTimeout(() => aborter.abort(), Math.min(timeoutMs, 60000))
+
+    try {
+      const models = await withAcpSession(
+        { spawn: spawnConfig, signal: aborter.signal },
+        {},
+        async (handle) => {
+          if (!handle.modelOptions.ok || handle.modelOptions.models.length === 0) {
+            throw new Error(
+              handle.modelOptions.error ?? 'No models found in configOptions',
+            )
+          }
+          return handle.modelOptions.models.map((m) => ({
+            modelId: m.modelId,
+            name: m.name,
+            description: m.description,
+          }))
+        },
+      )
+
+      return { ok: true, models }
+    } finally {
+      clearTimeout(timer)
+    }
   } catch (e) {
-    const raw = e instanceof Error ? e.message : String(e)
-    // Normalize English timeout from older callers
-    const error = /timed out after \d+ms/i.test(raw)
-      ? `ACP 拉取模型超时。命令在 PATH 上可用，但 ACP 会话未能在时限内列出模型。`
-      : raw
+    const msg = e instanceof Error ? e.message : String(e)
     return {
       ok: false,
       models: [],
-      error,
+      error: msg,
     }
   }
 }

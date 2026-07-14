@@ -48,11 +48,9 @@ describe('mergeProvidersWithCustom', () => {
     assert.notEqual(openai[0]!.name, 'Fake')
   })
 
-  it('includes popular providers (azure, ollama, alibaba, moonshot)', () => {
-    const ids = new Set(MASTRA_PROVIDERS.map((p) => p.id))
-    for (const id of ['azure', 'ollama', 'alibaba', 'moonshotai', 'zhipuai', 'together', 'fireworks']) {
-      assert.ok(ids.has(id), `missing provider ${id}`)
-    }
+  it('keeps a curated builtin set (not a marketplace catalog)', () => {
+    const ids = MASTRA_PROVIDERS.map((p) => p.id)
+    assert.deepEqual(ids, ['openai', 'anthropic', 'google', 'xai', 'deepseek'])
   })
 })
 

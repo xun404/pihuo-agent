@@ -7,6 +7,7 @@
 const KNOWN_PROVIDER_API_KEY_ENV: Record<string, string> = {
   opencode: 'OPENCODE_API_KEY',
   'opencode-go': 'OPENCODE_API_KEY',
+  opencodego: 'OPENCODE_API_KEY',
   openai: 'OPENAI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
@@ -17,7 +18,26 @@ const KNOWN_PROVIDER_API_KEY_ENV: Record<string, string> = {
   mistral: 'MISTRAL_API_KEY',
 }
 
-export function slugProviderId(name: string): string {
+/**
+ * Prefer Mastra models.dev provider ids when the name/URL is a known gateway.
+ * e.g. "OpenCodeGO" → `opencode-go` (not `opencodego`).
+ */
+export function inferKnownProviderId(name: string, baseURL?: string): string | undefined {
+  const url = (baseURL ?? '').toLowerCase()
+  if (url.includes('opencode.ai/zen/go') || url.includes('opencode.ai/go')) return 'opencode-go'
+  if (url.includes('opencode.ai')) return 'opencode'
+  if (url.includes('openrouter.ai')) return 'openrouter'
+
+  const n = name.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  if (n.includes('opencode') && n.includes('go')) return 'opencode-go'
+  if (n === 'opencode' || n === 'opencodezen') return 'opencode'
+  if (n.includes('openrouter')) return 'openrouter'
+  return undefined
+}
+
+export function slugProviderId(name: string, baseURL?: string): string {
+  const known = inferKnownProviderId(name, baseURL)
+  if (known) return known
   const s = name
     .trim()
     .toLowerCase()

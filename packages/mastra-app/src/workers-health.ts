@@ -104,4 +104,42 @@ export function scheduleAutoWorkerHealth(): void {
   // Don't block server listen
   setTimeout(run, 800)
   setInterval(run, ttl)
+
+  // Soft auto-detect once shortly after boot (enable installed CLIs)
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const { detectAcpWorkers, applyDetectionToWorkers } = await import(
+          '@router-agents/adapters'
+        )
+        const { createId } = await import('@router-agents/core')
+        const candidates = await detectAcpWorkers()
+        const existing = store.listWorkers()
+        // First boot: many unknown workers — apply detection
+        const neverProbed = existing.every((w) => !w.lastSeenAt)
+        if (!neverProbed && candidates.every((c) => !c.installed)) return
+
+        const merged = applyDetectionToWorkers(existing, candidates, {
+          createMissing: true,
+          autoDisableMissing: false,
+        })
+        for (const w of merged.workers) {
+          if (w.id.startsWith('detect-')) {
+            store.upsertWorker({ ...w, id: createId('worker') })
+          } else {
+            store.upsertWorker(w)
+          }
+        }
+        if (merged.recommended.length) {
+          globalActivityLog.append(
+            'system',
+            `Auto-detect workers: ${merged.recommended.map((c) => c.name).join(', ')}`,
+            { kinds: merged.recommended.map((c) => c.kind) },
+          )
+        }
+      } catch (e) {
+        console.warn('[workers-health] auto-detect failed', e)
+      }
+    })()
+  }, 1200)
 }

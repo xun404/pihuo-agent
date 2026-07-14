@@ -90,6 +90,10 @@ interface Props {
   onResolveApproval: (id: string, decision: ApprovalDecision) => void
   onDemoApproval: () => void
   onRegisterWorker: (body: Partial<WorkerRegistration>) => Promise<void>
+  onDetectWorkers?: () => Promise<{
+    recommended?: { kind: string; name: string; installed: boolean; installHint?: string }[]
+    candidates?: { kind: string; name: string; installed: boolean; installHint?: string }[]
+  } | void>
   onRefreshSnapshot: () => void
 }
 
@@ -145,11 +149,14 @@ export function RightPanel({
   onResolveApproval,
   onDemoApproval,
   onRegisterWorker,
+  onDetectWorkers,
   onRefreshSnapshot,
 }: Props) {
   const { t } = useI18n()
   const [checkingIds, setCheckingIds] = useState<Set<string>>(() => new Set())
   const [checkingAll, setCheckingAll] = useState(false)
+  const [detecting, setDetecting] = useState(false)
+  const [detectNote, setDetectNote] = useState<string | null>(null)
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('workers')
   const [jobs, setJobs] = useState<WorkerJob[]>([])
@@ -398,6 +405,34 @@ export function RightPanel({
             <button
               className="btn btn-ghost btn-sm"
               type="button"
+              disabled={detecting || !onDetectWorkers}
+              title={t('workers.detectHint')}
+              onClick={() => {
+                if (!onDetectWorkers) return
+                setDetecting(true)
+                setDetectNote(null)
+                void Promise.resolve(onDetectWorkers())
+                  .then((res) => {
+                    const rec = res?.recommended ?? res?.candidates?.filter((c) => c.installed) ?? []
+                    if (rec.length === 0) {
+                      setDetectNote(t('workers.detectNone'))
+                    } else {
+                      setDetectNote(
+                        t('workers.detectOk', {
+                          names: rec.map((c) => c.name).join(' · '),
+                        }),
+                      )
+                    }
+                  })
+                  .catch((e) => setDetectNote(String(e)))
+                  .finally(() => setDetecting(false))
+              }}
+            >
+              {detecting ? t('app.loading') : t('workers.detect')}
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
               disabled={checkingAll}
               title={t('workers.healthAllHint')}
               onClick={() => {
@@ -416,6 +451,16 @@ export function RightPanel({
               {t('workers.register')}
             </button>
           </div>
+          {detectNote && (
+            <div className="worker-detect-banner" role="status">
+              {detectNote}
+            </div>
+          )}
+          {workers.every((w) => w.health === 'unknown' || w.health === 'missing') && (
+            <div className="worker-detect-banner worker-detect-hint">
+              {t('workers.detectFirstRun')}
+            </div>
+          )}
           <div className="scroll">
             {workers.map((w) => {
               const checking = checkingIds.has(w.id)
@@ -602,6 +647,19 @@ export function RightPanel({
                       {modelErrors[w.id]}
                     </div>
                   )}
+                  {!w.model?.trim() && w.kind === 'opencode' && !modelErrors[w.id] && (
+                    <div className="worker-model-need" role="status">
+                      {t('workers.modelNeedSelectOpenCode')}
+                    </div>
+                  )}
+                  {!w.model?.trim() &&
+                    w.kind !== 'opencode' &&
+                    (w.availableModels?.length ?? 0) > 0 &&
+                    !modelErrors[w.id] && (
+                      <div className="worker-model-need muted" role="status">
+                        {t('workers.modelNeedSelect')}
+                      </div>
+                    )}
                   <div className="worker-tags" style={{ alignItems: 'center' }}>
                     <span
                       className={`badge ${roleBadgeClass(w.primaryRole)}`}
@@ -870,7 +928,24 @@ export function RightPanel({
                     <div className="job-detail">
                       <div className="mono">{j.id}</div>
                       {j.message && <div>{j.message}</div>}
-                      {j.error && <div className="job-error">{j.error}</div>}
+                      {j.error && (
+                        <div
+                          className={
+                            /模型不可用|Model is disabled|model not found|model.*not available/i.test(
+                              j.error,
+                            )
+                              ? 'job-error job-error-model'
+                              : 'job-error'
+                          }
+                        >
+                          {j.error}
+                          {/模型不可用|Model is disabled|model not found|model.*not available/i.test(
+                            j.error,
+                          ) && (
+                            <div className="job-error-hint">{t('jobs.modelDisabledHint')}</div>
+                          )}
+                        </div>
+                      )}
                       {j.output && (
                         <pre className="job-output mono">{j.output.slice(0, 4000)}</pre>
                       )}

@@ -16,6 +16,8 @@ import {
   MASTRA_PROVIDERS,
   mergeProvidersWithCustom,
   normalizeThinkingIntensity,
+  normalizeThinkingIntensityList,
+  resolveSupportedThinkingIntensities,
   type CustomProviderSettings,
   type ThinkingIntensity,
 } from '@router-agents/core'
@@ -107,15 +109,23 @@ function providersPayload() {
   return {
     status,
     customProviders: settings.customProviders ?? [],
-    providers: merged.map((p) => ({
-      id: p.id,
-      name: p.name,
-      apiKeyEnv: p.apiKeyEnv,
-      docsUrl: p.docsUrl,
-      models: p.models,
-      configured: status.configuredKeys.includes(p.apiKeyEnv),
-      custom: Boolean(settings.customProviders?.some((c) => c.id === p.id)),
-    })),
+    providers: merged.map((p) => {
+      const isCustom = Boolean(settings.customProviders?.some((c) => c.id === p.id))
+      const rawThinking = (p as { thinkingIntensities?: ThinkingIntensity[] }).thinkingIntensities
+      return {
+        id: p.id,
+        name: p.name,
+        apiKeyEnv: p.apiKeyEnv,
+        docsUrl: p.docsUrl,
+        models: p.models,
+        thinkingIntensities: resolveSupportedThinkingIntensities({
+          custom: isCustom,
+          thinkingIntensities: rawThinking,
+        }),
+        configured: status.configuredKeys.includes(p.apiKeyEnv),
+        custom: isCustom,
+      }
+    }),
   }
 }
 
@@ -126,6 +136,7 @@ function registerIpc(): void {
       ...status,
       providers,
       customProviders,
+      leaderMaxSteps: status.settings.leaderMaxSteps,
       safeStorageAvailable: safeStorage.isEncryptionAvailable(),
       platform: process.platform,
       storagePath: `${process.env.HOME ?? '~'}/.router-agents`,
@@ -139,6 +150,7 @@ function registerIpc(): void {
       payload: {
         leaderModel?: string
         thinkingIntensity?: ThinkingIntensity
+        leaderMaxSteps?: number
         secrets?: Record<string, string | null>
         customProviders?: CustomProviderSettings[]
       },
@@ -150,9 +162,16 @@ function registerIpc(): void {
           payload.thinkingIntensity !== undefined
             ? normalizeThinkingIntensity(payload.thinkingIntensity)
             : prev.thinkingIntensity,
+        leaderMaxSteps: payload.leaderMaxSteps ?? prev.leaderMaxSteps,
         customProviders:
           payload.customProviders !== undefined
-            ? payload.customProviders
+            ? payload.customProviders.map((c) => ({
+                ...c,
+                thinkingIntensities:
+                  c.thinkingIntensities !== undefined
+                    ? normalizeThinkingIntensityList(c.thinkingIntensities)
+                    : c.thinkingIntensities,
+              }))
             : prev.customProviders,
       })
       process.env.LEADER_MODEL = next.leaderModel

@@ -331,11 +331,25 @@ export class LocalStore {
   }
 
   upsertWorker(worker: WorkerRegistration): WorkerRegistration {
-    const normalized = {
+    const idx = this.data.workers.findIndex((w) => w.id === worker.id)
+    const existing = idx >= 0 ? this.data.workers[idx] : undefined
+    // Merge onto existing so partial updates (health-only) don't wipe
+    // availableModels / model / modelsFetchedAt that callers forgot to carry.
+    const normalized: WorkerRegistration = {
+      ...existing,
       ...worker,
       ...normalizeWorkerRoles(worker),
     }
-    const idx = this.data.workers.findIndex((w) => w.id === worker.id)
+    // null/undefined = caller didn't carry catalog (JSON may store null)
+    if (worker.availableModels == null && existing?.availableModels?.length) {
+      normalized.availableModels = existing.availableModels
+      if (worker.modelsFetchedAt == null && existing.modelsFetchedAt) {
+        normalized.modelsFetchedAt = existing.modelsFetchedAt
+      }
+    }
+    if (worker.model == null && existing?.model) {
+      normalized.model = existing.model
+    }
     if (idx >= 0) this.data.workers[idx] = normalized
     else this.data.workers.push(normalized)
     this.save()
@@ -366,7 +380,7 @@ export class LocalStore {
   }
 
   /**
-   * Set preferred ACP model for a worker (session/set_model).
+   * Set preferred ACP model for a worker (session/set_config_option).
    * Pass empty string / null to clear.
    */
   setWorkerModel(
@@ -382,6 +396,8 @@ export class LocalStore {
     if (availableModels) {
       worker.availableModels = availableModels
       worker.modelsFetchedAt = now()
+      worker.modelsState = 'fresh'
+      delete worker.modelsError
     }
     this.save()
     return worker
@@ -390,11 +406,26 @@ export class LocalStore {
   setWorkerAvailableModels(
     workerId: string,
     models: NonNullable<WorkerRegistration['availableModels']>,
+    state?: WorkerRegistration['modelsState'],
   ): WorkerRegistration {
     const worker = this.data.workers.find((w) => w.id === workerId)
     if (!worker) throw new Error(`Worker not found: ${workerId}`)
     worker.availableModels = models
     worker.modelsFetchedAt = now()
+    worker.modelsState = state ?? 'fresh'
+    delete worker.modelsError
+    this.save()
+    return worker
+  }
+
+  setWorkerModelsStale(
+    workerId: string,
+    error: string,
+  ): WorkerRegistration {
+    const worker = this.data.workers.find((w) => w.id === workerId)
+    if (!worker) throw new Error(`Worker not found: ${workerId}`)
+    worker.modelsState = 'stale'
+    worker.modelsError = error.slice(0, 500)
     this.save()
     return worker
   }

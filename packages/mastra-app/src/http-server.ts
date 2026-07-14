@@ -21,16 +21,32 @@ import {
   deleteSecret,
   loadSettings,
   saveSettings,
+  resolveLeaderMaxSteps,
   mergeProvidersWithCustom,
   MASTRA_PROVIDERS,
   SECRET_ENV_KEYS,
   normalizeThinkingIntensity,
   thinkingIntensityToProviderOptions,
+  resolveSupportedThinkingIntensities,
+  normalizeThinkingIntensityList,
+  resolveApiKeyEnvsForModel,
+  hasAnyApiKey,
+  normalizeLeaderModelForMastra,
+  normalizeMastraModelId,
+  parseLeaderMaxStepsInput,
   type CustomProviderSettings,
   type ThinkingIntensity,
 } from '@router-agents/core'
 // mapAcpPermission / waitForApproval still used by approval routes
-import { applyHealthReport, listAcpModels, parseHealthDepth } from '@router-agents/adapters'
+import {
+  applyHealthReport,
+  parseHealthDepth,
+  detectAcpWorkers,
+  applyDetectionToWorkers,
+  workerExecutionConfigChanged,
+} from '@router-agents/adapters'
+import { refreshWorkerModels } from './worker-models.js'
+import { getAcpSessionManager } from '@router-agents/adapters'
 import type {
   ApprovalDecision,
   LeaderMode,
@@ -45,6 +61,7 @@ import { pipeUIMessageStreamToResponse } from 'ai'
 import { RequestContext } from '@mastra/core/request-context'
 import { mastra } from './mastra/index.js'
 import { leaderAgent } from './agents/leader-agent.js'
+import { leaderMemory } from './agents/leader-agent.js'
 import { controllerStatusSnapshot, getLeaderController } from './agents/controller.js'
 import {
   checkOneWorker,
@@ -52,6 +69,8 @@ import {
   scheduleAutoWorkerHealth,
 } from './workers-health.js'
 import { getWorkerScheduler } from './scheduler.js'
+import { detectLeaderStepBudgetExhaustion, createBudgetMarkerMessage } from './leader-step-budget.js'
+import type { LeaderStepBudgetEvent } from '@router-agents/shared'
 
 // Load encrypted secrets + model settings into process.env before agents run
 applySecretsToEnv(process.env)
@@ -144,6 +163,7 @@ const server = createServer(async (req, res) => {
 
         // Per-chat model from UI picker (provider/model), else settings leaderModel
         const settings = loadSettings()
+        const leaderMaxSteps = resolveLeaderMaxSteps(settings.leaderMaxSteps)
         const clientModel =
           typeof params.model === 'string' && params.model.includes('/')
             ? params.model.trim()
@@ -151,8 +171,39 @@ const server = createServer(async (req, res) => {
                 (params as { leaderModel: string }).leaderModel.includes('/')
               ? (params as { leaderModel: string }).leaderModel.trim()
               : undefined
-        const leaderModel =
+        const leaderModelRaw =
           clientModel || settings.leaderModel || process.env.LEADER_MODEL || 'openai/gpt-5.5'
+        // Map slug typos (opencodego → opencode-go) so Mastra models.dev can resolve
+        const leaderModel = normalizeLeaderModelForMastra(
+          normalizeMastraModelId(leaderModelRaw),
+          settings.customProviders,
+        )
+
+        // Ensure secrets are on process.env before Mastra resolves the model
+        applySecretsToEnv(process.env)
+
+        const keyInfo = resolveApiKeyEnvsForModel(leaderModel, settings.customProviders)
+        if (keyInfo && !hasAnyApiKey(keyInfo.envKeys, process.env)) {
+          const detail = {
+            code: 'MISSING_API_KEY',
+            model: leaderModel,
+            providerId: keyInfo.providerId,
+            envKeys: keyInfo.envKeys,
+          }
+          console.error('[chat] missing API key — configure in Settings', detail)
+          globalActivityLog.append(
+            'chat',
+            `Missing API key for ${leaderModel} (${keyInfo.envKeys[0] ?? '?'})`,
+            { agentId, ...detail },
+          )
+          send(res, 400, {
+            code: 'MISSING_API_KEY',
+            error: `Missing API key for ${leaderModel}`,
+            providerId: keyInfo.providerId,
+            envKey: keyInfo.envKeys[0],
+          })
+          return
+        }
 
         // Thinking intensity: per-request body > settings > env
         const clientThinking = (params as { thinkingIntensity?: unknown }).thinkingIntensity
@@ -168,9 +219,23 @@ const server = createServer(async (req, res) => {
         requestContext.set('leaderModel', leaderModel)
         requestContext.set('thinkingIntensity', thinkingIntensity)
 
+        const routerSession = store.listSessions().find((s) => s.memoryThreadId === threadId) ?? null
+        if (routerSession) {
+          requestContext.set('routerSessionId', routerSession.id)
+          requestContext.set('routerProjectId', routerSession.projectId)
+          requestContext.set('memoryThreadId', routerSession.memoryThreadId)
+          const routerProject = store.listProjects().find((p) => p.id === routerSession.projectId)
+          if (routerProject) {
+            requestContext.set('routerProjectRoot', routerProject.rootPath)
+          }
+        } else {
+          requestContext.set('memoryThreadId', threadId)
+        }
+
         // Ensure params carry memory even if client omitted it (goal-state processor)
         const paramsWithMemory = {
           ...params,
+          maxSteps: leaderMaxSteps,
           memory: {
             thread: threadId,
             resource: resourceId,
@@ -192,15 +257,49 @@ const server = createServer(async (req, res) => {
         })
         // untilIdle keeps the stream open across background tool tasks
         // @see https://mastra.ai/docs/long-running-agents/background-tasks
+
+        let streamBudgetEvent: LeaderStepBudgetEvent | null = null
+
         const stream = await handleChatStream({
           mastra,
           agentId,
           params: {
             ...paramsWithMemory,
             untilIdle: true,
+            onFinish: async (onFinishEvent: {
+              steps?: readonly unknown[];
+              finishReason?: string;
+              runId?: string;
+            }) => {
+              if (!onFinishEvent.finishReason) return
+              const event = detectLeaderStepBudgetExhaustion({
+                maxSteps: leaderMaxSteps,
+                steps: onFinishEvent.steps ?? [],
+                finishReason: onFinishEvent.finishReason,
+                runId: onFinishEvent.runId ?? `${threadId}/${Date.now()}`,
+              })
+              if (!event) return
+              streamBudgetEvent = event
+              try {
+                const marker = createBudgetMarkerMessage({
+                  threadId,
+                  resourceId,
+                  event,
+                })
+                await leaderMemory.saveMessages({ messages: [marker as never] })
+              } catch (err) {
+                console.error('[step-budget] Failed to persist budget marker:', {
+                  threadId,
+                  runId: event.data.runId,
+                  error: String(err),
+                })
+              }
+            },
           } as never,
           sendReasoning: true,
+          messageMetadata: () => streamBudgetEvent ? { leaderStepBudget: streamBudgetEvent.data } : undefined,
           defaultOptions: {
+            maxSteps: leaderMaxSteps,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -219,16 +318,21 @@ const server = createServer(async (req, res) => {
         })
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
+        const stack = e instanceof Error ? e.stack : undefined
+        // Full detail only in the API process terminal / activity log
+        console.error('[chat] stream failed', msg)
+        if (stack) console.error(stack)
         globalActivityLog.append('chat', `Chat error: ${msg.slice(0, 160)}`, { agentId })
-        // Missing key / model errors must not look like 404
-        send(res, 500, {
-          error: msg,
-          hint:
-            msg.includes('resourceId') || msg.includes('threadId')
-              ? 'Open a project/session so chat can bind memory thread+resource, then retry.'
-              : !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY
-                ? 'Set OPENAI_API_KEY (or LEADER_MODEL + provider key) for Leader chat generation.'
-                : undefined,
+
+        const missingKey = /Could not find API key|Missing API key|process\.env\.\w*API_KEY/i.test(
+          msg,
+        )
+        send(res, missingKey ? 400 : 500, {
+          code: missingKey ? 'MISSING_API_KEY' : 'CHAT_ERROR',
+          // Short machine message — UI maps this; never include stack
+          error: missingKey
+            ? msg.replace(/\n[\s\S]*/, '').slice(0, 200)
+            : 'Chat failed. See API terminal for details.',
         })
       }
       return
@@ -546,12 +650,16 @@ const server = createServer(async (req, res) => {
     const toggleMatch = match(path, '/api/workers/:id/toggle')
     if (method === 'POST' && toggleMatch) {
       const body = (await readJson(req)) as { enabled: boolean }
+      const previous = store.listWorkers().find((candidate) => candidate.id === toggleMatch.id)
       const worker = store.setWorkerEnabled(toggleMatch.id!, Boolean(body.enabled))
+      if (previous && workerExecutionConfigChanged(previous, worker)) {
+        getAcpSessionManager().invalidateWorker(worker.id)
+      }
       send(res, 200, { worker })
       return
     }
 
-    // List ACP models for a worker (spawns agent briefly)
+    // List ACP models for a worker (spawns agent briefly, resolves from configOptions)
     const modelsMatch = match(path, '/api/workers/:id/models')
     if (method === 'GET' && modelsMatch) {
       const worker = store.listWorkers().find((w) => w.id === modelsMatch.id)
@@ -559,49 +667,21 @@ const server = createServer(async (req, res) => {
         send(res, 404, { error: 'not found' })
         return
       }
-      const active = store.getActive()
-      const result = await listAcpModels(worker, {
-        cwd: active.project?.rootPath,
-      })
-      const checkedAt = new Date().toISOString()
-      if (result.ok && result.models.length > 0) {
-        store.setWorkerAvailableModels(worker.id, result.models)
-        // ACP session worked — align health with "usable"
-        store.upsertWorker(
-          applyHealthReport(worker, {
-            status: 'healthy',
-            level: 'acp_handshake',
-            checkedAt,
-            message: `ACP 可用 · ${result.models.length} 个模型`,
-            hints: [],
-          }),
-        )
-      } else {
-        // Presence may still pass, but ACP model listing failed → not "可用" for real use
-        const msg = result.error ?? 'ACP 模型列表不可用'
-        store.upsertWorker(
-          applyHealthReport(worker, {
-            status: 'unhealthy',
-            level: 'acp_handshake',
-            checkedAt,
-            message: msg,
-            hints: [
-              '可稍后重试「更新模型列表」',
-              '或手动填写 model id（不依赖列表）',
-            ],
-            detail: { errorCode: 'ACP_MODELS' },
-          }),
-        )
+      try {
+        const active = store.getActive()
+        const refResult = await refreshWorkerModels(worker.id, active.project?.rootPath)
+        send(res, 200, {
+          ok: refResult.ok,
+          models: refResult.models ?? [],
+          error: refResult.error,
+          worker: refResult.worker,
+          snapshot: store.snapshot(),
+          cached: refResult.cached,
+          stale: refResult.stale,
+        })
+      } catch (e) {
+        send(res, 500, { error: e instanceof Error ? e.message : String(e) })
       }
-      const updated = store.listWorkers().find((w) => w.id === worker.id) ?? worker
-      send(res, 200, {
-        ok: result.ok,
-        models: result.models.length ? result.models : updated.availableModels ?? [],
-        error: result.error,
-        worker: updated,
-        snapshot: store.snapshot(),
-        cached: !result.ok && Boolean(updated.availableModels?.length),
-      })
       return
     }
 
@@ -610,7 +690,11 @@ const server = createServer(async (req, res) => {
     if (method === 'POST' && modelMatch) {
       const body = (await readJson(req)) as { model?: string | null }
       try {
+        const previous = store.listWorkers().find((candidate) => candidate.id === modelMatch.id)
         const worker = store.setWorkerModel(modelMatch.id!, body.model)
+        if (previous && workerExecutionConfigChanged(previous, worker)) {
+          getAcpSessionManager().invalidateWorker(worker.id)
+        }
         globalActivityLog.append('worker', `Model set for ${worker.name}: ${worker.model ?? '(default)'}`, {
           workerId: worker.id,
           model: worker.model,
@@ -623,6 +707,86 @@ const server = createServer(async (req, res) => {
     }
 
     // Batch health check (must be before :id route)
+    // Auto-detect ACP CLIs on this machine (Claude / Codex / OpenCode …)
+    if (method === 'GET' && path === '/api/workers/detect') {
+      const candidates = await detectAcpWorkers()
+      send(res, 200, {
+        candidates,
+        recommended: candidates.filter((c) => c.installed),
+        firstRun: store.listWorkers().every((w) => w.health === 'unknown' || !w.lastSeenAt),
+      })
+      return
+    }
+
+    if (method === 'POST' && path === '/api/workers/detect') {
+      let apply = true
+      let autoDisableMissing = false
+      try {
+        const body = (await readJson(req)) as {
+          apply?: boolean
+          autoDisableMissing?: boolean
+        }
+        if (body.apply === false) apply = false
+        if (body.autoDisableMissing === true) autoDisableMissing = true
+      } catch {
+        /* empty body = apply defaults */
+      }
+      const candidates = await detectAcpWorkers()
+      if (!apply) {
+        send(res, 200, {
+          candidates,
+          recommended: candidates.filter((c) => c.installed),
+          applied: false,
+          snapshot: store.snapshot(),
+        })
+        return
+      }
+
+      const existing = store.listWorkers()
+      const existingById = new Map(existing.map((worker) => [worker.id, worker]))
+      const merged = applyDetectionToWorkers(existing, candidates, {
+        autoDisableMissing,
+        createMissing: true,
+      })
+
+      // Persist: update by kind, create new rows with real ids
+      for (const w of merged.workers) {
+        if (w.id.startsWith('detect-')) {
+          const real = { ...w, id: createId('worker') }
+          store.upsertWorkerLogged(real)
+        } else {
+          store.upsertWorker(w)
+          const previous = existingById.get(w.id)
+          if (previous && workerExecutionConfigChanged(previous, w)) {
+            getAcpSessionManager().invalidateWorker(w.id)
+          }
+        }
+      }
+
+      // Refresh health for enabled workers (async batch)
+      void checkWorkersBatch({ onlyEnabled: true, depth: 'version' }).catch(() => null)
+
+      globalActivityLog.append(
+        'system',
+        `Worker detect: ${merged.recommended.map((c) => c.name).join(', ') || 'none'} installed`,
+        {
+          enabled: merged.enabled,
+          recommended: merged.recommended.map((c) => c.kind),
+        },
+      )
+
+      send(res, 200, {
+        candidates,
+        recommended: merged.recommended,
+        enabled: merged.enabled,
+        disabled: merged.disabled,
+        applied: true,
+        snapshot: store.snapshot(),
+        workers: store.listWorkers(),
+      })
+      return
+    }
+
     if (method === 'POST' && path === '/api/workers/health') {
       const body = (await readJson(req).catch(() => ({}))) as {
         workerIds?: string[]
@@ -698,7 +862,13 @@ const server = createServer(async (req, res) => {
         description: body.description ?? 'Custom ACP/CLI worker',
         health: 'unknown',
       }
+      const previous = body.id
+        ? store.listWorkers().find((candidate) => candidate.id === body.id)
+        : undefined
       store.upsertWorkerLogged(worker)
+      if (previous && workerExecutionConfigChanged(previous, worker)) {
+        getAcpSessionManager().invalidateWorker(worker.id)
+      }
       // Async presence check for newly registered workers
       void checkOneWorker(worker, 'version').catch(() => null)
       send(res, 200, { worker })
@@ -777,6 +947,7 @@ const server = createServer(async (req, res) => {
     const delSession = match(path, '/api/sessions/:id')
     if (method === 'DELETE' && delSession) {
       store.deleteSession(delSession.id!)
+      getAcpSessionManager().closeByRouterSession(delSession.id!)
       send(res, 200, { ok: true, snapshot: store.snapshot() })
       return
     }
@@ -784,6 +955,7 @@ const server = createServer(async (req, res) => {
     const delProject = match(path, '/api/projects/:id')
     if (method === 'DELETE' && delProject) {
       store.deleteProject(delProject.id!)
+      getAcpSessionManager().closeByProject(delProject.id!)
       send(res, 200, { ok: true, snapshot: store.snapshot() })
       return
     }
@@ -803,18 +975,26 @@ const server = createServer(async (req, res) => {
         ...merged.map((p) => p.apiKeyEnv),
       ]
       const configured = getSecretsStatus([...new Set(secretKeys)]).configuredKeys
-      return merged.map((p) => ({
-        id: p.id,
-        name: p.name,
-        apiKeyEnv: p.apiKeyEnv,
-        docsUrl: p.docsUrl,
-        models: p.models,
-        baseURL: (p as { baseURL?: string }).baseURL,
-        apiStyle: (p as { apiStyle?: string }).apiStyle,
-        contextWindow: (p as { contextWindow?: number }).contextWindow,
-        configured: configured.includes(p.apiKeyEnv),
-        custom: Boolean(status.settings.customProviders?.some((c) => c.id === p.id)),
-      }))
+      return merged.map((p) => {
+        const isCustom = Boolean(status.settings.customProviders?.some((c) => c.id === p.id))
+        const rawThinking = (p as { thinkingIntensities?: ThinkingIntensity[] }).thinkingIntensities
+        return {
+          id: p.id,
+          name: p.name,
+          apiKeyEnv: p.apiKeyEnv,
+          docsUrl: p.docsUrl,
+          models: p.models,
+          baseURL: (p as { baseURL?: string }).baseURL,
+          apiStyle: (p as { apiStyle?: string }).apiStyle,
+          contextWindow: (p as { contextWindow?: number }).contextWindow,
+          thinkingIntensities: resolveSupportedThinkingIntensities({
+            custom: isCustom,
+            thinkingIntensities: rawThinking,
+          }),
+          configured: configured.includes(p.apiKeyEnv),
+          custom: isCustom,
+        }
+      })
     }
 
     // —— Settings / secrets ——
@@ -822,6 +1002,7 @@ const server = createServer(async (req, res) => {
       const status = getSecretsStatus(SECRET_ENV_KEYS)
       send(res, 200, {
         ...status,
+        leaderMaxSteps: status.settings.leaderMaxSteps,
         providers: providersPayload(status),
         customProviders: status.settings.customProviders ?? [],
         storagePath: process.env.HOME
@@ -835,8 +1016,19 @@ const server = createServer(async (req, res) => {
       const body = (await readJson(req)) as {
         leaderModel?: string
         thinkingIntensity?: ThinkingIntensity
+        leaderMaxSteps?: number
         secrets?: Record<string, string | null>
         customProviders?: CustomProviderSettings[]
+      }
+      if (body.leaderMaxSteps !== undefined && body.leaderMaxSteps !== null) {
+        try {
+          parseLeaderMaxStepsInput(body.leaderMaxSteps)
+        } catch (e) {
+          send(res, 400, {
+            error: e instanceof Error ? e.message : `leaderMaxSteps must be an integer between 10 and 1000`,
+          })
+          return
+        }
       }
       const prev = loadSettings()
       const nextSettings = saveSettings({
@@ -845,9 +1037,16 @@ const server = createServer(async (req, res) => {
           body.thinkingIntensity !== undefined
             ? normalizeThinkingIntensity(body.thinkingIntensity)
             : prev.thinkingIntensity,
+        leaderMaxSteps: body.leaderMaxSteps ?? prev.leaderMaxSteps,
         customProviders:
           body.customProviders !== undefined
-            ? body.customProviders
+            ? body.customProviders.map((c) => ({
+                ...c,
+                thinkingIntensities:
+                  c.thinkingIntensities !== undefined
+                    ? normalizeThinkingIntensityList(c.thinkingIntensities)
+                    : c.thinkingIntensities,
+              }))
             : prev.customProviders,
       })
       process.env.LEADER_MODEL = nextSettings.leaderModel
@@ -883,6 +1082,7 @@ const server = createServer(async (req, res) => {
       send(res, 200, {
         ok: true,
         ...status,
+        leaderMaxSteps: status.settings.leaderMaxSteps,
         providers: providersPayload(status),
         customProviders: status.settings.customProviders ?? [],
       })
@@ -1054,3 +1254,22 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`  Chat  POST /chat/:agentId  (e.g. /chat/router-leader)`)
   globalActivityLog.append('system', `API server started on :${port}`)
 })
+
+let shuttingDown = false
+const shutdown = async (signal: string) => {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`[shutdown] ${signal} — closing ACP sessions...`)
+  const forceExitTimer = setTimeout(() => { process.exit(1) }, 5000)
+  forceExitTimer.unref?.()
+  const serverClosed = new Promise<void>((resolve) => {
+    // Stop accepting new requests before draining worker sessions.
+    server.close(() => resolve())
+  })
+  try { await getAcpSessionManager().closeAll() } catch (e) { console.error('[shutdown] closeAll failed:', e) }
+  await serverClosed
+  clearTimeout(forceExitTimer)
+  process.exit(0)
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))

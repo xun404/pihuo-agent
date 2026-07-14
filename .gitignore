@@ -22,3 +22,7 @@ release/
 
 dist-electron/
 apps/*/dist-electron/
+
+# Internal design docs and plans
+docs/superpowers/
+.opencode/

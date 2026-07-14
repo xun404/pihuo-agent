@@ -21,7 +21,6 @@
     "test": "node --import tsx --test ../core/src/**/*.test.ts ../adapters/src/**/*.test.ts"
   },
   "dependencies": {
-    "@mastra/acp": "^0.3.0",
     "@mastra/ai-sdk": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",

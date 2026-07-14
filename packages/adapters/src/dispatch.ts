@@ -38,7 +38,7 @@ export interface DispatchResult {
   task: string
   message: string
   output?: string
-  /** True when path would use @mastra/acp adapter */
+  /** True when path would use ACP adapter via SDK 1.2.1 */
   acpPath: boolean
   /** Worker health at dispatch time */
   health?: string
@@ -171,7 +171,7 @@ export async function dispatchToWorker(req: DispatchRequest): Promise<DispatchRe
       args: config.args,
       cwd: config.cwd,
       task: req.task,
-      message: `ACP dispatch completed via @mastra/acp for ${worker.name}${healthWarning ? ` (warning: ${healthWarning})` : ''}`,
+      message: `ACP dispatch completed via @agentclientprotocol/sdk for ${worker.name}${healthWarning ? ` (warning: ${healthWarning})` : ''}`,
       output: result.output,
       acpPath: true,
       ...healthFields,
