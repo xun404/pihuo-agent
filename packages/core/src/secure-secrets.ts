@@ -31,6 +31,12 @@ import {
   normalizeThinkingIntensity,
   type ThinkingIntensity,
 } from './thinking-intensity.js'
+import {
+  normalizeCustomProvidersForMastra,
+  normalizeLeaderModelForMastra,
+  normalizeMastraProviderId,
+} from './provider-ids.js'
+import { resolveLeaderMaxSteps, parseLeaderMaxStepsInput } from './leader-max-steps.js'
 
 export type SecretsMap = Record<string, string>
 
@@ -57,6 +63,11 @@ export interface CustomProviderSettings {
   apiStyle?: CustomApiStyle
   /** Default context window for models without per-model override */
   contextWindow?: number
+  /**
+   * Thinking intensities this gateway actually supports (checkboxes in Settings).
+   * Built-ins ignore this and use BUILTIN_THINKING_PRESETS.
+   */
+  thinkingIntensities?: ThinkingIntensity[]
   models: CustomProviderModel[]
 }
 
@@ -69,6 +80,8 @@ export interface AppSettings {
   thinkingIntensity?: ThinkingIntensity
   /** User-defined providers (non-secret); keys stored in secrets map */
   customProviders?: CustomProviderSettings[]
+  /** Maximum model steps per response (10–1000, default 500) */
+  leaderMaxSteps?: number
   /** Non-secret prefs */
   updatedAt?: string
 }
@@ -225,6 +238,7 @@ function defaultAppSettings(): AppSettings {
     leaderModel: process.env.LEADER_MODEL ?? 'openai/gpt-5.5',
     thinkingIntensity: DEFAULT_THINKING_INTENSITY,
     customProviders: [],
+    leaderMaxSteps: 500,
   }
 }
 
@@ -234,12 +248,16 @@ export function loadSettings(): AppSettings {
       return defaultAppSettings()
     }
     const raw = JSON.parse(readFileSync(SETTINGS_PATH, 'utf8')) as AppSettings
+    const customRaw = Array.isArray(raw.customProviders) ? raw.customProviders : []
+    const customProviders = normalizeCustomProvidersForMastra(customRaw)
+    const leaderRaw = raw.leaderModel || process.env.LEADER_MODEL || 'openai/gpt-5.5'
     return {
-      leaderModel: raw.leaderModel || process.env.LEADER_MODEL || 'openai/gpt-5.5',
+      leaderModel: normalizeLeaderModelForMastra(leaderRaw, customProviders),
       thinkingIntensity: normalizeThinkingIntensity(
         raw.thinkingIntensity ?? process.env.THINKING_INTENSITY,
       ),
-      customProviders: Array.isArray(raw.customProviders) ? raw.customProviders : [],
+      customProviders,
+      leaderMaxSteps: resolveLeaderMaxSteps(raw.leaderMaxSteps),
       updatedAt: raw.updatedAt,
     }
   } catch {
@@ -250,16 +268,23 @@ export function loadSettings(): AppSettings {
 export function saveSettings(settings: AppSettings): AppSettings {
   ensureDir()
   const prev = loadSettings()
+  const customProviders = normalizeCustomProvidersForMastra(
+    settings.customProviders !== undefined
+      ? settings.customProviders
+      : prev.customProviders ?? [],
+  )
+  const leaderRaw = settings.leaderModel ?? prev.leaderModel
   const next: AppSettings = {
-    leaderModel: settings.leaderModel ?? prev.leaderModel,
+    leaderModel: normalizeLeaderModelForMastra(leaderRaw, customProviders),
     thinkingIntensity:
       settings.thinkingIntensity !== undefined
         ? normalizeThinkingIntensity(settings.thinkingIntensity)
         : normalizeThinkingIntensity(prev.thinkingIntensity),
-    customProviders:
-      settings.customProviders !== undefined
-        ? settings.customProviders
-        : prev.customProviders ?? [],
+    customProviders,
+    leaderMaxSteps:
+      settings.leaderMaxSteps !== undefined
+        ? parseLeaderMaxStepsInput(settings.leaderMaxSteps)
+        : prev.leaderMaxSteps ?? resolveLeaderMaxSteps(undefined),
     updatedAt: new Date().toISOString(),
   }
   writeFileSync(SETTINGS_PATH, JSON.stringify(next, null, 2), { mode: 0o600 })
@@ -282,6 +307,7 @@ export function mergeProvidersWithCustom<
     baseURL?: string
     apiStyle?: string
     contextWindow?: number
+    thinkingIntensities?: ThinkingIntensity[]
   },
 >(builtIn: T[], custom: CustomProviderSettings[] | undefined): T[] {
   const extras = (custom ?? []).map(
@@ -294,6 +320,7 @@ export function mergeProvidersWithCustom<
         baseURL: c.baseURL,
         apiStyle: c.apiStyle ?? 'openai',
         contextWindow: c.contextWindow,
+        thinkingIntensities: c.thinkingIntensities,
         models: (c.models?.length ? c.models : [{ id: `${c.id}/default`, label: 'Default' }]).map(
           (m) => ({
             id: m.id,
@@ -318,6 +345,8 @@ export function mergeProvidersWithCustom<
 export const MASTRA_GATEWAY_API_KEY_ENV: Record<string, string | string[]> = {
   opencode: 'OPENCODE_API_KEY',
   'opencode-go': 'OPENCODE_API_KEY',
+  // slug("OpenCodeGO") without hyphen — still map to same key
+  opencodego: 'OPENCODE_API_KEY',
   google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
   gemini: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
   alibaba: 'DASHSCOPE_API_KEY',
@@ -391,14 +420,18 @@ export function applyMastraProviderKeyAliases(
     const key = resolveKey(c.apiKeyEnv)
     if (!key) continue
 
+    const canonId = normalizeMastraProviderId(c.id)
     const upper = providerIdToEnvPrefix(c.id)
+    const canonUpper = providerIdToEnvPrefix(canonId)
     // Common convention: OPENCODE_GO_API_KEY
     fillEnvIfEmpty(target, `${upper}_API_KEY`, key)
+    fillEnvIfEmpty(target, `${canonUpper}_API_KEY`, key)
     // Always ensure the storage key itself is present (usually already set)
     fillEnvIfEmpty(target, c.apiKeyEnv, key)
 
-    const mapped = MASTRA_GATEWAY_API_KEY_ENV[c.id]
-    if (mapped) {
+    for (const id of new Set([c.id, canonId])) {
+      const mapped = MASTRA_GATEWAY_API_KEY_ENV[id]
+      if (!mapped) continue
       for (const envName of Array.isArray(mapped) ? mapped : [mapped]) {
         fillEnvIfEmpty(target, envName, key)
       }
@@ -407,13 +440,16 @@ export function applyMastraProviderKeyAliases(
     // Model ids may use a different provider prefix than settings id (rare)
     for (const m of c.models ?? []) {
       const prefix = m.id.split('/')[0]
-      if (!prefix || prefix === c.id) continue
-      const mappedPrefix = MASTRA_GATEWAY_API_KEY_ENV[prefix]
-      if (!mappedPrefix) continue
-      for (const envName of Array.isArray(mappedPrefix) ? mappedPrefix : [mappedPrefix]) {
-        fillEnvIfEmpty(target, envName, key)
+      if (!prefix) continue
+      const canonPrefix = normalizeMastraProviderId(prefix)
+      for (const p of new Set([prefix, canonPrefix])) {
+        const mappedPrefix = MASTRA_GATEWAY_API_KEY_ENV[p]
+        if (!mappedPrefix) continue
+        for (const envName of Array.isArray(mappedPrefix) ? mappedPrefix : [mappedPrefix]) {
+          fillEnvIfEmpty(target, envName, key)
+        }
+        fillEnvIfEmpty(target, `${providerIdToEnvPrefix(p)}_API_KEY`, key)
       }
-      fillEnvIfEmpty(target, `${providerIdToEnvPrefix(prefix)}_API_KEY`, key)
     }
   }
 
@@ -424,9 +460,15 @@ export function applyMastraProviderKeyAliases(
     if (!value) continue
     const m = /^CUSTOM_(.+)_API_KEY$/.exec(secretKey)
     if (!m?.[1]) continue
-    const idGuess = m[1].toLowerCase().replace(/_/g, '-')
-    // try hyphen form and underscore form as provider ids
-    for (const id of new Set([idGuess, m[1].toLowerCase()])) {
+    const collapsed = m[1].toLowerCase()
+    const hyphenated = collapsed.replace(/_/g, '-')
+    // try hyphen form, underscore form, and Mastra-canonical id
+    for (const id of new Set([
+      hyphenated,
+      collapsed,
+      normalizeMastraProviderId(hyphenated),
+      normalizeMastraProviderId(collapsed),
+    ])) {
       const mapped = MASTRA_GATEWAY_API_KEY_ENV[id]
       if (!mapped) continue
       for (const envName of Array.isArray(mapped) ? mapped : [mapped]) {

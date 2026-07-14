@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('routerAgents', {
     save: (payload: {
       leaderModel?: string
       thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'max'
+      leaderMaxSteps?: number
       secrets?: Record<string, string | null>
       customProviders?: {
         id: string

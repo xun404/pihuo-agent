@@ -9,7 +9,19 @@ import {
   THINKING_INTENSITY_OPTIONS,
   type ThinkingIntensity,
 } from '../lib/settings'
+import { ProviderLogo } from '../lib/provider-icons'
+import { formatChatError } from '../lib/chat-errors'
+import {
+  enrichLastUserMessageForWire,
+  parseRouterUserMessage,
+} from '../lib/user-message-display'
 import { MarkdownContent } from './MarkdownContent'
+import { WorkerRunCard } from './WorkerRunCard'
+import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
+import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
+import { workerRunReducer, seedWorkerStates, cleanupTerminalWorkers } from '../lib/worker-run-reducer'
+import { setRecordKey } from '../lib/chat-state'
+import type { WorkerRunEvent, WorkerRunState, LeaderStepBudgetEvent } from '@router-agents/shared'
 
 const MODES: LeaderMode[] = ['ask', 'plan', 'build', 'review']
 
@@ -19,6 +31,18 @@ type ModelOption = {
   providerId: string
   providerName: string
   configured: boolean
+  /** Supported thinking levels for this provider (preset for builtins) */
+  thinkingIntensities: ThinkingIntensity[]
+}
+
+function clampThink(
+  preferred: ThinkingIntensity | undefined,
+  supported: ThinkingIntensity[],
+): ThinkingIntensity {
+  const list = supported.length > 0 ? supported : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
+  if (preferred && list.includes(preferred)) return preferred
+  if (list.includes('medium')) return 'medium'
+  return list[0] ?? 'off'
 }
 
 interface Props {
@@ -63,11 +87,36 @@ export function ChatPanel({
   const modelWrapRef = useRef<HTMLDivElement>(null)
   const thinkWrapRef = useRef<HTMLDivElement>(null)
   const historyLoadedFor = useRef<string | null>(null)
-  // Keep latest model / thinking for transport body (avoid stale closure)
+  // Keep latest model / thinking / mode for transport body (avoid stale closure)
   const selectedModelRef = useRef(selectedModel)
   selectedModelRef.current = selectedModel
   const thinkingIntensityRef = useRef(thinkingIntensity)
   thinkingIntensityRef.current = thinkingIntensity
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  /** Track tool start times (keyed by metaKey) for execution duration */
+  const toolStartTimes = useRef<Map<string, number>>(new Map())
+  const toolDurations = useRef<Map<string, number>>(new Map())
+  /** Accumulated worker run states keyed by jobId (live + history) */
+  const [workerStates, setWorkerStates] = useState<Map<string, WorkerRunState>>(new Map())
+  /** Terminal worker states moved from workerStates after cleanup */
+  const terminalWorkerStatesRef = useRef<Map<string, WorkerRunState>>(new Map())
+
+  /** Track chat start time for total elapsed */
+  const chatStartRef = useRef<number | null>(null)
+  const [chatElapsed, setChatElapsed] = useState('')
+  const chatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [activeBudgetEvent, setActiveBudgetEvent] = useState<LeaderStepBudgetEvent | null>(null)
+  const [canContinueBudget, setCanContinueBudget] = useState(false)
+  /** Tick counter to trigger re-renders for live tool duration updates */
+  const [tick, setTick] = useState(0)
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const localeRef = useRef(locale)
+  localeRef.current = locale
+  const projectRef = useRef(project)
+  projectRef.current = project
+  const sessionRef = useRef(session)
+  sessionRef.current = session
 
   // Bind Mastra memory thread/resource so goal-state + working memory can run
   const memoryThreadId = session.memoryThreadId ?? session.id
@@ -81,6 +130,14 @@ export function ChatPanel({
       const list: ModelOption[] = []
       for (const p of s.providers) {
         if (!p.configured) continue
+        const supported =
+          p.thinkingIntensities && p.thinkingIntensities.length > 0
+            ? (p.thinkingIntensities.filter((x) =>
+                THINKING_INTENSITY_OPTIONS.includes(x),
+              ) as ThinkingIntensity[])
+            : p.custom
+              ? (['off', 'medium'] as ThinkingIntensity[])
+              : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
         for (const m of p.models) {
           list.push({
             id: m.id,
@@ -88,21 +145,28 @@ export function ChatPanel({
             providerId: p.id,
             providerName: p.name,
             configured: true,
+            thinkingIntensities: supported,
           })
         }
       }
       setModels(list)
       const current = s.settings.leaderModel
-      setSelectedModel((prev) => {
-        if (prev && list.some((m) => m.id === prev)) return prev
-        if (current && list.some((m) => m.id === current)) return current
-        return list[0]?.id ?? current ?? ''
-      })
-      const ti = s.settings.thinkingIntensity
-      if (ti && THINKING_INTENSITY_OPTIONS.includes(ti)) {
-        setThinkingIntensity(ti)
-        thinkingIntensityRef.current = ti
-      }
+      const previous = selectedModelRef.current
+      const nextModel = previous && list.some((m) => m.id === previous)
+        ? previous
+        : current && list.some((m) => m.id === current)
+          ? current
+          : list[0]?.id ?? current ?? ''
+      setSelectedModel(nextModel)
+      selectedModelRef.current = nextModel
+      const preferred = s.settings.thinkingIntensity
+      const meta = list.find((m) => m.id === nextModel) ?? list[0]
+      const nextThink = clampThink(
+        preferred && THINKING_INTENSITY_OPTIONS.includes(preferred) ? preferred : undefined,
+        meta?.thinkingIntensities ?? [],
+      )
+      setThinkingIntensity(nextThink)
+      thinkingIntensityRef.current = nextThink
     } catch (e) {
       console.warn('[ChatPanel] load models failed', e)
     } finally {
@@ -128,9 +192,21 @@ export function ChatPanel({
         // @see https://mastra.ai/guides/build-your-ui/ai-sdk-ui
         prepareSendMessagesRequest: ({ messages: msgs }) => {
           const last = msgs[msgs.length - 1]
+          const proj = projectRef.current
+          const sess = sessionRef.current
+          // UI keeps clean user text; inject mode/context only on the wire
+          const wireLast = enrichLastUserMessageForWire(last as never, {
+            locale: localeRef.current,
+            mode: modeRef.current,
+            projectName: proj?.name,
+            projectPath: proj?.rootPath,
+            sessionTitle: sess?.title,
+            model: selectedModelRef.current || undefined,
+            thinking: thinkingIntensityRef.current,
+          })
           return {
             body: {
-              messages: last ? [last] : [],
+              messages: wireLast ? [wireLast] : [],
               memory: {
                 thread: memoryThreadId,
                 resource: memoryResourceId,
@@ -147,6 +223,12 @@ export function ChatPanel({
   const { messages, sendMessage, status, stop, error, setMessages } = useChat({
     transport,
     id: memoryThreadId,
+    experimental_throttle: 50,
+    onData: (dataPart) => {
+      if (dataPart.type !== 'data-worker-run') return
+      const event = dataPart.data as WorkerRunEvent
+      setWorkerStates((prev) => workerRunReducer(prev, event))
+    },
   })
 
   const busy = status === 'submitted' || status === 'streaming'
@@ -180,9 +262,89 @@ export function ChatPanel({
     }
   }, [memoryThreadId, memoryResourceId, setMessages])
 
+  // Seed worker run states from persisted message parts (history loads)
   useEffect(() => {
-    onBusyChange?.(busy)
-  }, [busy, onBusyChange])
+    if (historyLoading) return
+    setWorkerStates((prev) => seedWorkerStates(prev, messages))
+  }, [messages, historyLoading, memoryThreadId])
+
+  // Extract active budget events from message parts
+  useEffect(() => {
+    const actionable = findLatestActionableBudget(messages)
+    if (actionable) {
+      setActiveBudgetEvent((previous) =>
+        previous?.data.runId === actionable.data.runId
+          && previous.data.maxSteps === actionable.data.maxSteps
+          && previous.data.usedSteps === actionable.data.usedSteps
+          ? previous
+          : actionable,
+      )
+      setCanContinueBudget(true)
+    } else {
+      setActiveBudgetEvent(null)
+      setCanContinueBudget(false)
+    }
+  }, [messages])
+
+  // Clean up transient worker states for terminal jobs already persisted in message.parts
+  useEffect(() => {
+    setWorkerStates((prev) => {
+      const { active, terminal } = cleanupTerminalWorkers(prev, messages)
+      for (const [jobId, state] of terminal) {
+        terminalWorkerStatesRef.current.set(jobId, state)
+      }
+      return active
+    })
+  }, [messages])
+
+  const onBusyChangeRef = useRef(onBusyChange)
+  onBusyChangeRef.current = onBusyChange
+
+  useEffect(() => {
+    onBusyChangeRef.current?.(busy)
+  }, [busy])
+
+  // Chat total elapsed timer (minutes) + tool duration tick
+  const hasRunningWorker = useMemo(
+    () => {
+      for (const s of workerStates.values()) {
+        if (s.status === 'running') return true
+      }
+      return false
+    },
+    [workerStates],
+  )
+
+  useEffect(() => {
+    if (busy) {
+      if (!chatStartRef.current) chatStartRef.current = Date.now()
+      if (!chatTimerRef.current) {
+        chatTimerRef.current = setInterval(() => {
+          const elapsed = (Date.now() - chatStartRef.current!) / 60000
+          setChatElapsed(`${elapsed.toFixed(1)}m`)
+        }, 1000)
+      }
+      // Only start the 250ms worker-card tick when there are running workers
+      if (hasRunningWorker && !tickRef.current) {
+        tickRef.current = setInterval(() => setTick((t) => t + 1), 250)
+      } else if (!hasRunningWorker && tickRef.current) {
+        clearInterval(tickRef.current)
+        tickRef.current = null
+      }
+    } else if (!busy) {
+      if (chatStartRef.current) {
+        const total = (Date.now() - chatStartRef.current) / 60000
+        setChatElapsed(`${total.toFixed(1)}m`)
+      }
+      if (chatTimerRef.current) { clearInterval(chatTimerRef.current); chatTimerRef.current = null }
+      if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+      chatStartRef.current = null
+    }
+    return () => {
+      if (chatTimerRef.current) clearInterval(chatTimerRef.current)
+      if (tickRef.current) clearInterval(tickRef.current)
+    }
+  }, [busy, hasRunningWorker])
 
   useEffect(() => {
     if (isActive) {
@@ -218,14 +380,6 @@ export function ChatPanel({
     return t('mode.review')
   }
 
-  const thinkLabel = (level: ThinkingIntensity) => {
-    if (level === 'off') return t('chat.think.off')
-    if (level === 'low') return t('chat.think.low')
-    if (level === 'medium') return t('chat.think.medium')
-    if (level === 'high') return t('chat.think.high')
-    return t('chat.think.max')
-  }
-
   const selectMode = (m: LeaderMode) => {
     setMode(m)
     setModeMenuOpen(false)
@@ -247,31 +401,65 @@ export function ChatPanel({
     ? `${selectedMeta.providerName} / ${selectedMeta.label}`
     : selectedModel || t('chat.model')
 
+  const supportedThinking: ThinkingIntensity[] =
+    selectedMeta?.thinkingIntensities?.length
+      ? selectedMeta.thinkingIntensities
+      : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
+
+  // When model changes, clamp thinking to what that provider supports
+  useEffect(() => {
+    if (!selectedMeta) return
+    const next = clampThink(thinkingIntensity, selectedMeta.thinkingIntensities)
+    if (next !== thinkingIntensity) {
+      setThinkingIntensity(next)
+      thinkingIntensityRef.current = next
+    }
+  }, [selectedModel, selectedMeta, thinkingIntensity])
+
+  const friendlyError = useMemo(() => {
+    if (!error) return null
+    return formatChatError(error, {
+      missingKey: t('chat.errorMissingKey'),
+      network: t('chat.errorNetwork'),
+      offline: t('chat.errorOffline'),
+      model: t('chat.errorModel'),
+      generic: t('chat.errorGeneric'),
+    })
+  }, [error, t])
+
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const text = input.trim()
     if (!text || busy) return
 
-    const langHint = locale === 'zh' ? 'Respond in Chinese. ' : 'Respond in English. '
+    // Soft client guard: no configured model/key — don't fire a raw stream error
+    if (!selectedModel || models.length === 0) {
+      console.error('[chat] blocked send: no configured model/API key', {
+        selectedModel,
+        models: models.length,
+      })
+      // useChat error state is server-driven; surface via temporary local message is harder.
+      // Prefer opening settings — user sees empty model chip already.
+      onOpenSettings?.()
+      return
+    }
 
-    const prefix =
-      mode === 'ask'
-        ? '[mode=ask] '
-        : mode === 'plan'
-          ? '[mode=plan] Produce a plan only unless I ask to execute. Prefer role=plan workers if dispatching. '
-          : mode === 'review'
-            ? '[mode=review] Focus on review. Prefer role=review workers. '
-            : '[mode=build] Prefer role=coder then role=test/review as needed. '
-
-    const modelHint = selectedModel ? ` model=${selectedModel}` : ''
-    const thinkHint = ` thinking=${thinkingIntensity}`
-    const context = project
-      ? `\n\n[context] project=${project.name} path=${project.rootPath} session=${session.title} locale=${locale} mode=${mode}${modelHint}${thinkHint}`
-      : `\n\n[context] locale=${locale} mode=${mode}${modelHint}${thinkHint}`
-
-    void sendMessage({ text: `${langHint}${prefix}${text}${context}` })
+    // UI message = clean user text only; mode/context injected in prepareSendMessagesRequest
+    void sendMessage({ text })
     setInput('')
   }
+
+  const handleContinueBudget = useCallback(() => {
+    if (!activeBudgetEvent || busy) return
+    const saved = activeBudgetEvent
+    setCanContinueBudget(false)
+    const prompt = buildContinuePrompt(locale)
+    sendMessage({ text: prompt })
+      .catch(() => {
+        setActiveBudgetEvent(saved)
+        setCanContinueBudget(true)
+      })
+  }, [activeBudgetEvent, busy, locale, sendMessage])
 
   // Group models by provider for the menu (before any early return — hooks rules)
   const byProvider = useMemo(() => {
@@ -301,6 +489,9 @@ export function ChatPanel({
     <main className="panel panel-center chat-panel" style={{ display: 'flex', flexDirection: 'column' }}>
       <div className="session-toolbar">
         <span className="session-title-main">{session.title}</span>
+        {chatElapsed && (
+          <span className="badge badge-gray chat-elapsed">{chatElapsed}</span>
+        )}
         <div className="spacer" />
         <span className="badge badge-gray" title={selectedModel}>
           {selectedMeta ? `${selectedMeta.providerName}/${selectedMeta.label}` : selectedModel || '—'}
@@ -309,7 +500,7 @@ export function ChatPanel({
           {t('chat.mode')}: {modeLabel(mode)}
         </span>
         <span className="badge badge-gray chat-think-badge" title={t('chat.think.hint')}>
-          {t('chat.think.short')}: {thinkLabel(thinkingIntensity)}
+          {t('chat.think.short')}: {thinkingIntensity}
         </span>
       </div>
 
@@ -342,7 +533,7 @@ export function ChatPanel({
                       {t('chat.model')}: {selectedModel || '—'}
                     </li>
                     <li>
-                      {t('chat.think.label')}: {thinkLabel(thinkingIntensity)}
+                      {t('chat.think.label')}: {thinkingIntensity}
                     </li>
                     <li>
                       {t('chat.project')}: {project?.name ?? '—'}
@@ -368,7 +559,9 @@ export function ChatPanel({
             </div>
           )}
 
-          {messages.map((message) => (
+          {messages.map((message) => {
+                const renderedWorkerJobs = new Set<string>()
+                return (
             <div
               key={message.id}
               className={`msg ${message.role === 'user' ? 'user' : 'assistant'}`}
@@ -385,43 +578,74 @@ export function ChatPanel({
               </div>
               {message.parts.map((part, i) => {
                 if (part.type === 'text') {
-                  return message.role === 'user' ? (
-                    <div className="bubble" key={i}>
-                      {part.text}
-                    </div>
-                  ) : (
+                  if (message.role === 'user') {
+                    const { text: display, meta } = parseRouterUserMessage(part.text)
+                    const chips: string[] = []
+                    if (meta.mode) chips.push(meta.mode)
+                    if (meta.model) {
+                      const short = meta.model.includes('/')
+                        ? meta.model.slice(meta.model.indexOf('/') + 1)
+                        : meta.model
+                      chips.push(short)
+                    }
+                    if (meta.thinking && meta.thinking !== 'off') {
+                      chips.push(`think:${meta.thinking}`)
+                    }
+                    return (
+                      <div className="user-msg-block" key={i}>
+                        <div className="bubble">{display || part.text}</div>
+                        {chips.length > 0 && (
+                          <div className="user-msg-meta" title={part.text}>
+                            {chips.map((c) => (
+                              <span key={c} className="user-msg-chip">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+                  return (
                     <div className="bubble bubble-md" key={i}>
                       <MarkdownContent>{part.text}</MarkdownContent>
                     </div>
                   )
                 }
 
-                // Reasoning: open while streaming, auto-collapse when done
+                // Reasoning: expanded while streaming ("思考中" / "Thinking"),
+                // auto-collapse when done (label "思考" / "Thinking")
                 if (part.type === 'reasoning') {
                   const rp = part as { type: 'reasoning'; text?: string; state?: string }
                   const text = rp.text?.trim() ?? ''
                   if (!text && rp.state !== 'streaming') return null
                   const key = metaKey(message.id, i)
                   const streaming = rp.state === 'streaming'
-                  const open = isMetaOpen(key, streaming)
+                  // Force open only while streaming; after done stay collapsed
+                  // unless the user explicitly expands again.
+                  const open = streaming ? true : metaOpen[key] === true
                   return (
                     <details
                       className={`chat-meta chat-meta-thinking${streaming ? ' live' : ''}`}
                       key={i}
                       open={open}
                       onToggle={(e) => {
+                        // While streaming, keep forced-open (ignore collapse attempts)
+                        if (streaming) {
+                          e.preventDefault()
+                          return
+                        }
                         const el = e.currentTarget
-                        setMetaOpen((prev) => ({ ...prev, [key]: el.open }))
+                        setMetaOpen((prev) => setRecordKey(prev, key as string, el.open))
                       }}
                     >
                       <summary className="chat-meta-summary">
                         <span className="chat-meta-chevron" aria-hidden>
                           ▸
                         </span>
-                        <span className="chat-meta-label">{t('chat.thinking')}</span>
-                        {streaming && (
-                          <span className="chat-meta-state">{t('chat.thinkingLive')}</span>
-                        )}
+                        <span className="chat-meta-label">
+                          {streaming ? t('chat.thinkingLive') : t('chat.thinking')}
+                        </span>
                       </summary>
                       <div className="chat-meta-body">{text || '…'}</div>
                     </details>
@@ -449,6 +673,47 @@ export function ChatPanel({
                     Boolean(toolPart.errorText)
                   const key = metaKey(message.id, i)
                   const open = isMetaOpen(key, false)
+                  const toolOutput = toolPart.output && typeof toolPart.output === 'object'
+                    ? toolPart.output as Record<string, unknown>
+                    : null
+                  const workerJobId = typeof toolOutput?.jobId === 'string'
+                    ? toolOutput.jobId
+                    : null
+                  const fallbackWorkerState = workerJobId
+                    ? workerStates.get(workerJobId) ?? terminalWorkerStatesRef.current.get(workerJobId)
+                    : undefined
+
+                  if (workerJobId && fallbackWorkerState && fallbackWorkerState.status !== 'running') {
+                    if (renderedWorkerJobs.has(workerJobId)) return null
+                    renderedWorkerJobs.add(workerJobId)
+                    return (
+                      <WorkerRunCard
+                        key={i}
+                        state={fallbackWorkerState}
+                        open={isMetaOpen(key, false)}
+                        onToggle={(o) =>
+                          setMetaOpen((prev) => setRecordKey(prev, key, o))
+                        }
+                        tick={tick}
+                      />
+                    )
+                  }
+
+                  // Track tool execution duration (live)
+                  // eslint-disable-next-line react-hooks/rules-of-hooks
+                  const isDone = toolPart.state === 'result' || toolPart.output != null || Boolean(toolPart.errorText)
+                  if (!isDone && !toolStartTimes.current.has(key)) {
+                    toolStartTimes.current.set(key, Date.now())
+                  }
+                  if (isDone && toolStartTimes.current.has(key) && !toolDurations.current.has(key)) {
+                    const duration = (Date.now() - toolStartTimes.current.get(key)!) / 1000
+                    toolDurations.current.set(key, duration)
+                    toolStartTimes.current.delete(key)
+                  }
+                  const finalDuration = toolDurations.current.get(key)
+                  const liveMs = toolStartTimes.current.has(key) ? Date.now() - toolStartTimes.current.get(key)! : 0
+                  const showDuration = finalDuration != null ? finalDuration : (liveMs > 0 ? liveMs / 1000 : null)
+
                   return (
                     <details
                       className="chat-meta chat-meta-tool"
@@ -456,7 +721,7 @@ export function ChatPanel({
                       open={open}
                       onToggle={(e) => {
                         const el = e.currentTarget
-                        setMetaOpen((prev) => ({ ...prev, [key]: el.open }))
+                        setMetaOpen((prev) => setRecordKey(prev, key as string, el.open))
                       }}
                     >
                       <summary className="chat-meta-summary">
@@ -467,6 +732,11 @@ export function ChatPanel({
                         <span className="chat-meta-name mono">{name}</span>
                         {toolPart.state && (
                           <span className="chat-meta-state">{toolPart.state}</span>
+                        )}
+                        {showDuration != null && (
+                          <span className={`chat-meta-duration${finalDuration == null ? ' live' : ''}`}>
+                            {showDuration.toFixed(1)}s
+                          </span>
                         )}
                         {toolPart.errorText && (
                           <span className="chat-meta-error">{t('chat.toolError')}</span>
@@ -492,15 +762,79 @@ export function ChatPanel({
                     </details>
                   )
                 }
+
+                // Worker run events: rendered from accumulated state
+                if (part.type === 'data-worker-run') {
+                  const data = (part as { type: 'data-worker-run'; data: WorkerRunEvent }).data
+                  const state = workerStates.get(data.jobId)
+                    ?? terminalWorkerStatesRef.current.get(data.jobId)
+                  if (!state) return null
+                  if (renderedWorkerJobs.has(data.jobId)) return null
+                  renderedWorkerJobs.add(data.jobId)
+                  const wrKey = metaKey(message.id, i)
+                  return (
+                    <WorkerRunCard
+                      key={i}
+                      state={state}
+                      open={isMetaOpen(wrKey, state.status === 'running')}
+                      onToggle={(o) =>
+                        setMetaOpen((prev) => setRecordKey(prev, wrKey, o))
+                      }
+                      tick={tick}
+                    />
+                  )
+                }
                 return null
               })}
             </div>
-          ))}
+            )
+          })}
 
-          {error && (
-            <div className="chat-error-block">
+          {/* Live running worker cards (transient, not in message.parts) */}
+          {Array.from(workerStates.entries())
+            .filter(([_, s]) => s.status === 'running')
+            .map(([jobId, state]) => {
+              const wrKey = `live-${jobId}`
+              return (
+                <WorkerRunCard
+                  key={wrKey}
+                  state={state}
+                  open={isMetaOpen(wrKey, true)}
+                  onToggle={(o) =>
+                    setMetaOpen((prev) => setRecordKey(prev, wrKey, o))
+                  }
+                  tick={tick}
+                />
+              )
+            })}
+
+          {activeBudgetEvent && (
+            <LeaderStepBudgetNotice
+              event={activeBudgetEvent}
+              canContinue={canContinueBudget}
+              busy={busy}
+              onContinue={handleContinueBudget}
+              continueLabel={t('chat.continueTask')}
+              description={t('chat.budgetExhausted', {
+                used: String(activeBudgetEvent.data.usedSteps),
+                max: String(activeBudgetEvent.data.maxSteps),
+              })}
+            />
+          )}
+
+          {friendlyError && (
+            <div className="chat-error-block" role="alert">
               <span className="chat-error-label">{t('chat.error')}</span>
-              <div className="chat-error-body">{error.message}</div>
+              <div className="chat-error-body">{friendlyError.message}</div>
+              {friendlyError.action === 'open_settings' && onOpenSettings && (
+                <button
+                  type="button"
+                  className="btn btn-soft btn-sm chat-error-action"
+                  onClick={() => onOpenSettings()}
+                >
+                  {t('chat.openSettings')}
+                </button>
+              )}
             </div>
           )}
 
@@ -586,7 +920,10 @@ export function ChatPanel({
                 <div className="mode-menu model-menu" role="menu">
                   {byProvider.map(([providerId, group]) => (
                     <div key={providerId} className="model-menu-group">
-                      <div className="model-menu-provider">{group.name}</div>
+                      <div className="model-menu-provider">
+                        <ProviderLogo providerId={providerId} size={14} />
+                        <span>{group.name}</span>
+                      </div>
                       {group.models.map((m) => (
                         <button
                           key={m.id}
@@ -596,6 +933,9 @@ export function ChatPanel({
                           onClick={() => {
                             setSelectedModel(m.id)
                             selectedModelRef.current = m.id
+                            const nextThink = clampThink(thinkingIntensity, m.thinkingIntensities)
+                            setThinkingIntensity(nextThink)
+                            thinkingIntensityRef.current = nextThink
                             setModelMenuOpen(false)
                           }}
                         >
@@ -609,36 +949,44 @@ export function ChatPanel({
               )}
             </div>
 
-            <div className="mode-menu-wrap think-menu-wrap" ref={thinkWrapRef}>
-              <button
-                type="button"
-                className="chip mode-chip think-chip"
+            {supportedThinking.length > 1 ? (
+              <div className="mode-menu-wrap think-menu-wrap" ref={thinkWrapRef}>
+                <button
+                  type="button"
+                  className="chip mode-chip think-chip"
+                  title={t('chat.think.hint')}
+                  onClick={() => {
+                    setThinkMenuOpen((v) => !v)
+                    setModeMenuOpen(false)
+                    setModelMenuOpen(false)
+                  }}
+                >
+                  {t('chat.think.short')}: {thinkingIntensity} ▾
+                </button>
+                {thinkMenuOpen && (
+                  <div className="mode-menu think-menu" role="menu">
+                    {supportedThinking.map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        className={thinkingIntensity === level ? 'active' : ''}
+                        role="menuitem"
+                        onClick={() => selectThinking(level)}
+                      >
+                        <span className="mono">{level}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : supportedThinking.length === 1 ? (
+              <span
+                className="chip mode-chip think-chip think-chip-fixed"
                 title={t('chat.think.hint')}
-                onClick={() => {
-                  setThinkMenuOpen((v) => !v)
-                  setModeMenuOpen(false)
-                  setModelMenuOpen(false)
-                }}
               >
-                {t('chat.think.short')}: {thinkLabel(thinkingIntensity)} ▾
-              </button>
-              {thinkMenuOpen && (
-                <div className="mode-menu think-menu" role="menu">
-                  {THINKING_INTENSITY_OPTIONS.map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      className={thinkingIntensity === level ? 'active' : ''}
-                      role="menuitem"
-                      onClick={() => selectThinking(level)}
-                    >
-                      <span>{thinkLabel(level)}</span>
-                      <span className="model-menu-id mono">{level}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                {t('chat.think.short')}: {supportedThinking[0]}
+              </span>
+            ) : null}
 
             <div className="spacer" />
             {busy && (

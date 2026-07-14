@@ -96,6 +96,7 @@ function AppShell({
   resolveApproval,
   demoApproval,
   registerWorker,
+  detectWorkers,
   refresh,
 }: ReturnType<typeof useAppState>) {
   const { t } = useI18n()
@@ -273,6 +274,7 @@ function AppShell({
             }
             onDemoApproval={() => void demoApproval().catch((e) => alert(String(e)))}
             onRegisterWorker={(body) => registerWorker(body)}
+            onDetectWorkers={() => detectWorkers({ apply: true })}
             onRefreshSnapshot={() => void refresh()}
           />
         </div>

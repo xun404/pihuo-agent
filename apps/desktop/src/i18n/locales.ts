@@ -63,6 +63,11 @@ export type MessageKey =
   | 'chat.placeholder'
   | 'chat.stop'
   | 'chat.error'
+  | 'chat.errorMissingKey'
+  | 'chat.errorNetwork'
+  | 'chat.errorOffline'
+  | 'chat.errorModel'
+  | 'chat.errorGeneric'
   | 'chat.tool'
   | 'chat.toolError'
   | 'chat.thinking'
@@ -93,6 +98,11 @@ export type MessageKey =
   | 'workers.healthHint'
   | 'workers.healthAll'
   | 'workers.healthAllHint'
+  | 'workers.detect'
+  | 'workers.detectHint'
+  | 'workers.detectFirstRun'
+  | 'workers.detectOk'
+  | 'workers.detectNone'
   | 'workers.healthDetail'
   | 'workers.healthNoDetail'
   | 'workers.healthDeep'
@@ -111,7 +121,10 @@ export type MessageKey =
   | 'workers.modelLoading'
   | 'workers.modelComboHint'
   | 'workers.modelManual'
+  | 'workers.modelNeedSelect'
+  | 'workers.modelNeedSelectOpenCode'
   | 'jobs.title'
+  | 'jobs.modelDisabledHint'
   | 'jobs.empty'
   | 'jobs.dispatch'
   | 'jobs.dispatchRole'
@@ -175,6 +188,7 @@ export type MessageKey =
   | 'settings.keyCleared'
   | 'settings.tabModel'
   | 'settings.tabProviders'
+  | 'settings.tabRuntime'
   | 'settings.tabAbout'
   | 'settings.pickProvider'
   | 'settings.pickModel'
@@ -232,6 +246,17 @@ export type MessageKey =
   | 'settings.styleGoogle'
   | 'settings.showAdvanced'
   | 'settings.hideAdvanced'
+  | 'settings.useGateway'
+  | 'settings.sourcesHint'
+  | 'settings.thinkingSupport'
+  | 'settings.thinkingSupportHint'
+  | 'settings.runtime.leaderMaxSteps'
+  | 'settings.runtime.leaderMaxStepsDesc'
+  | 'settings.runtime.leaderMaxStepsError'
+  | 'settings.runtime.saveSuccess'
+  | 'chat.budgetExhausted'
+  | 'chat.continueTask'
+  | 'chat.continueHint'
   | 'right.goals'
   | 'goals.title'
   | 'goals.hint'
@@ -297,7 +322,7 @@ const zh: Dict = {
   'chat.openSession': '打开 Session 开始协作',
   'chat.openSessionHint':
     '选择左侧 Session，或新建一个。Mastra Leader 会按角色协调 plan / coder / review / test 等 CLI Worker。',
-  'chat.serverDown': 'Mastra 服务未连接（localhost:4111）。请先运行 npm run dev:mastra',
+  'chat.serverDown': 'Mastra 服务未连接（127.0.0.1:4111）。请先运行 npm run dev:mastra',
   'chat.ready': '就绪',
   'chat.connected': '已连接',
   'chat.offline': '离线',
@@ -314,11 +339,16 @@ const zh: Dict = {
   'chat.you': '你',
   'chat.placeholder': '描述任务，或指定角色/Worker…（⌘↵ 发送）',
   'chat.stop': '停止',
-  'chat.error': '对话错误',
+  'chat.error': '无法完成对话',
+  'chat.errorMissingKey': '尚未配置该模型的 API Key。请到设置中填写后重试。',
+  'chat.errorNetwork': '无法连接本地服务，请确认 API 已启动。',
+  'chat.errorOffline': 'Mastra 服务未连接，请先启动 npm run dev:mastra。',
+  'chat.errorModel': '模型不可用或 id 无效，请在设置中更换模型。',
+  'chat.errorGeneric': '请求失败。详细信息已输出到开发者终端。',
   'chat.tool': '工具',
   'chat.toolError': '失败',
   'chat.thinking': '思考',
-  'chat.thinkingLive': '进行中…',
+  'chat.thinkingLive': '思考中',
   'chat.think.label': '思考强度',
   'chat.think.short': '思考',
   'chat.think.hint': '控制推理/思考预算；默认折叠显示思考过程与工具调用',
@@ -346,6 +376,12 @@ const zh: Dict = {
   'workers.healthHint': '点击检查命令是否可用',
   'workers.healthAll': '全部检查',
   'workers.healthAllHint': '检查所有已启用 Worker 的可用性',
+  'workers.detect': '自动侦测',
+  'workers.detectHint': '扫描本机已安装的 ACP CLI（Claude / Codex / OpenCode）',
+  'workers.detectFirstRun':
+    '首次使用：点击「自动侦测」识别本机 CLI，并启用可用的 ACP Worker。OpenCode 请在列表中选择可用模型（避免 “Model is disabled”）。',
+  'workers.detectOk': '已识别并启用：{names}',
+  'workers.detectNone': '未发现可用 CLI。请安装 Claude Code、Codex 或 OpenCode 后重试。',
   'workers.healthDetail': '健康详情',
   'workers.healthNoDetail': '暂无详情。点击状态徽章进行检查。',
   'workers.healthDeep': '深度检查（启动 ACP 进程）',
@@ -364,6 +400,10 @@ const zh: Dict = {
   'workers.modelLoading': '正在从 ACP 加载…',
   'workers.modelComboHint': '选择模型；选「加载/更新列表」会启动 ACP 拉取',
   'workers.modelManual': '✎ 手动输入 model id…',
+  'workers.modelNeedSelect':
+    '⚠ 请选择可用模型。CLI 默认模型可能被禁用（Model is disabled），派发任务前务必点选列表中的模型。',
+  'workers.modelNeedSelectOpenCode':
+    '⚠ OpenCode 默认模型常不可用。请先「加载模型列表」，再选择 Zen 免费模型（如 Big Pickle），不要留在「默认（CLI）」。',
   'jobs.title': 'Worker 任务',
   'jobs.empty': '暂无任务。可在下方派发，或由 Leader 调用 dispatch-worker。',
   'jobs.dispatch': '派发任务',
@@ -372,6 +412,8 @@ const zh: Dict = {
   'jobs.needSession': '请先打开一个 Session 再派发。',
   'jobs.cancel': '取消',
   'jobs.retry': '重试',
+  'jobs.modelDisabledHint':
+    '模型不可用：请到 Workers 面板为该 Worker 选择可用模型后再重试（勿使用「默认」）。',
   'approvals.empty': '暂无待批权限。ACP 权限请求会进入此队列。',
   'approvals.pending': '待审批',
   'approvals.allow': '允许',
@@ -399,7 +441,7 @@ const zh: Dict = {
   'theme.light': '浅色',
   'theme.dark': '深色',
   'settings.title': '设置',
-  'settings.subtitle': '选择 Leader 模型并安全保存 API Key',
+  'settings.subtitle': '选一个 Leader 模型，配好 Key 就能聊',
   'settings.close': '关闭',
   'settings.save': '保存并应用',
   'settings.saved': '已保存。密钥已加密，模型将用于新对话。',
@@ -420,31 +462,45 @@ const zh: Dict = {
   'settings.clear': '清除',
   'settings.keyCleared': '密钥已清除',
   'settings.tabModel': '模型',
-  'settings.tabProviders': '自定义 Provider',
+  'settings.tabProviders': '自定义网关',
   'settings.tabAbout': '关于',
-  'settings.pickProvider': '选择提供方',
-  'settings.pickModel': '选择模型',
+  'settings.pickProvider': '提供方',
+  'settings.pickModel': '模型',
   'settings.thinking': '思考强度',
-  'settings.thinkingHint':
-    '映射到模型侧 reasoning / thinking 预算（OpenAI reasoningEffort、Anthropic budget、Gemini thinkingBudget 等）。聊天栏可临时切换并写回此处。',
-  'settings.providerKey': '{provider} 的 API Key',
-  'settings.needKey': '需配置 Key',
+  'settings.thinkingHint': '内置模型使用系统预设，在聊天栏切换。',
+  'settings.thinkingSupport': '支持的思考强度',
+  'settings.thinkingSupportHint':
+    '勾选该网关实际支持的档位（off / low / medium / high / max）；聊天栏只显示已勾选项。',
+  'settings.tabRuntime': '运行',
+  'settings.runtime.leaderMaxSteps': 'Leader 最大步骤数',
+  'settings.runtime.leaderMaxStepsDesc':
+    '单次响应允许的最大模型步骤数，包含工具调用和结果处理。提高数值会增加耗时与成本。范围：10-1000。',
+  'settings.runtime.leaderMaxStepsError': '请输入 10 到 1000 之间的整数',
+  'settings.runtime.saveSuccess': '运行设置已保存',
+  'chat.budgetExhausted': '已消耗 {used}/{max} 步骤预算，任务可能尚未完成。',
+  'chat.continueTask': '继续',
+  'chat.continueHint':
+    '继续完成上一轮未完成的任务。请先处理最后一个工具结果，不要重复已完成步骤。',
+  'settings.providerKey': '{provider} API Key',
+  'settings.needKey': '未配置 Key',
   'settings.keyReady': 'Key 已就绪',
-  'settings.keyRequired': '此提供方尚未配置 Key，保存前请填写。',
-  'settings.keyOptionalUpdate': '可更新 Key（留空则保持原值）。',
-  'settings.updateKey': '更新 Key',
-  'settings.showCustom': '使用自定义 model id…',
-  'settings.hideCustom': '收起自定义',
-  'settings.current': '当前 Leader 模型',
-  'settings.sources': '模型数据来源',
-  'settings.modelDocs': '查看模型说明',
+  'settings.keyRequired': '保存前请粘贴 API Key，否则无法调用此提供方。',
+  'settings.keyOptionalUpdate': 'Key 已保存。要更换时再粘贴新值。',
+  'settings.updateKey': '更换 Key',
+  'settings.showCustom': '手动输入 model id…',
+  'settings.hideCustom': '收起手动输入',
+  'settings.current': '当前选用',
+  'settings.sources': '说明',
+  'settings.sourcesHint':
+    '内置只保留常用官方提供方。OpenRouter、Ollama、硅基流动等请走「自定义网关」。',
+  'settings.modelDocs': '文档',
   'settings.show': '显示',
   'settings.hide': '隐藏',
   'settings.customIntro':
-    '添加公司网关或第三方 API（类似 OpenCode）。一般只需：名称、地址、模型名、API Key。',
-  'settings.customEmpty': '还没有自定义 Provider。填下面几项即可。',
-  'settings.addCustomProvider': '添加自定义 Provider',
-  'settings.editCustom': '编辑自定义 Provider',
+    'OpenRouter、Ollama、公司内网等 OpenAI 兼容接口：填名称、Base URL、模型名和 Key 即可。',
+  'settings.customEmpty': '还没有自定义网关。',
+  'settings.addCustomProvider': '添加网关',
+  'settings.editCustom': '编辑网关',
   'settings.customId': 'Provider id',
   'settings.customName': '名称',
   'settings.customEnv': 'API Key 环境变量名',
@@ -454,9 +510,10 @@ const zh: Dict = {
   'settings.customRequired': '请填写名称和模型名。',
   'settings.customModelFormat': '模型 id 需为 provider/model 格式。',
   'settings.customIdTaken': '该名称与内置 Provider 冲突，请换一个名字。',
-  'settings.customDrafted': '已加入列表。点底部「保存并应用」即可生效。',
-  'settings.customSaveHint': '填完后点「加入列表」，再点底部「保存并应用」。',
+  'settings.customDrafted': '已加入。点底部「保存并应用」生效。',
+  'settings.customSaveHint': '加入列表后，记得点底部「保存并应用」。',
   'settings.customBadge': '自定义',
+  'settings.useGateway': '选用',
   'settings.edit': '编辑',
   'settings.remove': '移除',
   'settings.cancelEdit': '取消编辑',
@@ -544,7 +601,7 @@ const en: Dict = {
   'chat.openSession': 'Open a session to collaborate',
   'chat.openSessionHint':
     'Pick a session on the left or create one. The Mastra Leader routes by role: plan / coder / review / test CLI workers.',
-  'chat.serverDown': 'Mastra is offline (localhost:4111). Run npm run dev:mastra first.',
+  'chat.serverDown': 'Mastra is offline (127.0.0.1:4111). Run npm run dev:mastra first.',
   'chat.ready': 'Ready',
   'chat.connected': 'connected',
   'chat.offline': 'offline',
@@ -561,11 +618,16 @@ const en: Dict = {
   'chat.you': 'You',
   'chat.placeholder': 'Describe a task, or name a role/worker… (⌘↵ send)',
   'chat.stop': 'Stop',
-  'chat.error': 'Chat error',
+  'chat.error': 'Could not complete chat',
+  'chat.errorMissingKey': 'No API key for this model. Add one in Settings and try again.',
+  'chat.errorNetwork': 'Cannot reach the local API. Make sure it is running.',
+  'chat.errorOffline': 'Mastra is offline. Run npm run dev:mastra first.',
+  'chat.errorModel': 'Model unavailable or invalid. Pick another in Settings.',
+  'chat.errorGeneric': 'Request failed. Details were logged to the developer console.',
   'chat.tool': 'tool',
   'chat.toolError': 'error',
   'chat.thinking': 'Thinking',
-  'chat.thinkingLive': 'live…',
+  'chat.thinkingLive': 'Thinking',
   'chat.think.label': 'Thinking intensity',
   'chat.think.short': 'Think',
   'chat.think.hint': 'Controls reasoning budget; tool calls and thinking stay collapsed by default',
@@ -593,6 +655,12 @@ const en: Dict = {
   'workers.healthHint': 'Click to check whether the command is available',
   'workers.healthAll': 'Check all',
   'workers.healthAllHint': 'Probe all enabled workers',
+  'workers.detect': 'Auto-detect',
+  'workers.detectHint': 'Scan for ACP CLIs on this machine (Claude / Codex / OpenCode)',
+  'workers.detectFirstRun':
+    'First run: click Auto-detect to enable installed ACP workers. For OpenCode, pick a working model to avoid “Model is disabled”.',
+  'workers.detectOk': 'Detected and enabled: {names}',
+  'workers.detectNone': 'No CLI found. Install Claude Code, Codex, or OpenCode and retry.',
   'workers.healthDetail': 'Health details',
   'workers.healthNoDetail': 'No details yet. Click the status badge to check.',
   'workers.healthDeep': 'Deep check (start ACP process)',
@@ -611,6 +679,10 @@ const en: Dict = {
   'workers.modelLoading': 'Loading from ACP…',
   'workers.modelComboHint': 'Pick a model; choose “Load/Refresh” to fetch via ACP',
   'workers.modelManual': '✎ Enter model id…',
+  'workers.modelNeedSelect':
+    '⚠ Pick a working model. The CLI default may be disabled (“Model is disabled”) — select one from the list before dispatching.',
+  'workers.modelNeedSelectOpenCode':
+    '⚠ OpenCode’s default model is often disabled. Load the model list, then pick a Zen free model (e.g. Big Pickle) — do not leave “Default (CLI)”.',
   'jobs.title': 'Worker jobs',
   'jobs.empty': 'No jobs yet. Dispatch below, or let the Leader call dispatch-worker.',
   'jobs.dispatch': 'Dispatch',
@@ -619,6 +691,8 @@ const en: Dict = {
   'jobs.needSession': 'Open a session before dispatching.',
   'jobs.cancel': 'Cancel',
   'jobs.retry': 'Retry',
+  'jobs.modelDisabledHint':
+    'Model unavailable: open Workers, select a working model for this worker, then retry (do not use Default).',
   'approvals.empty': 'No pending permissions. ACP permission requests enqueue here.',
   'approvals.pending': 'Pending',
   'approvals.allow': 'Allow',
@@ -646,7 +720,7 @@ const en: Dict = {
   'theme.light': 'Light',
   'theme.dark': 'Dark',
   'settings.title': 'Settings',
-  'settings.subtitle': 'Pick a Leader model and store API keys securely',
+  'settings.subtitle': 'Pick a Leader model and add its API key',
   'settings.close': 'Close',
   'settings.save': 'Save & apply',
   'settings.saved': 'Saved. Keys encrypted; model applies to new chats.',
@@ -656,7 +730,7 @@ const en: Dict = {
   'settings.safeStorageOn': 'Electron safeStorage enabled',
   'settings.safeStorageOff': 'safeStorage unavailable — using local encrypted file (mode 600)',
   'settings.model': 'Leader model',
-  'settings.modelHint': 'Model ids use provider/model. Catalog curated from models.dev / AI SDK.',
+  'settings.modelHint': 'Model ids use provider/model. Catalog is intentionally small.',
   'settings.provider': 'Provider',
   'settings.leaderModel': 'Model',
   'settings.customModel': 'Custom model id',
@@ -667,31 +741,45 @@ const en: Dict = {
   'settings.clear': 'Clear',
   'settings.keyCleared': 'Key cleared',
   'settings.tabModel': 'Model',
-  'settings.tabProviders': 'Custom providers',
+  'settings.tabProviders': 'Custom gateway',
   'settings.tabAbout': 'About',
-  'settings.pickProvider': 'Choose provider',
-  'settings.pickModel': 'Choose model',
-  'settings.thinking': 'Thinking intensity',
-  'settings.thinkingHint':
-    'Maps to provider reasoning budgets (OpenAI reasoningEffort, Anthropic budget, Gemini thinkingBudget, …). The chat bar can change this and syncs back here.',
+  'settings.pickProvider': 'Provider',
+  'settings.pickModel': 'Model',
+  'settings.thinking': 'Thinking',
+  'settings.thinkingHint': 'Built-in models use system presets; change them in the chat bar.',
+  'settings.thinkingSupport': 'Supported thinking levels',
+  'settings.thinkingSupportHint':
+    'Check levels this gateway supports (off / low / medium / high / max). Chat only lists checked ones.',
+  'settings.tabRuntime': 'Runtime',
+  'settings.runtime.leaderMaxSteps': 'Leader Max Steps',
+  'settings.runtime.leaderMaxStepsDesc':
+    'Maximum model steps per response, including tool calls and result processing. Higher values increase time and cost. Range: 10-1000.',
+  'settings.runtime.leaderMaxStepsError': 'Please enter an integer between 10 and 1000',
+  'settings.runtime.saveSuccess': 'Runtime settings saved',
+  'chat.budgetExhausted': '{used}/{max} step budget exhausted. Task may be incomplete.',
+  'chat.continueTask': 'Continue',
+  'chat.continueHint':
+    'Continue the unfinished task from the last round. Process the last tool result first, do not repeat completed steps.',
   'settings.providerKey': '{provider} API key',
-  'settings.needKey': 'Key required',
+  'settings.needKey': 'No key',
   'settings.keyReady': 'Key ready',
-  'settings.keyRequired': 'This provider has no key yet — add one before chat works.',
-  'settings.keyOptionalUpdate': 'Optional: paste a new key to update (leave blank to keep).',
-  'settings.updateKey': 'Update key',
-  'settings.showCustom': 'Use custom model id…',
-  'settings.hideCustom': 'Hide custom id',
-  'settings.current': 'Current Leader model',
-  'settings.sources': 'Model data sources',
-  'settings.modelDocs': 'Model docs',
+  'settings.keyRequired': 'Paste an API key before this provider will work.',
+  'settings.keyOptionalUpdate': 'Key is stored. Paste a new value only to replace it.',
+  'settings.updateKey': 'Replace key',
+  'settings.showCustom': 'Type model id…',
+  'settings.hideCustom': 'Hide manual id',
+  'settings.current': 'Selected',
+  'settings.sources': 'Notes',
+  'settings.sourcesHint':
+    'Built-ins cover a few official providers only. Use Custom gateway for OpenRouter, Ollama, SiliconFlow, etc.',
+  'settings.modelDocs': 'Docs',
   'settings.show': 'Show',
   'settings.hide': 'Hide',
   'settings.customIntro':
-    'Add a company gateway or third-party API (OpenCode-style). Usually just: name, URL, model, API key.',
-  'settings.customEmpty': 'No custom providers yet. Fill in the fields below.',
-  'settings.addCustomProvider': 'Add custom provider',
-  'settings.editCustom': 'Edit custom provider',
+    'OpenAI-compatible endpoints (OpenRouter, Ollama, private gateways): name, base URL, model, key.',
+  'settings.customEmpty': 'No custom gateways yet.',
+  'settings.addCustomProvider': 'Add gateway',
+  'settings.editCustom': 'Edit gateway',
   'settings.customId': 'Provider id',
   'settings.customName': 'Name',
   'settings.customEnv': 'API key env var',
@@ -701,9 +789,10 @@ const en: Dict = {
   'settings.customRequired': 'Name and model are required.',
   'settings.customModelFormat': 'Model id must be provider/model.',
   'settings.customIdTaken': 'That name conflicts with a built-in provider — pick another.',
-  'settings.customDrafted': 'Added to list. Click Save & apply at the bottom.',
-  'settings.customSaveHint': 'Click “Add to list”, then Save & apply at the bottom.',
+  'settings.customDrafted': 'Added. Click Save & apply at the bottom.',
+  'settings.customSaveHint': 'After adding to the list, click Save & apply.',
   'settings.customBadge': 'Custom',
+  'settings.useGateway': 'Use',
   'settings.edit': 'Edit',
   'settings.remove': 'Remove',
   'settings.cancelEdit': 'Cancel',

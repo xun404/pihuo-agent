@@ -2,6 +2,8 @@
 
 Mac 桌面「多智能体指挥台」：用 **Mastra Supervisor** 做 Leader，协调 **Claude Code / Codex / OpenCode** 等 CLI（ACP）Worker。
 
+> **完整进度 / 已知问题 / 运维交接**：见 [`docs/HANDOVER.md`](./docs/HANDOVER.md)（以交接文档为准，更新于 2026-07-13）。
+
 ## Phase 状态
 
 ### Phase 0（完成）
@@ -16,7 +18,7 @@ Mac 桌面「多智能体指挥台」：用 **Mastra Supervisor** 做 Leader，�
 
 ### Phase 1（完成）
 
-- **ACP 委派路径**：`dispatchToWorker` + `@mastra/acp` `createACPTool`（`packages/adapters`）
+- **ACP 委派路径**：`dispatchToWorker` + `@agentclientprotocol/sdk@1.2.1`（`packages/adapters`）
 - CLI 不可用时返回 **`ok: false` + `mode: planned_unavailable`**（非静默成功）
 - **审批队列**：`ApprovalItem` + `GET/POST /api/approvals` + `POST /api/approvals/:id/resolve`
 - ACP `onPermissionRequest` → **等待** UI/API resolve（`waitForApprovalDecision`，可配置 `APPROVAL_TIMEOUT_MS`）
@@ -116,7 +118,7 @@ npm run gui
 | `OPENAI_API_KEY` | Leader 默认 `openai/gpt-5.5` |
 | `LEADER_MODEL` | 覆盖模型，如 `anthropic/claude-sonnet-4-6` |
 | `MASTRA_PORT` | 默认 `4111` |
-| `VITE_MASTRA_URL` | Desktop 连接的 API，默认 `http://localhost:4111` |
+| `VITE_MASTRA_URL` | Desktop 连接的 API，默认 `http://127.0.0.1:4111`（优先 IPv4，避免 localhost→::1 404） |
 
 ## API 摘要
 
@@ -153,7 +155,7 @@ npm run gui
 | Phase | 内容 |
 |-------|------|
 | **0** | 骨架 + GUI + Leader tools |
-| **1** | `@mastra/acp` 委派路径 + 审批队列（当前） |
+| **1** | `@agentclientprotocol/sdk@1.2.1` 委派 + 审批队列 + fresh/stale 模型缓存（当前） |
 | **2** | Git / Files 实装 + Electron 打包 |
 | **3** | 长任务 / 并行 Worker / 产品化 |
 

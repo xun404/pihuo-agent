@@ -1,9 +1,14 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  BUILTIN_THINKING_PRESETS,
+  DEFAULT_CUSTOM_THINKING_SUPPORT,
   DEFAULT_THINKING_INTENSITY,
+  clampThinkingIntensity,
   isThinkingIntensity,
   normalizeThinkingIntensity,
+  normalizeThinkingIntensityList,
+  resolveSupportedThinkingIntensities,
   thinkingIntensityToProviderOptions,
 } from './thinking-intensity.js'
 
@@ -31,5 +36,38 @@ describe('thinking-intensity', () => {
 
     const max = thinkingIntensityToProviderOptions('max')
     assert.equal(max.openai?.reasoningEffort, 'xhigh')
+  })
+
+  it('normalizes supported intensity lists for custom gateways', () => {
+    assert.deepEqual(normalizeThinkingIntensityList(['max', 'off', 'max', 'nope']), [
+      'off',
+      'max',
+    ])
+    assert.deepEqual(normalizeThinkingIntensityList([]), ['off'])
+    assert.deepEqual(normalizeThinkingIntensityList(null), ['off'])
+  })
+
+  it('clamps preferred intensity into supported set', () => {
+    assert.equal(clampThinkingIntensity('high', ['off', 'medium']), 'medium')
+    assert.equal(clampThinkingIntensity('high', ['off', 'high']), 'high')
+    assert.equal(clampThinkingIntensity('high', ['off']), 'off')
+  })
+
+  it('resolves builtins to full preset and custom to declared list', () => {
+    assert.deepEqual(
+      resolveSupportedThinkingIntensities({ custom: false }),
+      [...BUILTIN_THINKING_PRESETS],
+    )
+    assert.deepEqual(
+      resolveSupportedThinkingIntensities({ custom: true, thinkingIntensities: undefined }),
+      [...DEFAULT_CUSTOM_THINKING_SUPPORT],
+    )
+    assert.deepEqual(
+      resolveSupportedThinkingIntensities({
+        custom: true,
+        thinkingIntensities: ['high', 'off'],
+      }),
+      ['off', 'high'],
+    )
   })
 })

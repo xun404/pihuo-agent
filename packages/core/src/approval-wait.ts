@@ -76,6 +76,16 @@ export class ApprovalWaitRegistry {
     return true
   }
 
+  /**
+   * Cancel all pending waiters by approval ids. Idempotent.
+   */
+  cancelMany(approvalIds: string[]): void {
+    for (const id of approvalIds) {
+      if (!this.has(id)) continue
+      this.settle(id, 'cancel')
+    }
+  }
+
   has(approvalId: string): boolean {
     return this.waiters.has(approvalId)
   }

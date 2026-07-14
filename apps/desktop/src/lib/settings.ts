@@ -2,6 +2,19 @@ import { api } from './api'
 
 export type ApiStyle = 'openai' | 'anthropic' | 'google' | 'custom'
 
+export type ThinkingIntensity = 'off' | 'low' | 'medium' | 'high' | 'max'
+
+export const THINKING_INTENSITY_OPTIONS: ThinkingIntensity[] = [
+  'off',
+  'low',
+  'medium',
+  'high',
+  'max',
+]
+
+/** Default checkboxes when adding a custom gateway */
+export const DEFAULT_CUSTOM_THINKING_SUPPORT: ThinkingIntensity[] = ['off', 'medium']
+
 export interface CustomProvider {
   id: string
   name: string
@@ -10,6 +23,8 @@ export interface CustomProvider {
   baseURL?: string
   apiStyle?: ApiStyle
   contextWindow?: number
+  /** Which thinking levels this gateway supports (Settings checkboxes) */
+  thinkingIntensities?: ThinkingIntensity[]
   models: { id: string; label: string; contextWindow?: number }[]
 }
 
@@ -24,17 +39,9 @@ export interface SettingsProvider {
   baseURL?: string
   apiStyle?: string
   contextWindow?: number
+  /** Resolved supported levels (builtins = full preset) */
+  thinkingIntensities?: ThinkingIntensity[]
 }
-
-export type ThinkingIntensity = 'off' | 'low' | 'medium' | 'high' | 'max'
-
-export const THINKING_INTENSITY_OPTIONS: ThinkingIntensity[] = [
-  'off',
-  'low',
-  'medium',
-  'high',
-  'max',
-]
 
 export interface SettingsPayload {
   configuredKeys: string[]
@@ -42,11 +49,13 @@ export interface SettingsPayload {
   settings: {
     leaderModel: string
     thinkingIntensity?: ThinkingIntensity
+    leaderMaxSteps?: number
     updatedAt?: string
     customProviders?: CustomProvider[]
   }
   providers: SettingsProvider[]
   customProviders?: CustomProvider[]
+  leaderMaxSteps?: number
   safeStorageAvailable?: boolean
   platform?: string
   storagePath?: string
@@ -55,6 +64,7 @@ export interface SettingsPayload {
 export type SaveSettingsPayload = {
   leaderModel?: string
   thinkingIntensity?: ThinkingIntensity
+  leaderMaxSteps?: number
   secrets?: Record<string, string | null>
   customProviders?: CustomProvider[]
 }

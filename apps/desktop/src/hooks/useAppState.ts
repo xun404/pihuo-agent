@@ -69,6 +69,13 @@ export function useAppState() {
     return session
   }
 
+  const detectWorkers = async (opts?: { apply?: boolean }) => {
+    const res = await api.detectWorkers({ apply: opts?.apply !== false })
+    if (res.snapshot) setSnapshot(res.snapshot)
+    else await refresh()
+    return res
+  }
+
   const registerWorker = async (body: Parameters<typeof api.registerWorker>[0]) => {
     await api.registerWorker(body)
     await refresh()
@@ -199,5 +206,6 @@ export function useAppState() {
     resolveApproval,
     demoApproval,
     registerWorker,
+    detectWorkers,
   }
 }

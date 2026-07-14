@@ -2,9 +2,18 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import { getSharedStore } from '@router-agents/core'
 import { getWorkerScheduler } from '../scheduler.js'
+import type { WorkerKind, WorkerRole, WorkerRunEvent } from '@router-agents/shared'
+import {
+  enrichTerminalWorkerEvent,
+  raceWithTimeout,
+  splitWorkerDeltaChunks,
+  subscribeAbort,
+  type WorkerEventIdentity,
+} from '../worker-events.js'
 
 const store = getSharedStore()
 const scheduler = getWorkerScheduler()
+const WORKER_JOB_TIMEOUT_MS = Number(process.env.WORKER_JOB_TIMEOUT_MS) || 600_000
 
 const roleSchema = z.enum(['plan', 'coder', 'review', 'test', 'research', 'general'])
 const jobStatusSchema = z.enum([
@@ -45,7 +54,7 @@ export const listProjectsTool = createTool({
 export const listWorkersTool = createTool({
   id: 'list-workers',
   description:
-    'List registered CLI workers with roles, health, and busy status. Prefer healthy non-busy workers when dispatching.',
+    'List registered CLI workers with roles, health, configured model, and available model catalog. Prefer healthy non-busy workers. For OpenCode, require a selected model (modelConfigured=true) before dispatch — default CLI models often fail with “Model is disabled”.',
   inputSchema: z.object({
     enabledOnly: z.boolean().optional().default(true),
     role: roleSchema.optional().describe('Only workers that can serve this role'),
@@ -66,7 +75,18 @@ export const listWorkersTool = createTool({
         healthHints: z.array(z.string()).optional(),
         busy: z.boolean(),
         openJobs: z.number(),
+        /** Pinned ACP model id for session/set_config_option (empty = CLI default) */
         model: z.string().optional(),
+        modelConfigured: z.boolean(),
+        /** Cached catalog from last “fetch models” in Workers panel */
+        availableModels: z.array(
+          z.object({
+            modelId: z.string(),
+            name: z.string(),
+          }),
+        ),
+        /** OpenCode without a pin is risky — ask user to pick a model in Workers */
+        needsModelSelection: z.boolean(),
       }),
     ),
   }),
@@ -81,6 +101,13 @@ export const listWorkersTool = createTool({
     return {
       workers: workers.map((w) => {
         const openJobs = store.countOpenJobs({ workerId: w.id })
+        const model = w.model?.trim() || undefined
+        const availableModels = (w.availableModels ?? []).map((m) => ({
+          modelId: m.modelId,
+          name: m.name || m.modelId,
+        }))
+        const modelConfigured = Boolean(model)
+        const needsModelSelection = w.kind === 'opencode' && !modelConfigured
         return {
           id: w.id,
           name: w.name,
@@ -95,7 +122,10 @@ export const listWorkersTool = createTool({
           healthHints: w.healthReport?.hints,
           busy: openJobs > 0,
           openJobs,
-          model: w.model,
+          model,
+          modelConfigured,
+          availableModels,
+          needsModelSelection,
         }
       }),
     }
@@ -144,14 +174,14 @@ export const getActiveContextTool = createTool({
 })
 
 /**
- * Schedule a worker job (ACP). Default is async: returns jobId immediately.
- * Pass wait=true to block until the job finishes (short tasks / debugging).
- * Poll with get-job for long-running work. Never claim success without job status.
+ * Schedule a worker job (ACP).
+ * Default waits for terminal status so the Leader can relay worker output in the same turn.
+ * Pass wait=false only for long fire-and-forget work (then poll get-job).
  */
 export const dispatchWorkerTool = createTool({
   id: 'dispatch-worker',
   description:
-    'Delegate a coding task to a CLI worker via the job scheduler. Prefer role=plan|coder|review|test|research|general. Returns jobId + status. Default async (does not wait for ACP to finish); use wait=true to await completion, or call get-job later. Never invent file changes — only trust job output when status=succeeded.',
+    'Delegate a task to a CLI worker (Claude/Codex/OpenCode). Prefer role=plan|coder|review|test|research|general, or workerIdOrKind=codex|claude|opencode. By default waits until the job finishes and returns output — use this when the user wants to see the worker reply. Set wait=false only for long background work, then poll get-job. Never invent results: only trust status=succeeded + output. If error mentions Model is disabled / 【模型不可用】, tell the user to pick a model in the Workers panel (especially OpenCode).',
   inputSchema: z.object({
     role: roleSchema
       .optional()
@@ -165,7 +195,9 @@ export const dispatchWorkerTool = createTool({
     wait: z
       .boolean()
       .optional()
-      .describe('If true, wait until job finishes before returning (default false)'),
+      .describe(
+        'Wait for job completion before returning. Default true. Set false only for long fire-and-forget jobs.',
+      ),
   }),
   outputSchema: z.object({
     ok: z.boolean(),
@@ -180,14 +212,53 @@ export const dispatchWorkerTool = createTool({
     output: z.string().optional(),
     error: z.string().optional(),
   }),
-  execute: async ({ role, workerIdOrKind, task, cwd, wait }) => {
-    const { project, session } = store.getActive()
+  execute: async (input, context) => {
+    const { role, workerIdOrKind, task, cwd, wait } = input as {
+      role?: WorkerRole; workerIdOrKind?: string; task: string; cwd?: string; wait?: boolean
+    }
+    const ctx = context as any
+    const requestContext = ctx?.requestContext
+    const routerSessionId = requestContext?.get?.('routerSessionId') as string | undefined
+    const routerProjectId = requestContext?.get?.('routerProjectId') as string | undefined
+    const routerProjectRoot = requestContext?.get?.('routerProjectRoot') as string | undefined
+    const memoryThreadId = requestContext?.get?.('memoryThreadId') as string | undefined
+    if (routerSessionId && memoryThreadId && ctx?.agent?.threadId !== memoryThreadId) {
+      throw new Error(`Thread mismatch: agent thread ${ctx.agent?.threadId} vs session ${memoryThreadId}`)
+    }
+    if (!routerSessionId || !routerProjectId || !memoryThreadId) {
+      throw new Error(
+        `dispatchWorkerTool requires routerSessionId, routerProjectId, and memoryThreadId in RequestContext. Got: session=${routerSessionId}, project=${routerProjectId}, thread=${memoryThreadId}`
+      )
+    }
+    const project = { id: routerProjectId, rootPath: routerProjectRoot }
+    const session = { id: routerSessionId, projectId: routerProjectId, memoryThreadId }
     const workdir = cwd ?? project?.rootPath ?? process.cwd()
     const sync =
-      wait === true ||
-      process.env.DISPATCH_MODE === 'sync'
+      process.env.DISPATCH_MODE === 'async'
+        ? wait === true
+        : wait !== false
 
-    const { job, output } = await scheduler.enqueue({
+    const writer = ctx?.writer as {
+      custom?: (opts: { type: string; data: unknown; transient?: boolean; id?: string }) => Promise<void>
+    } | undefined
+
+    let onEvent: ((event: WorkerRunEvent) => void) | undefined
+    const eventQueue: WorkerRunEvent[] = []
+    let buf = ''
+    let lastSeq = 0
+    let pumpRunning = true
+    let workerName: string | undefined
+    let workerKind: WorkerKind | undefined
+    let workerRole: WorkerRole | undefined
+    let workerModel: string | undefined
+
+    if (sync && writer?.custom) {
+      onEvent = (event: WorkerRunEvent) => {
+        eventQueue.push(event)
+      }
+    }
+
+    const { job } = await scheduler.enqueue({
       task,
       role,
       workerIdOrKind,
@@ -196,26 +267,163 @@ export const dispatchWorkerTool = createTool({
       projectId: project?.id ?? session?.projectId,
       threadId: session?.memoryThreadId,
       source: 'leader',
-      wait: sync,
+      wait: false,
+      onEvent,
     })
 
-    const ok = job.status === 'succeeded' || job.status === 'queued' || job.status === 'running' || job.status === 'pending_approval'
-    return {
-      ok: sync ? job.status === 'succeeded' : ok && job.status !== 'failed',
-      jobId: job.id,
-      status: job.status,
-      workerName: job.workerName,
-      workerId: job.workerId,
-      role: job.role,
-      cwd: job.cwd,
-      task: job.task,
-      message:
-        job.message ??
-        (sync
-          ? `Job ${job.status}`
-          : `Job ${job.id} ${job.status}. Poll get-job for result.`),
-      output: output ?? job.output,
-      error: job.error,
+    const abortSignal = ctx?.abortSignal as AbortSignal | undefined
+    const detachAbort = abortSignal
+      ? subscribeAbort(abortSignal, () => {
+        scheduler.cancel(job.id).catch(() => {})
+      })
+      : () => {}
+
+    try {
+      // Stream worker events via Mastra writer for wait=true
+      if (sync && writer?.custom) {
+      const jid = job.id
+      workerName ??= job.workerName
+      workerRole ??= job.role
+
+      async function pump() {
+        let lastFlush = Date.now()
+        let writerSequence = 0
+        const FLUSH_MS = 50
+        const MAX_CHUNK = 8192
+
+        async function drainBuf() {
+          const text = buf
+          buf = ''
+          const split = splitWorkerDeltaChunks(jid, text, writerSequence, MAX_CHUNK)
+          writerSequence = split.nextSequence
+          for (const event of split.events) {
+            try {
+              await writer!.custom!({ type: 'data-worker-run', data: event, transient: true })
+            } catch (error) {
+              console.error('[dispatchWorkerTool] delta writer failed for', jid, error)
+            }
+          }
+        }
+
+        while (pumpRunning || eventQueue.length > 0) {
+          while (eventQueue.length > 0) {
+            const event = eventQueue.shift()!
+            if (event.type === 'delta') {
+              const e = event as WorkerRunEvent & { delta: string; sequence: number }
+              if (e.sequence > lastSeq) { lastSeq = e.sequence; buf += e.delta }
+            } else if (event.type === 'started') {
+              workerName = event.workerName
+              workerKind = event.workerKind
+              workerRole = event.role
+              workerModel = event.model
+              try { await writer!.custom!({ type: 'data-worker-run', id: jid, data: event, transient: true }) } catch {}
+              lastFlush = Date.now()
+            } else {
+              await drainBuf()
+              const identity: WorkerEventIdentity = {
+                workerName,
+                workerKind,
+                role: workerRole,
+                model: workerModel,
+              }
+              const data = enrichTerminalWorkerEvent(event, identity)
+              try {
+                await writer!.custom!({ type: 'data-worker-run', id: jid, data, transient: false })
+              } catch (e) {
+                console.error('[dispatchWorkerTool] terminal writer failed for', jid, e)
+              }
+              lastFlush = Date.now()
+            }
+          }
+
+          if (buf.length > 0 && Date.now() - lastFlush >= FLUSH_MS) {
+            await drainBuf()
+            lastFlush = Date.now()
+          }
+
+          if (pumpRunning || eventQueue.length > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
+        }
+        await drainBuf()
+      }
+
+      const pumpPromise = pump()
+
+      const SAFETY_MULTIPLIER = 1.2
+      try {
+        const terminalJob = await raceWithTimeout(
+          scheduler.waitForJob(jid),
+          Math.floor(WORKER_JOB_TIMEOUT_MS * SAFETY_MULTIPLIER),
+          () => new Error(`Job ${jid} timed out waiting for terminal status`),
+        )
+        const ok = terminalJob.status === 'succeeded'
+        return {
+          ok,
+          jobId: terminalJob.id,
+          status: terminalJob.status,
+          workerName: terminalJob.workerName,
+          workerId: terminalJob.workerId,
+          role: terminalJob.role,
+          cwd: terminalJob.cwd,
+          task: terminalJob.task,
+          message: terminalJob.message ?? `Job ${terminalJob.status}`,
+          output: terminalJob.output,
+          error: terminalJob.error,
+        }
+      } catch (e) {
+        await scheduler.cancel(jid).catch(() => {})
+        return {
+          ok: false,
+          jobId: jid,
+          status: 'failed' as const,
+          workerName: job.workerName,
+          workerId: job.workerId,
+          role: job.role,
+          cwd: job.cwd,
+          task: job.task,
+          message: e instanceof Error ? e.message : 'Job watcher timed out',
+          error: e instanceof Error ? e.message : 'Job watcher timed out',
+        }
+      } finally {
+        pumpRunning = false
+        await pumpPromise
+      }
+      }
+
+      // Non-streaming path (sync without writer, or async)
+      if (sync) {
+        const terminalJob = await scheduler.waitForJob(job.id)
+        return {
+          ok: terminalJob.status === 'succeeded',
+          jobId: terminalJob.id,
+          status: terminalJob.status,
+          workerName: terminalJob.workerName,
+          workerId: terminalJob.workerId,
+          role: terminalJob.role,
+          cwd: terminalJob.cwd,
+          task: terminalJob.task,
+          message: terminalJob.message ?? `Job ${terminalJob.status}`,
+          output: terminalJob.output,
+          error: terminalJob.error,
+        }
+      }
+
+      return {
+        ok: true,
+        jobId: job.id,
+        status: job.status,
+        workerName: job.workerName,
+        workerId: job.workerId,
+        role: job.role,
+        cwd: job.cwd,
+        task: job.task,
+        message: `Job ${job.id} ${job.status}. Poll get-job for result.`,
+        output: job.output,
+        error: job.error,
+      }
+    } finally {
+      detachAbort()
     }
   },
 })

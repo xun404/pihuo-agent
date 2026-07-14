@@ -111,14 +111,18 @@ export interface WorkerRegistration {
   /** Latest probe report (message, hints, latency) */
   healthReport?: WorkerHealthReport
   /**
-   * ACP model id for session/set_model (optional).
-   * @see https://mastra.ai/docs — @mastra/acp model option
+   * ACP model id for session/set_config_option (optional).
+   * Stable config option validated against session-announced options.
    */
   model?: string
-  /** Cached list from last ACP getAvailableModels() */
+  /** Cached list from last ACP configOptions parse */
   availableModels?: WorkerModelOption[]
   /** When availableModels was last fetched */
   modelsFetchedAt?: string
+  /** Fresh after successful refresh; stale after failed refresh with old cache retained */
+  modelsState?: 'fresh' | 'stale'
+  /** Most recent model refresh error (truncated, no secrets) */
+  modelsError?: string
 }
 
 export interface ChatMessagePart {
@@ -204,6 +208,80 @@ export const JOB_HISTORY_LIMIT = 100
 
 /** Truncate job output stored on disk */
 export const JOB_OUTPUT_MAX_CHARS = 32_000
+
+/**
+ * Typed event stream for worker execution (Scheduler → tool bridge → Chat UI).
+ * Order: started -> delta* -> completed | failed | cancelled | timed_out
+ * Preflight failure (e.g. Worker not found) may skip started and emit failed directly.
+ */
+export type WorkerRunEvent =
+  | {
+      type: 'started'
+      jobId: string
+      workerId: string
+      workerName: string
+      workerKind: WorkerKind
+      role?: WorkerRole
+      model?: string
+      reusedSession: boolean
+    }
+  | {
+      type: 'delta'
+      jobId: string
+      sequence: number
+      delta: string
+    }
+  | {
+      type: 'completed'
+      jobId: string
+      output: string
+      truncated: boolean
+      workerName?: string
+      workerKind?: WorkerKind
+      role?: WorkerRole
+      model?: string
+    }
+  | {
+      type: 'failed' | 'cancelled' | 'timed_out'
+      jobId: string
+      output?: string
+      error?: string
+      truncated: boolean
+      workerName?: string
+      workerKind?: WorkerKind
+      role?: WorkerRole
+      model?: string
+    }
+
+export const LEADER_STEP_BUDGET_PART_TYPE = "data-leader-step-budget";
+
+export interface LeaderStepBudgetEvent {
+  type: typeof LEADER_STEP_BUDGET_PART_TYPE;
+  data: {
+    reason: "max_steps";
+    maxSteps: number;
+    usedSteps: number;
+    runId: string;
+    occurredAt: string;
+  };
+}
+
+/** Per-job accumulated state for UI reducer */
+export interface WorkerRunState {
+  jobId: string
+  workerName: string
+  workerKind: WorkerKind
+  role?: WorkerRole
+  model?: string
+  reusedSession: boolean
+  sequence: number
+  output: string
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out'
+  truncated: boolean
+  error?: string
+  startedAt: number
+  lastDeltaAt: number
+}
 
 /** Pending or resolved permission from ACP / tool approval path. */
 export type ApprovalStatus = 'pending' | 'allowed' | 'denied' | 'cancelled'

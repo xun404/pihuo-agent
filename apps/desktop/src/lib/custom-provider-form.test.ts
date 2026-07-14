@@ -14,6 +14,15 @@ describe('custom-provider-form helpers', () => {
     assert.equal(slugProviderId('  '), 'custom')
   })
 
+  it('slugProviderId maps OpenCode GO names/URLs to Mastra opencode-go', () => {
+    assert.equal(slugProviderId('OpenCodeGO'), 'opencode-go')
+    assert.equal(slugProviderId('OpenCode Go'), 'opencode-go')
+    assert.equal(
+      slugProviderId('My Gateway', 'https://opencode.ai/zen/go/v1'),
+      'opencode-go',
+    )
+  })
+
   it('defaultApiKeyEnv is auto and never user-facing', () => {
     assert.equal(defaultApiKeyEnv('myco'), 'CUSTOM_MYCO_API_KEY')
     assert.equal(defaultApiKeyEnv('my-co'), 'CUSTOM_MY_CO_API_KEY')

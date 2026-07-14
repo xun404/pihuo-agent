@@ -10,7 +10,9 @@ import type {
   WorkerRole,
 } from '@router-agents/shared'
 
-const BASE = import.meta.env.VITE_MASTRA_URL ?? 'http://localhost:4111'
+// Prefer 127.0.0.1 over localhost: on macOS, localhost often resolves to ::1,
+// and another process may already own *:4111 (IPv6), shadowing our IPv4 server.
+const BASE = import.meta.env.VITE_MASTRA_URL ?? 'http://127.0.0.1:4111'
 
 export interface GitStatusResponse {
   ok: boolean
@@ -125,6 +127,41 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  /** Detect ACP CLIs on this machine; apply=true enables/updates workers */
+  detectWorkers: (body?: { apply?: boolean; autoDisableMissing?: boolean }) =>
+    request<{
+      candidates: {
+        kind: string
+        name: string
+        installed: boolean
+        detectVia: string
+        command: string
+        args: string[]
+        installHint: string
+        docsUrl?: string
+      }[]
+      recommended: { kind: string; name: string; installed: boolean; installHint: string }[]
+      enabled?: string[]
+      applied?: boolean
+      firstRun?: boolean
+      snapshot?: AppSnapshot
+      workers?: WorkerRegistration[]
+    }>('/api/workers/detect', {
+      method: 'POST',
+      body: JSON.stringify(body ?? { apply: true }),
+    }),
+  getWorkerDetect: () =>
+    request<{
+      candidates: {
+        kind: string
+        name: string
+        installed: boolean
+        installHint: string
+        docsUrl?: string
+      }[]
+      recommended: { kind: string; name: string; installed: boolean }[]
+      firstRun: boolean
+    }>('/api/workers/detect'),
   setWorkerRoles: (id: string, body: { primaryRole: WorkerRole; roles: WorkerRole[] }) =>
     request<{ worker: WorkerRegistration }>(`/api/workers/${id}/roles`, {
       method: 'POST',
@@ -139,6 +176,7 @@ export const api = {
       worker?: WorkerRegistration
       snapshot?: AppSnapshot
       cached?: boolean
+      stale?: boolean
     }>(`/api/workers/${id}/models`),
   /** Persist preferred ACP model for worker (empty clears) */
   setWorkerModel: (id: string, model: string | null) =>
@@ -198,15 +236,20 @@ export const api = {
       settings: {
         leaderModel: string
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'max'
+        leaderMaxSteps?: number
         updatedAt?: string
         customProviders?: {
           id: string
           name: string
           apiKeyEnv: string
           docsUrl?: string
+          baseURL?: string
+          apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+          thinkingIntensities?: ('off' | 'low' | 'medium' | 'high' | 'max')[]
           models: { id: string; label: string }[]
         }[]
       }
+      leaderMaxSteps?: number
       providers: {
         id: string
         name: string
@@ -215,12 +258,16 @@ export const api = {
         models: { id: string; label: string; tag?: string }[]
         configured: boolean
         custom?: boolean
+        thinkingIntensities?: ('off' | 'low' | 'medium' | 'high' | 'max')[]
       }[]
       customProviders?: {
         id: string
         name: string
         apiKeyEnv: string
         docsUrl?: string
+        baseURL?: string
+        apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+        thinkingIntensities?: ('off' | 'low' | 'medium' | 'high' | 'max')[]
         models: { id: string; label: string }[]
       }[]
       storagePath?: string
@@ -228,12 +275,16 @@ export const api = {
   saveSettings: (body: {
     leaderModel?: string
     thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'max'
+    leaderMaxSteps?: number
     secrets?: Record<string, string | null>
     customProviders?: {
       id: string
       name: string
       apiKeyEnv: string
       docsUrl?: string
+      baseURL?: string
+      apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+      thinkingIntensities?: ('off' | 'low' | 'medium' | 'high' | 'max')[]
       models: { id: string; label: string }[]
     }[]
   }) =>
@@ -243,6 +294,7 @@ export const api = {
       settings: {
         leaderModel: string
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'max'
+        leaderMaxSteps?: number
       }
       providers: {
         id: string
@@ -252,6 +304,7 @@ export const api = {
         models: { id: string; label: string; tag?: string }[]
         docsUrl: string
         custom?: boolean
+        thinkingIntensities?: ('off' | 'low' | 'medium' | 'high' | 'max')[]
       }[]
     }>('/api/settings', { method: 'POST', body: JSON.stringify(body) }),
   deleteSecret: (key: string) =>
