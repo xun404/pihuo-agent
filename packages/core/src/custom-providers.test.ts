@@ -98,8 +98,8 @@ describe('applyMastraProviderKeyAliases', () => {
     assert.equal(env.CUSTOM_OPENCODE_GO_API_KEY, 'sk-opencode-test-key')
   })
 
-  it('does not overwrite an existing OPENCODE_API_KEY', () => {
-    const env: NodeJS.ProcessEnv = { OPENCODE_API_KEY: 'already-set' }
+  it('settings secret wins over stale process OPENCODE_API_KEY (worker>settings>process)', () => {
+    const env: NodeJS.ProcessEnv = { OPENCODE_API_KEY: 'stale-process' }
     applyMastraProviderKeyAliases(
       [
         {
@@ -112,16 +112,58 @@ describe('applyMastraProviderKeyAliases', () => {
       { CUSTOM_OPENCODE_GO_API_KEY: 'from-custom' },
       env,
     )
-    assert.equal(env.OPENCODE_API_KEY, 'already-set')
+    // Resolver priority: settings secret must replace process env for registry aliases
+    assert.equal(env.OPENCODE_API_KEY, 'from-custom')
+  })
+
+  it('forces OPENCODE_GO_API_KEY when shell has a different stale key', () => {
+    const env: NodeJS.ProcessEnv = {
+      OPENCODE_API_KEY: 'new-saved-key',
+      OPENCODE_GO_API_KEY: 'stale-shell-key-from-cli',
+    }
+    applyMastraProviderKeyAliases(
+      [
+        {
+          id: 'opencode-go',
+          name: 'OpenCodeGO',
+          apiKeyEnv: 'OPENCODE_API_KEY',
+          baseURL: 'https://opencode.ai/zen/go/v1',
+          models: [{ id: 'opencode-go/deepseek-v4-pro', label: 'pro' }],
+        },
+      ],
+      { OPENCODE_API_KEY: 'new-saved-key' },
+      env,
+    )
+    assert.equal(env.OPENCODE_API_KEY, 'new-saved-key')
+    assert.equal(env.OPENCODE_GO_API_KEY, 'new-saved-key')
+  })
+
+  it('does not let stale CUSTOM_OPENCODEGO overwrite configured OPENCODE_API_KEY', () => {
+    const env: NodeJS.ProcessEnv = {}
+    applyMastraProviderKeyAliases(
+      [
+        {
+          id: 'opencode-go',
+          name: 'OpenCodeGO',
+          apiKeyEnv: 'OPENCODE_API_KEY',
+          baseURL: 'https://opencode.ai/zen/go/v1',
+          models: [{ id: 'opencode-go/deepseek-v4-pro', label: 'pro' }],
+        },
+      ],
+      {
+        OPENCODE_API_KEY: 'valid-primary-key',
+        CUSTOM_OPENCODEGO_API_KEY: 'stale-billing-dead-key',
+      },
+      env,
+    )
+    assert.equal(env.OPENCODE_API_KEY, 'valid-primary-key')
+    assert.equal(env.OPENCODE_GO_API_KEY, 'valid-primary-key')
+    assert.equal(env.CUSTOM_OPENCODEGO_API_KEY, 'valid-primary-key')
   })
 
   it('aliases from CUSTOM_* secret key even without customProviders entry', () => {
     const env: NodeJS.ProcessEnv = {}
-    applyMastraProviderKeyAliases(
-      [],
-      { CUSTOM_OPENCODE_GO_API_KEY: 'sk-from-secret-only' },
-      env,
-    )
+    applyMastraProviderKeyAliases([], { CUSTOM_OPENCODE_GO_API_KEY: 'sk-from-secret-only' }, env)
     assert.equal(env.OPENCODE_API_KEY, 'sk-from-secret-only')
   })
 })

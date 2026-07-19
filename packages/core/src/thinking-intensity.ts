@@ -9,7 +9,8 @@
  * @see https://mastra.ai/models — providerOptions / reasoningEffort
  */
 
-export const THINKING_INTENSITIES = ['off', 'low', 'medium', 'high', 'max'] as const
+/** UI + storage levels; OpenAI maps high→high, xhigh/max→xhigh reasoningEffort */
+export const THINKING_INTENSITIES = ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
 export type ThinkingIntensity = (typeof THINKING_INTENSITIES)[number]
 
@@ -22,10 +23,7 @@ export const DEFAULT_THINKING_INTENSITY: ThinkingIntensity = 'medium'
 export const BUILTIN_THINKING_PRESETS: readonly ThinkingIntensity[] = THINKING_INTENSITIES
 
 /** Default when creating a custom gateway (user can re-check) */
-export const DEFAULT_CUSTOM_THINKING_SUPPORT: readonly ThinkingIntensity[] = [
-  'off',
-  'medium',
-]
+export const DEFAULT_CUSTOM_THINKING_SUPPORT: readonly ThinkingIntensity[] = ['off', 'medium']
 
 export function isThinkingIntensity(v: unknown): v is ThinkingIntensity {
   return typeof v === 'string' && (THINKING_INTENSITIES as readonly string[]).includes(v)
@@ -96,6 +94,7 @@ function openaiEffort(level: ThinkingIntensity): string {
       return 'medium'
     case 'high':
       return 'high'
+    case 'xhigh':
     case 'max':
       return 'xhigh'
   }
@@ -112,6 +111,8 @@ function anthropicBudget(level: ThinkingIntensity): number | null {
       return 8_000
     case 'high':
       return 16_000
+    case 'xhigh':
+      return 24_000
     case 'max':
       return 32_000
   }
@@ -128,6 +129,8 @@ function googleBudget(level: ThinkingIntensity): number {
       return 8_192
     case 'high':
       return 16_384
+    case 'xhigh':
+      return 20_480
     case 'max':
       return 24_576
   }

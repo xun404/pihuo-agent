@@ -2,7 +2,9 @@ import type {
   ApprovalDecision,
   ApprovalItem,
   ApprovalOption,
+  ApprovalLocation,
   ApprovalStatus,
+  AcpToolKind,
 } from '@router-agents/shared'
 import { createId } from './id.js'
 
@@ -14,23 +16,21 @@ export interface EnqueueApprovalInput {
   workerId?: string
   workerName?: string
   sessionId?: string | null
-  options?: ApprovalOption[]
+  options: ApprovalOption[]
   source?: ApprovalItem['source']
   id?: string
   createdAt?: string
+  jobId?: string
+  toolCallId?: string
+  toolKind?: AcpToolKind
+  locations?: ApprovalLocation[]
 }
 
 /**
  * Pure: build a pending approval item (does not mutate store).
  */
 export function createApprovalItem(input: EnqueueApprovalInput): ApprovalItem {
-  const options =
-    input.options && input.options.length > 0
-      ? input.options
-      : [
-          { optionId: 'allow', name: 'Allow' },
-          { optionId: 'deny', name: 'Deny' },
-        ]
+  const options = validateApprovalOptions(input.options)
 
   return {
     id: input.id ?? createId('appr'),
@@ -45,7 +45,33 @@ export function createApprovalItem(input: EnqueueApprovalInput): ApprovalItem {
     options,
     source: input.source ?? 'acp',
     createdAt: input.createdAt ?? new Date().toISOString(),
+    jobId: input.jobId,
+    toolCallId: input.toolCallId,
+    toolKind: input.toolKind,
+    locations: input.locations,
   }
+}
+
+function validateApprovalOptions(options: ApprovalOption[] | undefined): ApprovalOption[] {
+  if (!Array.isArray(options) || options.length === 0) {
+    throw new Error('Approval options must contain at least one option')
+  }
+  const seen = new Set<string>()
+  return options.map((option) => {
+    const optionId = option?.optionId?.trim()
+    const name = option?.name?.trim()
+    const kind = option?.kind
+    if (
+      !optionId ||
+      !name ||
+      !['allow_once', 'allow_always', 'reject_once', 'reject_always'].includes(kind) ||
+      seen.has(optionId)
+    ) {
+      throw new Error('Approval options are invalid')
+    }
+    seen.add(optionId)
+    return { optionId, name, kind }
+  })
 }
 
 export interface ResolveApprovalInput {
@@ -53,6 +79,8 @@ export interface ResolveApprovalInput {
   decision: ApprovalDecision
   optionId?: string
   resolvedAt?: string
+  resolutionSource?: ApprovalItem['resolutionSource']
+  resolutionReason?: string
 }
 
 /**
@@ -66,24 +94,28 @@ export function applyApprovalDecision(input: ResolveApprovalInput): ApprovalItem
   }
 
   let status: ApprovalStatus
-  let selectedOptionId = input.optionId
+  let selectedOption: ApprovalOption | undefined
 
   if (decision === 'allow') {
     status = 'allowed'
-    if (!selectedOptionId) {
-      const allowOpt =
-        item.options.find((o) => /allow|yes|approve/i.test(o.name)) ?? item.options[0]
-      selectedOptionId = allowOpt?.optionId
+    if (!input.optionId) throw new Error('optionId required for allow/deny')
+    selectedOption = item.options.find((option) => option.optionId === input.optionId)
+    if (!selectedOption)
+      throw new Error(`optionId "${input.optionId}" does not belong to approval ${item.id}`)
+    if (selectedOption.kind !== 'allow_once' && selectedOption.kind !== 'allow_always') {
+      throw new Error('allow decision requires allow_* option kind')
     }
   } else if (decision === 'deny') {
     status = 'denied'
-    if (!selectedOptionId) {
-      const denyOpt =
-        item.options.find((o) => /deny|no|reject/i.test(o.name)) ??
-        item.options.find((o) => o.optionId === 'deny')
-      selectedOptionId = denyOpt?.optionId
+    if (!input.optionId) throw new Error('optionId required for allow/deny')
+    selectedOption = item.options.find((option) => option.optionId === input.optionId)
+    if (!selectedOption)
+      throw new Error(`optionId "${input.optionId}" does not belong to approval ${item.id}`)
+    if (selectedOption.kind !== 'reject_once' && selectedOption.kind !== 'reject_always') {
+      throw new Error('deny decision requires reject_* option kind')
     }
   } else {
+    if (input.optionId) throw new Error('cancel must not specify optionId')
     status = 'cancelled'
   }
 
@@ -91,7 +123,10 @@ export function applyApprovalDecision(input: ResolveApprovalInput): ApprovalItem
     ...item,
     status,
     decision,
-    selectedOptionId,
+    selectedOptionId: selectedOption?.optionId,
+    selectedOption: selectedOption ? { ...selectedOption } : undefined,
+    resolutionSource: input.resolutionSource,
+    resolutionReason: input.resolutionReason,
     resolvedAt: input.resolvedAt ?? new Date().toISOString(),
   }
 }
@@ -115,6 +150,7 @@ export function resolveApprovalInQueue(
   id: string,
   decision: ApprovalDecision,
   optionId?: string,
+  metadata?: Pick<ResolveApprovalInput, 'resolutionSource' | 'resolutionReason'>,
 ): { queue: ApprovalItem[]; item: ApprovalItem } {
   const idx = queue.findIndex((a) => a.id === id)
   if (idx < 0) throw new Error(`Approval not found: ${id}`)
@@ -122,6 +158,7 @@ export function resolveApprovalInQueue(
     item: queue[idx]!,
     decision,
     optionId,
+    ...metadata,
   })
   const next = queue.slice()
   next[idx] = resolved
@@ -137,12 +174,16 @@ export function listPendingApprovals(queue: ApprovalItem[]): ApprovalItem[] {
  */
 export function mapAcpPermissionToEnqueue(input: {
   title: string
-  options?: ApprovalOption[]
+  options: ApprovalOption[]
   workerId?: string
   workerName?: string
   sessionId?: string | null
   pathOrTarget?: string
   action?: string
+  jobId?: string
+  toolCallId?: string
+  toolKind?: AcpToolKind
+  locations?: ApprovalLocation[]
 }): EnqueueApprovalInput {
   return {
     title: input.title,
@@ -156,5 +197,9 @@ export function mapAcpPermissionToEnqueue(input: {
     detail: input.pathOrTarget
       ? `${input.action ?? 'permission'}: ${input.pathOrTarget}`
       : undefined,
+    jobId: input.jobId,
+    toolCallId: input.toolCallId,
+    toolKind: input.toolKind,
+    locations: input.locations,
   }
 }

@@ -4,11 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFileSync } from 'node:child_process'
-import {
-  parseGitStatusPorcelain,
-  parseGitNumstat,
-  getGitStatus,
-} from './git-status.js'
+import { parseGitStatusPorcelain, parseGitNumstat, getGitStatus } from './git-status.js'
 
 describe('parseGitStatusPorcelain', () => {
   it('parses modified, added, untracked, and renames', () => {

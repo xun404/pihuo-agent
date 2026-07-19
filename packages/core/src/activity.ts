@@ -1,14 +1,7 @@
 import { createId } from './id.js'
 
 export type ActivityKind =
-  | 'system'
-  | 'project'
-  | 'session'
-  | 'worker'
-  | 'dispatch'
-  | 'job'
-  | 'approval'
-  | 'chat'
+  'system' | 'project' | 'session' | 'worker' | 'dispatch' | 'job' | 'approval' | 'chat'
 
 export interface ActivityEvent {
   id: string

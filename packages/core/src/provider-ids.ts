@@ -12,7 +12,7 @@ export const MASTRA_PROVIDER_ID_ALIASES: Record<string, string> = {
   opencode: 'opencode',
   'opencode-go': 'opencode-go',
   opencodego: 'opencode-go',
-  'opencode_go': 'opencode-go',
+  opencode_go: 'opencode-go',
   'opencode-zen': 'opencode',
   opencodezen: 'opencode',
   // Google aliases
@@ -126,7 +126,9 @@ export function normalizeLeaderModelForMastra(
   const prefix = leaderModel.split('/')[0]
   const rest = leaderModel.includes('/') ? leaderModel.slice(leaderModel.indexOf('/') + 1) : ''
   const hit = custom.find(
-    (c) => c.id === prefix || normalizeMastraProviderId(c.id) === normalizeMastraProviderId(prefix ?? ''),
+    (c) =>
+      c.id === prefix ||
+      normalizeMastraProviderId(c.id) === normalizeMastraProviderId(prefix ?? ''),
   )
   if (hit) {
     const canon =
