@@ -22,8 +22,8 @@
     "@router-agents/shared": "0.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.15.21",
-    "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3"
   }
 }

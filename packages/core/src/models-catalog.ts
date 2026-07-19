@@ -8,6 +8,7 @@
  */
 
 import { normalizeMastraProviderId } from './provider-ids.js'
+import type { FeaturedPolicy } from './featured-policy.js'
 
 export interface ModelOption {
   id: string
@@ -60,10 +61,30 @@ export const MASTRA_PROVIDERS: ModelProviderDef[] = [
     docsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
     apiStyle: 'anthropic',
     models: [
-      { id: 'anthropic/claude-opus-4-8', label: 'Claude Opus 4.8', tag: 'flagship', contextWindow: 200000 },
-      { id: 'anthropic/claude-opus-4-6', label: 'Claude Opus 4.6', tag: 'flagship', contextWindow: 1000000 },
-      { id: 'anthropic/claude-sonnet-4-6', label: 'Claude Sonnet 4.6', tag: 'coding', contextWindow: 1000000 },
-      { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5', tag: 'fast', contextWindow: 200000 },
+      {
+        id: 'anthropic/claude-opus-4-8',
+        label: 'Claude Opus 4.8',
+        tag: 'flagship',
+        contextWindow: 200000,
+      },
+      {
+        id: 'anthropic/claude-opus-4-6',
+        label: 'Claude Opus 4.6',
+        tag: 'flagship',
+        contextWindow: 1000000,
+      },
+      {
+        id: 'anthropic/claude-sonnet-4-6',
+        label: 'Claude Sonnet 4.6',
+        tag: 'coding',
+        contextWindow: 1000000,
+      },
+      {
+        id: 'anthropic/claude-haiku-4-5',
+        label: 'Claude Haiku 4.5',
+        tag: 'fast',
+        contextWindow: 200000,
+      },
     ],
   },
   {
@@ -74,10 +95,30 @@ export const MASTRA_PROVIDERS: ModelProviderDef[] = [
     docsUrl: 'https://ai.google.dev/gemini-api/docs/models',
     apiStyle: 'google',
     models: [
-      { id: 'google/gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', tag: 'flagship', contextWindow: 1048576 },
-      { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash', tag: 'fast', contextWindow: 1048576 },
-      { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', tag: 'flagship', contextWindow: 1048576 },
-      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', tag: 'cheap', contextWindow: 1048576 },
+      {
+        id: 'google/gemini-3.1-pro-preview',
+        label: 'Gemini 3.1 Pro',
+        tag: 'flagship',
+        contextWindow: 1048576,
+      },
+      {
+        id: 'google/gemini-3.5-flash',
+        label: 'Gemini 3.5 Flash',
+        tag: 'fast',
+        contextWindow: 1048576,
+      },
+      {
+        id: 'google/gemini-2.5-pro',
+        label: 'Gemini 2.5 Pro',
+        tag: 'flagship',
+        contextWindow: 1048576,
+      },
+      {
+        id: 'google/gemini-2.5-flash',
+        label: 'Gemini 2.5 Flash',
+        tag: 'cheap',
+        contextWindow: 1048576,
+      },
     ],
   },
   {
@@ -89,7 +130,12 @@ export const MASTRA_PROVIDERS: ModelProviderDef[] = [
     models: [
       { id: 'xai/grok-4.3', label: 'Grok 4.3', tag: 'flagship', contextWindow: 256000 },
       { id: 'xai/grok-4-fast', label: 'Grok 4 Fast', tag: 'fast', contextWindow: 256000 },
-      { id: 'xai/grok-4.20-reasoning', label: 'Grok 4.20 Reasoning', tag: 'reasoning', contextWindow: 256000 },
+      {
+        id: 'xai/grok-4.20-reasoning',
+        label: 'Grok 4.20 Reasoning',
+        tag: 'reasoning',
+        contextWindow: 256000,
+      },
       { id: 'xai/grok-3-mini', label: 'Grok 3 Mini', tag: 'cheap', contextWindow: 131072 },
     ],
   },
@@ -100,10 +146,25 @@ export const MASTRA_PROVIDERS: ModelProviderDef[] = [
     docsUrl: 'https://api-docs.deepseek.com/',
     apiStyle: 'openai',
     models: [
-      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro', tag: 'flagship', contextWindow: 128000 },
-      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash', tag: 'fast', contextWindow: 128000 },
+      {
+        id: 'deepseek/deepseek-v4-pro',
+        label: 'DeepSeek V4 Pro',
+        tag: 'flagship',
+        contextWindow: 128000,
+      },
+      {
+        id: 'deepseek/deepseek-v4-flash',
+        label: 'DeepSeek V4 Flash',
+        tag: 'fast',
+        contextWindow: 128000,
+      },
       { id: 'deepseek/deepseek-chat', label: 'DeepSeek Chat', tag: 'cheap', contextWindow: 64000 },
-      { id: 'deepseek/deepseek-reasoner', label: 'DeepSeek Reasoner', tag: 'reasoning', contextWindow: 64000 },
+      {
+        id: 'deepseek/deepseek-reasoner',
+        label: 'DeepSeek Reasoner',
+        tag: 'reasoning',
+        contextWindow: 64000,
+      },
     ],
   },
 ]
@@ -126,6 +187,28 @@ export const RECOMMENDED_MODELS: { id: string; label: string; reason: string }[]
   { id: 'xai/grok-4.3', label: 'Grok 4.3', reason: 'flagship' },
   { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash', reason: 'cheap' },
 ]
+
+/** Product featured layer — intersect with RegistrySnapshot for default UI lists */
+export const DEFAULT_FEATURED_POLICY: FeaturedPolicy = (() => {
+  const recommendedOrder = new Map(RECOMMENDED_MODELS.map((m, i) => [m.id, i]))
+  const entries: FeaturedPolicy['entries'] = []
+  let fallbackSort = 0
+  for (const p of MASTRA_PROVIDERS) {
+    for (const m of p.models) {
+      const recIdx = recommendedOrder.get(m.id)
+      const hint = RECOMMENDED_MODELS.find((r) => r.id === m.id)?.reason
+      entries.push({
+        modelId: m.id,
+        tag: m.tag,
+        sort: recIdx !== undefined ? recIdx : 1000 + fallbackSort,
+        ...(hint ? { hint } : {}),
+      })
+      fallbackSort += 1
+    }
+  }
+  entries.sort((a, b) => a.sort - b.sort)
+  return { version: 1, entries }
+})()
 
 export function findProviderForModel(modelId: string): ModelProviderDef | undefined {
   const prefix = modelId.split('/')[0]
@@ -154,8 +237,7 @@ export function resolveApiKeyEnvsForModel(
   const canon = normalizeMastraProviderId(prefix)
 
   const builtin =
-    findProviderForModel(id) ??
-    findProviderForModel(`${canon}/${id.split('/').slice(1).join('/')}`)
+    findProviderForModel(id) ?? findProviderForModel(`${canon}/${id.split('/').slice(1).join('/')}`)
   if (builtin) {
     return {
       providerId: builtin.id,
@@ -202,6 +284,19 @@ export function hasAnyApiKey(
     const v = env[k]
     return typeof v === 'string' && v.trim().length > 0
   })
+}
+
+/**
+ * Get the merged provider catalog from the sync mechanism.
+ * Falls back to the static MASTRA_PROVIDERS if the sync module is unavailable.
+ */
+export async function getProviderCatalog(forceRefresh?: boolean): Promise<ModelProviderDef[]> {
+  try {
+    const { getLeaderModelCatalog } = await import('./models-catalog-sync.js')
+    return getLeaderModelCatalog(forceRefresh)
+  } catch {
+    return MASTRA_PROVIDERS
+  }
 }
 
 /** Normalize api style for custom / OpenCode-like gateways */

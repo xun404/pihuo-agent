@@ -1,8 +1,10 @@
 import type { ApprovalDecision } from '@router-agents/shared'
 
+const MAX_TIMER_DELAY_MS = 2_147_483_647
+
 export type ApprovalWaitOutcome =
-  | { outcome: 'selected'; decision: 'allow'; optionId?: string }
-  | { outcome: 'cancelled'; decision: 'deny' | 'cancel'; optionId?: string }
+  | { outcome: 'selected'; decision: 'allow' | 'deny'; optionId?: string }
+  | { outcome: 'cancelled'; decision: 'cancel'; optionId?: string }
   | { outcome: 'timeout' }
 
 export interface WaitForApprovalOptions {
@@ -14,6 +16,7 @@ export interface WaitForApprovalOptions {
 
 type Waiter = {
   resolve: (value: ApprovalWaitOutcome) => void
+  reject: (reason: Error) => void
   timer?: ReturnType<typeof setTimeout>
 }
 
@@ -24,22 +27,39 @@ export class ApprovalWaitRegistry {
   private waiters = new Map<string, Waiter>()
 
   /**
+   * Register a waiter that resolves on settle() or rejects on cancel().
+   * Same as wait() with no timeout. Used for ACP permission flow.
+   */
+  register(approvalId: string): Promise<ApprovalWaitOutcome> {
+    if (this.waiters.has(approvalId)) {
+      throw new Error(`Approval waiter already registered: ${approvalId}`)
+    }
+
+    return new Promise<ApprovalWaitOutcome>((resolve, reject) => {
+      const waiter: Waiter = { resolve, reject }
+      this.waiters.set(approvalId, waiter)
+    })
+  }
+
+  /**
    * Wait until settle() is called for this approval id, or timeout.
    * On timeout returns { outcome: 'timeout' } and leaves the approval pending in the store
    * (caller may separately cancel).
    */
   wait(approvalId: string, opts: WaitForApprovalOptions = {}): Promise<ApprovalWaitOutcome> {
-    const timeoutMs = opts.timeoutMs ?? 120_000
+    const rawTimeoutMs = opts.timeoutMs ?? 120_000
+    const timeoutMs = Number.isFinite(rawTimeoutMs)
+      ? rawTimeoutMs <= 0
+        ? 0
+        : Math.min(Math.max(1, Math.floor(rawTimeoutMs)), MAX_TIMER_DELAY_MS)
+      : 120_000
 
-    // If already settled race: create waiter first
-    return new Promise<ApprovalWaitOutcome>((resolve) => {
-      const existing = this.waiters.get(approvalId)
-      if (existing) {
-        // replace
-        if (existing.timer) clearTimeout(existing.timer)
-      }
+    if (this.waiters.has(approvalId)) {
+      throw new Error(`Approval waiter already registered: ${approvalId}`)
+    }
 
-      const waiter: Waiter = { resolve }
+    return new Promise<ApprovalWaitOutcome>((resolve, reject) => {
+      const waiter: Waiter = { resolve, reject }
       if (timeoutMs > 0) {
         waiter.timer = setTimeout(() => {
           this.waiters.delete(approvalId)
@@ -54,35 +74,40 @@ export class ApprovalWaitRegistry {
    * Called when user/API resolves an approval.
    * Returns true if a waiter was waiting.
    */
-  settle(
-    approvalId: string,
-    decision: ApprovalDecision,
-    optionId?: string,
-  ): boolean {
+  settle(approvalId: string, decision: ApprovalDecision, optionId?: string): boolean {
     const waiter = this.waiters.get(approvalId)
     if (!waiter) return false
     if (waiter.timer) clearTimeout(waiter.timer)
     this.waiters.delete(approvalId)
 
-    if (decision === 'allow') {
-      waiter.resolve({ outcome: 'selected', decision: 'allow', optionId })
+    if (decision === 'cancel') {
+      waiter.resolve({ outcome: 'cancelled', decision: 'cancel', optionId })
     } else {
-      waiter.resolve({
-        outcome: 'cancelled',
-        decision: decision === 'deny' ? 'deny' : 'cancel',
-        optionId,
-      })
+      waiter.resolve({ outcome: 'selected', decision, optionId })
     }
     return true
   }
 
   /**
-   * Cancel all pending waiters by approval ids. Idempotent.
+   * Cancel a single waiter, rejecting with the given reason.
    */
-  cancelMany(approvalIds: string[]): void {
+  cancel(approvalId: string, reason?: string): boolean {
+    const waiter = this.waiters.get(approvalId)
+    if (!waiter) return false
+    if (waiter.timer) clearTimeout(waiter.timer)
+    this.waiters.delete(approvalId)
+    waiter.reject(new Error(reason ?? 'approval cancelled'))
+    return true
+  }
+
+  /**
+   * Cancel all pending waiters by approval ids. Idempotent.
+   * When reason is provided, each waiter is rejected with that reason.
+   * Otherwise, settles as 'cancel' (backwards compatibility).
+   */
+  cancelMany(approvalIds: string[], reason?: string): void {
     for (const id of approvalIds) {
-      if (!this.has(id)) continue
-      this.settle(id, 'cancel')
+      this.cancel(id, reason ?? 'approval cancelled')
     }
   }
 
@@ -90,7 +115,7 @@ export class ApprovalWaitRegistry {
     return this.waiters.has(approvalId)
   }
 
-  /** Test helper: clear all waiters */
+  /** Test helper: clear all waiters. */
   clear(): void {
     for (const w of this.waiters.values()) {
       if (w.timer) clearTimeout(w.timer)

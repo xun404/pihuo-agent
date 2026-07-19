@@ -39,10 +39,7 @@ describe('thinking-intensity', () => {
   })
 
   it('normalizes supported intensity lists for custom gateways', () => {
-    assert.deepEqual(normalizeThinkingIntensityList(['max', 'off', 'max', 'nope']), [
-      'off',
-      'max',
-    ])
+    assert.deepEqual(normalizeThinkingIntensityList(['max', 'off', 'max', 'nope']), ['off', 'max'])
     assert.deepEqual(normalizeThinkingIntensityList([]), ['off'])
     assert.deepEqual(normalizeThinkingIntensityList(null), ['off'])
   })
@@ -54,10 +51,9 @@ describe('thinking-intensity', () => {
   })
 
   it('resolves builtins to full preset and custom to declared list', () => {
-    assert.deepEqual(
-      resolveSupportedThinkingIntensities({ custom: false }),
-      [...BUILTIN_THINKING_PRESETS],
-    )
+    assert.deepEqual(resolveSupportedThinkingIntensities({ custom: false }), [
+      ...BUILTIN_THINKING_PRESETS,
+    ])
     assert.deepEqual(
       resolveSupportedThinkingIntensities({ custom: true, thinkingIntensities: undefined }),
       [...DEFAULT_CUSTOM_THINKING_SUPPORT],
