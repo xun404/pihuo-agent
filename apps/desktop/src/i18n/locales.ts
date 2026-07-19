@@ -40,6 +40,9 @@ export type MessageKey =
   | 'chat.greeting'
   | 'chat.greetingNoProject'
   | 'chat.subhead'
+  | 'chat.hint.compose'
+  | 'chat.hint.capability'
+  | 'chat.hint.start'
   | 'chat.inspector'
   | 'chat.inspectorClose'
   | 'chat.leader'
@@ -424,6 +427,10 @@ const zh: Dict = {
   'chat.greeting': '我们应该在 {project} 中构建什么？',
   'chat.greetingNoProject': '我们应该构建什么？',
   'chat.subhead': '派发多个 Agent Worker 协同完成编码、审查与规划。Leader 统筹，Worker 各司其职。',
+  // 空态提示词池（每次进入空态随机轮换一条，含 subhead 共 4 条）
+  'chat.hint.compose': '描述任务，Leader 会自动拆解并派发给合适的 Worker。',
+  'chat.hint.capability': '实现、审查、规划——告诉我你的目标，我来编排。',
+  'chat.hint.start': '从一个问题开始，或描述你想要实现的功能。',
   'chat.inspector': '打开 Inspector',
   'chat.inspectorClose': '关闭 Inspector',
   'chat.leader': 'Supervisor',
@@ -824,6 +831,12 @@ const en: Dict = {
   'chat.greetingNoProject': 'What should we build?',
   'chat.subhead':
     'Dispatch multiple Agent Workers to collaborate on coding, review, and planning. Leader orchestrates, Workers each play their part.',
+  // Empty-state hint pool (rotates randomly on each entry, 4 total incl. subhead)
+  'chat.hint.compose':
+    'Describe a task — Leader will break it down and dispatch to the right Workers.',
+  'chat.hint.capability':
+    'Implement, review, plan — tell me your goal and I will orchestrate.',
+  'chat.hint.start': 'Start with a question, or describe the feature you want to build.',
   'chat.inspector': 'Open Inspector',
   'chat.inspectorClose': 'Close Inspector',
   'chat.leader': 'Supervisor',

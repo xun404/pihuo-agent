@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ApprovalItem,
   LeaderMode,
@@ -11,7 +11,20 @@ import type {
 import { ChatPanel } from './ChatPanel'
 import { BrandLogo } from './BrandLogo'
 import { useI18n } from '../i18n/I18nProvider'
+import type { MessageKey } from '../i18n/locales'
 import { IconArrowUp } from './Icons'
+
+/**
+ * Empty-state hint pool. Each time the user lands on the empty Chat state
+ * (no session), one hint is shown at random — avoiding repeating the same
+ * one twice in a row. All keys are existing i18n entries.
+ */
+const EMPTY_HINT_KEYS: MessageKey[] = [
+  'chat.subhead',
+  'chat.hint.compose',
+  'chat.hint.capability',
+  'chat.hint.start',
+]
 
 interface Props {
   project: Project | null
@@ -91,6 +104,29 @@ export function ChatWorkspace({
   const [aliveIds, setAliveIds] = useState<string[]>([])
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({})
   const [firstMessage, setFirstMessage] = useState('')
+  const [hintKey, setHintKey] = useState<MessageKey>(() => EMPTY_HINT_KEYS[0]!)
+  // remember the last hint so we don't pick it twice in a row
+  const lastHintIdxRef = useRef(0)
+
+  // Rotate the empty-state hint each time we (re)enter the empty state.
+  // Triggered when session becomes null after having been non-null, or on mount.
+  const prevSessionIdRef = useRef<string | null>(session?.id ?? null)
+  useEffect(() => {
+    const currentSessionId = session?.id ?? null
+    const enteredEmpty = currentSessionId === null
+    if (enteredEmpty) {
+      // pick a random index != lastHintIdxRef (when pool > 1)
+      let next = lastHintIdxRef.current
+      if (EMPTY_HINT_KEYS.length > 1) {
+        while (next === lastHintIdxRef.current) {
+          next = Math.floor(Math.random() * EMPTY_HINT_KEYS.length)
+        }
+      }
+      lastHintIdxRef.current = next
+      setHintKey(EMPTY_HINT_KEYS[next]!)
+    }
+    prevSessionIdRef.current = currentSessionId
+  }, [session?.id])
 
   useEffect(() => {
     if (!session?.id) return
@@ -157,7 +193,7 @@ export function ChatWorkspace({
               t('chat.greetingNoProject')
             )}
           </h1>
-          <p className="home-hint">{t('chat.openSession')}</p>
+          <p className="home-hint">{t(hintKey)}</p>
           {onComposeFirstMessage && (
             <form
               className="composer-card home-composer"
