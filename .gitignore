@@ -22,7 +22,19 @@ release/
 
 dist-electron/
 apps/*/dist-electron/
+apps/*/dist-runtime/
 
-# Internal design docs and plans
-docs/superpowers/
+# Execution plans stay local; design specs are normal project documentation.
+docs/superpowers/plans/
 .opencode/
+
+# Local design assets only (wireframes / screenshots). Do not commit.
+# As-built design system: docs/superpowers/specs/2026-07-16-desktop-as-built-design-system.md
+design/
+.worktrees/
+
+# ZCode client session/plan files (local only)
+.zcode/
+
+# Foreign tooling / build metadata that must not enter this repo
+build-meta.json
