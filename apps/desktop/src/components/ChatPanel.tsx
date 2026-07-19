@@ -1,29 +1,81 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
-import type { LeaderMode, Project, Session } from '@router-agents/shared'
-import { api, chatUrl } from '../lib/api'
+import { AnimatePresence, motion } from 'framer-motion'
+import type {
+  LeaderMode,
+  Project,
+  Session,
+  SessionApprovalPolicy,
+  WorkerJob,
+  WorkerRegistration,
+} from '@router-agents/shared'
+import { isPlaceholderSessionTitle } from '@router-agents/shared'
+import { api, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import {
-  saveSettings,
   THINKING_INTENSITY_OPTIONS,
+  saveThinkingIntensity,
   type ThinkingIntensity,
 } from '../lib/settings'
 import { ProviderLogo } from '../lib/provider-icons'
 import { formatChatError } from '../lib/chat-errors'
+import { enrichLastUserMessageForWire, parseRouterUserMessage } from '../lib/user-message-display'
 import {
-  enrichLastUserMessageForWire,
-  parseRouterUserMessage,
-} from '../lib/user-message-display'
+  ACCESS_MODES,
+  accessModeById,
+  resolveAccessMode,
+  type AccessModeId,
+} from '../lib/access-mode'
 import { MarkdownContent } from './MarkdownContent'
+import { MessageItem } from './MessageItem'
+import { ToolCallRow } from './chat/ToolCallRow'
+import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
+import {
+  AccessModeIcon,
+  ContextRing,
+  IconArrowUp,
+  IconBolt,
+  IconBranch,
+  IconCheck,
+  IconClock,
+  IconEdit,
+  IconFolder,
+  IconPanel,
+  IconSupervisor,
+  IconTerminal,
+} from './Icons'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
-import { workerRunReducer, seedWorkerStates, cleanupTerminalWorkers } from '../lib/worker-run-reducer'
+import { formatElapsedHms } from '../lib/format-elapsed'
+import { formatTokenCountDisplay } from '../lib/context-window'
+import {
+  formatClockTime,
+  resolveLeaderRunMeta,
+  shortModelId,
+  type ClientTurnMeta,
+} from '../lib/leader-run-meta'
+import {
+  workerRunReducer,
+  seedWorkerStates,
+  cleanupTerminalWorkers,
+  seedAcpResetMarkers,
+  seedWorkerStatesFromSnapshot,
+} from '../lib/worker-run-reducer'
+import {
+  projectWorkerCardPlacements,
+  shouldRenderGenericToolShell,
+  buildToolCallJobIdMap,
+  type WorkerCardPlacement,
+} from '../lib/worker-card-placement'
 import { setRecordKey } from '../lib/chat-state'
-import type { WorkerRunEvent, WorkerRunState, LeaderStepBudgetEvent } from '@router-agents/shared'
-
-const MODES: LeaderMode[] = ['ask', 'plan', 'build', 'review']
+import type {
+  WorkerRunEvent,
+  WorkerRunState,
+  LeaderStepBudgetEvent,
+  ApprovalItem,
+} from '@router-agents/shared'
 
 type ModelOption = {
   id: string
@@ -33,16 +85,34 @@ type ModelOption = {
   configured: boolean
   /** Supported thinking levels for this provider (preset for builtins) */
   thinkingIntensities: ThinkingIntensity[]
+  /** Model context window tokens when known */
+  contextWindow?: number
 }
 
+/**
+ * Pick the thinking intensity for a model.
+ * Strategy: from the model's supported levels, take the HIGHEST one
+ * (max > xhigh > high > medium > low > off). The global `preferred` and the
+ * option order are ignored — we always default to the strongest level the
+ * model actually supports. Empty supported → 'off'.
+ */
 function clampThink(
-  preferred: ThinkingIntensity | undefined,
+  _preferred: ThinkingIntensity | undefined,
   supported: ThinkingIntensity[],
 ): ThinkingIntensity {
-  const list = supported.length > 0 ? supported : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
-  if (preferred && list.includes(preferred)) return preferred
-  if (list.includes('medium')) return 'medium'
-  return list[0] ?? 'off'
+  const list =
+    supported.length > 0 ? supported : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
+  // THINKING_INTENSITY_OPTIONS is ordered low→high; pick the highest supported.
+  let best: ThinkingIntensity = 'off'
+  let bestRank = -1
+  for (const lv of list) {
+    const rank = THINKING_INTENSITY_OPTIONS.indexOf(lv)
+    if (rank > bestRank) {
+      bestRank = rank
+      best = lv
+    }
+  }
+  return best
 }
 
 interface Props {
@@ -52,11 +122,53 @@ interface Props {
   /** Visible pane (vs keep-alive hidden for parallel sessions) */
   isActive?: boolean
   onModeChange?: (mode: LeaderMode) => void
-  onOpenSettings?: () => void
+  /** Inline rename from the chat header. Receives the new title; the parent
+   *  decides whether to actually persist (e.g. skip if unchanged / empty). */
+  onRenameSession?: (title: string) => void
+  /** Open settings panel; optionally pin a tab (e.g. 'model' for model-config entries). */
+  onOpenSettings?: (tab?: 'general' | 'model' | 'workers' | 'about') => void
   /** When settings closes, reload available models */
   settingsOpen?: boolean
   /** Report streaming/busy so sidebar can show parallel activity */
   onBusyChange?: (busy: boolean) => void
+  /** Approval policy and resolution */
+  approvalPolicy: SessionApprovalPolicy
+  onSetApprovalPolicy?: (policy: SessionApprovalPolicy) => void
+  resolving?: Record<string, boolean>
+  onResolveApproval?: (
+    approvalId: string,
+    optionId: string | undefined,
+    decision: 'allow' | 'deny' | 'cancel',
+    surface: 'chat' | 'panel',
+  ) => void
+  onResetContext?: (jobId: string) => void
+  snapshotApprovals: ApprovalItem[]
+  snapshotJobs: WorkerJob[]
+  snapshotWorkers: WorkerRegistration[]
+  inspectorOpen?: boolean
+  onToggleInspector?: () => void
+  /** Persist session status + sticky chat error for sidebar / reload */
+  onSessionStatusChange?: (
+    status: Session['status'],
+    opts?: { lastChatError?: string | null },
+  ) => void | Promise<void>
+}
+
+const THINK_LABEL_KEY: Record<
+  ThinkingIntensity,
+  | 'chat.think.off'
+  | 'chat.think.low'
+  | 'chat.think.medium'
+  | 'chat.think.high'
+  | 'chat.think.xhigh'
+  | 'chat.think.max'
+> = {
+  off: 'chat.think.off',
+  low: 'chat.think.low',
+  medium: 'chat.think.medium',
+  high: 'chat.think.high',
+  xhigh: 'chat.think.xhigh',
+  max: 'chat.think.max',
 }
 
 export function ChatPanel({
@@ -65,16 +177,31 @@ export function ChatPanel({
   serverUp,
   isActive = true,
   onModeChange,
+  onRenameSession,
   onOpenSettings,
   settingsOpen,
   onBusyChange,
+  approvalPolicy,
+  onSetApprovalPolicy,
+  resolving = {},
+  onResolveApproval,
+  onResetContext,
+  snapshotApprovals,
+  snapshotJobs,
+  snapshotWorkers,
+  inspectorOpen,
+  onToggleInspector,
+  onSessionStatusChange,
 }: Props) {
   const { t, locale } = useI18n()
   const [input, setInput] = useState('')
   const [mode, setMode] = useState<LeaderMode>(session?.mode ?? 'build')
-  const [modeMenuOpen, setModeMenuOpen] = useState(false)
+  const [accessMenuOpen, setAccessMenuOpen] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  /** Wireframe cascade: root has 模型 / 思考强度 rows; list panel for models */
+  const [modelSideOpen, setModelSideOpen] = useState(false)
   const [thinkMenuOpen, setThinkMenuOpen] = useState(false)
+  const [ctxTipOpen, setCtxTipOpen] = useState(false)
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [thinkingIntensity, setThinkingIntensity] = useState<ThinkingIntensity>('medium')
@@ -82,8 +209,12 @@ export function ChatPanel({
   const [historyLoading, setHistoryLoading] = useState(true)
   /** User toggles for collapsed tool/thinking rows (keyed by msgId:partIndex) */
   const [metaOpen, setMetaOpen] = useState<Record<string, boolean>>({})
+  /** Inline title editing in the chat header */
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const titleInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const modeWrapRef = useRef<HTMLDivElement>(null)
+  const accessWrapRef = useRef<HTMLDivElement>(null)
   const modelWrapRef = useRef<HTMLDivElement>(null)
   const thinkWrapRef = useRef<HTMLDivElement>(null)
   const historyLoadedFor = useRef<string | null>(null)
@@ -97,15 +228,26 @@ export function ChatPanel({
   /** Track tool start times (keyed by metaKey) for execution duration */
   const toolStartTimes = useRef<Map<string, number>>(new Map())
   const toolDurations = useRef<Map<string, number>>(new Map())
+  /** Per-assistant-turn: wall clock + model/thinking at start (UI user text has no wire context) */
+  const turnTimingRef = useRef<Map<string, ClientTurnMeta>>(new Map())
+  const [timingEpoch, setTimingEpoch] = useState(0)
   /** Accumulated worker run states keyed by jobId (live + history) */
   const [workerStates, setWorkerStates] = useState<Map<string, WorkerRunState>>(new Map())
   /** Terminal worker states moved from workerStates after cleanup */
   const terminalWorkerStatesRef = useRef<Map<string, WorkerRunState>>(new Map())
 
-  /** Track chat start time for total elapsed */
-  const chatStartRef = useRef<number | null>(null)
-  const [chatElapsed, setChatElapsed] = useState('')
-  const chatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const registryIdentityFor = useCallback(
+    (state: WorkerRunState): string | undefined => {
+      const worker = state.workerId
+        ? snapshotWorkers.find((candidate) => candidate.id === state.workerId)
+        : undefined
+      return worker?.source?.type === 'registry'
+        ? `${worker.source.registryId}@${worker.source.registryVersion}`
+        : undefined
+    },
+    [snapshotWorkers],
+  )
+
   const [activeBudgetEvent, setActiveBudgetEvent] = useState<LeaderStepBudgetEvent | null>(null)
   const [canContinueBudget, setCanContinueBudget] = useState(false)
   /** Tick counter to trigger re-renders for live tool duration updates */
@@ -130,33 +272,38 @@ export function ChatPanel({
       const list: ModelOption[] = []
       for (const p of s.providers) {
         if (!p.configured) continue
-        const supported =
-          p.thinkingIntensities && p.thinkingIntensities.length > 0
-            ? (p.thinkingIntensities.filter((x) =>
-                THINKING_INTENSITY_OPTIONS.includes(x),
-              ) as ThinkingIntensity[])
-            : p.custom
-              ? (['off', 'medium'] as ThinkingIntensity[])
-              : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
+        // Custom providers can be toggled off in 模型设置
+        if (p.custom && (p as { enabled?: boolean }).enabled === false) continue
         for (const m of p.models) {
+          // Strictly read the model's own thinkingIntensities (set per-model
+          // in 模型设置). No fallback to provider-level or defaults — if a
+          // model has none configured, it only supports 'off'.
+          const modelThink = (m as { thinkingIntensities?: ThinkingIntensity[] })
+            .thinkingIntensities
+          const supported = (modelThink ?? []).filter((x) =>
+            THINKING_INTENSITY_OPTIONS.includes(x),
+          ) as ThinkingIntensity[]
           list.push({
             id: m.id,
             label: m.label,
             providerId: p.id,
             providerName: p.name,
             configured: true,
-            thinkingIntensities: supported,
+            contextWindow: (m as { contextWindow?: number }).contextWindow,
+            thinkingIntensities:
+              supported.length > 0 ? supported : (['off'] as ThinkingIntensity[]),
           })
         }
       }
       setModels(list)
       const current = s.settings.leaderModel
       const previous = selectedModelRef.current
-      const nextModel = previous && list.some((m) => m.id === previous)
-        ? previous
-        : current && list.some((m) => m.id === current)
-          ? current
-          : list[0]?.id ?? current ?? ''
+      const nextModel =
+        previous && list.some((m) => m.id === previous)
+          ? previous
+          : current && list.some((m) => m.id === current)
+            ? current
+            : (list[0]?.id ?? current ?? '')
       setSelectedModel(nextModel)
       selectedModelRef.current = nextModel
       const preferred = s.settings.thinkingIntensity
@@ -190,7 +337,8 @@ export function ChatPanel({
         // Mastra Memory already stores history — send only the latest user turn
         // @see https://mastra.ai/docs/memory/message-history
         // @see https://mastra.ai/guides/build-your-ui/ai-sdk-ui
-        prepareSendMessagesRequest: ({ messages: msgs }) => {
+        // Desktop bearer attached here (async headers not always typed on DefaultChatTransport)
+        prepareSendMessagesRequest: async ({ messages: msgs }) => {
           const last = msgs[msgs.length - 1]
           const proj = projectRef.current
           const sess = sessionRef.current
@@ -204,7 +352,14 @@ export function ChatPanel({
             model: selectedModelRef.current || undefined,
             thinking: thinkingIntensityRef.current,
           })
+          const tok = await ensureDesktopToken()
+          const headers: Record<string, string> = {}
+          if (tok) {
+            headers.Authorization = `Bearer ${tok}`
+            headers['X-Router-Desktop-Token'] = tok
+          }
           return {
+            headers,
             body: {
               messages: wireLast ? [wireLast] : [],
               memory: {
@@ -216,11 +371,39 @@ export function ChatPanel({
             },
           }
         },
+        // AI SDK 6: custom fetch so first 401 clears token, IPC re-fetch, replay once
+        fetch: async (input, init) => {
+          const doFetch = (headers: HeadersInit | undefined) =>
+            globalThis.fetch(input, { ...init, headers })
+          let res = await doFetch(init?.headers)
+          if (res.status !== 401) return res
+          clearDesktopToken()
+          const again = await ensureDesktopToken(true)
+          if (!again) return res
+          const headers = new Headers(init?.headers)
+          headers.set('Authorization', `Bearer ${again}`)
+          headers.set('X-Router-Desktop-Token', again)
+          res = await doFetch(headers)
+          return res
+        },
       }),
     [memoryThreadId, memoryResourceId],
   )
 
-  const { messages, sendMessage, status, stop, error, setMessages } = useChat({
+  const onSessionStatusChangeRef = useRef(onSessionStatusChange)
+  onSessionStatusChangeRef.current = onSessionStatusChange
+  /** Updated after i18n errorCopy is built; onError reads latest */
+  const errorCopyRef = useRef({
+    missingKey: 'Missing API key',
+    billing: 'Insufficient balance or inactive subscription',
+    network: 'Network error',
+    offline: 'Offline',
+    model: 'Model error',
+    generic: 'Chat failed',
+  })
+  const lastStatusPostRef = useRef<string>('')
+
+  const { messages, sendMessage, status, stop, error, setMessages, clearError } = useChat({
     transport,
     id: memoryThreadId,
     experimental_throttle: 50,
@@ -228,6 +411,14 @@ export function ChatPanel({
       if (dataPart.type !== 'data-worker-run') return
       const event = dataPart.data as WorkerRunEvent
       setWorkerStates((prev) => workerRunReducer(prev, event))
+    },
+    onError: (err) => {
+      // Ensure sticky error + lamp even if effect timing misses the useChat error state
+      const friendly = formatChatError(err, errorCopyRef.current)
+      const key = `error:${friendly.message}`
+      if (lastStatusPostRef.current === key) return
+      lastStatusPostRef.current = key
+      onSessionStatusChangeRef.current?.('error', { lastChatError: friendly.message })
     },
   })
 
@@ -262,20 +453,47 @@ export function ChatPanel({
     }
   }, [memoryThreadId, memoryResourceId, setMessages])
 
-  // Seed worker run states from persisted message parts (history loads)
+  // Seed message history and the complete durable snapshot in one monotonic update.
   useEffect(() => {
     if (historyLoading) return
-    setWorkerStates((prev) => seedWorkerStates(prev, messages))
-  }, [messages, historyLoading, memoryThreadId])
+    setWorkerStates((prev) => {
+      let next = seedWorkerStates(prev, messages)
+      next = seedWorkerStatesFromSnapshot(next, {
+        sessionId: session.id,
+        jobs: snapshotJobs,
+        workers: snapshotWorkers,
+        approvals: snapshotApprovals,
+      })
+
+      const terminal = seedAcpResetMarkers(
+        terminalWorkerStatesRef.current,
+        snapshotJobs,
+        session.id,
+      )
+      if (terminal !== terminalWorkerStatesRef.current) {
+        terminalWorkerStatesRef.current = terminal
+        if (next === prev) next = new Map(prev)
+      }
+      return next
+    })
+  }, [
+    messages,
+    historyLoading,
+    memoryThreadId,
+    session.id,
+    snapshotApprovals,
+    snapshotJobs,
+    snapshotWorkers,
+  ])
 
   // Extract active budget events from message parts
   useEffect(() => {
     const actionable = findLatestActionableBudget(messages)
     if (actionable) {
       setActiveBudgetEvent((previous) =>
-        previous?.data.runId === actionable.data.runId
-          && previous.data.maxSteps === actionable.data.maxSteps
-          && previous.data.usedSteps === actionable.data.usedSteps
+        previous?.data.runId === actionable.data.runId &&
+        previous.data.maxSteps === actionable.data.maxSteps &&
+        previous.data.usedSteps === actionable.data.usedSteps
           ? previous
           : actionable,
       )
@@ -300,51 +518,48 @@ export function ChatPanel({
   const onBusyChangeRef = useRef(onBusyChange)
   onBusyChangeRef.current = onBusyChange
 
-  useEffect(() => {
-    onBusyChangeRef.current?.(busy)
-  }, [busy])
-
-  // Chat total elapsed timer (minutes) + tool duration tick
-  const hasRunningWorker = useMemo(
-    () => {
-      for (const s of workerStates.values()) {
-        if (s.status === 'running') return true
-      }
-      return false
-    },
-    [workerStates],
+  // Worker card live duration tick (no top-bar elapsed badge)
+  const placements = useMemo(
+    () => projectWorkerCardPlacements(messages, workerStates, terminalWorkerStatesRef.current),
+    [messages, workerStates],
   )
 
+  const toolCallJobIds = useMemo(() => buildToolCallJobIdMap(messages as never), [messages])
+
+  const placementByJobId = useMemo(() => {
+    const map = new Map<string, WorkerCardPlacement>()
+    for (const p of placements) map.set(p.jobId, p)
+    return map
+  }, [placements])
+
+  const livePlacements = useMemo(() => placements.filter((p) => p.source === 'live'), [placements])
+
+  const hasRunningWorker = useMemo(() => {
+    for (const s of workerStates.values()) {
+      if (s.status === 'running' || s.status === 'pending_approval') return true
+    }
+    return false
+  }, [workerStates])
+  const effectiveBusy = busy || hasRunningWorker
+
   useEffect(() => {
-    if (busy) {
-      if (!chatStartRef.current) chatStartRef.current = Date.now()
-      if (!chatTimerRef.current) {
-        chatTimerRef.current = setInterval(() => {
-          const elapsed = (Date.now() - chatStartRef.current!) / 60000
-          setChatElapsed(`${elapsed.toFixed(1)}m`)
-        }, 1000)
-      }
-      // Only start the 250ms worker-card tick when there are running workers
-      if (hasRunningWorker && !tickRef.current) {
-        tickRef.current = setInterval(() => setTick((t) => t + 1), 250)
-      } else if (!hasRunningWorker && tickRef.current) {
+    onBusyChangeRef.current?.(effectiveBusy)
+  }, [effectiveBusy])
+
+  useEffect(() => {
+    if (hasRunningWorker && !tickRef.current) {
+      tickRef.current = setInterval(() => setTick((t) => t + 1), 250)
+    } else if (!hasRunningWorker && tickRef.current) {
+      clearInterval(tickRef.current)
+      tickRef.current = null
+    }
+    return () => {
+      if (tickRef.current) {
         clearInterval(tickRef.current)
         tickRef.current = null
       }
-    } else if (!busy) {
-      if (chatStartRef.current) {
-        const total = (Date.now() - chatStartRef.current) / 60000
-        setChatElapsed(`${total.toFixed(1)}m`)
-      }
-      if (chatTimerRef.current) { clearInterval(chatTimerRef.current); chatTimerRef.current = null }
-      if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
-      chatStartRef.current = null
     }
-    return () => {
-      if (chatTimerRef.current) clearInterval(chatTimerRef.current)
-      if (tickRef.current) clearInterval(tickRef.current)
-    }
-  }, [busy, hasRunningWorker])
+  }, [hasRunningWorker])
 
   useEffect(() => {
     if (isActive) {
@@ -352,80 +567,335 @@ export function ChatPanel({
     }
   }, [messages, status, isActive])
 
+  /**
+   * Supervisor 本轮计时：
+   * - busy 一开始就记 startedAt（不绑 message id，避免流式 id 变更丢耗时）
+   * - 流式中把同一 startedAt 同步到「当前」assistant id
+   * - busy 结束时在最终 assistant id 上封印 endedAt
+   */
+  const activeTurnRef = useRef<{
+    startedAt: number
+    model?: string
+    thinking?: string
+    assistantId?: string
+  } | null>(null)
+  const wasBusyRef = useRef(false)
+  useEffect(() => {
+    const map = turnTimingRef.current
+    let changed = false
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+    const wasBusy = wasBusyRef.current
+
+    if (busy) {
+      if (!activeTurnRef.current) {
+        activeTurnRef.current = {
+          startedAt: Date.now(),
+          model: selectedModelRef.current || undefined,
+          thinking: thinkingIntensityRef.current || undefined,
+        }
+        changed = true
+      } else {
+        const at = activeTurnRef.current
+        if (!at.model && selectedModelRef.current) {
+          at.model = selectedModelRef.current
+          changed = true
+        }
+        if (!at.thinking && thinkingIntensityRef.current) {
+          at.thinking = thinkingIntensityRef.current
+          changed = true
+        }
+      }
+
+      // 同步到当前 assistant id（id 变了就迁过去，删掉旧 key）
+      if (lastAssistant && activeTurnRef.current) {
+        const at = activeTurnRef.current
+        const prevId = at.assistantId
+        if (prevId && prevId !== lastAssistant.id) {
+          map.delete(prevId)
+          changed = true
+        }
+        if (at.assistantId !== lastAssistant.id) {
+          at.assistantId = lastAssistant.id
+          changed = true
+        }
+        const next: ClientTurnMeta = {
+          startedAt: at.startedAt,
+          model: at.model,
+          thinking: at.thinking,
+        }
+        const prev = map.get(lastAssistant.id)
+        if (
+          !prev ||
+          prev.startedAt !== next.startedAt ||
+          prev.model !== next.model ||
+          prev.thinking !== next.thinking ||
+          prev.endedAt != null
+        ) {
+          map.set(lastAssistant.id, next)
+          changed = true
+        }
+      }
+    } else if (wasBusy && activeTurnRef.current) {
+      // 本轮结束：封印到最终 assistant
+      const at = activeTurnRef.current
+      const id = lastAssistant?.id ?? at.assistantId
+      if (id) {
+        map.set(id, {
+          startedAt: at.startedAt,
+          endedAt: Date.now(),
+          model: at.model || selectedModelRef.current || undefined,
+          thinking: at.thinking || thinkingIntensityRef.current || undefined,
+        })
+        changed = true
+      }
+      activeTurnRef.current = null
+    }
+
+    wasBusyRef.current = busy
+    if (changed) setTimingEpoch((n) => n + 1)
+  }, [messages, busy])
+
   useEffect(() => {
     if (session.mode) setMode(session.mode)
   }, [session.mode, session.id])
 
   useEffect(() => {
-    if (!modeMenuOpen && !modelMenuOpen && !thinkMenuOpen) return
+    if (!accessMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
     const onDoc = (e: MouseEvent) => {
-      if (modeWrapRef.current && !modeWrapRef.current.contains(e.target as Node)) {
-        setModeMenuOpen(false)
+      if (accessWrapRef.current && !accessWrapRef.current.contains(e.target as Node)) {
+        setAccessMenuOpen(false)
       }
       if (modelWrapRef.current && !modelWrapRef.current.contains(e.target as Node)) {
         setModelMenuOpen(false)
+        setModelSideOpen(false)
+        setThinkMenuOpen(false)
       }
       if (thinkWrapRef.current && !thinkWrapRef.current.contains(e.target as Node)) {
         setThinkMenuOpen(false)
       }
+      // ctx-tip：点 ctx 环外面就关（ctx 环在 model-wrap 内）
+      if (ctxTipOpen && modelWrapRef.current && !modelWrapRef.current.contains(e.target as Node)) {
+        // 但不能关 tip 自己里面的点击（压缩按钮等）
+        const tip = document.querySelector('.ctx-tip')
+        if (!tip || !tip.contains(e.target as Node)) {
+          setCtxTipOpen(false)
+        }
+      }
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [modeMenuOpen, modelMenuOpen, thinkMenuOpen])
+  }, [accessMenuOpen, modelMenuOpen, thinkMenuOpen, ctxTipOpen])
 
-  const modeLabel = (m: LeaderMode) => {
-    if (m === 'ask') return t('mode.ask')
-    if (m === 'plan') return t('mode.plan')
-    if (m === 'build') return t('mode.build')
-    return t('mode.review')
-  }
+  const accessModeId = resolveAccessMode(mode, approvalPolicy)
+  const accessMode = accessModeById(accessModeId)
 
-  const selectMode = (m: LeaderMode) => {
-    setMode(m)
-    setModeMenuOpen(false)
-    onModeChange?.(m)
+  const selectAccessMode = (id: AccessModeId) => {
+    const def = accessModeById(id)
+    setMode(def.mode)
+    modeRef.current = def.mode
+    setAccessMenuOpen(false)
+    onModeChange?.(def.mode)
+    onSetApprovalPolicy?.(def.policy)
   }
 
   const selectThinking = (level: ThinkingIntensity) => {
     setThinkingIntensity(level)
     thinkingIntensityRef.current = level
     setThinkMenuOpen(false)
-    // Persist so Settings stays in sync
-    void saveSettings({ thinkingIntensity: level }).catch((e) => {
+    void saveThinkingIntensity(level).catch((e) => {
       console.warn('[ChatPanel] save thinkingIntensity failed', e)
     })
   }
 
   const selectedMeta = models.find((m) => m.id === selectedModel)
-  const modelChipLabel = selectedMeta
-    ? `${selectedMeta.providerName} / ${selectedMeta.label}`
-    : selectedModel || t('chat.model')
+  const modelShort = selectedMeta
+    ? selectedMeta.label
+    : selectedModel
+      ? selectedModel.includes('/')
+        ? selectedModel.slice(selectedModel.indexOf('/') + 1)
+        : selectedModel
+      : t('chat.model')
+  const thinkShort = t(THINK_LABEL_KEY[thinkingIntensity] ?? 'chat.think.medium')
+  const modelChipLabel = `${modelShort} ${thinkShort}`
 
-  const supportedThinking: ThinkingIntensity[] =
-    selectedMeta?.thinkingIntensities?.length
-      ? selectedMeta.thinkingIntensities
-      : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
+  // Context meter: UI-only estimate until backend exposes token usage (see HANDOVER)
+  const ctxTotal =
+    selectedMeta?.contextWindow && selectedMeta.contextWindow > 0
+      ? selectedMeta.contextWindow
+      : 1_000_000
+  // memo 化：避免每次按键（setInput）都重算 messages.reduce
+  const approxTokens = useMemo(
+    () =>
+      Math.min(
+        ctxTotal,
+        Math.round(
+          messages.reduce((acc, m) => {
+            for (const p of m.parts) {
+              if (p.type === 'text' && 'text' in p) acc += String(p.text).length / 4
+            }
+            return acc
+          }, 0),
+        ),
+      ),
+    [messages, ctxTotal],
+  )
+  const ctxPctRaw = ctxTotal > 0 ? (approxTokens / ctxTotal) * 100 : 0
+  const ctxPct = Math.min(100, Math.round(ctxPctRaw * 10) / 10)
+  const ctxUsedLabel = formatTokenCountDisplay(approxTokens, locale)
+  const ctxTotalLabel = formatTokenCountDisplay(ctxTotal, locale)
+  const ctxPctLabel =
+    ctxPctRaw > 0 && ctxPctRaw < 0.1
+      ? ctxPctRaw.toFixed(2)
+      : ctxPct % 1 === 0
+        ? String(Math.round(ctxPct))
+        : ctxPct.toFixed(1)
+  const hasMessages = messages.length > 0 || historyLoading
 
-  // When model changes, clamp thinking to what that provider supports
+  const supportedThinking: ThinkingIntensity[] = selectedMeta?.thinkingIntensities?.length
+    ? selectedMeta.thinkingIntensities
+    : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
+
+  // When model changes, clamp thinking to what that provider supports.
+  // NOTE: intentionally does NOT depend on `thinkingIntensity` — otherwise
+  // picking a different level would re-clamp and override the user's choice.
+
   useEffect(() => {
     if (!selectedMeta) return
-    const next = clampThink(thinkingIntensity, selectedMeta.thinkingIntensities)
-    if (next !== thinkingIntensity) {
+    const next = clampThink(thinkingIntensityRef.current, selectedMeta.thinkingIntensities)
+    if (next !== thinkingIntensityRef.current) {
       setThinkingIntensity(next)
       thinkingIntensityRef.current = next
     }
-  }, [selectedModel, selectedMeta, thinkingIntensity])
+  }, [selectedModel, selectedMeta])
 
-  const friendlyError = useMemo(() => {
-    if (!error) return null
-    return formatChatError(error, {
+  const errorCopy = useMemo(
+    () => ({
       missingKey: t('chat.errorMissingKey'),
+      billing: t('chat.errorBilling'),
       network: t('chat.errorNetwork'),
       offline: t('chat.errorOffline'),
       model: t('chat.errorModel'),
       generic: t('chat.errorGeneric'),
-    })
-  }, [error, t])
+    }),
+    [t],
+  )
+  errorCopyRef.current = errorCopy
+
+  const liveFriendlyError = useMemo(() => {
+    if (!error) return null
+    return formatChatError(error, errorCopy)
+  }, [error, errorCopy])
+
+  // Live stream error + sticky session error (survives reload).
+  // lastChatError alone is enough — don't require status==='error' (recompute races).
+  const displayError = useMemo(() => {
+    if (liveFriendlyError) return liveFriendlyError
+    if (session.lastChatError?.trim()) {
+      return formatChatError(session.lastChatError, errorCopy, { log: false })
+    }
+    return null
+  }, [liveFriendlyError, session.lastChatError, errorCopy])
+
+  // One card only: embed error in the tail assistant turn when present;
+  // otherwise a single standalone Supervisor card at the end (failed before any reply).
+  const lastMessage = messages[messages.length - 1]
+  const errorBelongsInLastAssistant =
+    Boolean(displayError) && Boolean(lastMessage) && lastMessage!.role !== 'user'
+
+  // Credentials rotation clears lastChatError while idle → drop useChat error too.
+  // Do NOT clear when user re-sends (status→running) or while busy — that hid the next failure.
+  const prevStickyErrorRef = useRef(session.lastChatError)
+  useEffect(() => {
+    const prev = prevStickyErrorRef.current
+    prevStickyErrorRef.current = session.lastChatError
+    const stickyClearedExternally =
+      Boolean(prev?.trim()) &&
+      !session.lastChatError?.trim() &&
+      session.status !== 'error' &&
+      session.status !== 'running' &&
+      !busy
+    if (!stickyClearedExternally) return
+    lastStatusPostRef.current = ''
+    if (error) clearError()
+  }, [session.lastChatError, session.status, busy, error, clearError])
+
+  const persistChatError = useCallback(
+    (friendly: { message: string }, opts?: { force?: boolean }) => {
+      if (!onSessionStatusChange) return Promise.resolve()
+      const key = `error:${friendly.message}`
+      if (!opts?.force && lastStatusPostRef.current === key) return Promise.resolve()
+      lastStatusPostRef.current = key
+      return Promise.resolve(onSessionStatusChange('error', { lastChatError: friendly.message }))
+    },
+    [onSessionStatusChange],
+  )
+
+  // Keep latest error text for unmount flush (Settings replaces the shell)
+  const displayErrorRef = useRef(displayError)
+  displayErrorRef.current = displayError
+
+  useEffect(() => {
+    if (!onSessionStatusChange) return
+    if (liveFriendlyError) {
+      persistChatError(liveFriendlyError)
+      return
+    }
+    if (busy) {
+      const key = 'running'
+      if (lastStatusPostRef.current === key) return
+      lastStatusPostRef.current = key
+      onSessionStatusChange('running', { lastChatError: null })
+    }
+  }, [liveFriendlyError, busy, onSessionStatusChange, persistChatError])
+
+  // Opening Settings unmounts this panel — flush sticky so the card returns after close
+  useEffect(() => {
+    return () => {
+      const err = displayErrorRef.current
+      if (!err?.message) return
+      const key = `error:${err.message}`
+      lastStatusPostRef.current = key
+      onSessionStatusChangeRef.current?.('error', { lastChatError: err.message })
+    }
+  }, [])
+
+  const openSettingsFromError = useCallback(() => {
+    const go = () => onOpenSettings?.()
+    if (!displayError) {
+      go()
+      return
+    }
+    // Wait for sticky write so leaveSettings refresh cannot race-away the card
+    void persistChatError(displayError, { force: true }).finally(go)
+  }, [displayError, persistChatError, onOpenSettings])
+
+  const errorBlock = displayError ? (
+    <div className="chat-error-block chat-error-in-bubble" role="alert">
+      <span className="chat-error-label">{t('chat.error')}</span>
+      <div className="chat-error-body">{displayError.message}</div>
+      <div className="chat-error-actions">
+        {displayError.href && (
+          <a
+            className="btn btn-soft btn-sm chat-error-action"
+            href={displayError.href}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('chat.errorOpenBilling')}
+          </a>
+        )}
+        {displayError.action === 'open_settings' && onOpenSettings && (
+          <button
+            type="button"
+            className="btn btn-soft btn-sm chat-error-action"
+            onClick={openSettingsFromError}
+          >
+            {t('chat.openSettings')}
+          </button>
+        )}
+      </div>
+    </div>
+  ) : null
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -440,11 +910,14 @@ export function ChatPanel({
       })
       // useChat error state is server-driven; surface via temporary local message is harder.
       // Prefer opening settings — user sees empty model chip already.
-      onOpenSettings?.()
+      onOpenSettings?.('model')
       return
     }
 
     // UI message = clean user text only; mode/context injected in prepareSendMessagesRequest
+    lastStatusPostRef.current = 'running'
+    if (error) clearError()
+    onSessionStatusChange?.('running', { lastChatError: null })
     void sendMessage({ text })
     setInput('')
   }
@@ -454,11 +927,10 @@ export function ChatPanel({
     const saved = activeBudgetEvent
     setCanContinueBudget(false)
     const prompt = buildContinuePrompt(locale)
-    sendMessage({ text: prompt })
-      .catch(() => {
-        setActiveBudgetEvent(saved)
-        setCanContinueBudget(true)
-      })
+    sendMessage({ text: prompt }).catch(() => {
+      setActiveBudgetEvent(saved)
+      setCanContinueBudget(true)
+    })
   }, [activeBudgetEvent, busy, locale, sendMessage])
 
   // Group models by provider for the menu (before any early return — hooks rules)
@@ -475,536 +947,644 @@ export function ChatPanel({
     return [...map.entries()]
   }, [models])
 
+  // —— Inline title editing (chat header) ——
+  // Begin editing: seed the draft from the *raw* session title (not the
+  // "Untitled" placeholder shown in the UI), so users can clear/replace it.
+  const beginEditTitle = useCallback(() => {
+    if (!onRenameSession) return
+    setTitleDraft(session.title)
+    setEditingTitle(true)
+  }, [onRenameSession, session.title])
+
+  // Focus + select-all once the input mounts.
+  useEffect(() => {
+    if (editingTitle) {
+      const el = titleInputRef.current
+      if (el) {
+        el.focus()
+        el.select()
+      }
+    }
+  }, [editingTitle])
+
+  const commitTitle = useCallback(() => {
+    if (!editingTitle) return
+    const next = titleDraft.trim()
+    setEditingTitle(false)
+    // Parent skips empty / unchanged values; we always exit edit mode.
+    if (next && next !== session.title) onRenameSession?.(next)
+  }, [editingTitle, titleDraft, session.title, onRenameSession])
+
+  const cancelTitle = useCallback(() => {
+    setEditingTitle(false)
+    setTitleDraft(session.title)
+  }, [session.title])
+
   const metaKey = (msgId: string, partIdx: number) => `${msgId}:${partIdx}`
 
-  const isMetaOpen = (
-    key: string,
-    autoOpen: boolean,
-  ): boolean => {
-    if (key in metaOpen) return metaOpen[key]!
-    return autoOpen
-  }
+  const isMetaOpen = useCallback(
+    (key: string, autoOpen: boolean): boolean => {
+      if (key in metaOpen) return metaOpen[key]!
+      return autoOpen
+    },
+    [metaOpen],
+  )
 
-  return (
-    <main className="panel panel-center chat-panel" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div className="session-toolbar">
-        <span className="session-title-main">{session.title}</span>
-        {chatElapsed && (
-          <span className="badge badge-gray chat-elapsed">{chatElapsed}</span>
+  // 消息列表 JSX 缓存：只在真正影响渲染的数据变化时重建（不含 input）。
+  // 按键（setInput）时所有 deps 引用都不变 → 返回缓存 JSX → React 完全跳过
+  // 66 个 MessageItem 的 element 创建 + reconciliation。根治输入卡顿。
+  const messageList = useMemo(() => {
+    const lastAssistantId = (() => {
+      for (let k = messages.length - 1; k >= 0; k--) {
+        if (messages[k]!.role === 'assistant') return messages[k]!.id
+      }
+      return undefined
+    })()
+    return (
+      <>
+        {historyLoading && messages.length === 0 && (
+          <div className="chat-history-loading">{t('app.loading')}</div>
         )}
-        <div className="spacer" />
-        <span className="badge badge-gray" title={selectedModel}>
-          {selectedMeta ? `${selectedMeta.providerName}/${selectedMeta.label}` : selectedModel || '—'}
-        </span>
-        <span className="badge badge-gray">
-          {t('chat.mode')}: {modeLabel(mode)}
-        </span>
-        <span className="badge badge-gray chat-think-badge" title={t('chat.think.hint')}>
-          {t('chat.think.short')}: {thinkingIntensity}
-        </span>
-      </div>
-
-      <div className="chat">
-        <div className="chat-inner">
-          {historyLoading && messages.length === 0 && (
-            <div className="chat-history-loading">{t('app.loading')}</div>
-          )}
-
-          {!historyLoading && messages.length === 0 && (
-            <div className="msg assistant">
-              <div className="msg-role">
-                <span className="badge badge-blue">Leader</span>
-                {t('chat.leader')}
+        {messages.map((message, msgIdx) => (
+          <MessageItem
+            key={message.id}
+            message={message}
+            msgIdx={msgIdx}
+            messages={messages}
+            busy={busy}
+            lastAssistantId={lastAssistantId}
+            isTailMessage={lastMessage?.id === message.id}
+            showErrorInThisBubble={
+              errorBelongsInLastAssistant &&
+              lastMessage?.id === message.id &&
+              message.role !== 'user'
+            }
+            t={t}
+            locale={locale}
+            models={models}
+            selectedModel={selectedModel}
+            thinkingIntensity={thinkingIntensity}
+            modelShort={modelShort}
+            thinkShort={thinkShort}
+            metaOpen={metaOpen}
+            setMetaOpen={setMetaOpen}
+            tick={tick}
+            placementByJobId={placementByJobId}
+            toolCallJobIds={toolCallJobIds}
+            hasRunningWorker={hasRunningWorker}
+            resolving={resolving}
+            onResolveApproval={onResolveApproval}
+            onResetContext={onResetContext}
+            registryIdentityFor={registryIdentityFor}
+            isMetaOpen={isMetaOpen}
+            errorBlock={errorBlock}
+            timingEpoch={timingEpoch}
+            turnTimingRef={turnTimingRef}
+            toolStartTimes={toolStartTimes}
+            toolDurations={toolDurations}
+          />
+        ))}
+        {/* 尚无 assistant 回复时（失败在首包前）：单独一张卡承载错误 */}
+        {displayError && !errorBelongsInLastAssistant && (
+          <div className="msg leader">
+            <div className="sup-card">
+              <div className="sup-header">
+                <span className="sup-avatar" aria-hidden>
+                  <IconSupervisor size={11} />
+                </span>
+                <span className="sup-name">{t('chat.leader')}</span>
               </div>
-              <div className="chat-ready-block">
-                <div className="chat-ready-title">
-                  <span>📋</span> {t('chat.ready')}
-                  <span className={`chat-ready-status${serverUp ? ' on' : ''}`}>
-                    {serverUp ? t('chat.connected') : t('chat.offline')}
-                  </span>
-                </div>
-                <div className="chat-ready-body">
-                  {t('chat.readyBody')}
-                  <ul>
-                    <li>
-                      {t('chat.mode')}: {modeLabel(mode)}
-                    </li>
-                    <li>
-                      {t('chat.model')}: {selectedModel || '—'}
-                    </li>
-                    <li>
-                      {t('chat.think.label')}: {thinkingIntensity}
-                    </li>
-                    <li>
-                      {t('chat.project')}: {project?.name ?? '—'}
-                    </li>
-                    <li>
-                      {t('chat.path')}: {project?.rootPath ?? '—'}
-                    </li>
-                  </ul>
-                  {!modelsLoading && models.length === 0 && (
-                    <p className="chat-no-key-hint">
-                      {t('chat.noModelHint')}{' '}
-                      <button
-                        type="button"
-                        className="chat-settings-link"
-                        onClick={() => onOpenSettings?.()}
-                      >
-                        {t('chat.openSettings')}
-                      </button>
-                    </p>
-                  )}
-                </div>
-              </div>
+              <div className="sup-body">{errorBlock}</div>
             </div>
-          )}
+          </div>
+        )}
+        {livePlacements.map((wp) => (
+          <WorkerRunCard
+            key={wp.jobId}
+            state={wp.state}
+            registryIdentity={registryIdentityFor(wp.state)}
+            open={isMetaOpen(wp.jobId, true)}
+            onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, wp.jobId, o))}
+            tick={tick}
+            resolving={resolving}
+            onResolveApproval={onResolveApproval}
+            onResetContext={onResetContext}
+          />
+        ))}
+        {activeBudgetEvent && (
+          <LeaderStepBudgetNotice
+            event={activeBudgetEvent}
+            canContinue={canContinueBudget}
+            busy={busy}
+            onContinue={handleContinueBudget}
+            continueLabel={t('chat.continueTask')}
+            description={t('chat.budgetExhausted', {
+              used: String(activeBudgetEvent.data.usedSteps),
+              max: String(activeBudgetEvent.data.maxSteps),
+            })}
+          />
+        )}
+        <div ref={bottomRef} />
+      </>
+    )
+  }, [
+    messages,
+    historyLoading,
+    busy,
+    lastMessage,
+    errorBelongsInLastAssistant,
+    displayError,
+    errorBlock,
+    t,
+    locale,
+    models,
+    selectedModel,
+    thinkingIntensity,
+    modelShort,
+    thinkShort,
+    metaOpen,
+    setMetaOpen,
+    tick,
+    placementByJobId,
+    toolCallJobIds,
+    hasRunningWorker,
+    resolving,
+    onResolveApproval,
+    onResetContext,
+    registryIdentityFor,
+    isMetaOpen,
+    timingEpoch,
+    livePlacements,
+    activeBudgetEvent,
+    canContinueBudget,
+    handleContinueBudget,
+  ])
 
-          {messages.map((message) => {
-                const renderedWorkerJobs = new Set<string>()
-                return (
-            <div
-              key={message.id}
-              className={`msg ${message.role === 'user' ? 'user' : 'assistant'}`}
+  const composerCard = (
+    <div className="composer-stack">
+      <form className="composer-card" onSubmit={onSubmit}>
+        <div className="context-bar">
+          {project && (
+            <span className="ctx" title={project.rootPath}>
+              <IconFolder size={13} />
+              {project.name}
+            </span>
+          )}
+          {project?.defaultBranch && (
+            <span className="ctx">
+              <IconBranch size={13} />
+              {project.defaultBranch}
+            </span>
+          )}
+        </div>
+        <textarea
+          className="composer-input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={hasMessages ? t('chat.placeholder') : t('chat.placeholderHome')}
+          rows={hasMessages ? 2 : 3}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              onSubmit(e)
+            }
+          }}
+        />
+        <div className="composer-tools">
+          <div className="mode-menu-wrap" ref={accessWrapRef}>
+            <button
+              type="button"
+              className={`chip menu${accessMode.accent ? ' access' : ''}`}
+              onClick={() => {
+                setAccessMenuOpen((v) => !v)
+                setModelMenuOpen(false)
+                setThinkMenuOpen(false)
+              }}
             >
-              <div className="msg-role">
-                {message.role === 'user' ? (
-                  t('chat.you')
-                ) : (
-                  <>
-                    <span className="badge badge-blue">Leader</span>
-                    {t('chat.leader')}
-                  </>
+              <AccessModeIcon id={accessMode.id} size={13} className="chip-ico" />
+              {t(accessMode.titleKey)}
+              <span className="caret">▾</span>
+            </button>
+            <AnimatePresence>
+              {accessMenuOpen && (
+                <motion.div
+                  className="pop-menu mode-menu"
+                  role="menu"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
+                >
+                  {ACCESS_MODES.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`pop-item${accessModeId === m.id ? ' on' : ''}${
+                        m.accent ? ' access' : ''
+                      }`}
+                      role="menuitem"
+                      onClick={() => selectAccessMode(m.id)}
+                    >
+                      <span className={`pi${m.accent ? ' accent' : ''}`} aria-hidden>
+                        <AccessModeIcon id={m.id} size={16} />
+                      </span>
+                      <span className="pi-body">
+                        <div className="pi-title">{t(m.titleKey)}</div>
+                        <div className="pi-desc">{t(m.descKey)}</div>
+                      </span>
+                      {accessModeId === m.id && (
+                        <span className="check">
+                          <IconCheck size={14} />
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="spacer" />
+
+          <div className="model-wrap" ref={modelWrapRef}>
+            <span
+              className="ctx-meter-hit"
+              title={t('chat.ctxTitle')}
+              onClick={() => {
+                setCtxTipOpen((v) => !v)
+                setModelMenuOpen(false)
+                setModelSideOpen(false)
+                setThinkMenuOpen(false)
+              }}
+            >
+              <ContextRing
+                pct={ctxPct}
+                title={t('chat.ctxStats', {
+                  used: ctxUsedLabel,
+                  total: ctxTotalLabel,
+                  pct: ctxPctLabel,
+                })}
+              />
+              <AnimatePresence>
+                {ctxTipOpen && (
+                  <motion.div
+                    className="ctx-tip"
+                    role="dialog"
+                    aria-label={t('chat.ctxTitle')}
+                    initial={{ opacity: 0, x: '-50%', y: 4 }}
+                    animate={{ opacity: 1, x: '-50%', y: 0 }}
+                    exit={{ opacity: 0, x: '-50%', y: 4 }}
+                    transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
+                  >
+                    <div className="ctx-tip-head">
+                      <span className="t-title">{t('chat.ctxTitle')}</span>
+                      <span className="t-stats">
+                        {t('chat.ctxStats', {
+                          used: ctxUsedLabel,
+                          total: ctxTotalLabel,
+                          pct: ctxPctLabel,
+                        })}
+                      </span>
+                    </div>
+                    <div
+                      className="ctx-tip-bar"
+                      role="progressbar"
+                      aria-valuenow={Math.round(ctxPct)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <div
+                        className="ctx-tip-bar-fill"
+                        style={{ width: `${Math.min(100, Math.max(0, ctxPct))}%` }}
+                      />
+                    </div>
+                    <div className="ctx-tip-cache">
+                      <span className="t-label">{t('chat.ctxCacheHit')}</span>
+                      <span className="t-value">99.89%</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="ctx-tip-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        // Placeholder: compress context — implement later
+                      }}
+                    >
+                      {t('chat.ctxCompress')}
+                    </button>
+                  </motion.div>
                 )}
-              </div>
-              {message.parts.map((part, i) => {
-                if (part.type === 'text') {
-                  if (message.role === 'user') {
-                    const { text: display, meta } = parseRouterUserMessage(part.text)
-                    const chips: string[] = []
-                    if (meta.mode) chips.push(meta.mode)
-                    if (meta.model) {
-                      const short = meta.model.includes('/')
-                        ? meta.model.slice(meta.model.indexOf('/') + 1)
-                        : meta.model
-                      chips.push(short)
-                    }
-                    if (meta.thinking && meta.thinking !== 'off') {
-                      chips.push(`think:${meta.thinking}`)
-                    }
-                    return (
-                      <div className="user-msg-block" key={i}>
-                        <div className="bubble">{display || part.text}</div>
-                        {chips.length > 0 && (
-                          <div className="user-msg-meta" title={part.text}>
-                            {chips.map((c) => (
-                              <span key={c} className="user-msg-chip">
-                                {c}
+              </AnimatePresence>
+            </span>
+
+            {!modelsLoading && models.length === 0 ? (
+              <button type="button" className="chip menu" onClick={() => onOpenSettings?.('model')}>
+                {t('chat.noModelConfigured')} →
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="chip menu"
+                title={selectedModel}
+                disabled={modelsLoading}
+                onClick={() => {
+                  setModelMenuOpen((v) => !v)
+                  setCtxTipOpen(false)
+                  setAccessMenuOpen(false)
+                  if (!models.length) void loadModels()
+                }}
+              >
+                {modelsLoading ? t('app.loading') : modelChipLabel}
+                <span className="caret">▾</span>
+              </button>
+            )}
+
+            <AnimatePresence>
+              {modelMenuOpen && models.length > 0 && (
+                <motion.div
+                  className="pop-menu model-menu"
+                  role="menu"
+                  aria-label={t('chat.model')}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
+                >
+                  {/* 主面板两行：模型 / 思考强度。点击各自弹侧栏（紧贴左侧，top 对齐）*/}
+                  <button
+                    type="button"
+                    className="pop-row"
+                    role="menuitem"
+                    onClick={() => {
+                      setModelSideOpen((v) => !v)
+                      setThinkMenuOpen(false)
+                    }}
+                  >
+                    {t('chat.model')}
+                    <span className="val">
+                      {modelShort}
+                      <span className="arrow">‹</span>
+                    </span>
+                  </button>
+                  {supportedThinking.length > 0 && (
+                    <button
+                      type="button"
+                      className="pop-row"
+                      role="menuitem"
+                      onClick={() => {
+                        setThinkMenuOpen((v) => !v)
+                        setModelSideOpen(false)
+                      }}
+                    >
+                      {t('chat.think.label')}
+                      <span className="val">
+                        {thinkShort}
+                        <span className="arrow">‹</span>
+                      </span>
+                    </button>
+                  )}
+                  {/* 管理模型入口（主菜单底部，分隔线 + accent 按钮）*/}
+                  <div className="pop-manage">
+                    <button
+                      type="button"
+                      className="pop-row pop-manage-btn"
+                      onClick={() => {
+                        setModelMenuOpen(false)
+                        setModelSideOpen(false)
+                        setThinkMenuOpen(false)
+                        window.dispatchEvent(
+                          new CustomEvent('router-agents:open-settings', {
+                            detail: { tab: 'model' },
+                          }),
+                        )
+                      }}
+                    >
+                      {t('chat.manageModels')}
+                    </button>
+                  </div>
+                  {/* 思考强度侧栏（紧贴主菜单左侧，top 对齐，从右滑入）*/}
+                  <AnimatePresence>
+                    {thinkMenuOpen && supportedThinking.length > 0 && (
+                      <motion.div
+                        className="pop-side pop-side-cascade"
+                        ref={thinkWrapRef}
+                        role="menu"
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -8 }}
+                        transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
+                      >
+                        {supportedThinking.map((level) => (
+                          <button
+                            key={level}
+                            type="button"
+                            className={`pop-row${thinkingIntensity === level ? ' on' : ''}`}
+                            role="menuitem"
+                            onClick={() => selectThinking(level)}
+                          >
+                            {t(THINK_LABEL_KEY[level])}
+                            {thinkingIntensity === level && (
+                              <span className="check">
+                                <IconCheck size={14} />
                               </span>
+                            )}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  {/* 模型侧栏（紧贴主菜单左侧，top 对齐，从右滑入）：服务商分组 */}
+                  <AnimatePresence>
+                    {modelSideOpen && (
+                      <motion.div
+                        className="pop-side pop-side-cascade pop-side-models"
+                        ref={thinkWrapRef}
+                        role="menu"
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -8 }}
+                        transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
+                      >
+                        {byProvider.map(([providerId, group]) => (
+                          <div key={providerId} className="pop-prov-block">
+                            <div className="pop-prov-header">
+                              <span className="prov-ico" aria-hidden>
+                                <ProviderLogo providerId={providerId} size={14} />
+                              </span>
+                              <span>{group.name}</span>
+                            </div>
+                            {group.models.map((m) => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                className={`pop-row pop-model-row${selectedModel === m.id ? ' on' : ''}`}
+                                role="menuitemradio"
+                                aria-checked={selectedModel === m.id}
+                                onClick={() => {
+                                  setSelectedModel(m.id)
+                                  selectedModelRef.current = m.id
+                                  const nextThink = clampThink(
+                                    thinkingIntensity,
+                                    m.thinkingIntensities,
+                                  )
+                                  setThinkingIntensity(nextThink)
+                                  thinkingIntensityRef.current = nextThink
+                                  setModelSideOpen(false)
+                                  setModelMenuOpen(false)
+                                  setThinkMenuOpen(false)
+                                }}
+                              >
+                                <span>{m.label}</span>
+                                {selectedModel === m.id && (
+                                  <span className="check">
+                                    <IconCheck size={14} />
+                                  </span>
+                                )}
+                              </button>
                             ))}
                           </div>
-                        )}
-                      </div>
-                    )
-                  }
-                  return (
-                    <div className="bubble bubble-md" key={i}>
-                      <MarkdownContent>{part.text}</MarkdownContent>
-                    </div>
-                  )
-                }
-
-                // Reasoning: expanded while streaming ("思考中" / "Thinking"),
-                // auto-collapse when done (label "思考" / "Thinking")
-                if (part.type === 'reasoning') {
-                  const rp = part as { type: 'reasoning'; text?: string; state?: string }
-                  const text = rp.text?.trim() ?? ''
-                  if (!text && rp.state !== 'streaming') return null
-                  const key = metaKey(message.id, i)
-                  const streaming = rp.state === 'streaming'
-                  // Force open only while streaming; after done stay collapsed
-                  // unless the user explicitly expands again.
-                  const open = streaming ? true : metaOpen[key] === true
-                  return (
-                    <details
-                      className={`chat-meta chat-meta-thinking${streaming ? ' live' : ''}`}
-                      key={i}
-                      open={open}
-                      onToggle={(e) => {
-                        // While streaming, keep forced-open (ignore collapse attempts)
-                        if (streaming) {
-                          e.preventDefault()
-                          return
-                        }
-                        const el = e.currentTarget
-                        setMetaOpen((prev) => setRecordKey(prev, key as string, el.open))
-                      }}
-                    >
-                      <summary className="chat-meta-summary">
-                        <span className="chat-meta-chevron" aria-hidden>
-                          ▸
-                        </span>
-                        <span className="chat-meta-label">
-                          {streaming ? t('chat.thinkingLive') : t('chat.thinking')}
-                        </span>
-                      </summary>
-                      <div className="chat-meta-body">{text || '…'}</div>
-                    </details>
-                  )
-                }
-
-                // Tools — muted, collapsed by default
-                if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') {
-                  const toolPart = part as {
-                    type: string
-                    state?: string
-                    input?: unknown
-                    output?: unknown
-                    errorText?: string
-                    toolName?: string
-                  }
-                  const name =
-                    toolPart.toolName ||
-                    (toolPart.type === 'dynamic-tool'
-                      ? 'tool'
-                      : toolPart.type.replace(/^tool-/, ''))
-                  const hasDetail =
-                    toolPart.input != null ||
-                    toolPart.output != null ||
-                    Boolean(toolPart.errorText)
-                  const key = metaKey(message.id, i)
-                  const open = isMetaOpen(key, false)
-                  const toolOutput = toolPart.output && typeof toolPart.output === 'object'
-                    ? toolPart.output as Record<string, unknown>
-                    : null
-                  const workerJobId = typeof toolOutput?.jobId === 'string'
-                    ? toolOutput.jobId
-                    : null
-                  const fallbackWorkerState = workerJobId
-                    ? workerStates.get(workerJobId) ?? terminalWorkerStatesRef.current.get(workerJobId)
-                    : undefined
-
-                  if (workerJobId && fallbackWorkerState && fallbackWorkerState.status !== 'running') {
-                    if (renderedWorkerJobs.has(workerJobId)) return null
-                    renderedWorkerJobs.add(workerJobId)
-                    return (
-                      <WorkerRunCard
-                        key={i}
-                        state={fallbackWorkerState}
-                        open={isMetaOpen(key, false)}
-                        onToggle={(o) =>
-                          setMetaOpen((prev) => setRecordKey(prev, key, o))
-                        }
-                        tick={tick}
-                      />
-                    )
-                  }
-
-                  // Track tool execution duration (live)
-                  // eslint-disable-next-line react-hooks/rules-of-hooks
-                  const isDone = toolPart.state === 'result' || toolPart.output != null || Boolean(toolPart.errorText)
-                  if (!isDone && !toolStartTimes.current.has(key)) {
-                    toolStartTimes.current.set(key, Date.now())
-                  }
-                  if (isDone && toolStartTimes.current.has(key) && !toolDurations.current.has(key)) {
-                    const duration = (Date.now() - toolStartTimes.current.get(key)!) / 1000
-                    toolDurations.current.set(key, duration)
-                    toolStartTimes.current.delete(key)
-                  }
-                  const finalDuration = toolDurations.current.get(key)
-                  const liveMs = toolStartTimes.current.has(key) ? Date.now() - toolStartTimes.current.get(key)! : 0
-                  const showDuration = finalDuration != null ? finalDuration : (liveMs > 0 ? liveMs / 1000 : null)
-
-                  return (
-                    <details
-                      className="chat-meta chat-meta-tool"
-                      key={i}
-                      open={open}
-                      onToggle={(e) => {
-                        const el = e.currentTarget
-                        setMetaOpen((prev) => setRecordKey(prev, key as string, el.open))
-                      }}
-                    >
-                      <summary className="chat-meta-summary">
-                        <span className="chat-meta-chevron" aria-hidden>
-                          ▸
-                        </span>
-                        <span className="chat-meta-label">{t('chat.tool')}</span>
-                        <span className="chat-meta-name mono">{name}</span>
-                        {toolPart.state && (
-                          <span className="chat-meta-state">{toolPart.state}</span>
-                        )}
-                        {showDuration != null && (
-                          <span className={`chat-meta-duration${finalDuration == null ? ' live' : ''}`}>
-                            {showDuration.toFixed(1)}s
-                          </span>
-                        )}
-                        {toolPart.errorText && (
-                          <span className="chat-meta-error">{t('chat.toolError')}</span>
-                        )}
-                      </summary>
-                      {hasDetail && (
-                        <div className="chat-meta-body">
-                          {toolPart.input != null && (
-                            <pre className="chat-meta-pre mono">
-                              {JSON.stringify(toolPart.input, null, 2)}
-                            </pre>
-                          )}
-                          {toolPart.output != null && (
-                            <pre className="chat-meta-pre mono">
-                              {JSON.stringify(toolPart.output, null, 2)}
-                            </pre>
-                          )}
-                          {toolPart.errorText && (
-                            <div className="chat-meta-error-text">{toolPart.errorText}</div>
-                          )}
-                        </div>
-                      )}
-                    </details>
-                  )
-                }
-
-                // Worker run events: rendered from accumulated state
-                if (part.type === 'data-worker-run') {
-                  const data = (part as { type: 'data-worker-run'; data: WorkerRunEvent }).data
-                  const state = workerStates.get(data.jobId)
-                    ?? terminalWorkerStatesRef.current.get(data.jobId)
-                  if (!state) return null
-                  if (renderedWorkerJobs.has(data.jobId)) return null
-                  renderedWorkerJobs.add(data.jobId)
-                  const wrKey = metaKey(message.id, i)
-                  return (
-                    <WorkerRunCard
-                      key={i}
-                      state={state}
-                      open={isMetaOpen(wrKey, state.status === 'running')}
-                      onToggle={(o) =>
-                        setMetaOpen((prev) => setRecordKey(prev, wrKey, o))
-                      }
-                      tick={tick}
-                    />
-                  )
-                }
-                return null
-              })}
-            </div>
-            )
-          })}
-
-          {/* Live running worker cards (transient, not in message.parts) */}
-          {Array.from(workerStates.entries())
-            .filter(([_, s]) => s.status === 'running')
-            .map(([jobId, state]) => {
-              const wrKey = `live-${jobId}`
-              return (
-                <WorkerRunCard
-                  key={wrKey}
-                  state={state}
-                  open={isMetaOpen(wrKey, true)}
-                  onToggle={(o) =>
-                    setMetaOpen((prev) => setRecordKey(prev, wrKey, o))
-                  }
-                  tick={tick}
-                />
-              )
-            })}
-
-          {activeBudgetEvent && (
-            <LeaderStepBudgetNotice
-              event={activeBudgetEvent}
-              canContinue={canContinueBudget}
-              busy={busy}
-              onContinue={handleContinueBudget}
-              continueLabel={t('chat.continueTask')}
-              description={t('chat.budgetExhausted', {
-                used: String(activeBudgetEvent.data.usedSteps),
-                max: String(activeBudgetEvent.data.maxSteps),
-              })}
-            />
-          )}
-
-          {friendlyError && (
-            <div className="chat-error-block" role="alert">
-              <span className="chat-error-label">{t('chat.error')}</span>
-              <div className="chat-error-body">{friendlyError.message}</div>
-              {friendlyError.action === 'open_settings' && onOpenSettings && (
-                <button
-                  type="button"
-                  className="btn btn-soft btn-sm chat-error-action"
-                  onClick={() => onOpenSettings()}
-                >
-                  {t('chat.openSettings')}
-                </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
               )}
-            </div>
+            </AnimatePresence>
+          </div>
+
+          {busy ? (
+            <button
+              className="send stop"
+              type="button"
+              onClick={() => stop()}
+              title={t('chat.stop')}
+              aria-label={t('chat.stop')}
+            />
+          ) : (
+            <button
+              className="send"
+              type="submit"
+              disabled={!input.trim()}
+              title="Send"
+              aria-label="Send"
+            >
+              <IconArrowUp />
+            </button>
           )}
-
-          <div ref={bottomRef} />
         </div>
-      </div>
+      </form>
+    </div>
+  )
 
-      <div className="composer-wrap">
-        <form className="composer" onSubmit={onSubmit}>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={t('chat.placeholder')}
-            rows={3}
+  return (
+    <main className="main chat-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="chat-head">
+        {editingTitle ? (
+          <input
+            ref={titleInputRef}
+            className="title-input"
+            value={titleDraft}
+            placeholder={t('sidebar.renamePlaceholder')}
+            aria-label={t('sidebar.renameSession')}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={commitTitle}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              if (e.key === 'Enter') {
                 e.preventDefault()
-                onSubmit(e)
+                commitTitle()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                cancelTitle()
               }
             }}
           />
-          <div className="composer-bar">
-            <div className="mode-menu-wrap" ref={modeWrapRef}>
+        ) : (
+          <div className="title-wrap">
+            <span
+              className={'title' + (isPlaceholderSessionTitle(session.title) ? ' untitled' : '')}
+            >
+              {isPlaceholderSessionTitle(session.title)
+                ? t('sidebar.untitledSession')
+                : session.title}
+            </span>
+            {onRenameSession && (
               <button
                 type="button"
-                className="chip mode-chip"
-                onClick={() => {
-                  setModeMenuOpen((v) => !v)
-                  setModelMenuOpen(false)
-                  setThinkMenuOpen(false)
-                }}
+                className="title-edit-btn"
+                title={t('sidebar.renameSession')}
+                aria-label={t('sidebar.renameSession')}
+                onClick={beginEditTitle}
               >
-                {t('chat.mode')}: {modeLabel(mode)} ▾
-              </button>
-              {modeMenuOpen && (
-                <div className="mode-menu" role="menu">
-                  {MODES.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className={mode === m ? 'active' : ''}
-                      role="menuitem"
-                      onClick={() => selectMode(m)}
-                    >
-                      {modeLabel(m)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mode-menu-wrap model-menu-wrap" ref={modelWrapRef}>
-              {!modelsLoading && models.length === 0 ? (
-                <button
-                  type="button"
-                  className="chip mode-chip model-chip model-chip-empty"
-                  onClick={() => {
-                    setModeMenuOpen(false)
-                    setModelMenuOpen(false)
-                    setThinkMenuOpen(false)
-                    onOpenSettings?.()
-                  }}
-                >
-                  {t('chat.model')}: {t('chat.noModelConfigured')} →
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="chip mode-chip model-chip"
-                  title={selectedModel}
-                  disabled={modelsLoading}
-                  onClick={() => {
-                    setModelMenuOpen((v) => !v)
-                    setModeMenuOpen(false)
-                    setThinkMenuOpen(false)
-                    if (!models.length) void loadModels()
-                  }}
-                >
-                  {t('chat.model')}: {modelsLoading ? t('app.loading') : modelChipLabel} ▾
-                </button>
-              )}
-              {modelMenuOpen && models.length > 0 && (
-                <div className="mode-menu model-menu" role="menu">
-                  {byProvider.map(([providerId, group]) => (
-                    <div key={providerId} className="model-menu-group">
-                      <div className="model-menu-provider">
-                        <ProviderLogo providerId={providerId} size={14} />
-                        <span>{group.name}</span>
-                      </div>
-                      {group.models.map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          className={selectedModel === m.id ? 'active' : ''}
-                          role="menuitem"
-                          onClick={() => {
-                            setSelectedModel(m.id)
-                            selectedModelRef.current = m.id
-                            const nextThink = clampThink(thinkingIntensity, m.thinkingIntensities)
-                            setThinkingIntensity(nextThink)
-                            thinkingIntensityRef.current = nextThink
-                            setModelMenuOpen(false)
-                          }}
-                        >
-                          <span>{m.label}</span>
-                          <span className="model-menu-id mono">{m.id}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {supportedThinking.length > 1 ? (
-              <div className="mode-menu-wrap think-menu-wrap" ref={thinkWrapRef}>
-                <button
-                  type="button"
-                  className="chip mode-chip think-chip"
-                  title={t('chat.think.hint')}
-                  onClick={() => {
-                    setThinkMenuOpen((v) => !v)
-                    setModeMenuOpen(false)
-                    setModelMenuOpen(false)
-                  }}
-                >
-                  {t('chat.think.short')}: {thinkingIntensity} ▾
-                </button>
-                {thinkMenuOpen && (
-                  <div className="mode-menu think-menu" role="menu">
-                    {supportedThinking.map((level) => (
-                      <button
-                        key={level}
-                        type="button"
-                        className={thinkingIntensity === level ? 'active' : ''}
-                        role="menuitem"
-                        onClick={() => selectThinking(level)}
-                      >
-                        <span className="mono">{level}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : supportedThinking.length === 1 ? (
-              <span
-                className="chip mode-chip think-chip think-chip-fixed"
-                title={t('chat.think.hint')}
-              >
-                {t('chat.think.short')}: {supportedThinking[0]}
-              </span>
-            ) : null}
-
-            <div className="spacer" />
-            {busy && (
-              <button className="stop-btn" type="button" onClick={() => stop()}>
-                {t('chat.stop')}
+                <IconEdit />
               </button>
             )}
-            <button
-              className="send-btn"
-              type="submit"
-              disabled={busy || !input.trim()}
-              title="Send"
-            >
-              ↑
-            </button>
           </div>
-        </form>
+        )}
+        <div className="spacer" />
+        {/* 后端在线状态靠右（非当前任务 busy） */}
+        {serverUp ? (
+          <span className="badge run" title={t('chat.serviceOnlineHint')}>
+            {t('chat.running')}
+          </span>
+        ) : (
+          <span className="badge offline" title={t('chat.serverDown')}>
+            {t('chat.serviceOffline')}
+          </span>
+        )}
+        {onToggleInspector && (
+          <button
+            type="button"
+            className="icon-btn"
+            title={inspectorOpen ? t('chat.inspectorClose') : t('chat.inspector')}
+            aria-label={inspectorOpen ? t('chat.inspectorClose') : t('chat.inspector')}
+            aria-pressed={inspectorOpen}
+            onClick={onToggleInspector}
+          >
+            <IconPanel />
+          </button>
+        )}
       </div>
+
+      {!hasMessages || (!historyLoading && messages.length === 0) ? (
+        <div className="home" style={{ flex: 1 }}>
+          {/* 线稿 home：logo-cloud（终端图标）→ 问候 → Composer */}
+          <div className="logo-cloud" aria-hidden>
+            <IconTerminal />
+          </div>
+          <h1 className="greeting">
+            {project ? (
+              <>
+                {t('chat.greeting', { project: '\uE000' }).split('\uE000')[0]}
+                <em>{project.name}</em>
+                {t('chat.greeting', { project: '\uE000' }).split('\uE000')[1]}
+              </>
+            ) : (
+              t('chat.greetingNoProject')
+            )}
+          </h1>
+          <div className="subhead">{t('chat.subhead')}</div>
+          {!modelsLoading && models.length === 0 && (
+            <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-sm)' }}>
+              {t('chat.noModelHint')}{' '}
+              <button
+                type="button"
+                className="btn btn-soft btn-sm"
+                onClick={() => onOpenSettings?.('model')}
+              >
+                {t('chat.openSettings')}
+              </button>
+            </p>
+          )}
+          {composerCard}
+        </div>
+      ) : (
+        <>
+          <div className="messages-scroll">
+            <div className="messages">{messageList}</div>
+          </div>
+          <div className="composer-dock">{composerCard}</div>
+        </>
+      )}
     </main>
   )
 }

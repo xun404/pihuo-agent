@@ -14,11 +14,17 @@ interface Window {
     versions: NodeJS.ProcessVersions
     isDesktop?: boolean
     apiBase?: string
+    /** Injected Desktop API bearer (from runtime.json / main process) */
+    desktopToken?: string
+    getDesktopToken?: () => Promise<string | null>
     settings?: {
       get: () => Promise<unknown>
+      setThinkingIntensity?: (
+        level: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max',
+      ) => Promise<unknown>
       save: (payload: {
         leaderModel?: string
-        thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'max'
+        thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
         secrets?: Record<string, string | null>
         customProviders?: {
           id: string

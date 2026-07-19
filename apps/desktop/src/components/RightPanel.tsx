@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ApprovalDecision,
   ApprovalItem,
@@ -11,21 +11,18 @@ import { WORKER_ROLES } from '@router-agents/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
 import { api, type FileEntryDto, type GitStatusResponse } from '../lib/api'
+import { resolveWorkerModelOptions, shouldApplyScopedModelResponse } from '../lib/worker-model-view'
+import { ApprovalActions } from './ApprovalActions'
+import { WorkerBrandLogo } from './Icons'
+import { useToast } from './Toast'
 
-type Tab = 'workers' | 'jobs' | 'git' | 'files' | 'approvals' | 'activity' | 'goals'
+type Tab = 'workers' | 'git' | 'files' | 'approvals'
 
 function kindClass(kind: WorkerRegistration['kind']): string {
   if (kind === 'claude') return 'claude'
   if (kind === 'codex') return 'codex'
   if (kind === 'opencode') return 'opencode'
   return 'custom'
-}
-
-function kindShort(kind: WorkerRegistration['kind']): string {
-  if (kind === 'claude') return 'CC'
-  if (kind === 'codex') return 'CX'
-  if (kind === 'opencode') return 'OC'
-  return 'CU'
 }
 
 function roleBadgeClass(role: WorkerRole): string {
@@ -56,11 +53,15 @@ function FileTree({ entries, depth = 0 }: { entries: FileEntryDto[]; depth?: num
       {entries.map((e) => (
         <div key={e.path}>
           <div
-            className={`tree-item${e.type === 'directory' ? ' folder' : ''}`}
+            className={`tree-item w-row inspector-list-row${e.type === 'directory' ? ' folder' : ''}`}
             style={{ paddingLeft: 10 + depth * 12 }}
           >
-            {e.type === 'directory' ? '▾ ' : '· '}
-            {e.name}
+            <span className="tree-item-ico" aria-hidden>
+              {e.type === 'directory' ? '▾' : '·'}
+            </span>
+            <div className="info">
+              <div className="n">{e.name}</div>
+            </div>
           </div>
           {e.children && e.children.length > 0 && (
             <FileTree entries={e.children} depth={depth + 1} />
@@ -76,19 +77,34 @@ interface Props {
   approvals: ApprovalItem[]
   projectId: string | null
   sessionId?: string | null
-  memoryThreadId?: string | null
   onToggle: (id: string, enabled: boolean) => void
   onHealth: (id: string, depth?: 'presence' | 'version' | 'acp') => void | Promise<void>
   onHealthAll?: () => void | Promise<unknown>
   onSetRoles: (id: string, body: { primaryRole: WorkerRole; roles: WorkerRole[] }) => void
-  onSetModel?: (id: string, model: string | null) => void | Promise<void>
-  onFetchModels?: (id: string) => Promise<{
+  onSetModel?: (id: string, model: string | null, projectId: string | null) => void | Promise<void>
+  onFetchModels?: (
+    id: string,
+    opts?: { q?: string; force?: boolean; limit?: number; projectId?: string | null },
+  ) => Promise<{
     ok: boolean
     models: { modelId: string; name: string; description?: string }[]
     error?: string
+    errorCode?: string
+    stale?: boolean
+    catalogState?: 'empty' | 'fresh' | 'stale'
+    currentPinState?: {
+      modelId: string
+      status: 'available' | 'unavailable' | 'unknown'
+      reasonCode?: string
+    }
   }>
-  onResolveApproval: (id: string, decision: ApprovalDecision) => void
-  onDemoApproval: () => void
+  onResolveApproval: (
+    approvalId: string,
+    optionId: string | undefined,
+    decision: 'allow' | 'deny' | 'cancel',
+    surface: 'chat' | 'panel',
+  ) => void
+  resolving?: Record<string, boolean>
   onRegisterWorker: (body: Partial<WorkerRegistration>) => Promise<void>
   onDetectWorkers?: () => Promise<{
     recommended?: { kind: string; name: string; installed: boolean; installHint?: string }[]
@@ -107,19 +123,27 @@ function jobStatusClass(status: string): string {
 }
 
 function healthBadgeClass(status: string): string {
-  if (status === 'healthy') return 'badge-green'
-  if (status === 'unhealthy') return 'badge-yellow'
-  if (status === 'missing') return 'badge-orange'
+  if (status === 'healthy' || status === 'ready') return 'badge-green'
+  if (status === 'unhealthy' || status === 'degraded') return 'badge-yellow'
+  if (status === 'missing' || status === 'unavailable') return 'badge-orange'
   return 'badge-gray'
 }
 
 function healthLabelKey(
   status: string,
-): 'workers.health.healthy' | 'workers.health.unhealthy' | 'workers.health.missing' | 'workers.health.unknown' {
-  if (status === 'healthy') return 'workers.health.healthy'
-  if (status === 'unhealthy') return 'workers.health.unhealthy'
-  if (status === 'missing') return 'workers.health.missing'
+):
+  | 'workers.health.healthy'
+  | 'workers.health.unhealthy'
+  | 'workers.health.missing'
+  | 'workers.health.unknown' {
+  if (status === 'healthy' || status === 'ready') return 'workers.health.healthy'
+  if (status === 'unhealthy' || status === 'degraded') return 'workers.health.unhealthy'
+  if (status === 'missing' || status === 'unavailable') return 'workers.health.missing'
   return 'workers.health.unknown'
+}
+
+function shortHealthLabel(status: string): string {
+  return status
 }
 
 function relChecked(iso: string | undefined, nowLabel: string): string | null {
@@ -139,7 +163,6 @@ export function RightPanel({
   approvals,
   projectId,
   sessionId,
-  memoryThreadId,
   onToggle,
   onHealth,
   onHealthAll,
@@ -147,7 +170,7 @@ export function RightPanel({
   onSetModel,
   onFetchModels,
   onResolveApproval,
-  onDemoApproval,
+  resolving = {},
   onRegisterWorker,
   onDetectWorkers,
   onRefreshSnapshot,
@@ -156,7 +179,7 @@ export function RightPanel({
   const [checkingIds, setCheckingIds] = useState<Set<string>>(() => new Set())
   const [checkingAll, setCheckingAll] = useState(false)
   const [detecting, setDetecting] = useState(false)
-  const [detectNote, setDetectNote] = useState<string | null>(null)
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast()
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('workers')
   const [jobs, setJobs] = useState<WorkerJob[]>([])
@@ -168,9 +191,38 @@ export function RightPanel({
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [modelsLoadingId, setModelsLoadingId] = useState<string | null>(null)
+  const [modelsLoadingIds, setModelsLoadingIds] = useState<Set<string>>(() => new Set())
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({})
   const [modelErrors, setModelErrors] = useState<Record<string, string>>({})
+  const [modelSearch, setModelSearch] = useState<Record<string, string>>({})
+  const [searchResults, setSearchResults] = useState<
+    Record<string, { modelId: string; name: string; description?: string }[]>
+  >({})
+  const [catalogResults, setCatalogResults] = useState<
+    Record<string, { modelId: string; name: string; description?: string }[]>
+  >({})
+  const [catalogStates, setCatalogStates] = useState<Record<string, 'empty' | 'fresh' | 'stale'>>(
+    {},
+  )
+  const searchTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  /** Monotonic search generation per worker — drop stale responses */
+  const searchGen = useRef<Record<string, number>>({})
+  const catalogGen = useRef<Record<string, number>>({})
+  const modelScopeRef = useRef(projectId)
+  modelScopeRef.current = projectId
+  /** Pin availability from models API (unavailable pins are not options) */
+  const [pinStates, setPinStates] = useState<
+    Record<string, { modelId: string; status: string; reasonCode?: string }>
+  >({})
+  /** Per-worker pin mutation generation — ignore stale success/failure */
+  const pinGen = useRef<Record<string, number>>({})
+  const pinInFlight = useRef<Record<string, boolean>>({})
+  const gitRequestGen = useRef(0)
+  const filesRequestGen = useRef(0)
+  const jobsRequestGen = useRef(0)
+  const dispatchRequestGen = useRef(0)
+  const sessionScopeRef = useRef(sessionId)
+  sessionScopeRef.current = sessionId
 
   const [git, setGit] = useState<GitStatusResponse | null>(null)
   const [gitLoading, setGitLoading] = useState(false)
@@ -187,47 +239,47 @@ export function RightPanel({
   const [regRole, setRegRole] = useState<WorkerRole>('general')
   const [regBusy, setRegBusy] = useState(false)
 
-  const [goalText, setGoalText] = useState('')
-  const [goalStatus, setGoalStatus] = useState<{
-    objective: string | null
-    status?: string
-    threadId: string | null
-    error?: string
-  }>({ objective: null, threadId: null })
-  const [goalBusy, setGoalBusy] = useState(false)
-  const [memoryInfo, setMemoryInfo] = useState<string | null>(null)
-  const [controllerInfo, setControllerInfo] = useState<string | null>(null)
-
   const loadGit = useCallback(async () => {
+    const gen = ++gitRequestGen.current
+    const requestProjectId = projectId
     if (!projectId) {
       setGit(null)
       setGitError(t('git.noProject'))
+      setGitLoading(false)
       return
     }
     setGitLoading(true)
     setGitError(null)
     try {
       const data = await api.gitStatus(projectId)
+      if (gen !== gitRequestGen.current || modelScopeRef.current !== requestProjectId) return
       setGit(data)
       if (!data.ok) setGitError(data.error ?? t('git.error'))
     } catch (e) {
+      if (gen !== gitRequestGen.current || modelScopeRef.current !== requestProjectId) return
       setGit(null)
       setGitError(e instanceof Error ? e.message : String(e))
     } finally {
-      setGitLoading(false)
+      if (gen === gitRequestGen.current && modelScopeRef.current === requestProjectId) {
+        setGitLoading(false)
+      }
     }
   }, [projectId, t])
 
   const loadFiles = useCallback(async () => {
+    const gen = ++filesRequestGen.current
+    const requestProjectId = projectId
     if (!projectId) {
       setFiles(null)
       setFilesError(t('files.noProject'))
+      setFilesLoading(false)
       return
     }
     setFilesLoading(true)
     setFilesError(null)
     try {
       const data = await api.listFiles(projectId)
+      if (gen !== filesRequestGen.current || modelScopeRef.current !== requestProjectId) return
       if (!data.ok) {
         setFiles(null)
         setFilesError(data.error ?? t('files.error'))
@@ -236,103 +288,97 @@ export function RightPanel({
         setFilesTruncated(data.truncated)
       }
     } catch (e) {
+      if (gen !== filesRequestGen.current || modelScopeRef.current !== requestProjectId) return
       setFiles(null)
       setFilesError(e instanceof Error ? e.message : String(e))
     } finally {
-      setFilesLoading(false)
+      if (gen === filesRequestGen.current && modelScopeRef.current === requestProjectId) {
+        setFilesLoading(false)
+      }
     }
   }, [projectId, t])
 
-  const loadGoal = useCallback(async () => {
-    try {
-      const data = await api.getGoal(memoryThreadId ?? undefined)
-      const obj = data.objective as
-        | { objective?: string; status?: string; text?: string }
-        | null
-        | string
-      let text: string | null = null
-      let status: string | undefined
-      if (typeof obj === 'string') text = obj
-      else if (obj && typeof obj === 'object') {
-        text = obj.objective ?? obj.text ?? JSON.stringify(obj)
-        status = obj.status
-      }
-      setGoalStatus({
-        objective: text,
-        status,
-        threadId: data.threadId,
-        error: data.error,
-      })
-      if (text) setGoalText(text)
-    } catch (e) {
-      setGoalStatus({
-        objective: null,
-        threadId: memoryThreadId ?? null,
-        error: e instanceof Error ? e.message : String(e),
-      })
-    }
-  }, [memoryThreadId])
-
   const loadJobs = useCallback(async () => {
+    const gen = ++jobsRequestGen.current
+    const requestSessionId = sessionId
     setJobsLoading(true)
     try {
       const data = await api.listJobs({
         sessionId: sessionId ?? undefined,
         limit: 40,
       })
+      if (gen !== jobsRequestGen.current || sessionScopeRef.current !== requestSessionId) return
       setJobs(data.jobs ?? [])
       setBusyWorkerIds(new Set(data.busyWorkerIds ?? []))
     } catch {
       /* ignore */
     } finally {
-      setJobsLoading(false)
+      if (gen === jobsRequestGen.current && sessionScopeRef.current === requestSessionId) {
+        setJobsLoading(false)
+      }
     }
   }, [sessionId])
 
-  const loadMemoryAndController = useCallback(async () => {
-    try {
-      const [mem, ctrl] = await Promise.all([api.memoryStatus(), api.controllerStatus()])
-      setMemoryInfo(
-        `lastMessages=${mem.lastMessages} · workingMemory=${mem.workingMemory} · OM=${mem.observationalMemory}`,
-      )
-      setControllerInfo(
-        `${ctrl.id} · modes: ${ctrl.modes.map((m) => m.id).join(', ')}`,
-      )
-    } catch {
-      setMemoryInfo(null)
-      setControllerInfo(null)
-    }
-  }, [])
+  useEffect(() => {
+    gitRequestGen.current += 1
+    filesRequestGen.current += 1
+    setGit(null)
+    setGitError(null)
+    setGitLoading(false)
+    setFiles(null)
+    setFilesError(null)
+    setFilesLoading(false)
+    setFilesTruncated(false)
+  }, [projectId])
+
+  useEffect(() => {
+    jobsRequestGen.current += 1
+    dispatchRequestGen.current += 1
+    setJobs([])
+    setBusyWorkerIds(new Set())
+    setJobsLoading(false)
+    setDispatchBusy(false)
+  }, [sessionId])
 
   useEffect(() => {
     if (tab === 'git') void loadGit()
     if (tab === 'files') void loadFiles()
-    if (tab === 'jobs') void loadJobs()
-    if (tab === 'goals') {
-      void loadGoal()
-      void loadMemoryAndController()
-    }
-  }, [tab, loadGit, loadFiles, loadJobs, loadGoal, loadMemoryAndController])
+  }, [tab, loadGit, loadFiles])
 
-  // Poll jobs while tab open and any open job
+  // Clear model-search debounce timers on unmount
   useEffect(() => {
-    if (tab !== 'jobs') return
-    const hasOpen = jobs.some(
-      (j) => j.status === 'queued' || j.status === 'running' || j.status === 'pending_approval',
-    )
-    if (!hasOpen) return
-    const id = setInterval(() => void loadJobs(), 2500)
-    return () => clearInterval(id)
-  }, [tab, jobs, loadJobs])
+    return () => {
+      for (const t of Object.values(searchTimers.current)) {
+        clearTimeout(t)
+      }
+      searchTimers.current = {}
+    }
+  }, [])
+
+  // Catalogs are cwd-scoped. Invalidate every transient view/request boundary when
+  // the active project changes so project A can never populate project B's controls.
+  useEffect(() => {
+    for (const timer of Object.values(searchTimers.current)) clearTimeout(timer)
+    searchTimers.current = {}
+    for (const workerId of Object.keys(searchGen.current)) searchGen.current[workerId]! += 1
+    for (const workerId of Object.keys(catalogGen.current)) catalogGen.current[workerId]! += 1
+    for (const workerId of Object.keys(pinGen.current)) pinGen.current[workerId]! += 1
+    pinInFlight.current = {}
+    setModelsLoadingIds(new Set())
+    setModelDrafts({})
+    setModelSearch({})
+    setSearchResults({})
+    setCatalogResults({})
+    setCatalogStates({})
+    setPinStates({})
+    setModelErrors({})
+  }, [projectId])
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'workers', label: t('right.workers') },
-    { id: 'jobs', label: t('right.jobs') },
     { id: 'git', label: t('right.git') },
     { id: 'files', label: t('right.files') },
     { id: 'approvals', label: t('right.approvals') },
-    { id: 'goals', label: t('right.goals') },
-    { id: 'activity', label: t('right.activity') },
   ]
 
   const cyclePrimary = (w: WorkerRegistration) => {
@@ -355,10 +401,7 @@ export function RightPanel({
     if (!regName.trim() || !regCommand.trim()) return
     setRegBusy(true)
     try {
-      const args = regArgs
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
+      const args = regArgs.trim().split(/\s+/).filter(Boolean)
       await onRegisterWorker({
         name: regName.trim(),
         command: regCommand.trim(),
@@ -381,13 +424,13 @@ export function RightPanel({
   }
 
   return (
-    <aside className="panel panel-right">
-      <div className="tabs">
+    <aside className="panel panel-right inspector-panel">
+      <div className="drawer-tabs">
         {tabs.map((item) => (
           <button
             key={item.id}
             type="button"
-            className={tab === item.id ? 'active' : ''}
+            className={tab === item.id ? 'on' : ''}
             onClick={() => setTab(item.id)}
           >
             {item.label}
@@ -396,91 +439,64 @@ export function RightPanel({
       </div>
 
       {tab === 'workers' && (
-        <div className="tab-panel active">
-          <div className="panel-header" style={{ height: 36 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              {t('workers.registered')}
-            </span>
-            <div className="spacer" />
-            <button
-              className="btn btn-ghost btn-sm"
-              type="button"
-              disabled={detecting || !onDetectWorkers}
-              title={t('workers.detectHint')}
-              onClick={() => {
-                if (!onDetectWorkers) return
-                setDetecting(true)
-                setDetectNote(null)
-                void Promise.resolve(onDetectWorkers())
-                  .then((res) => {
-                    const rec = res?.recommended ?? res?.candidates?.filter((c) => c.installed) ?? []
-                    if (rec.length === 0) {
-                      setDetectNote(t('workers.detectNone'))
-                    } else {
-                      setDetectNote(
-                        t('workers.detectOk', {
-                          names: rec.map((c) => c.name).join(' · '),
-                        }),
-                      )
-                    }
-                  })
-                  .catch((e) => setDetectNote(String(e)))
-                  .finally(() => setDetecting(false))
-              }}
-            >
-              {detecting ? t('app.loading') : t('workers.detect')}
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              type="button"
-              disabled={checkingAll}
-              title={t('workers.healthAllHint')}
-              onClick={() => {
-                if (!onHealthAll) return
-                setCheckingAll(true)
-                void Promise.resolve(onHealthAll()).finally(() => setCheckingAll(false))
-              }}
-            >
-              {checkingAll ? t('app.loading') : t('workers.healthAll')}
-            </button>
-            <button
-              className="btn btn-soft btn-sm"
-              type="button"
-              onClick={() => setShowForm((v) => !v)}
-            >
-              {t('workers.register')}
-            </button>
-          </div>
-          {detectNote && (
-            <div className="worker-detect-banner" role="status">
-              {detectNote}
-            </div>
-          )}
-          {workers.every((w) => w.health === 'unknown' || w.health === 'missing') && (
-            <div className="worker-detect-banner worker-detect-hint">
-              {t('workers.detectFirstRun')}
-            </div>
-          )}
-          <div className="scroll">
-            {workers.map((w) => {
-              const checking = checkingIds.has(w.id)
-              const report = w.healthReport
-              const ago = relChecked(report?.checkedAt ?? w.lastSeenAt, t('sidebar.now'))
-              const open = expandedHealth === w.id
-              return (
-              <div className="worker" key={w.id}>
-                <div className={`worker-icon ${kindClass(w.kind)}`}>{kindShort(w.kind)}</div>
-                <div className="worker-body">
-                  <div className="worker-name">
+        <div className="drawer-body tab-panel active">
+          {/* 线稿：section-hint + w-row 列表；运维动作收在底部 */}
+          <div className="section-hint">{t('right.workersHint')}</div>
+          {workers.map((w) => {
+            const checking = checkingIds.has(w.id)
+            const report = w.healthReport
+            const healthKey =
+              w.health === 'healthy'
+                ? ('workers.health.healthy' as const)
+                : w.health === 'missing'
+                  ? ('workers.health.missing' as const)
+                  : w.health === 'unhealthy'
+                    ? ('workers.health.unhealthy' as const)
+                    : ('workers.health.unknown' as const)
+            const roleLabel =
+              w.primaryRole === 'coder'
+                ? 'coder'
+                : w.primaryRole === 'review'
+                  ? 'review'
+                  : w.primaryRole === 'plan'
+                    ? 'plan'
+                    : w.primaryRole === 'test'
+                      ? 'test'
+                      : w.primaryRole === 'research'
+                        ? 'research'
+                        : 'general'
+            const healthEn =
+              w.health === 'healthy'
+                ? 'healthy'
+                : w.health === 'missing'
+                  ? 'missing'
+                  : w.health === 'unhealthy'
+                    ? 'unhealthy'
+                    : 'unknown'
+            return (
+              <div className="w-row inspector-worker-row" key={w.id}>
+                <span className={`worker-logo ${kindClass(w.kind)}`} title={w.name} aria-hidden>
+                  <WorkerBrandLogo kind={w.kind} name={w.name} size={14} />
+                </span>
+                <div className="info">
+                  <div className="n">
                     {w.name}
                     {busyWorkerIds.has(w.id) && (
-                      <span className="badge badge-green worker-busy-badge" title={t('workers.busy')}>
+                      <span
+                        className="badge badge-green worker-busy-badge"
+                        title={t('workers.busy')}
+                      >
                         {t('workers.busy')}
                       </span>
                     )}
-                    <span
-                      className={`badge ${healthBadgeClass(w.health)}${checking ? ' worker-health-checking' : ''}`}
-                      style={{ cursor: checking ? 'wait' : 'pointer' }}
+                  </div>
+                  {/* 线稿副行：role · health */}
+                  <div className="s">
+                    <span>{roleLabel}</span>
+                    <span aria-hidden> · </span>
+                    <button
+                      type="button"
+                      className={`health-inline${checking ? ' checking' : ''}`}
                       title={report?.message ?? t('workers.healthHint')}
                       onClick={() => {
                         if (checking) return
@@ -494,328 +510,103 @@ export function RightPanel({
                         })
                       }}
                     >
-                      {checking ? '…' : t(healthLabelKey(w.health))}
-                    </span>
-                    {ago && (
-                      <span className="worker-health-ago" title={report?.checkedAt}>
-                        {ago}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="worker-health-detail-btn"
-                      title={t('workers.healthDetail')}
-                      onClick={() => setExpandedHealth(open ? null : w.id)}
-                    >
-                      {open ? '▴' : '▾'}
+                      {checking ? '…' : healthEn}
                     </button>
                   </div>
-                  {open && (
-                    <div className="worker-health-detail">
-                      {report?.message && <div>{report.message}</div>}
-                      {report?.version && (
-                        <div className="mono worker-health-ver">{report.version}</div>
-                      )}
-                      {report?.hints && report.hints.length > 0 && (
-                        <ul>
-                          {report.hints.map((h) => (
-                            <li key={h}>{h}</li>
-                          ))}
-                        </ul>
-                      )}
-                      {!report?.message && !report?.hints?.length && (
-                        <div className="settings-muted">{t('workers.healthNoDetail')}</div>
-                      )}
-                      <div className="worker-health-actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          disabled={checking}
-                          onClick={() => {
-                            setCheckingIds((s) => new Set(s).add(w.id))
-                            void Promise.resolve(onHealth(w.id, 'acp')).finally(() => {
-                              setCheckingIds((s) => {
-                                const n = new Set(s)
-                                n.delete(w.id)
-                                return n
-                              })
-                            })
-                          }}
-                        >
-                          {t('workers.healthDeep')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="worker-cmd">
-                    {w.command} {w.args.join(' ')}
-                  </div>
-                  <div className="worker-model-row">
-                    <label className="worker-model-label">{t('workers.model')}</label>
-                    <select
-                      className={`worker-model-select${modelsLoadingId === w.id ? ' loading' : ''}`}
-                      disabled={modelsLoadingId === w.id}
-                      title={t('workers.modelComboHint')}
-                      value={
-                        modelsLoadingId === w.id
-                          ? '__loading__'
-                          : (modelDrafts[w.id] ?? w.model ?? '')
-                      }
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (v === '__loading__') return
-                        if (v === '__refresh__') {
-                          if (!onFetchModels) return
-                          setModelsLoadingId(w.id)
-                          setModelErrors((m) => {
-                            const n = { ...m }
-                            delete n[w.id]
-                            return n
-                          })
-                          void onFetchModels(w.id)
-                            .then((res) => {
-                              if (!res.ok && res.error) {
-                                setModelErrors((m) => ({ ...m, [w.id]: res.error! }))
-                              } else {
-                                setModelErrors((m) => {
-                                  const n = { ...m }
-                                  delete n[w.id]
-                                  return n
-                                })
-                              }
-                            })
-                            .catch((err) =>
-                              setModelErrors((m) => ({
-                                ...m,
-                                [w.id]: err instanceof Error ? err.message : String(err),
-                              })),
-                            )
-                            .finally(() => setModelsLoadingId(null))
-                          return
-                        }
-                        if (v === '__manual__') {
-                          const typed = window.prompt(
-                            t('workers.modelPlaceholder'),
-                            w.model ?? '',
-                          )
-                          if (typed == null) return
-                          const id = typed.trim()
-                          setModelDrafts((d) => ({ ...d, [w.id]: id }))
-                          void Promise.resolve(onSetModel?.(w.id, id || null)).catch((err) =>
-                            setModelErrors((m) => ({
-                              ...m,
-                              [w.id]: err instanceof Error ? err.message : String(err),
-                            })),
-                          )
-                          return
-                        }
-                        setModelDrafts((d) => ({ ...d, [w.id]: v }))
-                        void Promise.resolve(onSetModel?.(w.id, v || null)).catch((err) =>
-                          setModelErrors((m) => ({
-                            ...m,
-                            [w.id]: err instanceof Error ? err.message : String(err),
-                          })),
-                        )
-                      }}
-                    >
-                      {modelsLoadingId === w.id ? (
-                        <option value="__loading__">{t('workers.modelLoading')}</option>
-                      ) : (
-                        <>
-                          <option value="__refresh__">
-                            {w.availableModels?.length
-                              ? t('workers.modelRefresh')
-                              : t('workers.modelFetch')}
-                          </option>
-                          <option value="">{t('workers.modelDefault')}</option>
-                          <option value="__manual__">{t('workers.modelManual')}</option>
-                          {(w.availableModels ?? []).map((m) => (
-                            <option key={m.modelId} value={m.modelId}>
-                              {m.name !== m.modelId ? `${m.name} · ${m.modelId}` : m.modelId}
-                            </option>
-                          ))}
-                          {w.model &&
-                            !(w.availableModels ?? []).some((m) => m.modelId === w.model) && (
-                              <option value={w.model}>{w.model}</option>
-                            )}
-                        </>
-                      )}
-                    </select>
-                  </div>
-                  {modelErrors[w.id] && (
-                    <div className="worker-model-error" title={modelErrors[w.id]}>
-                      {modelErrors[w.id]}
-                    </div>
-                  )}
-                  {!w.model?.trim() && w.kind === 'opencode' && !modelErrors[w.id] && (
-                    <div className="worker-model-need" role="status">
-                      {t('workers.modelNeedSelectOpenCode')}
-                    </div>
-                  )}
-                  {!w.model?.trim() &&
-                    w.kind !== 'opencode' &&
-                    (w.availableModels?.length ?? 0) > 0 &&
-                    !modelErrors[w.id] && (
-                      <div className="worker-model-need muted" role="status">
-                        {t('workers.modelNeedSelect')}
-                      </div>
-                    )}
-                  <div className="worker-tags" style={{ alignItems: 'center' }}>
-                    <span
-                      className={`badge ${roleBadgeClass(w.primaryRole)}`}
-                      style={{ cursor: 'pointer' }}
-                      title={`${t('workers.primary')}: ${t(roleMessageKey(w.primaryRole))}`}
-                      onClick={() => cyclePrimary(w)}
-                    >
-                      {t('workers.primary')}: {t(roleMessageKey(w.primaryRole))}
-                    </span>
-                    <button
-                      type="button"
-                      className="badge badge-gray"
-                      style={{ cursor: 'pointer', border: 'none' }}
-                      onClick={() => setEditingId(editingId === w.id ? null : w.id)}
-                    >
-                      {t('workers.roles')} ▾
-                    </button>
-                  </div>
-                  {editingId === w.id && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-                      {WORKER_ROLES.map((role) => {
-                        const active = w.roles.includes(role)
-                        return (
-                          <button
-                            key={role}
-                            type="button"
-                            className={`badge ${active ? roleBadgeClass(role) : 'badge-gray'}`}
-                            style={{
-                              cursor: 'pointer',
-                              border: active
-                                ? '1px solid var(--accent-border)'
-                                : '1px solid transparent',
-                              opacity: active ? 1 : 0.55,
-                            }}
-                            onClick={() => toggleRole(w, role)}
-                          >
-                            {t(roleMessageKey(role))}
-                            {w.primaryRole === role ? ' ★' : ''}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
                 </div>
                 <button
-                  className={`toggle${w.enabled ? ' on' : ''}`}
                   type="button"
-                  aria-label="toggle"
+                  className={`toggle${w.enabled ? '' : ' off'}`}
+                  role="switch"
+                  aria-checked={w.enabled}
+                  aria-label={t('workers.formEnabled')}
                   onClick={() => onToggle(w.id, !w.enabled)}
                 />
               </div>
-              )
-            })}
-
-            {showForm && (
-              <div className="card mt-8">
-                <div className="card-head">{t('workers.registerTitle')}</div>
-                <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('workers.formName')}</label>
-                  <input
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                    style={{
-                      height: 30,
-                      padding: '0 8px',
-                      borderRadius: 6,
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-app)',
-                      color: 'var(--text)',
-                    }}
-                  />
-                  <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('workers.formCommand')}</label>
-                  <input
-                    value={regCommand}
-                    onChange={(e) => setRegCommand(e.target.value)}
-                    className="mono"
-                    style={{
-                      height: 30,
-                      padding: '0 8px',
-                      borderRadius: 6,
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-app)',
-                      color: 'var(--text)',
-                    }}
-                  />
-                  <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('workers.formArgs')}</label>
-                  <input
-                    value={regArgs}
-                    onChange={(e) => setRegArgs(e.target.value)}
-                    className="mono"
-                    style={{
-                      height: 30,
-                      padding: '0 8px',
-                      borderRadius: 6,
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-app)',
-                      color: 'var(--text)',
-                    }}
-                  />
-                  <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('workers.primary')}</label>
-                  <select
-                    value={regRole}
-                    onChange={(e) => setRegRole(e.target.value as WorkerRole)}
-                    style={{
-                      height: 30,
-                      borderRadius: 6,
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-app)',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    {WORKER_ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {t(roleMessageKey(r))}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="btn btn-soft btn-sm"
-                    disabled={regBusy || !regName.trim() || !regCommand.trim()}
-                    onClick={() => void submitWorker()}
-                  >
-                    {regBusy ? t('app.loading') : t('workers.formSave')}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === 'jobs' && (
-        <div className="tab-panel active">
-          <div className="panel-header" style={{ height: 36 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              {t('jobs.title')}
-            </span>
-            <div className="spacer" />
+            )
+          })}
+          {workers.length === 0 && <p className="section-hint">{t('workers.detectFirstRun')}</p>}
+          <div className="inspector-actions">
             <button
-              className="btn btn-ghost btn-sm"
+              className="settings-btn-soft"
               type="button"
-              disabled={jobsLoading}
-              onClick={() => void loadJobs()}
+              disabled={detecting || !onDetectWorkers}
+              title={t('workers.detectHint')}
+              onClick={() => {
+                if (!onDetectWorkers) return
+                setDetecting(true)
+                void Promise.resolve(onDetectWorkers())
+                  .then((res) => {
+                    const rec =
+                      res?.recommended ?? res?.candidates?.filter((c) => c.installed) ?? []
+                    if (rec.length === 0) toastInfo(t('workers.detectNone'))
+                    else
+                      toastSuccess(
+                        t('workers.detectOk', {
+                          names: rec.map((c) => c.name).join(' · '),
+                        }),
+                      )
+                  })
+                  .catch((e) => toastError(String(e)))
+                  .finally(() => setDetecting(false))
+              }}
             >
-              {t('common.refresh')}
+              {detecting ? t('app.loading') : t('workers.detect')}
+            </button>
+            <button
+              className="settings-btn-soft"
+              type="button"
+              disabled={checkingAll}
+              title={t('workers.healthAllHint')}
+              onClick={() => {
+                if (!onHealthAll) return
+                setCheckingAll(true)
+                void Promise.resolve(onHealthAll()).finally(() => setCheckingAll(false))
+              }}
+            >
+              {checkingAll ? t('app.loading') : t('workers.healthAll')}
+            </button>
+            <button
+              className="settings-btn-soft"
+              type="button"
+              onClick={() => setShowForm((v) => !v)}
+            >
+              {t('workers.register')}
             </button>
           </div>
-          <div className="scroll">
-            <div className="job-dispatch-form">
-              <label className="settings-field">
-                <span>{t('jobs.dispatchRole')}</span>
-                <select
+          {showForm && (
+            <div className="settings-form-card worker-register-card" style={{ maxWidth: '100%' }}>
+              <div className="model-list-label">{t('workers.registerTitle')}</div>
+              <div className="settings-field">
+                <label>{t('workers.formName')}</label>
+                <input
                   className="settings-input"
-                  value={dispatchRole}
-                  onChange={(e) => setDispatchRole(e.target.value as WorkerRole)}
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                />
+              </div>
+              <div className="settings-field">
+                <label>{t('workers.formCommand')}</label>
+                <input
+                  className="settings-input mono"
+                  value={regCommand}
+                  onChange={(e) => setRegCommand(e.target.value)}
+                />
+              </div>
+              <div className="settings-field">
+                <label>{t('workers.formArgs')}</label>
+                <input
+                  className="settings-input mono"
+                  value={regArgs}
+                  onChange={(e) => setRegArgs(e.target.value)}
+                />
+              </div>
+              <div className="settings-field">
+                <label>{t('workers.primary')}</label>
+                <select
+                  className="field-select"
+                  value={regRole}
+                  onChange={(e) => setRegRole(e.target.value as WorkerRole)}
                 >
                   {WORKER_ROLES.map((r) => (
                     <option key={r} value={r}>
@@ -823,450 +614,135 @@ export function RightPanel({
                     </option>
                   ))}
                 </select>
-              </label>
-              <textarea
-                className="job-dispatch-task"
-                rows={3}
-                value={dispatchTask}
-                onChange={(e) => setDispatchTask(e.target.value)}
-                placeholder={t('jobs.dispatchPlaceholder')}
-              />
-              <button
-                type="button"
-                className="btn btn-soft btn-sm"
-                disabled={dispatchBusy || !dispatchTask.trim() || !sessionId}
-                onClick={() => {
-                  setDispatchBusy(true)
-                  void api
-                    .createJob({
-                      task: dispatchTask.trim(),
-                      role: dispatchRole,
-                      sessionId: sessionId ?? undefined,
-                      wait: false,
-                    })
-                    .then(() => {
-                      setDispatchTask('')
-                      onRefreshSnapshot()
-                      return loadJobs()
-                    })
-                    .catch((e) => alert(String(e)))
-                    .finally(() => setDispatchBusy(false))
-                }}
-              >
-                {dispatchBusy ? t('app.loading') : t('jobs.dispatch')}
-              </button>
-              {!sessionId && (
-                <p className="settings-muted mt-8">{t('jobs.needSession')}</p>
-              )}
+              </div>
+              <div className="model-edit-actions">
+                <button type="button" className="btn-ghost" onClick={() => setShowForm(false)}>
+                  {t('workers.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="settings-save-btn"
+                  disabled={regBusy || !regName.trim() || !regCommand.trim()}
+                  onClick={() => void submitWorker()}
+                >
+                  {regBusy ? t('app.loading') : t('workers.formSave')}
+                </button>
+              </div>
             </div>
-
-            {jobsLoading && jobs.length === 0 && (
-              <p className="settings-muted">{t('app.loading')}</p>
-            )}
-            {!jobsLoading && jobs.length === 0 && (
-              <p className="settings-muted">{t('jobs.empty')}</p>
-            )}
-            {jobs.map((j) => {
-              const open = expandedJobId === j.id
-              const canCancel =
-                j.status === 'queued' ||
-                j.status === 'running' ||
-                j.status === 'pending_approval'
-              return (
-                <div className="job-row" key={j.id}>
-                  <div className="job-row-head">
-                    <span className={jobStatusClass(j.status)}>{j.status}</span>
-                    <span className="job-worker">{j.workerName}</span>
-                    {j.role && (
-                      <span className={`badge ${roleBadgeClass(j.role)}`}>{j.role}</span>
-                    )}
-                    <div className="spacer" />
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => setExpandedJobId(open ? null : j.id)}
-                    >
-                      {open ? '▴' : '▾'}
-                    </button>
-                    {canCancel && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => {
-                          void api
-                            .cancelJob(j.id)
-                            .then(() => {
-                              onRefreshSnapshot()
-                              return loadJobs()
-                            })
-                            .catch((e) => alert(String(e)))
-                        }}
-                      >
-                        {t('jobs.cancel')}
-                      </button>
-                    )}
-                    {(j.status === 'failed' || j.status === 'cancelled' || j.status === 'timed_out') && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => {
-                          void api
-                            .retryJob(j.id, false)
-                            .then(() => {
-                              onRefreshSnapshot()
-                              return loadJobs()
-                            })
-                            .catch((e) => alert(String(e)))
-                        }}
-                      >
-                        {t('jobs.retry')}
-                      </button>
-                    )}
-                  </div>
-                  <div className="job-task">{j.task.slice(0, 160)}</div>
-                  {open && (
-                    <div className="job-detail">
-                      <div className="mono">{j.id}</div>
-                      {j.message && <div>{j.message}</div>}
-                      {j.error && (
-                        <div
-                          className={
-                            /模型不可用|Model is disabled|model not found|model.*not available/i.test(
-                              j.error,
-                            )
-                              ? 'job-error job-error-model'
-                              : 'job-error'
-                          }
-                        >
-                          {j.error}
-                          {/模型不可用|Model is disabled|model not found|model.*not available/i.test(
-                            j.error,
-                          ) && (
-                            <div className="job-error-hint">{t('jobs.modelDisabledHint')}</div>
-                          )}
-                        </div>
-                      )}
-                      {j.output && (
-                        <pre className="job-output mono">{j.output.slice(0, 4000)}</pre>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+          )}
         </div>
       )}
 
       {tab === 'git' && (
-        <div className="tab-panel active">
-          <div className="panel-header" style={{ height: 36 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+        <div className="drawer-body tab-panel active">
+          <div className="inspector-panel-head">
+            <div className="inspector-panel-title">
               {git?.branch ? `⎇ ${git.branch}` : t('right.git')}
-            </span>
-            <div className="spacer" />
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => void loadGit()}>
-              {t('common.refresh')}
+            </div>
+            <button
+              className="settings-btn-soft"
+              type="button"
+              onClick={() => void loadGit()}
+              disabled={gitLoading}
+            >
+              {gitLoading ? t('app.loading') : t('common.refresh')}
             </button>
           </div>
-          <div className="git-summary">
-            <div className="stat">
-              <div className="n" style={{ color: 'var(--success)' }}>
+          <div className="inspector-stats">
+            <div className="inspector-stat">
+              <div className="inspector-stat-n is-green">
                 {gitLoading ? '…' : git ? `+${git.insertions}` : '—'}
               </div>
-              <div className="l">{t('git.insertions')}</div>
+              <div className="inspector-stat-l">{t('git.insertions')}</div>
             </div>
-            <div className="stat">
-              <div className="n" style={{ color: 'var(--danger)' }}>
+            <div className="inspector-stat">
+              <div className="inspector-stat-n is-danger">
                 {gitLoading ? '…' : git ? `−${git.deletions}` : '—'}
               </div>
-              <div className="l">{t('git.deletions')}</div>
+              <div className="inspector-stat-l">{t('git.deletions')}</div>
             </div>
           </div>
-          <div className="scroll">
-            {gitError && (
-              <p style={{ padding: 12, color: 'var(--warning)', fontSize: 12 }}>{gitError}</p>
-            )}
-            {!gitError && git && git.files.length === 0 && (
-              <p style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
-                {t('git.clean')}
-              </p>
-            )}
-            {git?.files.map((f) => (
-              <div className="file-row" key={f.path}>
-                <span className={`status ${statusLetter(f.status)}`}>{statusLetter(f.status)}</span>
-                <span>{f.path}</span>
+          {gitError && <p className="section-hint is-warn">{gitError}</p>}
+          {!gitError && git && git.files.length === 0 && (
+            <p className="section-hint">{t('git.clean')}</p>
+          )}
+          {git?.files.map((f) => (
+            <div className="w-row inspector-list-row" key={f.path}>
+              <span className={`git-status-badge ${statusLetter(f.status)}`}>
+                {statusLetter(f.status)}
+              </span>
+              <div className="info">
+                <div className="n mono">{f.path}</div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       )}
 
       {tab === 'files' && (
-        <div className="tab-panel active">
-          <div className="panel-header" style={{ height: 36 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('right.files')}</span>
-            <div className="spacer" />
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => void loadFiles()}>
-              {t('common.refresh')}
+        <div className="drawer-body tab-panel active">
+          <div className="inspector-panel-head">
+            <div className="inspector-panel-title">{t('right.files')}</div>
+            <button
+              className="settings-btn-soft"
+              type="button"
+              onClick={() => void loadFiles()}
+              disabled={filesLoading}
+            >
+              {filesLoading ? t('app.loading') : t('common.refresh')}
             </button>
           </div>
-          <div className="scroll">
-            {filesLoading && (
-              <p style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
-                {t('app.loading')}
-              </p>
-            )}
-            {filesError && (
-              <p style={{ padding: 12, color: 'var(--warning)', fontSize: 12 }}>{filesError}</p>
-            )}
-            {!filesLoading && !filesError && files && files.length === 0 && (
-              <p style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
-                {t('files.empty')}
-              </p>
-            )}
-            {files && <FileTree entries={files} />}
-            {filesTruncated && (
-              <p style={{ padding: 12, color: 'var(--text-muted)', fontSize: 11 }}>
-                {t('files.truncated')}
-              </p>
-            )}
-          </div>
+          {filesLoading && <p className="section-hint">{t('app.loading')}</p>}
+          {filesError && <p className="section-hint is-warn">{filesError}</p>}
+          {!filesLoading && !filesError && files && files.length === 0 && (
+            <p className="section-hint">{t('files.empty')}</p>
+          )}
+          {files && <FileTree entries={files} />}
+          {filesTruncated && <p className="section-hint">{t('files.truncated')}</p>}
         </div>
       )}
 
       {tab === 'approvals' && (
-        <div className="tab-panel active">
-          <div className="panel-header" style={{ height: 36 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              {t('approvals.pending')} (
-              {approvals.filter((a) => a.status === 'pending').length})
-            </span>
-            <div className="spacer" />
-            <button className="btn btn-soft btn-sm" type="button" onClick={onDemoApproval}>
-              {t('approvals.demo')}
-            </button>
-          </div>
-          <div className="scroll">
-            {approvals.filter((a) => a.status === 'pending').length === 0 && (
-              <p style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
-                {t('approvals.empty')}
-              </p>
-            )}
-            {approvals
-              .filter((a) => a.status === 'pending')
-              .map((a) => (
-                <div className="approval-item" key={a.id}>
-                  <h4>{a.title}</h4>
-                  {a.workerName && (
-                    <p style={{ marginTop: 4 }}>
-                      {t('approvals.worker')}: {a.workerName}
-                    </p>
-                  )}
-                  {a.pathOrTarget && (
-                    <p style={{ marginTop: 2 }}>
-                      {t('approvals.target')}: {a.pathOrTarget}
-                    </p>
-                  )}
-                  <div className="row mt-8">
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      type="button"
-                      onClick={() => onResolveApproval(a.id, 'deny')}
-                    >
-                      {t('approvals.deny')}
-                    </button>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      type="button"
-                      onClick={() => onResolveApproval(a.id, 'allow')}
-                    >
-                      {t('approvals.allow')}
-                    </button>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {tab === 'goals' && (
-        <div className="scroll" style={{ padding: 12 }}>
-          <div className="panel-header" style={{ padding: '0 0 8px' }}>
-            <h2 style={{ fontSize: 13 }}>{t('goals.title')}</h2>
-            <div className="spacer" />
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => void loadGoal()}
-            >
+        <div className="drawer-body tab-panel active">
+          <div className="inspector-panel-head">
+            <div className="inspector-panel-title">
+              {t('approvals.pending')} ({approvals.filter((a) => a.status === 'pending').length})
+            </div>
+            <button className="settings-btn-soft" type="button" onClick={() => onRefreshSnapshot()}>
               {t('common.refresh')}
             </button>
           </div>
-          <p className="settings-muted" style={{ marginBottom: 10 }}>
-            {t('goals.hint')}
-          </p>
-          {goalStatus.error && (
-            <p className="settings-error" style={{ marginBottom: 8 }}>
-              {goalStatus.error}
-            </p>
+          {approvals.filter((a) => a.status === 'pending').length === 0 && (
+            <p className="section-hint">{t('approvals.empty')}</p>
           )}
-          {goalStatus.objective ? (
-            <div className="card" style={{ marginBottom: 10 }}>
-              <div className="card-head">
-                <span className="badge badge-blue">{t('goals.status')}</span>
-                {goalStatus.status ?? 'active'}
-              </div>
-              <div className="card-body" style={{ whiteSpace: 'pre-wrap' }}>
-                {goalStatus.objective}
-              </div>
-              {goalStatus.threadId && (
-                <div className="settings-mono" style={{ padding: '0 10px 8px' }}>
-                  {t('goals.thread')}: {goalStatus.threadId}
+          {approvals
+            .filter((a) => a.status === 'pending')
+            .map((a) => (
+              <div className="inspector-approval-card" key={a.id}>
+                <div className="inspector-approval-title">{a.title}</div>
+                {a.workerName && (
+                  <div className="inspector-approval-meta">
+                    {t('approvals.worker')}: {a.workerName}
+                  </div>
+                )}
+                {a.pathOrTarget && (
+                  <div className="inspector-approval-meta mono">
+                    {t('approvals.target')}: {a.pathOrTarget}
+                  </div>
+                )}
+                <div className="approval-row inspector-approval-actions">
+                  <ApprovalActions
+                    approval={a}
+                    surface="panel"
+                    resolving={resolving}
+                    onResolve={onResolveApproval}
+                    variant="wireframe"
+                  />
                 </div>
-              )}
-            </div>
-          ) : (
-            <p className="settings-muted" style={{ marginBottom: 10 }}>
-              {t('goals.empty')}
-            </p>
-          )}
-          <textarea
-            className="settings-input"
-            style={{ height: 80, padding: 8, resize: 'vertical' }}
-            value={goalText}
-            onChange={(e) => setGoalText(e.target.value)}
-            placeholder={t('goals.placeholder')}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              disabled={goalBusy || !goalText.trim()}
-              onClick={() => {
-                void (async () => {
-                  setGoalBusy(true)
-                  try {
-                    await api.setGoal({
-                      objective: goalText.trim(),
-                      threadId: memoryThreadId ?? undefined,
-                      resourceId: projectId ?? undefined,
-                    })
-                    await loadGoal()
-                  } catch (e) {
-                    alert(String(e))
-                  } finally {
-                    setGoalBusy(false)
-                  }
-                })()
-              }}
-            >
-              {t('goals.set')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={goalBusy}
-              onClick={() => {
-                void (async () => {
-                  setGoalBusy(true)
-                  try {
-                    await api.clearGoal(memoryThreadId ?? undefined)
-                    setGoalText('')
-                    await loadGoal()
-                  } catch (e) {
-                    alert(String(e))
-                  } finally {
-                    setGoalBusy(false)
-                  }
-                })()
-              }}
-            >
-              {t('goals.clear')}
-            </button>
-          </div>
-          {memoryInfo && (
-            <p className="settings-mono" style={{ marginTop: 14, fontSize: 10 }}>
-              Memory: {memoryInfo}
-            </p>
-          )}
-          {controllerInfo && (
-            <p className="settings-mono" style={{ marginTop: 4, fontSize: 10 }}>
-              Controller: {controllerInfo}
-            </p>
-          )}
+              </div>
+            ))}
         </div>
       )}
-
-      {tab === 'activity' && (
-        <ActivityTab />
-      )}
     </aside>
-  )
-}
-
-function ActivityTab() {
-  const { t } = useI18n()
-  const [events, setEvents] = useState<
-    { id: string; at: string; kind: string; message: string }[]
-  >([])
-  const [err, setErr] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    try {
-      const data = await api.activity(80)
-      setEvents(data.events)
-      setErr(null)
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-    const t = setInterval(() => void load(), 4000)
-    return () => clearInterval(t)
-  }, [load])
-
-  const time = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-    } catch {
-      return '—'
-    }
-  }
-
-  return (
-    <div className="tab-panel active">
-      <div className="panel-header" style={{ height: 36 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('right.activity')}</span>
-        <div className="spacer" />
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => void load()}>
-          {t('common.refresh')}
-        </button>
-      </div>
-      <div className="scroll">
-        {err && (
-          <p style={{ padding: 12, color: 'var(--warning)', fontSize: 12 }}>{err}</p>
-        )}
-        {!err && events.length === 0 && (
-          <p style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
-            {t('activity.empty')}
-          </p>
-        )}
-        {events.map((e) => (
-          <div className="activity-item" key={e.id}>
-            <div className="t">{time(e.at)}</div>
-            <div className="d">
-              <strong>{e.kind}</strong> {e.message}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   )
 }

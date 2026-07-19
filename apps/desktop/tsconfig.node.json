@@ -3,8 +3,8 @@
   "compilerOptions": {
     "outDir": "dist-electron",
     "rootDir": "electron",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "types": ["node"],
     "noEmit": false
   },

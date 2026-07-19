@@ -13,8 +13,7 @@ export type RouterMessageMeta = {
   thinking?: string
 }
 
-const LANG_PREFIX =
-  /^(Respond in Chinese\.|Respond in English\.)\s*/i
+const LANG_PREFIX = /^(Respond in Chinese\.|Respond in English\.)\s*/i
 
 /** Exact mode instruction prefixes injected by ChatPanel (order: longest first) */
 const MODE_PREFIXES: { re: RegExp; mode: string }[] = [
@@ -113,10 +112,7 @@ export type EnrichUserMessageOpts = {
 /**
  * Build the wire payload text (what the Leader agent receives).
  */
-export function enrichUserMessageForLeader(
-  userText: string,
-  opts: EnrichUserMessageOpts,
-): string {
+export function enrichUserMessageForLeader(userText: string, opts: EnrichUserMessageOpts): string {
   const text = userText.trim()
   const langHint = opts.locale === 'zh' ? 'Respond in Chinese. ' : 'Respond in English. '
 
@@ -144,11 +140,11 @@ export function enrichUserMessageForLeader(
  * Leaves non-text parts untouched.
  */
 export function enrichLastUserMessageForWire<
-  T extends { role?: string; parts?: Array<{ type?: string; text?: string } & Record<string, unknown>> },
->(
-  message: T | undefined,
-  opts: EnrichUserMessageOpts,
-): T | undefined {
+  T extends {
+    role?: string
+    parts?: Array<{ type?: string; text?: string } & Record<string, unknown>>
+  },
+>(message: T | undefined, opts: EnrichUserMessageOpts): T | undefined {
   if (!message || message.role !== 'user' || !Array.isArray(message.parts)) return message
   const parts = message.parts.map((p) => {
     if (p.type === 'text' && typeof p.text === 'string') {

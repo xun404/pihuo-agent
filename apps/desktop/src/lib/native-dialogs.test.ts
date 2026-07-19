@@ -1,9 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  failReasonFromOpenDirectoryResult,
-  pathFromOpenDirectoryResult,
-} from './native-dialogs.js'
+import { failReasonFromOpenDirectoryResult, pathFromOpenDirectoryResult } from './native-dialogs.js'
 
 describe('pathFromOpenDirectoryResult', () => {
   it('returns null for empty / canceled', () => {

@@ -17,8 +17,7 @@ import { dialog, app, BrowserWindow, type BrowserWindow as BW } from 'electron'
 const execFileAsync = promisify(execFile)
 
 export type PickDirectoryResult =
-  | { ok: true; path: string; via: string }
-  | { ok: false; reason: string; via?: string }
+  { ok: true; path: string; via: string } | { ok: false; reason: string; via?: string }
 
 export type PickDirectoryLabels = {
   title?: string
@@ -93,9 +92,7 @@ async function pickElectronWithTempWindow(
   }
 }
 
-async function pickElectronDetached(
-  labels: PickDirectoryLabels,
-): Promise<PickDirectoryResult> {
+async function pickElectronDetached(labels: PickDirectoryLabels): Promise<PickDirectoryResult> {
   try {
     const opts: Electron.OpenDialogOptions = {
       properties: ['openDirectory', 'createDirectory'],

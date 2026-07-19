@@ -4,26 +4,19 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self' http://localhost:4111 http://127.0.0.1:4111 ws://localhost:5173 ws://127.0.0.1:5173; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+      content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     />
+    <!--
+      `frame-ancestors` is intentionally omitted from the <meta> CSP: per the
+      CSP spec it is ignored when delivered via <meta> and only emits a console
+      error. Clickjacking protection via frame-ancestors must come from a
+      response header, which is not applicable here (Electron loads a local /
+      dev-server origin, never embedded in a third-party frame).
+    -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
     <title>Router Agents</title>
-    <script>
-      // Prevent flash: apply theme before React mounts
-      ;(function () {
-        try {
-          var mode = localStorage.getItem('router-agents.theme') || 'system'
-          var dark =
-            mode === 'dark' ||
-            (mode !== 'light' &&
-              window.matchMedia('(prefers-color-scheme: dark)').matches)
-          var theme = dark ? 'dark' : 'light'
-          document.documentElement.dataset.theme = theme
-          document.documentElement.style.colorScheme = theme
-        } catch (e) {}
-      })()
-    </script>
+    <script type="module" src="/src/theme-bootstrap.ts"></script>
   </head>
   <body>
     <div id="root"></div>

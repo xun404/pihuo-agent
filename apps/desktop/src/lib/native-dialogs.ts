@@ -74,14 +74,10 @@ export function hasNativeDirectoryPicker(): boolean {
 }
 
 export function hasNativeConfirm(): boolean {
-  return (
-    typeof window !== 'undefined' && typeof window.routerAgents?.dialog?.confirm === 'function'
-  )
+  return typeof window !== 'undefined' && typeof window.routerAgents?.dialog?.confirm === 'function'
 }
 
-export async function pickProjectDirectory(
-  labels?: OpenDirectoryLabels,
-): Promise<string | null> {
+export async function pickProjectDirectory(labels?: OpenDirectoryLabels): Promise<string | null> {
   const detailed = await pickProjectDirectoryDetailed(labels)
   return detailed.ok ? detailed.path : null
 }

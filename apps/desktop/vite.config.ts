@@ -14,10 +14,7 @@ export default defineConfig({
               vite: {
                 resolve: {
                   alias: {
-                    '@router-agents/core': path.join(
-                      __dirname,
-                      '../../packages/core/src/index.ts',
-                    ),
+                    '@router-agents/core': path.join(__dirname, '../../packages/core/src/index.ts'),
                     '@router-agents/shared': path.join(
                       __dirname,
                       '../../packages/shared/src/index.ts',
@@ -54,4 +51,3 @@ export default defineConfig({
     exclude: ['@router-agents/shared', '@router-agents/core'],
   },
 })
-

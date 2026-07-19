@@ -1,4 +1,5 @@
 import {
+  default as React,
   createContext,
   useCallback,
   useContext,
@@ -8,13 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Locale as SharedLocale } from '@router-agents/shared'
-import {
-  catalogs,
-  detectLocale,
-  formatMessage,
-  type Locale,
-  type MessageKey,
-} from './locales'
+import { catalogs, detectLocale, formatMessage, type Locale, type MessageKey } from './locales'
 
 interface I18nContextValue {
   locale: Locale

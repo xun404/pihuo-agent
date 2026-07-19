@@ -33,10 +33,11 @@ describe('directoryPathFromFileList', () => {
   })
 
   it('uses resolveAbsPath when File.path is missing (webUtils path)', () => {
-    const files = [
-      { webkitRelativePath: 'router-agents/README.md' } as ElectronFile,
-    ]
-    const dir = directoryPathFromFileList(files, () => '/Users/me/workspace/router-agents/README.md')
+    const files = [{ webkitRelativePath: 'router-agents/README.md' } as ElectronFile]
+    const dir = directoryPathFromFileList(
+      files,
+      () => '/Users/me/workspace/router-agents/README.md',
+    )
     assert.equal(dir, '/Users/me/workspace/router-agents')
   })
 
