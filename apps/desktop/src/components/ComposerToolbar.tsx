@@ -213,6 +213,47 @@ export function ComposerToolbar({
     return [...map.entries()]
   }, [models])
 
+  // —— Close popovers on outside click ——
+  // Mirrors the original ChatPanel logic, but uses ComposerToolbar's own
+  // state/refs (ChatPanel's copy became dead code after extraction).
+  useEffect(() => {
+    if (!accessMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
+    const onDoc = (e: MouseEvent) => {
+      // access menu: close when clicking outside its wrapper
+      if (accessMenuOpen && accessWrapRef.current && !accessWrapRef.current.contains(e.target as Node)) {
+        setAccessMenuOpen(false)
+      }
+      // model menu + its sub-panels + ctx tip all live inside model-wrap:
+      // close them all when clicking outside model-wrap
+      if (
+        (modelMenuOpen || thinkMenuOpen || ctxTipOpen || modelSideOpen) &&
+        modelWrapRef.current &&
+        !modelWrapRef.current.contains(e.target as Node)
+      ) {
+        setModelMenuOpen(false)
+        setModelSideOpen(false)
+        setThinkMenuOpen(false)
+        setCtxTipOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [accessMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
+
+  // —— Close all popovers when the window loses focus (Alt-Tab / app switch) ——
+  useEffect(() => {
+    if (!accessMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen && !modelSideOpen) return
+    const onBlur = () => {
+      setAccessMenuOpen(false)
+      setModelMenuOpen(false)
+      setModelSideOpen(false)
+      setThinkMenuOpen(false)
+      setCtxTipOpen(false)
+    }
+    window.addEventListener('blur', onBlur)
+    return () => window.removeEventListener('blur', onBlur)
+  }, [accessMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
+
   return (
     <>
       <div className="mode-menu-wrap" ref={accessWrapRef}>

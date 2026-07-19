@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
-import { AnimatePresence, motion } from 'framer-motion'
 import type {
   LeaderMode,
   Project,
@@ -15,18 +14,10 @@ import { api, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   THINKING_INTENSITY_OPTIONS,
-  saveThinkingIntensity,
   type ThinkingIntensity,
 } from '../lib/settings'
-import { ProviderLogo } from '../lib/provider-icons'
 import { formatChatError } from '../lib/chat-errors'
 import { enrichLastUserMessageForWire, parseRouterUserMessage } from '../lib/user-message-display'
-import {
-  ACCESS_MODES,
-  accessModeById,
-  resolveAccessMode,
-  type AccessModeId,
-} from '../lib/access-mode'
 import { MarkdownContent } from './MarkdownContent'
 import { MessageItem } from './MessageItem'
 import { ToolCallRow } from './chat/ToolCallRow'
@@ -34,11 +25,8 @@ import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
 import {
-  AccessModeIcon,
-  ContextRing,
   IconArrowUp,
   IconBolt,
-  IconCheck,
   IconClock,
   IconEdit,
   IconFolder,
@@ -215,12 +203,6 @@ export function ChatPanel({
     }
   }, [initialInput, onInitialInputConsumed])
   const [mode, setMode] = useState<LeaderMode>(session?.mode ?? 'build')
-  const [accessMenuOpen, setAccessMenuOpen] = useState(false)
-  const [modelMenuOpen, setModelMenuOpen] = useState(false)
-  /** Wireframe cascade: root has 模型 / 思考强度 rows; list panel for models */
-  const [modelSideOpen, setModelSideOpen] = useState(false)
-  const [thinkMenuOpen, setThinkMenuOpen] = useState(false)
-  const [ctxTipOpen, setCtxTipOpen] = useState(false)
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [thinkingIntensity, setThinkingIntensity] = useState<ThinkingIntensity>('medium')
@@ -233,9 +215,6 @@ export function ChatPanel({
   const [titleDraft, setTitleDraft] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const accessWrapRef = useRef<HTMLDivElement>(null)
-  const modelWrapRef = useRef<HTMLDivElement>(null)
-  const thinkWrapRef = useRef<HTMLDivElement>(null)
   const historyLoadedFor = useRef<string | null>(null)
   // Keep latest model / thinking / mode for transport body (avoid stale closure)
   const selectedModelRef = useRef(selectedModel)
@@ -678,54 +657,6 @@ export function ChatPanel({
     if (session.mode) setMode(session.mode)
   }, [session.mode, session.id])
 
-  useEffect(() => {
-    if (!accessMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
-    const onDoc = (e: MouseEvent) => {
-      if (accessWrapRef.current && !accessWrapRef.current.contains(e.target as Node)) {
-        setAccessMenuOpen(false)
-      }
-      if (modelWrapRef.current && !modelWrapRef.current.contains(e.target as Node)) {
-        setModelMenuOpen(false)
-        setModelSideOpen(false)
-        setThinkMenuOpen(false)
-      }
-      if (thinkWrapRef.current && !thinkWrapRef.current.contains(e.target as Node)) {
-        setThinkMenuOpen(false)
-      }
-      // ctx-tip：点 ctx 环外面就关（ctx 环在 model-wrap 内）
-      if (ctxTipOpen && modelWrapRef.current && !modelWrapRef.current.contains(e.target as Node)) {
-        // 但不能关 tip 自己里面的点击（压缩按钮等）
-        const tip = document.querySelector('.ctx-tip')
-        if (!tip || !tip.contains(e.target as Node)) {
-          setCtxTipOpen(false)
-        }
-      }
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [accessMenuOpen, modelMenuOpen, thinkMenuOpen, ctxTipOpen])
-
-  const accessModeId = resolveAccessMode(mode, approvalPolicy)
-  const accessMode = accessModeById(accessModeId)
-
-  const selectAccessMode = (id: AccessModeId) => {
-    const def = accessModeById(id)
-    setMode(def.mode)
-    modeRef.current = def.mode
-    setAccessMenuOpen(false)
-    onModeChange?.(def.mode)
-    onSetApprovalPolicy?.(def.policy)
-  }
-
-  const selectThinking = (level: ThinkingIntensity) => {
-    setThinkingIntensity(level)
-    thinkingIntensityRef.current = level
-    setThinkMenuOpen(false)
-    void saveThinkingIntensity(level).catch((e) => {
-      console.warn('[ChatPanel] save thinkingIntensity failed', e)
-    })
-  }
-
   const selectedMeta = models.find((m) => m.id === selectedModel)
   const modelShort = selectedMeta
     ? selectedMeta.label
@@ -735,7 +666,6 @@ export function ChatPanel({
         : selectedModel
       : t('chat.model')
   const thinkShort = t(THINK_LABEL_KEY[thinkingIntensity] ?? 'chat.think.medium')
-  const modelChipLabel = `${modelShort} ${thinkShort}`
 
   // Context meter: UI-only estimate until backend exposes token usage (see HANDOVER)
   const ctxTotal =
@@ -769,10 +699,6 @@ export function ChatPanel({
         ? String(Math.round(ctxPct))
         : ctxPct.toFixed(1)
   const hasMessages = messages.length > 0 || historyLoading
-
-  const supportedThinking: ThinkingIntensity[] = selectedMeta?.thinkingIntensities?.length
-    ? selectedMeta.thinkingIntensities
-    : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
 
   // When model changes, clamp thinking to what that provider supports.
   // NOTE: intentionally does NOT depend on `thinkingIntensity` — otherwise
@@ -951,20 +877,6 @@ export function ChatPanel({
       setCanContinueBudget(true)
     })
   }, [activeBudgetEvent, busy, locale, sendMessage])
-
-  // Group models by provider for the menu (before any early return — hooks rules)
-  const byProvider = useMemo(() => {
-    const map = new Map<string, { name: string; models: ModelOption[] }>()
-    for (const m of models) {
-      let g = map.get(m.providerId)
-      if (!g) {
-        g = { name: m.providerName, models: [] }
-        map.set(m.providerId, g)
-      }
-      g.models.push(m)
-    }
-    return [...map.entries()]
-  }, [models])
 
   // —— Inline title editing (chat header) ——
   // Begin editing: seed the draft from the *raw* session title (not the

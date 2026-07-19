@@ -6261,6 +6261,48 @@ button {
   margin-top: var(--sp-1);
 }
 
+/* —— Window drag: top of every view —— */
+/* The sidebar top, chat-head, and settings-nav top already drag. These rules
+   cover the remaining views so the window is draggable from the top of any
+   page. -webkit-app-region does NOT inherit, so each draggable element must
+   be set explicitly; interactive children are no-drag. */
+.home-main,
+.home-main > .home,
+.home-main > .home > * {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+/* Interactive / clickable children stay no-drag */
+.home-main button,
+.home-main a,
+.home-main input,
+.home-main textarea,
+.home-main .composer-card,
+.home-main .home-composer,
+.home-main .pop-menu {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* Settings main: the container padding region drags (left settings-nav already
+   has sidebar-top drag). All form content is no-drag. */
+.settings-main {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.settings-main button,
+.settings-main a,
+.settings-main input,
+.settings-main textarea,
+.settings-main select,
+.settings-main label,
+.settings-main .settings-form-card,
+.settings-main .settings-general,
+.settings-main .settings-row,
+.settings-main .pop-menu {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 /* —— Layout fixes: force wireframe visual proportions —— */
 
 .shell > .sidebar {

@@ -4,7 +4,6 @@ import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { RightPanel } from './components/RightPanel'
 import { SettingsPanel } from './components/SettingsPanel'
-import { OpenProjectModal } from './components/OpenProjectModal'
 import { useAppState } from './hooks/useAppState'
 import { I18nProvider, useI18n } from './i18n/I18nProvider'
 import type { Locale } from './i18n/locales'
@@ -50,7 +49,6 @@ function AppShell({
   >()
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
-  const [openProjectOpen, setOpenProjectOpen] = useState(false)
   /**
    * First-message composer on the empty Chat state: when the user types a
    * message before any session exists, we create a session and pre-fill its
@@ -81,8 +79,21 @@ function AppShell({
     return () => window.removeEventListener('swarmdesk-agent:open-settings', onOpen)
   }, [])
 
+  /**
+   * Open the native folder picker and activate the chosen project. Used by
+   * both the sidebar "open project" entry and the empty-state "open folder"
+   * chip. No intermediate modal — jumps straight to the OS folder dialog.
+   */
   const onOpenProject = () => {
-    setOpenProjectOpen(true)
+    void (async () => {
+      const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
+      if (!path) return
+      try {
+        await openProject(path)
+      } catch (e) {
+        toastError(e instanceof Error ? e.message : String(e))
+      }
+    })()
   }
 
   /**
@@ -126,23 +137,6 @@ function AppShell({
         toastError(e instanceof Error ? e.message : String(e))
       } finally {
         setCreatingFromComposer(false)
-      }
-    })()
-  }
-
-  /**
-   * "Open folder" chip on the empty-state composer (scene 1, no project).
-   * Opens the native folder picker and activates the chosen project — does
-   * NOT create a session (the user may then type in the now-bound composer).
-   */
-  const onPickFolder = () => {
-    void (async () => {
-      const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
-      if (!path) return
-      try {
-        await openProject(path)
-      } catch (e) {
-        toastError(e instanceof Error ? e.message : String(e))
       }
     })()
   }
@@ -198,22 +192,6 @@ function AppShell({
   return (
     <div className="app-root">
       <div className="window app-window">
-        <OpenProjectModal
-          open={openProjectOpen}
-          title={t('sidebar.openProject')}
-          pathLabel={t('prompt.projectPath')}
-          pathPlaceholder="/Users/…/my-project"
-          browseLabel={t('prompt.browse')}
-          openLabel={t('prompt.ok')}
-          cancelLabel={t('prompt.cancel')}
-          noSelectionLabel={t('prompt.noFolder')}
-          onCancel={() => setOpenProjectOpen(false)}
-          onOpen={(path) => {
-            setOpenProjectOpen(false)
-            void openProject(path).catch((e) => toastError(String(e)))
-          }}
-        />
-
         {/* 设置全页：按线稿替换整个 shell（无项目侧栏） */}
         {settingsOpen ? (
           <SettingsPanel
@@ -290,7 +268,7 @@ function AppShell({
                 onToggleInspector={() => setInspectorOpen((v) => !v)}
                 onRefreshGit={() => void refresh()}
                 onComposeFirstMessage={onComposeFirstMessage}
-                onPickFolder={onPickFolder}
+                onPickFolder={onOpenProject}
                 initialInput={pendingComposerText}
                 onInitialInputConsumed={() => setPendingComposerText('')}
                 creatingFromComposer={creatingFromComposer}
