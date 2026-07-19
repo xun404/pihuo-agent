@@ -66,6 +66,50 @@ export interface GitStatusResponse {
   error?: string
 }
 
+/** Mirror of @router-agents/core BranchInfo (kept inline to avoid pulling core source into desktop typecheck). */
+export interface BranchInfo {
+  name: string
+  isCurrent: boolean
+  upstreamName?: string
+  commitHash?: string
+  commitTimestampMs?: number
+}
+
+export interface BranchListResult {
+  ok: boolean
+  isRepo: boolean
+  headRefType: 'branch' | 'detached'
+  currentBranchName: string | null
+  branches: BranchInfo[]
+  dirtyFileCount: number
+  error?: string
+}
+
+export type BranchSwitchIssueCode =
+  | 'tracked-changes-would-be-overwritten'
+  | 'untracked-changes-would-be-overwritten'
+  | 'conflicts-present'
+  | 'operation-in-progress'
+  | 'branch-in-other-worktree'
+  | 'target-branch-not-found'
+  | 'request-failed'
+
+export interface BranchSwitchIssue {
+  code: BranchSwitchIssueCode
+  message: string
+  paths?: string[]
+}
+
+export interface BranchSwitchResult {
+  ok: boolean
+  action: 'switch' | 'create'
+  branchName: string
+  didChange: boolean
+  issues: BranchSwitchIssue[]
+  currentBranchName?: string
+  error?: string
+}
+
 export interface FileEntryDto {
   name: string
   path: string
@@ -579,6 +623,25 @@ export const api = {
   gitStatus: (projectId?: string) =>
     request<GitStatusResponse>(
       projectId ? `/api/projects/${encodePathSegment(projectId)}/git` : '/api/git',
+    ),
+  listBranches: (projectId: string) =>
+    request<BranchListResult>(
+      `/api/projects/${encodePathSegment(projectId)}/branches`,
+    ),
+  switchBranch: (projectId: string, targetBranchName: string) =>
+    request<BranchSwitchResult>(
+      `/api/projects/${encodePathSegment(projectId)}/branches/switch`,
+      { method: 'POST', body: JSON.stringify({ targetBranchName }) },
+    ),
+  createBranchAndSwitch: (projectId: string, branchName: string, startPoint?: string) =>
+    request<BranchSwitchResult>(
+      `/api/projects/${encodePathSegment(projectId)}/branches/create`,
+      { method: 'POST', body: JSON.stringify({ branchName, startPoint }) },
+    ),
+  commitAndSwitch: (projectId: string, targetBranchName: string, message: string) =>
+    request<BranchSwitchResult>(
+      `/api/projects/${encodePathSegment(projectId)}/branches/commit-and-switch`,
+      { method: 'POST', body: JSON.stringify({ targetBranchName, message }) },
     ),
   listFiles: (projectId?: string, depth = 3) =>
     request<FilesResponse>(
