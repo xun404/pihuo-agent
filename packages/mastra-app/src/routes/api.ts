@@ -2,6 +2,10 @@ import { registerApiRoute } from '@mastra/core/server'
 import {
   createId,
   getGitStatus,
+  listLocalBranches,
+  switchBranch,
+  createBranchAndSwitch,
+  commitAndSwitch,
   listProjectFiles,
   getSharedStore,
   getWorkerModelCatalogStore,
@@ -836,6 +840,58 @@ export const apiRoutes = [
         .find((p) => p.id === id)
       if (!project) return c.json({ error: 'project not found' }, 404)
       return c.json(await getGitStatus(project.rootPath))
+    },
+  }),
+
+  registerApiRoute('/api/projects/:id/branches', {
+    method: 'GET',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const project = store().listProjects().find((p) => p.id === id)
+      if (!project) return c.json({ error: 'project not found' }, 404)
+      return c.json(await listLocalBranches(project.rootPath))
+    },
+  }),
+
+  registerApiRoute('/api/projects/:id/branches/switch', {
+    method: 'POST',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const project = store().listProjects().find((p) => p.id === id)
+      if (!project) return c.json({ error: 'project not found' }, 404)
+      const body = await c.req.json().catch(() => ({}))
+      const target = String(body?.targetBranchName ?? '').trim()
+      if (!target) return c.json({ error: 'targetBranchName required' }, 400)
+      return c.json(await switchBranch(project.rootPath, target))
+    },
+  }),
+
+  registerApiRoute('/api/projects/:id/branches/create', {
+    method: 'POST',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const project = store().listProjects().find((p) => p.id === id)
+      if (!project) return c.json({ error: 'project not found' }, 404)
+      const body = await c.req.json().catch(() => ({}))
+      const name = String(body?.branchName ?? '').trim()
+      if (!name) return c.json({ error: 'branchName required' }, 400)
+      const startPoint = body?.startPoint ? String(body.startPoint).trim() : undefined
+      return c.json(await createBranchAndSwitch(project.rootPath, name, startPoint))
+    },
+  }),
+
+  registerApiRoute('/api/projects/:id/branches/commit-and-switch', {
+    method: 'POST',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const project = store().listProjects().find((p) => p.id === id)
+      if (!project) return c.json({ error: 'project not found' }, 404)
+      const body = await c.req.json().catch(() => ({}))
+      const target = String(body?.targetBranchName ?? '').trim()
+      const message = String(body?.message ?? '').trim()
+      if (!target) return c.json({ error: 'targetBranchName required' }, 400)
+      if (!message) return c.json({ error: 'message required' }, 400)
+      return c.json(await commitAndSwitch(project.rootPath, target, message))
     },
   }),
 
