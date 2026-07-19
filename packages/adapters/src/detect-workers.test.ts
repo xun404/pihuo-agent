@@ -1,10 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  applyDetectionToWorkers,
-  detectAcpWorkers,
-  whichSync,
-} from './detect-workers.js'
+import { applyDetectionToWorkers, detectAcpWorkers, whichSync } from './detect-workers.js'
 
 describe('detect-workers', () => {
   it('whichSync finds node when on PATH', () => {
@@ -15,10 +11,7 @@ describe('detect-workers', () => {
   it('detectAcpWorkers returns three core candidates', async () => {
     const list = await detectAcpWorkers()
     assert.equal(list.length, 3)
-    assert.deepEqual(
-      list.map((c) => c.kind).sort(),
-      ['claude', 'codex', 'opencode'],
-    )
+    assert.deepEqual(list.map((c) => c.kind).sort(), ['claude', 'codex', 'opencode'])
   })
 
   it('applyDetectionToWorkers enables installed kinds', () => {

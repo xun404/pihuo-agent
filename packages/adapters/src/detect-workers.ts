@@ -53,10 +53,7 @@ function pathDirs(env: NodeJS.ProcessEnv = process.env): string[] {
 }
 
 /** Synchronous which(1)-like lookup */
-export function whichSync(
-  cmd: string,
-  env: NodeJS.ProcessEnv = process.env,
-): string | undefined {
+export function whichSync(cmd: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
   if (!cmd) return undefined
   if (isAbsolute(cmd)) {
     try {
@@ -182,8 +179,8 @@ export async function detectAcpWorkers(
   // OpenCode — native `opencode acp`
   {
     const preset = WORKER_PRESETS.opencode
-    let installed = Boolean(opencode)
-    let resolved = opencode
+    const installed = Boolean(opencode)
+    const resolved = opencode
     // Light version probe if present
     if (opencode) {
       const v = await spawnQuiet(opencode, ['--version'], 2000)

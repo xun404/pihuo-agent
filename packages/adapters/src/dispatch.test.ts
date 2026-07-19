@@ -128,6 +128,29 @@ describe('buildAcpSpawnConfig', () => {
     assert.equal(cfg.workerId, 'w-claude')
     assert.equal(cfg.primaryRole, 'coder')
   })
+
+  it('does not copy Leader secrets into a worker spawn configuration', () => {
+    const previous = process.env.ROUTER_INTERNAL_TOKEN
+    process.env.ROUTER_INTERNAL_TOKEN = 'leader-only-secret'
+    try {
+      const cfg = buildAcpSpawnConfig(
+        worker({
+          id: 'isolated',
+          name: 'Isolated',
+          kind: 'custom',
+          primaryRole: 'general',
+          roles: ['general'],
+          env: { WORKER_SETTING: 'ok' },
+        }),
+        '/tmp/project',
+      )
+      assert.equal(cfg.env.ROUTER_INTERNAL_TOKEN, undefined)
+      assert.equal(cfg.env.WORKER_SETTING, 'ok')
+    } finally {
+      if (previous === undefined) delete process.env.ROUTER_INTERNAL_TOKEN
+      else process.env.ROUTER_INTERNAL_TOKEN = previous
+    }
+  })
 })
 
 describe('dispatchToWorker', () => {

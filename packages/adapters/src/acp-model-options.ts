@@ -24,9 +24,7 @@ function isModelConfig(opt: SessionConfigOption): boolean {
   return false
 }
 
-function isSelectOption(
-  opt: SessionConfigOption,
-): opt is SessionConfigOption & { type: 'select' } {
+function isSelectOption(opt: SessionConfigOption): opt is SessionConfigOption & { type: 'select' } {
   return opt.type === 'select' && 'options' in opt && 'currentValue' in opt
 }
 

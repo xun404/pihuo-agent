@@ -130,7 +130,10 @@ describe('extractModelOptions', () => {
       currentValue: 'm1',
       options: [{ value: 'm1', name: 'M1' }],
     }
-    const r = extractModelOptions([{ id: 'settings', name: 'Settings', type: 'boolean', currentValue: true }, opt])
+    const r = extractModelOptions([
+      { id: 'settings', name: 'Settings', type: 'boolean', currentValue: true },
+      opt,
+    ])
     assert.equal(r.ok, true)
     assert.equal(r.models.length, 1)
   })

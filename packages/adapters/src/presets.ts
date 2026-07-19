@@ -5,14 +5,7 @@ export const WORKER_PRESETS: Record<
   Exclude<WorkerKind, 'custom'>,
   Pick<
     WorkerRegistration,
-    | 'name'
-    | 'kind'
-    | 'command'
-    | 'args'
-    | 'primaryRole'
-    | 'roles'
-    | 'capabilities'
-    | 'description'
+    'name' | 'kind' | 'command' | 'args' | 'primaryRole' | 'roles' | 'capabilities' | 'description'
   >
 > = {
   claude: {

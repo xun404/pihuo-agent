@@ -10,6 +10,7 @@ import {
   type ActiveSession,
   type SessionConfigOption,
 } from '@agentclientprotocol/sdk'
+import type { ApprovalOption, ApprovalOptionKind } from '@router-agents/shared'
 import type { AcpSpawnConfig } from './acp-config.js'
 import { extractModelOptions, type ModelOptionsResult } from './acp-model-options.js'
 import { readContainedText, writeContainedText } from './acp-filesystem.js'
@@ -20,11 +21,111 @@ export interface AcpSessionConfig {
   signal?: AbortSignal
 }
 
+export interface AcpPermissionRequest {
+  toolCallId?: string
+  kind?: string
+  title?: string
+  locations?: { path: string; line?: number }[]
+  options: ApprovalOption[]
+}
+
+const APPROVAL_OPTION_KINDS = new Set<ApprovalOptionKind>([
+  'allow_once',
+  'allow_always',
+  'reject_once',
+  'reject_always',
+])
+
+export class InvalidAcpApprovalOptionsError extends Error {
+  readonly code = 'invalid_approval_options'
+
+  constructor() {
+    super('Invalid approval options received from ACP agent')
+    this.name = 'InvalidAcpApprovalOptionsError'
+  }
+}
+
+function parseApprovalOptions(value: unknown): ApprovalOption[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new InvalidAcpApprovalOptionsError()
+  }
+
+  const seen = new Set<string>()
+  return value.map((candidate) => {
+    if (!candidate || typeof candidate !== 'object') {
+      throw new InvalidAcpApprovalOptionsError()
+    }
+    const raw = candidate as Record<string, unknown>
+    const optionId = typeof raw.optionId === 'string' ? raw.optionId.trim() : ''
+    const name = typeof raw.name === 'string' ? raw.name.trim() : ''
+    const kind = raw.kind
+    if (
+      !optionId ||
+      !name ||
+      typeof kind !== 'string' ||
+      !APPROVAL_OPTION_KINDS.has(kind as ApprovalOptionKind) ||
+      seen.has(optionId)
+    ) {
+      throw new InvalidAcpApprovalOptionsError()
+    }
+    seen.add(optionId)
+    return { optionId, name, kind: kind as ApprovalOptionKind }
+  })
+}
+
+function isValidLineNumber(line: unknown): line is number {
+  return typeof line === 'number' && Number.isFinite(line) && line >= 0 && Number.isInteger(line)
+}
+
+export function mapPermissionRequest(params: {
+  sessionId: string
+  toolCall: {
+    toolCallId: string
+    kind?: string | null
+    title?: string | null
+    locations?: Array<{ path: string; line?: number | null }> | null
+  }
+  options?: Array<{ optionId?: string; name?: string; kind?: string }> | null
+}): AcpPermissionRequest {
+  const toolCall = params.toolCall ?? {}
+  const kind =
+    toolCall.kind && typeof toolCall.kind === 'string' && toolCall.kind.length > 0
+      ? toolCall.kind
+      : 'other'
+  const title =
+    toolCall.title && typeof toolCall.title === 'string' && toolCall.title.length > 0
+      ? toolCall.title
+      : 'Permission required'
+
+  let locations: { path: string; line?: number }[] | undefined
+  if (Array.isArray(toolCall.locations)) {
+    const filtered = toolCall.locations
+      .filter((l) => l && typeof l.path === 'string' && l.path.length > 0)
+      .map((l) => {
+        const entry: { path: string; line?: number } = { path: l.path }
+        if (isValidLineNumber(l.line)) entry.line = l.line
+        return entry
+      })
+    locations = filtered.length > 0 ? filtered : []
+  } else {
+    locations = []
+  }
+
+  const opts = parseApprovalOptions(params.options)
+
+  return {
+    toolCallId: toolCall.toolCallId ?? undefined,
+    kind,
+    title,
+    locations,
+    options: opts,
+  }
+}
+
 export interface AcpSessionCallbacks {
-  onPermissionRequest?: (request: {
-    title: string
-    options: { optionId: string; name: string }[]
-  }) => Promise<{ outcome: 'selected' | 'cancelled'; optionId?: string }>
+  onPermissionRequest?: (
+    request: AcpPermissionRequest,
+  ) => Promise<{ outcome: 'selected' | 'cancelled'; optionId?: string }>
 }
 
 export interface AcpSessionHandle {
@@ -43,7 +144,8 @@ export interface AcpPromptResult {
   error?: string
 }
 
-type ErrorCode = 'SPAWN' | 'INITIALIZE' | 'SESSION_NEW' | 'PROMPT' | 'PROCESS_EXIT' | 'TIMEOUT' | 'CANCEL'
+type ErrorCode =
+  'SPAWN' | 'INITIALIZE' | 'SESSION_NEW' | 'PROMPT' | 'PROCESS_EXIT' | 'TIMEOUT' | 'CANCEL'
 
 export class AcpSessionError extends Error {
   code: ErrorCode
@@ -65,7 +167,9 @@ function killProcessGroup(proc: ChildProcess, signal: NodeJS.Signals) {
       process.kill(-proc.pid, signal)
     }
   } catch {
-    try { proc.kill(signal) } catch {}
+    try {
+      proc.kill(signal)
+    } catch {}
   }
 }
 
@@ -74,17 +178,82 @@ export async function withAcpSession<T>(
   callbacks: AcpSessionCallbacks,
   operation: (handle: AcpSessionHandle) => Promise<T>,
 ): Promise<T> {
-  const signal = config.signal
-  if (signal?.aborted) {
+  const externalSignal = config.signal
+  if (externalSignal?.aborted) {
     throw new AcpSessionError('CANCEL', 'Aborted before ACP session started')
   }
 
+  const lifecycleAborter = new AbortController()
+  const signal = lifecycleAborter.signal
+  let timedOut = false
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined
+  let externalAbortCleanup: (() => void) | undefined
+  let cancellationCleanup: (() => void) | undefined
+
+  if (externalSignal) {
+    const forwardAbort = () => lifecycleAborter.abort(externalSignal.reason)
+    externalSignal.addEventListener('abort', forwardAbort, { once: true })
+    externalAbortCleanup = () => externalSignal.removeEventListener('abort', forwardAbort)
+    if (externalSignal.aborted) forwardAbort()
+  }
+
+  const rawTimeoutMs = config.timeoutMs
+  const timeoutMs =
+    typeof rawTimeoutMs === 'number' && Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
+      ? Math.max(1, Math.floor(rawTimeoutMs))
+      : undefined
+  if (timeoutMs !== undefined) {
+    timeoutTimer = setTimeout(() => {
+      timedOut = true
+      lifecycleAborter.abort()
+    }, timeoutMs)
+    timeoutTimer.unref?.()
+  }
+
+  const cancellationFailure = new Promise<never>((_resolve, reject) => {
+    const rejectCancellation = () =>
+      reject(
+        new AcpSessionError(
+          timedOut ? 'TIMEOUT' : 'CANCEL',
+          timedOut
+            ? `${config.spawn.workerName}: ACP session timed out after ${timeoutMs}ms`
+            : 'ACP session cancelled',
+        ),
+      )
+    signal.addEventListener('abort', rejectCancellation, { once: true })
+    cancellationCleanup = () => signal.removeEventListener('abort', rejectCancellation)
+    if (signal.aborted) rejectCancellation()
+  })
+
   const cwd = config.spawn.cwd
-  const proc = spawn(config.spawn.command, [...(config.spawn.args ?? [])], {
-    cwd,
-    env: { ...config.spawn.env },
-    stdio: ['pipe', 'pipe', 'pipe'],
-    detached: true,
+  let proc: ChildProcess
+  try {
+    proc = spawn(config.spawn.command, [...(config.spawn.args ?? [])], {
+      cwd,
+      env: { ...config.spawn.env },
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: true,
+    })
+  } catch (error) {
+    cancellationCleanup?.()
+    externalAbortCleanup?.()
+    if (timeoutTimer) clearTimeout(timeoutTimer)
+    throw new AcpSessionError(
+      'SPAWN',
+      `${config.spawn.workerName}: failed to start ACP process`,
+      error,
+    )
+  }
+  const spawnFailure = new Promise<never>((_resolve, reject) => {
+    proc.once('error', (error) => {
+      reject(
+        new AcpSessionError(
+          'SPAWN',
+          `${config.spawn.workerName}: failed to start ACP process`,
+          error,
+        ),
+      )
+    })
   })
 
   const stderrChunks: string[] = []
@@ -97,10 +266,19 @@ export async function withAcpSession<T>(
 
   let disposed = false
   const cleanupTimers: ReturnType<typeof setTimeout>[] = []
+  let abortCleanup: (() => void) | undefined
 
   async function cleanupSession(): Promise<void> {
     if (disposed) return
     disposed = true
+    abortCleanup?.()
+    abortCleanup = undefined
+    cancellationCleanup?.()
+    cancellationCleanup = undefined
+    externalAbortCleanup?.()
+    externalAbortCleanup = undefined
+    if (timeoutTimer) clearTimeout(timeoutTimer)
+    timeoutTimer = undefined
     for (const t of cleanupTimers) clearTimeout(t)
     cleanupTimers.length = 0
 
@@ -109,13 +287,15 @@ export async function withAcpSession<T>(
         proc.once('exit', () => resolve())
       })
       try {
-        proc.kill('SIGTERM')
+        killProcessGroup(proc, 'SIGTERM')
         await Promise.race([killed, new Promise<void>((r) => setTimeout(r, 2000))])
       } catch {}
     }
-    if (proc.exitCode === null && proc.signalCode === null) {
-      try { killProcessGroup(proc, 'SIGKILL') } catch {}
-    }
+    // The detached group can retain grandchildren after its leader exits.
+    // A final group kill is safe/best-effort even when the direct child is gone.
+    try {
+      killProcessGroup(proc, 'SIGKILL')
+    } catch {}
   }
 
   let sessionResult: T | undefined
@@ -130,13 +310,7 @@ export async function withAcpSession<T>(
         if (!callbacks.onPermissionRequest) {
           return { outcome: { outcome: 'cancelled' as const } }
         }
-        const result = await callbacks.onPermissionRequest({
-          title: ctx.params.toolCall.title ?? 'Permission required',
-          options: (ctx.params.options ?? []).map((o) => ({
-            optionId: o.optionId ?? '',
-            name: o.name ?? '',
-          })),
-        })
+        const result = await callbacks.onPermissionRequest(mapPermissionRequest(ctx.params))
         if (result.outcome === 'cancelled' || !result.optionId) {
           return { outcome: { outcome: 'cancelled' as const } }
         }
@@ -158,7 +332,7 @@ export async function withAcpSession<T>(
         return {}
       })
 
-    sessionResult = await app.connectWith(stream, async (ctx) => {
+    const connected = app.connectWith(stream, async (ctx) => {
       await ctx.request(methods.agent.initialize, {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: {
@@ -176,9 +350,11 @@ export async function withAcpSession<T>(
           handlerFired = true
           // Best-effort ACP cancel notification
           try {
-            ctx.notify(methods.agent.session.cancel, {
-              sessionId: session.sessionId,
-            }).catch(() => {})
+            ctx
+              .notify(methods.agent.session.cancel, {
+                sessionId: session.sessionId,
+              })
+              .catch(() => {})
           } catch {}
           // Grace period then terminate process group
           const t = setTimeout(() => {
@@ -189,6 +365,7 @@ export async function withAcpSession<T>(
           cleanupTimers.push(t)
         }
         signal.addEventListener('abort', abortHandler, { once: true })
+        abortCleanup = () => signal.removeEventListener('abort', abortHandler)
         if (signal.aborted) abortHandler()
       }
 
@@ -234,11 +411,11 @@ export async function withAcpSession<T>(
         },
 
         setConfigOption: async (id: string, value: string) => {
-          const resp = await ctx.request(methods.agent.session.setConfigOption, {
+          const resp = (await ctx.request(methods.agent.session.setConfigOption, {
             sessionId: session.sessionId,
             configId: id,
             value,
-          }) as { configOptions: SessionConfigOption[] }
+          })) as { configOptions: SessionConfigOption[] }
           return resp.configOptions
         },
 
@@ -253,13 +430,20 @@ export async function withAcpSession<T>(
 
       return operation(handle)
     })
+    sessionResult = await Promise.race([connected, spawnFailure, cancellationFailure])
 
     return sessionResult
   } catch (e) {
     if (e instanceof AcpSessionError) throw e
 
-    if (signal?.aborted) {
-      throw new AcpSessionError('CANCEL', 'ACP session cancelled', e)
+    if (signal.aborted) {
+      throw new AcpSessionError(
+        timedOut ? 'TIMEOUT' : 'CANCEL',
+        timedOut
+          ? `${config.spawn.workerName}: ACP session timed out after ${timeoutMs}ms`
+          : 'ACP session cancelled',
+        e,
+      )
     }
 
     throw new AcpSessionError(

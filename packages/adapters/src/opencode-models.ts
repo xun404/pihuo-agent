@@ -10,9 +10,17 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
 import type { WorkerModelOption } from '@router-agents/shared'
 import { OPENCODE_ZEN_FREE_MODELS } from './opencode-acp-env.js'
+import {
+  resolveOpenCodeEvidencePaths,
+  type OpenCodeEvidencePaths,
+} from './opencode-evidence-paths.js'
+
+export {
+  resolveOpenCodeEvidencePaths,
+  type OpenCodeEvidencePaths,
+} from './opencode-evidence-paths.js'
 
 export interface ListOpenCodeModelsOpts {
   /** Executable used by the worker (default: opencode) */
@@ -40,24 +48,38 @@ export function parseOpenCodeModelsStdout(stdout: string): string[] {
   return ids
 }
 
-function readAuthProviderIds(realHome: string): Set<string> {
+/**
+ * Read OpenCode auth store provider IDs.
+ * When `opts.xdgDataHome` is passed (including empty), do not fall back to HOME.
+ */
+export function readAuthProviderIds(
+  realHome: string,
+  opts?: { xdgDataHome?: string; explicitXdg?: boolean },
+): Set<string> {
   const set = new Set<string>()
-  const candidates = [
-    join(realHome, '.local/share/opencode/auth.json'),
-    process.env.XDG_DATA_HOME
-      ? join(process.env.XDG_DATA_HOME, 'opencode/auth.json')
-      : '',
-  ].filter(Boolean)
-  for (const p of candidates) {
+  // Explicit only when caller passes a string (including "") — undefined means use HOME fallback
+  const explicit = opts?.explicitXdg === true || typeof opts?.xdgDataHome === 'string'
+  const { authPaths } = resolveOpenCodeEvidencePaths({
+    realHome,
+    XDG_DATA_HOME: opts?.xdgDataHome,
+    explicitXdgData: explicit,
+  })
+  for (const p of authPaths) {
     try {
-      if (!existsSync(p)) continue
+      if (!existsSync(p)) {
+        // Explicit XDG path missing → fail closed (do not try other paths)
+        if (explicit) break
+        continue
+      }
       const raw = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>
       for (const k of Object.keys(raw)) {
         if (k && typeof k === 'string') set.add(k)
       }
-      if (set.size) break
+      // First successfully-read file wins
+      break
     } catch {
-      /* ignore */
+      // Corrupt explicit XDG → fail closed, do not fall through to HOME
+      if (explicit) break
     }
   }
   // Zen free provider never needs auth entry
@@ -65,17 +87,23 @@ function readAuthProviderIds(realHome: string): Set<string> {
   return set
 }
 
-function readDisabledProviders(realHome: string): Set<string> {
+export function readDisabledProviders(
+  realHome: string,
+  opts?: { xdgConfigHome?: string; explicitXdg?: boolean },
+): Set<string> {
   const set = new Set<string>()
-  const paths = [
-    join(realHome, '.config/opencode/opencode.json'),
-    process.env.XDG_CONFIG_HOME
-      ? join(process.env.XDG_CONFIG_HOME, 'opencode/opencode.json')
-      : '',
-  ].filter(Boolean)
-  for (const p of paths) {
+  const explicit = opts?.explicitXdg === true || typeof opts?.xdgConfigHome === 'string'
+  const { disabledPaths } = resolveOpenCodeEvidencePaths({
+    realHome,
+    XDG_CONFIG_HOME: opts?.xdgConfigHome,
+    explicitXdgConfig: explicit,
+  })
+  for (const p of disabledPaths) {
     try {
-      if (!existsSync(p)) continue
+      if (!existsSync(p)) {
+        if (explicit) break
+        continue
+      }
       const raw = JSON.parse(readFileSync(p, 'utf8')) as {
         disabled_providers?: string[]
       }
@@ -84,7 +112,7 @@ function readDisabledProviders(realHome: string): Set<string> {
       }
       break
     } catch {
-      /* ignore */
+      if (explicit) break
     }
   }
   return set
@@ -150,13 +178,15 @@ export function zenFreeFallbackModels(): WorkerModelOption[] {
 /**
  * Run `opencode models` with the **real** user env (auth + providers).
  */
-export function listOpenCodeModelsViaCli(
-  opts?: ListOpenCodeModelsOpts,
-): { ok: boolean; models: WorkerModelOption[]; error?: string; source: 'cli' | 'fallback' } {
+export function listOpenCodeModelsViaCli(opts?: ListOpenCodeModelsOpts): {
+  ok: boolean
+  models: WorkerModelOption[]
+  error?: string
+  source: 'cli' | 'fallback'
+} {
   const command = opts?.command?.trim() || 'opencode'
   const timeoutMs = opts?.timeoutMs ?? 45_000
-  const realHome =
-    opts?.env?.HOME || process.env.HOME || process.env.USERPROFILE || homedir()
+  const realHome = opts?.env?.HOME || process.env.HOME || process.env.USERPROFILE || homedir()
 
   // Real env — do NOT use isolated ACP HOME here
   const env: NodeJS.ProcessEnv = {
@@ -204,8 +234,14 @@ export function listOpenCodeModelsViaCli(
     }
     const sorted = sortOpenCodeModelIds(ids, {
       pinnedModel: opts?.pinnedModel,
-      authProviders: readAuthProviderIds(realHome),
-      disabledProviders: readDisabledProviders(realHome),
+      authProviders: readAuthProviderIds(realHome, {
+        xdgDataHome: env.XDG_DATA_HOME,
+        explicitXdg: Object.prototype.hasOwnProperty.call(env, 'XDG_DATA_HOME'),
+      }),
+      disabledProviders: readDisabledProviders(realHome, {
+        xdgConfigHome: env.XDG_CONFIG_HOME,
+        explicitXdg: Object.prototype.hasOwnProperty.call(env, 'XDG_CONFIG_HOME'),
+      }),
     })
     return {
       ok: true,

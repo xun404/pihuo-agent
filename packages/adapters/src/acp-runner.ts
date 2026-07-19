@@ -1,16 +1,27 @@
 import type { WorkerModelOption, WorkerRegistration } from '@router-agents/shared'
 import type { AcpSpawnConfig } from './acp-config.js'
-import { formatWorkerModelError, isModelDisabledError } from './acp-errors.js'
+import { formatWorkerModelError } from './acp-errors.js'
 import { probeWorkerHealth } from './health.js'
 import { resolveWorkerCwd } from './presets.js'
-import { prepareOpenCodeAcpEnv, OPENCODE_SAFE_DEFAULT_MODEL } from './opencode-acp-env.js'
-import { withAcpSession, type AcpSessionHandle, type AcpPromptResult } from './acp-session.js'
+import { prepareOpenCodeAcpEnv, OPENCODE_ZEN_FREE_MODELS } from './opencode-acp-env.js'
+import { withAcpSession, type AcpPromptResult, type AcpPermissionRequest } from './acp-session.js'
+import { computeShortlistedModels, type ShortlistEntry } from './acp-model-shortlist.js'
+import { buildProviderEvidenceMap, type ProviderEvidence } from './model-eligibility.js'
 import { rmSync } from 'node:fs'
+import { buildEffectiveWorkerEnv } from './worker-env.js'
 
-export async function defaultCanRunAcp(
-  config: AcpSpawnConfig,
-  timeoutMs = 3000,
-): Promise<boolean> {
+export const DEFAULT_WORKER_MODELS_TIMEOUT_MS = 90_000
+export const MAX_WORKER_MODELS_TIMEOUT_MS = 300_000
+
+export function resolveWorkerModelsTimeoutMs(
+  raw: string | number | undefined = process.env.WORKER_MODELS_TIMEOUT_MS,
+): number {
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_WORKER_MODELS_TIMEOUT_MS
+  return Math.min(Math.floor(parsed), MAX_WORKER_MODELS_TIMEOUT_MS)
+}
+
+export async function defaultCanRunAcp(config: AcpSpawnConfig, timeoutMs = 3000): Promise<boolean> {
   const report = await probeWorkerHealth(
     {
       name: config.workerName,
@@ -23,7 +34,6 @@ export async function defaultCanRunAcp(
       level: 'presence',
       timeoutMs,
       cwd: config.cwd,
-      env: config.env,
     },
   )
   return report.status === 'healthy'
@@ -34,10 +44,9 @@ export interface RunAcpTaskOptions {
     config: AcpSpawnConfig,
     task: string,
   ) => Promise<{ ok: boolean; output?: string; error?: string }>
-  onPermissionRequest?: (request: {
-    title: string
-    options: { optionId: string; name: string }[]
-  }) => Promise<{ outcome: 'selected' | 'cancelled'; optionId?: string }>
+  onPermissionRequest?: (
+    request: AcpPermissionRequest,
+  ) => Promise<{ outcome: 'selected' | 'cancelled'; optionId?: string }>
   signal?: AbortSignal
 }
 
@@ -53,14 +62,30 @@ export async function runAcpTask(
   let isolatedHome: string | undefined
 
   try {
-    let spawnConfig = config
+    const effectiveEnv = buildEffectiveWorkerEnv({
+      ambientEnv: process.env,
+      workerEnv: config.env,
+      model: config.model,
+    })
+    let spawnConfig = { ...config, env: effectiveEnv }
     let modelUsed: string | undefined
-    let effectivePinned = config.model?.trim() || undefined
+    const effectivePinned = config.model?.trim() || undefined
 
     if (config.kind === 'opencode') {
+      const candidates = config.availableModels?.length ? config.availableModels : undefined
+      const providers = candidates
+        ? buildProviderEvidenceMap({
+            modelIds: candidates.map((m) => m.modelId),
+            env: effectiveEnv,
+            zenFreeAllowlist: [...OPENCODE_ZEN_FREE_MODELS],
+          })
+        : undefined
       const prep = prepareOpenCodeAcpEnv({
-        baseEnv: { ...process.env, ...config.env },
+        baseEnv: effectiveEnv,
         model: config.model,
+        candidates,
+        providers,
+        zenFreeAllowlist: [...OPENCODE_ZEN_FREE_MODELS],
       })
       console.info(`[acp] ${config.workerName}: ${prep.hint}`)
       isolatedHome = prep.isolatedHome
@@ -79,9 +104,7 @@ export async function runAcpTask(
       },
       async (handle) => {
         if (effectivePinned) {
-          const validOption = handle.modelOptions.models.find(
-            (m) => m.modelId === effectivePinned,
-          )
+          const validOption = handle.modelOptions.models.find((m) => m.modelId === effectivePinned)
           if (!validOption) {
             throw new Error(
               `Model "${effectivePinned}" is not in the agent's available config options`,
@@ -149,38 +172,59 @@ export async function runAcpTask(
     }
   } finally {
     if (isolatedHome) {
-      try { rmSync(isolatedHome, { recursive: true, force: true }) } catch {}
+      try {
+        rmSync(isolatedHome, { recursive: true, force: true })
+      } catch {}
     }
   }
 }
 
 export interface ListAcpModelsResult {
   ok: boolean
+  /** Full ACP candidate set */
   models: WorkerModelOption[]
   error?: string
+  shortlist?: ShortlistEntry[]
+  /** Shortlist as WorkerModelOption (for availableModels) */
+  shortlistModels?: WorkerModelOption[]
+  searchIndex?: WorkerModelOption[]
+  openRouterModels?: WorkerModelOption[]
+  remainingModels?: WorkerModelOption[]
+  totalModelCount?: number
+  providers?: Record<string, ProviderEvidence>
 }
 
 export async function listAcpModels(
-  worker: Pick<
-    WorkerRegistration,
-    'id' | 'name' | 'command' | 'args' | 'env' | 'kind' | 'model'
-  >,
+  worker: Pick<WorkerRegistration, 'id' | 'name' | 'command' | 'args' | 'env' | 'kind' | 'model'>,
   opts?: { cwd?: string; timeoutMs?: number },
 ): Promise<ListAcpModelsResult> {
-  const timeoutMs =
-    opts?.timeoutMs ??
-    (Number(process.env.WORKER_MODELS_TIMEOUT_MS) || 90_000)
+  const timeoutMs = resolveWorkerModelsTimeoutMs(opts?.timeoutMs)
   const cwd = opts?.cwd ?? resolveWorkerCwd(undefined)
 
   try {
     let env: Record<string, string>
 
-    if (worker.kind === 'opencode') {
-      // Model discovery uses real HOME so all user-configured providers appear
-      env = { ...process.env, ...worker.env } as Record<string, string>
-    } else {
-      env = { ...process.env, ...worker.env } as Record<string, string>
-    }
+    // Discovery still needs provider keys for that worker, but never full Leader env
+    const { buildEffectiveWorkerEnv } = await import('./worker-env.js')
+    env = buildEffectiveWorkerEnv({
+      ambientEnv: process.env,
+      workerEnv: worker.env,
+      model: worker.model,
+      // Model list needs provider auth for this worker's configured providers
+      extraAmbientKeys: [
+        'HTTP_PROXY',
+        'HTTPS_PROXY',
+        'http_proxy',
+        'https_proxy',
+        'NO_PROXY',
+        'no_proxy',
+        'SSL_CERT_FILE',
+        'SSL_CERT_DIR',
+        'NODE_EXTRA_CA_CERTS',
+      ],
+    })
+    // For discovery, also allow keys listed on worker.env or known provider keys already
+    // in process.env that worker registration intends (OPENCODE_API_KEY etc. via model).
 
     const spawnConfig: AcpSpawnConfig = {
       command: worker.command,
@@ -195,7 +239,7 @@ export async function listAcpModels(
     }
 
     const aborter = new AbortController()
-    const timer = setTimeout(() => aborter.abort(), Math.min(timeoutMs, 60000))
+    const timer = setTimeout(() => aborter.abort(), timeoutMs)
 
     try {
       const models = await withAcpSession(
@@ -203,9 +247,7 @@ export async function listAcpModels(
         {},
         async (handle) => {
           if (!handle.modelOptions.ok || handle.modelOptions.models.length === 0) {
-            throw new Error(
-              handle.modelOptions.error ?? 'No models found in configOptions',
-            )
+            throw new Error(handle.modelOptions.error ?? 'No models found in configOptions')
           }
           return handle.modelOptions.models.map((m) => ({
             modelId: m.modelId,
@@ -215,7 +257,61 @@ export async function listAcpModels(
         },
       )
 
-      return { ok: true, models }
+      // OpenCode: provider-prefix eligibility + auth/disabled evidence.
+      // Claude/Codex/etc: ACP options are already executable candidates — shortlist = all.
+      if (worker.kind === 'opencode') {
+        // Worker env overlays ambient so XDG_*/HOME from worker registration win for evidence.
+        const shortlistResult = computeShortlistedModels({
+          allModels: models,
+          pinnedModel: worker.model ?? undefined,
+          zenFreeModels: [...OPENCODE_ZEN_FREE_MODELS],
+          opencodeEnv: {
+            ...(process.env as Record<string, string>),
+            ...worker.env,
+          } as Record<string, string>,
+          useOpenCodeEvidence: true,
+          realHome: worker.env?.HOME || process.env.HOME || undefined,
+        })
+
+        const shortlistModels: WorkerModelOption[] = shortlistResult.shortlist.map((e) => ({
+          modelId: e.modelId,
+          name: e.name,
+          description: e.description,
+          group: 'shortlist' as const,
+        }))
+
+        return {
+          ok: true,
+          models,
+          shortlist: shortlistResult.shortlist,
+          shortlistModels,
+          searchIndex: shortlistResult.searchIndex,
+          openRouterModels: shortlistResult.openRouterModels,
+          remainingModels: shortlistResult.remainingModels,
+          totalModelCount: shortlistResult.totalModelCount,
+          providers: shortlistResult.providers,
+        }
+      }
+
+      // Generic ACP: treat all configOptions as shortlist + searchIndex (no OpenCode prefix rules)
+      const generic: WorkerModelOption[] = models.map((m) => ({
+        ...m,
+        group: 'shortlist' as const,
+      }))
+      return {
+        ok: true,
+        models,
+        shortlistModels: generic,
+        searchIndex: generic,
+        totalModelCount: models.length,
+        providers: Object.fromEntries(
+          models.map((m) => {
+            const i = m.modelId.indexOf('/')
+            const pid = i > 0 ? m.modelId.slice(0, i) : m.modelId
+            return [pid, 'authenticated' as const]
+          }),
+        ),
+      }
     } finally {
       clearTimeout(timer)
     }
