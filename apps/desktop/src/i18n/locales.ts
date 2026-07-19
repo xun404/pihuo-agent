@@ -53,6 +53,7 @@ export type MessageKey =
   | 'chat.openSession'
   | 'chat.openSessionHint'
   | 'chat.openProject'
+  | 'chat.openFolder'
   | 'chat.openSettings'
   | 'chat.placeholder'
   | 'chat.placeholderHome'
@@ -442,6 +443,7 @@ const zh: Dict = {
   'chat.openSessionHint':
     '选择左侧 Session，或新建一个。Leader 会按角色协调 plan / coder / review / test 等 CLI Worker。',
   'chat.openProject': '打开项目…',
+  'chat.openFolder': '打开文件夹',
   'chat.openSettings': '打开设置',
   'chat.placeholder': '描述任务，或指定角色/Worker…（⌘↵ 发送）',
   'chat.placeholderHome': '随心输入…',
@@ -848,6 +850,7 @@ const en: Dict = {
   'chat.openSessionHint':
     'Pick a session on the left or create one. The Leader routes by role: plan / coder / review / test CLI workers.',
   'chat.openProject': 'Open Project…',
+  'chat.openFolder': 'Open Folder',
   'chat.openSettings': 'Open settings',
   'chat.placeholder': 'Describe a task, or name a role/worker… (⌘↵ send)',
   'chat.placeholderHome': 'Ask anything…',

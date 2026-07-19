@@ -122,6 +122,23 @@ function AppShell({
     })()
   }
 
+  /**
+   * "Open folder" chip on the empty-state composer (scene 1, no project).
+   * Opens the native folder picker and activates the chosen project — does
+   * NOT create a session (the user may then type in the now-bound composer).
+   */
+  const onPickFolder = () => {
+    void (async () => {
+      const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
+      if (!path) return
+      try {
+        await openProject(path)
+      } catch (e) {
+        toastError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+  }
+
   const onNewSession = () => {
     // Delayed naming: no title prompt at creation time.
     // The Leader auto-names the session after the first task; the user can
@@ -265,6 +282,7 @@ function AppShell({
                 onToggleInspector={() => setInspectorOpen((v) => !v)}
                 onRefreshGit={() => void refresh()}
                 onComposeFirstMessage={onComposeFirstMessage}
+                onPickFolder={onPickFolder}
                 initialInput={pendingComposerText}
                 onInitialInputConsumed={() => setPendingComposerText('')}
                 creatingFromComposer={creatingFromComposer}

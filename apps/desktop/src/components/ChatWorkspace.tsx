@@ -10,9 +10,10 @@ import type {
 } from '@swarmdesk-agent/shared'
 import { ChatPanel } from './ChatPanel'
 import { BrandLogo } from './BrandLogo'
+import { BranchSwitcher } from './BranchSwitcher'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
-import { IconArrowUp } from './Icons'
+import { IconArrowUp, IconFolder } from './Icons'
 
 /**
  * Empty-state hint pool. Each time the user lands on the empty Chat state
@@ -61,6 +62,8 @@ interface Props {
   onRefreshGit?: () => void
   /** Empty-state composer: fired with the user's first message text. */
   onComposeFirstMessage?: (text: string) => void
+  /** Click handler for the "open folder" chip on the empty-state composer (scene 1, no project). */
+  onPickFolder?: () => void
   /** Pre-fill text to inject into the active session's composer (once). */
   initialInput?: string
   /** Fired when the active ChatPanel has consumed initialInput. */
@@ -96,6 +99,7 @@ export function ChatWorkspace({
   onToggleInspector,
   onRefreshGit,
   onComposeFirstMessage,
+  onPickFolder,
   initialInput,
   onInitialInputConsumed,
   creatingFromComposer,
@@ -204,6 +208,35 @@ export function ChatWorkspace({
                 onComposeFirstMessage(text)
               }}
             >
+              <div className="context-bar">
+                {!project && onPickFolder && (
+                  <button
+                    type="button"
+                    className="ctx"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      onPickFolder()
+                    }}
+                  >
+                    <IconFolder size={13} />
+                    {t('chat.openFolder')}
+                  </button>
+                )}
+                {project && (
+                  <>
+                    <span className="ctx" title={project.rootPath}>
+                      <IconFolder size={13} />
+                      {project.name}
+                    </span>
+                    <BranchSwitcher
+                      project={project}
+                      snapshotWorkers={snapshotWorkers}
+                      snapshotJobs={snapshotJobs}
+                      onAfterSwitch={onRefreshGit}
+                    />
+                  </>
+                )}
+              </div>
               <textarea
                 className="composer-input"
                 value={firstMessage}
