@@ -1,130 +1,190 @@
-# SwarmDesk
+<h1 align="center">
+  <a href="https://github.com/xun404/swarmdesk-agent"><img src="docs/assets/icon.png" alt="SwarmDesk" width="64" valign="middle" /></a> SwarmDesk
+</h1>
 
-**EN** · [中文](#swarmdesk-中文)
+<p align="center">
+  <a href="https://github.com/xun404/swarmdesk-agent/stargazers"><img src="https://img.shields.io/github/stars/xun404/swarmdesk-agent?style=flat&label=%E2%98%85" alt="GitHub stars" /></a>
+  <a href="https://github.com/xun404/swarmdesk-agent/releases"><img src="https://img.shields.io/github/v/release/xun404/swarmdesk-agent?label=release" alt="Latest release" /></a>
+  <a href="https://github.com/xun404/swarmdesk-agent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/xun404/swarmdesk-agent" alt="License" /></a>
+  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="Supported platforms: macOS, Windows, and Linux" />
+</p>
 
-Desktop multi-agent command center: a **Mastra Supervisor** Leader coordinates local **ACP** coding agents (Claude Code, Codex, OpenCode, and agents from the ACP Registry) against your project.
+<p align="center">
+  <sub><a href="docs/readme/README.zh-CN.md">中文</a></sub>
+</p>
+
+<p align="center">
+  <strong>Local multi-agent command center for ACP workers.</strong><br/>
+  A Mastra Supervisor <em>Leader</em> plans and delegates — Claude Code, Codex, OpenCode, and Registry agents run on your machine, tracked in one desktop app.
+</p>
+
+<h3 align="center"><a href="https://github.com/xun404/swarmdesk-agent/releases/latest"><ins>Download SwarmDesk</ins></a></h3>
+
+<p align="center">
+  <!-- Drop your hero screenshot at docs/assets/readme-hero.png -->
+  <img src="docs/assets/readme-hero.png" alt="SwarmDesk desktop — Leader chat, workers, and project context" width="960" />
+</p>
+
+## Features
+
+<table>
+<tr>
+<td width="50%" valign="middle">
+
+### Leader chat &amp; delegation
+
+Talk to a Supervisor Leader that plans work and dispatches **role-aware** jobs (`plan` · `coder` · `review` · `test` · `research` · `general`) to the right ACP worker.
+
+</td>
+<td width="50%">
+  <img src="docs/assets/feature-wall/leader-chat.png" alt="Leader chat and delegation" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Live worker cards
+
+Watch each job stream in place — tool calls, terminal output, and final status on a single card per job (no duplicate clutter).
+
+</td>
+<td width="50%">
+  <img src="docs/assets/feature-wall/worker-cards.png" alt="Worker run cards" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Approvals you control
+
+ACP permission requests surface in chat and the side panel. Session policies: manual, allow once / always, reject once / always.
+
+</td>
+<td width="50%">
+  <img src="docs/assets/feature-wall/approvals.png" alt="Permission approvals" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### ACP Registry agents
+
+Discover and prepare agents from the official ACP Registry (bundled offline snapshot). Explicit **prepare → trust → authenticate** before dispatch.
+
+</td>
+<td width="50%">
+  <img src="docs/assets/feature-wall/registry.png" alt="ACP Registry agent picker" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Models &amp; keys in Settings
+
+Configure Leader models and API keys with encrypted local storage. Built-in providers plus OpenAI / Anthropic / Google-compatible custom gateways.
+
+</td>
+<td width="50%">
+  <img src="docs/assets/feature-wall/settings-models.png" alt="Settings — models and API keys" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Projects &amp; sessions
+
+Open a local project path, keep multiple chat sessions, rename from the header, and resume ACP context across restarts when the agent supports it.
+
+</td>
+<td width="50%">
+  <img src="docs/assets/feature-wall/sessions.png" alt="Projects and sessions" width="100%" />
+</td>
+</tr>
+</table>
+
+**Also in the box:**
+
+- **i18n** — Chinese / English in the title bar  
+- **Git &amp; files** — real `git status` and bounded project tree in the UI  
+- **Step budget** — configurable Leader max steps with continue-on-same-thread  
+- **Local-first** — data under `~/.config/swarmdesk-agent/` (no cloud account required)
 
 ---
 
-## English
+## Supported Agents
 
-### What it is
+Built-in presets plus **ACP Registry** agents. Registry availability depends on platform, install method (`npx` / `uvx` / binary), and each agent’s own login. Agent CLIs are **not** bundled — install them separately.
 
-SwarmDesk is a local desktop app (macOS / Windows / Linux) that lets you:
+### Built-in presets
 
-- Chat with a **Leader** model that plans and delegates work
-- Run real coding agents on your machine over **ACP** (Agent Client Protocol)
-- Approve tool calls, watch worker progress, and keep sessions across restarts
-- Open a project path, inspect git/files, and manage models & API keys in Settings
+<p>
+  <kbd><img src="https://www.google.com/s2/favicons?domain=anthropic.com&sz=64" alt="" width="16" valign="middle" /> Claude Code</kbd> &nbsp;
+  <kbd><img src="https://www.google.com/s2/favicons?domain=openai.com&sz=64" alt="" width="16" valign="middle" /> Codex CLI</kbd> &nbsp;
+  <kbd><img src="https://www.google.com/s2/favicons?domain=opencode.ai&sz=64" alt="" width="16" valign="middle" /> OpenCode</kbd>
+</p>
 
-Agents run as **your OS user** (not a hard sandbox). Installers ship the UI + local API runtime; **ACP agent CLIs are not bundled** — install and sign in to each agent you want to use.
+| Agent | Primary role | Also |
+| ----- | ------------ | ---- |
+| **Claude Code** | coder | plan, research, general |
+| **Codex CLI** | review | coder, test, general |
+| **OpenCode** | general | coder, plan, test |
 
-### Download
+### ACP Registry (bundled catalog)
 
-Get prebuilt binaries from **[GitHub Releases](https://github.com/xun404/swarmdesk-agent/releases)**. Prefer the latest `v*` release and verify `SHA256SUMS` when present.
+<p>
+  <kbd>Agoragentic</kbd> &nbsp; <kbd>Amp</kbd> &nbsp; <kbd>Auggie CLI</kbd> &nbsp; <kbd>Autohand Code</kbd> &nbsp;
+  <kbd>Claude Agent</kbd> &nbsp; <kbd>Cline</kbd> &nbsp; <kbd>Codebuddy Code</kbd> &nbsp; <kbd>Codex</kbd> &nbsp;
+  <kbd>Cortex Code</kbd> &nbsp; <kbd>Corust Agent</kbd> &nbsp; <kbd>crow-cli</kbd> &nbsp; <kbd>Cursor</kbd> &nbsp;
+  <kbd>DeepAgents</kbd> &nbsp; <kbd>Devin</kbd> &nbsp; <kbd>DimCode</kbd> &nbsp; <kbd>Dirac</kbd> &nbsp;
+  <kbd>Factory Droid</kbd> &nbsp; <kbd>fast-agent</kbd> &nbsp; <kbd>Gemini CLI</kbd> &nbsp; <kbd>GitHub Copilot</kbd> &nbsp;
+  <kbd>GLM Agent</kbd> &nbsp; <kbd>goose</kbd> &nbsp; <kbd>Grok Build</kbd> &nbsp; <kbd>Harn</kbd> &nbsp;
+  <kbd>Junie</kbd> &nbsp; <kbd>Kilo</kbd> &nbsp; <kbd>Kimi CLI</kbd> &nbsp; <kbd>Minion Code</kbd> &nbsp;
+  <kbd>Mistral Vibe</kbd> &nbsp; <kbd>Nova</kbd> &nbsp; <kbd>OpenCode</kbd> &nbsp; <kbd>pi ACP</kbd> &nbsp;
+  <kbd>Poolside</kbd> &nbsp; <kbd>Qoder CLI</kbd> &nbsp; <kbd>Qwen Code</kbd> &nbsp; <kbd>siGit Code</kbd> &nbsp;
+  <kbd>Stakpak</kbd> &nbsp; <kbd>VT Code</kbd>
+</p>
 
-| Platform | Architecture          | Packages      |
-| -------- | --------------------- | ------------- |
-| macOS    | Apple Silicon (arm64) | DMG, ZIP      |
-| Windows  | x64                   | NSIS EXE      |
-| Linux    | x64                   | AppImage, DEB |
+---
 
-Installers are currently **unsigned** (no macOS notarization / Windows code signing). Gatekeeper or SmartScreen may warn; download only from this repo’s Releases.
+## Leader models &amp; providers
 
-```bash
-# macOS / Linux — in the folder that contains SHA256SUMS and the installer
-shasum -a 256 -c SHA256SUMS
+Configure in **Settings** (encrypted on disk). Leader uses Mastra’s model router (`provider/model`).
 
-# Windows PowerShell
-Get-FileHash .\SwarmDesk-Agent-0.1.0-win-x64.exe -Algorithm SHA256
-```
+### Built-in providers
 
-After install: open the app → configure Leader API keys in **Settings** → open a project → register workers (built-in presets or Registry) → chat.
-
-### Supported agents (Workers)
-
-#### Built-in presets
-
-| Agent           | Role focus                        | Notes                                       |
-| --------------- | --------------------------------- | ------------------------------------------- |
-| **Claude Code** | coder (+ plan, research, general) | Via `@agentclientprotocol/claude-agent-acp` |
-| **Codex CLI**   | review (+ coder, test, general)   | Via `@zed-industries/codex-acp`             |
-| **OpenCode**    | general (+ coder, plan, test)     | Native `opencode acp`                       |
-
-Worker roles used for delegation: `plan` · `coder` · `review` · `test` · `research` · `general`.
-
-#### ACP Registry (bundled catalog)
-
-The app also discovers agents from the official ACP Registry (bundled offline snapshot + optional refresh). Names currently included:
-
-Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Codebuddy Code · Codex · Cortex Code · Corust Agent · crow-cli · Cursor · DeepAgents · Devin · DimCode · Dirac · Factory Droid · fast-agent · Gemini CLI · GitHub Copilot · GLM Agent · goose · Grok Build · Harn · Junie · Kilo · Kimi CLI · Minion Code · Mistral Vibe · Nova · OpenCode · pi ACP · Poolside · Qoder CLI · Qwen Code · siGit Code · Stakpak · VT Code
-
-Registry agents need an explicit **prepare → trust → authenticate** flow before dispatch. Availability depends on platform, install method (`npx` / `uvx` / binary), and each agent’s own login.
-
-### Leader models & provider APIs
-
-The Leader uses Mastra’s model router (`provider/model`). Configure keys and models in **Settings** (encrypted on disk).
-
-#### Built-in providers
-
-| Provider        | API style            | Typical env key                                   |
-| --------------- | -------------------- | ------------------------------------------------- |
-| OpenAI          | OpenAI               | `OPENAI_API_KEY`                                  |
-| Anthropic       | Anthropic Messages   | `ANTHROPIC_API_KEY`                               |
+| Provider | API style | Key |
+| -------- | --------- | --- |
+| OpenAI | OpenAI | `OPENAI_API_KEY` |
+| Anthropic | Anthropic Messages | `ANTHROPIC_API_KEY` |
 | Google (Gemini) | Google Generative AI | `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_API_KEY` |
-| xAI (Grok)      | OpenAI-compatible    | `XAI_API_KEY`                                     |
-| DeepSeek        | OpenAI-compatible    | `DEEPSEEK_API_KEY`                                |
+| xAI (Grok) | OpenAI-compatible | `XAI_API_KEY` |
+| DeepSeek | OpenAI-compatible | `DEEPSEEK_API_KEY` |
 
-#### Custom / gateway APIs
+### Custom / gateway APIs
 
-| Style                    | Use for                                                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| **OpenAI-compatible**    | OpenRouter, Ollama, SiliconFlow, Azure OpenAI-compatible gateways, many local/proxy endpoints (`baseURL` + API key) |
-| **Anthropic-compatible** | Anthropic-protocol proxies                                                                                          |
-| **Google-compatible**    | Gemini-style endpoints                                                                                              |
-| **Custom**               | Other gateways mapped in Settings (id + base URL + key env)                                                         |
-
-Mastra may also resolve additional registry providers (e.g. aliases for OpenCode Zen/Go, Bedrock, OpenRouter) when configured correctly.
-
-### Platform notes
-
-- **UI language**: Chinese / English in the title bar
-- **Data**: local under `~/.config/swarmdesk-agent/` (settings, encrypted secrets, sessions)
-- **License**: [MIT](./LICENSE)
-- **Contributing / maintainers**: see [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/HANDOVER.md](./docs/HANDOVER.md)
+| Style | Typical use |
+| ----- | ----------- |
+| **OpenAI-compatible** | OpenRouter, Ollama, SiliconFlow, Azure-compatible gateways, local proxies |
+| **Anthropic-compatible** | Anthropic-protocol proxies |
+| **Google-compatible** | Gemini-style endpoints |
+| **Custom** | Other gateways (id + base URL + key env in Settings) |
 
 ---
 
-## SwarmDesk (中文)
+## Install
 
-**[EN](#swarmdesk-agent)** · **中文**
+### Desktop — macOS, Windows, Linux
 
-桌面端多智能体指挥台：由 **Mastra Supervisor（Leader）** 规划与委派，通过 **ACP** 调度本机编码 Agent（Claude Code / Codex / OpenCode 及 ACP Registry 中的 Agent）在本地项目上执行任务。
+- **[Download the latest release](https://github.com/xun404/swarmdesk-agent/releases/latest)**
+- Builds (names match `SwarmDesk-Agent-${version}-…`):
 
----
+  | Platform | Arch | Package |
+  | -------- | ---- | ------- |
+  | macOS | Apple Silicon (arm64) | DMG, ZIP |
+  | Windows | x64 | NSIS EXE |
+  | Linux | x64 | AppImage, DEB |
 
-### 它是什么
-
-SwarmDesk 是 macOS / Windows / Linux 本地桌面应用，可以：
-
-- 与 **Leader** 模型对话，由它规划并委派任务
-- 通过 **ACP（Agent Client Protocol）** 调用本机真实编码 Agent
-- 审批工具调用、查看 Worker 进度，并在重启后恢复会话上下文
-- 打开本地项目路径，查看 Git / 文件，在设置中管理模型与 API Key
-
-Agent 以**当前系统用户权限**运行（非强沙箱）。安装包包含 UI 与本地 API runtime，**不内置各 Agent CLI**——使用前请自行安装并登录对应 Agent。
-
-### 下载
-
-请从 **[GitHub Releases](https://github.com/xun404/swarmdesk-agent/releases)** 下载预编译安装包。建议使用最新 `v*` 版本，并核对同目录 `SHA256SUMS`。
-
-| 系统    | 架构                   | 安装包        |
-| ------- | ---------------------- | ------------- |
-| macOS   | Apple Silicon（arm64） | DMG、ZIP      |
-| Windows | x64                    | NSIS EXE      |
-| Linux   | x64                    | AppImage、DEB |
-
-当前安装包**未代码签名 / 未 notarize**。macOS Gatekeeper 或 Windows SmartScreen 可能提示未知来源；请仅从本仓库 Releases 下载。
+- Prefer verifying `SHA256SUMS` in the same release.
 
 ```bash
 # macOS / Linux
@@ -134,56 +194,28 @@ shasum -a 256 -c SHA256SUMS
 Get-FileHash .\SwarmDesk-Agent-0.1.0-win-x64.exe -Algorithm SHA256
 ```
 
-安装后：打开应用 → **设置**中配置 Leader 的 API Key → 打开项目 → 注册 Worker（内置预设或 Registry）→ 开始对话。
+> Installers are currently **unsigned** (no macOS notarization / Windows code signing). Gatekeeper or SmartScreen may warn — download only from this repo’s Releases.
 
-### 支持的 Agent（Worker）
+**After install:** open the app → **Settings** (Leader API keys) → open a project → register workers → chat.
 
-#### 内置预设
+---
 
-| Agent           | 主角色侧重                            | 说明                                    |
-| --------------- | ------------------------------------- | --------------------------------------- |
-| **Claude Code** | coder（兼 plan / research / general） | `@agentclientprotocol/claude-agent-acp` |
-| **Codex CLI**   | review（兼 coder / test / general）   | `@zed-industries/codex-acp`             |
-| **OpenCode**    | general（兼 coder / plan / test）     | 原生 `opencode acp`                     |
+## Community &amp; Support
 
-委派角色：`plan` · `coder` · `review` · `test` · `research` · `general`。
+- **Issues &amp; ideas:** [Open an issue](https://github.com/xun404/swarmdesk-agent/issues)
+- **Show support:** [Star](https://github.com/xun404/swarmdesk-agent) the repo
+- **Maintainers:** [CONTRIBUTING.md](./CONTRIBUTING.md) · [docs/HANDOVER.md](./docs/HANDOVER.md)
 
-#### ACP Registry（安装包内置目录快照）
+Local data lives under `~/.config/swarmdesk-agent/` (settings, encrypted secrets, sessions, registry LKG).
 
-还可从官方 ACP Registry 发现并准备 Agent（离线 bundled 快照 + 可选更新）。当前收录名称包括：
+---
 
-Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Codebuddy Code · Codex · Cortex Code · Corust Agent · crow-cli · Cursor · DeepAgents · Devin · DimCode · Dirac · Factory Droid · fast-agent · Gemini CLI · GitHub Copilot · GLM Agent · goose · Grok Build · Harn · Junie · Kilo · Kimi CLI · Minion Code · Mistral Vibe · Nova · OpenCode · pi ACP · Poolside · Qoder CLI · Qwen Code · siGit Code · Stakpak · VT Code
+## Developing
 
-Registry Agent 需完成 **准备 → 信任确认 → 认证** 后才能派发；是否可用取决于平台、安装方式（`npx` / `uvx` / binary）及各 Agent 自身登录要求。
+Want to contribute or run from source? See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-### Leader 模型与服务商接口
+---
 
-Leader 使用 Mastra 模型路由（`provider/model`）。在 **设置** 中配置密钥与模型（本地加密存储）。
+## License
 
-#### 内置服务商
-
-| 服务商           | 接口类型             | 常用环境变量 / 密钥名                             |
-| ---------------- | -------------------- | ------------------------------------------------- |
-| OpenAI           | OpenAI               | `OPENAI_API_KEY`                                  |
-| Anthropic        | Anthropic Messages   | `ANTHROPIC_API_KEY`                               |
-| Google（Gemini） | Google Generative AI | `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_API_KEY` |
-| xAI（Grok）      | OpenAI 兼容          | `XAI_API_KEY`                                     |
-| DeepSeek         | OpenAI 兼容          | `DEEPSEEK_API_KEY`                                |
-
-#### 自定义 / 网关接口
-
-| 接口类型           | 典型用途                                                                                      |
-| ------------------ | --------------------------------------------------------------------------------------------- |
-| **OpenAI 兼容**    | OpenRouter、Ollama、硅基流动、Azure OpenAI 兼容网关、各类本地/代理端点（`baseURL` + API Key） |
-| **Anthropic 兼容** | Anthropic 协议代理                                                                            |
-| **Google 兼容**    | Gemini 风格端点                                                                               |
-| **Custom**         | 在设置中配置 id、base URL 与密钥环境变量的其他网关                                            |
-
-在正确配置时，还可对接 Mastra 注册表中的其他 provider（如 OpenCode Zen/Go、Bedrock、OpenRouter 等别名）。
-
-### 其他说明
-
-- **界面语言**：标题栏可切换中文 / English
-- **本地数据**：`~/.config/swarmdesk-agent/`（配置、加密密钥、会话等）
-- **许可证**：[MIT](./LICENSE)
-- **贡献与交接**：[CONTRIBUTING.md](./CONTRIBUTING.md)、[docs/HANDOVER.md](./docs/HANDOVER.md)
+SwarmDesk is free and open source under the [MIT License](./LICENSE).
