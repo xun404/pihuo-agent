@@ -118,7 +118,11 @@ function DeepSeekLogo({ size }: { size: number }) {
 }
 
 function FallbackLogo({ id, size }: { id: string; size: number }) {
-  const label = id.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || '?'
+  const label =
+    id
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(0, 2)
+      .toUpperCase() || '?'
   return (
     <SvgFrame size={size} title={id}>
       <rect width="24" height="24" rx="6" fill="currentColor" opacity="0.15" />
@@ -145,7 +149,11 @@ export function getProviderIconMeta(providerId: string): ProviderIconMeta {
 /** @deprecated use ProviderLogo; kept for any leftover monogram callers */
 export function getProviderIcon(providerId: string): { glyph: string; color: string } {
   const meta = getProviderIconMeta(providerId)
-  const g = providerId.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || '?'
+  const g =
+    providerId
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(0, 2)
+      .toUpperCase() || '?'
   return { glyph: g, color: meta.color }
 }
 

@@ -1,92 +1,33 @@
-import { useState } from 'react'
-import type { LeaderMode, Project, Session } from '@router-agents/shared'
+import { useEffect, useState } from 'react'
+import type { LeaderMode, Project, Session, WorkerJob } from '@router-agents/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { RightPanel } from './components/RightPanel'
 import { SettingsPanel } from './components/SettingsPanel'
-import { TextPromptModal } from './components/TextPromptModal'
 import { OpenProjectModal } from './components/OpenProjectModal'
 import { useAppState } from './hooks/useAppState'
 import { I18nProvider, useI18n } from './i18n/I18nProvider'
 import type { Locale } from './i18n/locales'
-import { ThemeProvider, useTheme, type ThemeMode } from './theme/ThemeProvider'
+import { ThemeProvider } from './theme/ThemeProvider'
+import { ToastProvider, useToast } from './components/Toast'
 import { confirmAction } from './lib/native-dialogs'
 
-function LanguageSwitcher() {
-  const { locale, setLocale, t } = useI18n()
-  return (
-    <div className="seg" title={t('lang.label')} style={{ marginRight: 4 }}>
-      <button
-        type="button"
-        className={locale === 'zh' ? 'active' : ''}
-        onClick={() => setLocale('zh')}
-      >
-        {t('lang.zh')}
-      </button>
-      <button
-        type="button"
-        className={locale === 'en' ? 'active' : ''}
-        onClick={() => setLocale('en')}
-      >
-        {t('lang.en')}
-      </button>
-    </div>
-  )
-}
-
-function ThemeSwitcher() {
-  const { mode, setMode } = useTheme()
-  const { t } = useI18n()
-  const options: { id: ThemeMode; label: string }[] = [
-    { id: 'system', label: t('theme.system') },
-    { id: 'light', label: t('theme.light') },
-    { id: 'dark', label: t('theme.dark') },
-  ]
-  return (
-    <div className="seg" title={t('theme.label')} style={{ marginRight: 4 }}>
-      {options.map((opt) => (
-        <button
-          key={opt.id}
-          type="button"
-          className={mode === opt.id ? 'active' : ''}
-          onClick={() => setMode(opt.id)}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function modeLabelKey(mode: LeaderMode): 'mode.ask' | 'mode.plan' | 'mode.build' | 'mode.review' {
-  if (mode === 'ask') return 'mode.ask'
-  if (mode === 'plan') return 'mode.plan'
-  if (mode === 'build') return 'mode.build'
-  return 'mode.review'
-}
-
-type TextPromptState = {
-  title: string
-  defaultValue: string
-  placeholder?: string
-  onConfirm: (value: string) => void
-}
+const EMPTY_JOBS: WorkerJob[] = []
 
 function AppShell({
   snapshot,
-  loading,
-  error,
   serverUp,
   activeProject,
   activeSession,
-  seedDemo,
   openProject,
   createSession,
   activateSession,
   activateProject,
   setSessionMode,
+  setSessionStatus,
   deleteProject,
   deleteSession,
+  renameSession,
   toggleWorker,
   healthWorker,
   healthAllWorkers,
@@ -94,35 +35,51 @@ function AppShell({
   setWorkerModel,
   fetchWorkerModels,
   resolveApproval,
-  demoApproval,
+  resetAcpContext,
+  resolvingState,
   registerWorker,
   detectWorkers,
   refresh,
+  setSessionApprovalPolicy,
 }: ReturnType<typeof useAppState>) {
   const { t } = useI18n()
+  const { error: toastError } = useToast()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [textPrompt, setTextPrompt] = useState<TextPromptState | null>(null)
+  const [settingsTab, setSettingsTab] = useState<'general' | 'model' | 'workers' | 'about' | undefined>()
+  const [inspectorOpen, setInspectorOpen] = useState(false)
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
   const [openProjectOpen, setOpenProjectOpen] = useState(false)
 
-  const title = activeSession
-    ? `${t('app.title')} — ${activeProject?.name ?? 'project'} / ${activeSession.title}`
-    : t('app.title')
+  useEffect(() => {
+    const onOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ tab?: string }>).detail
+      if (detail?.tab === 'workers' || detail?.tab === 'model' || detail?.tab === 'general' || detail?.tab === 'about') {
+        setSettingsTab(detail.tab)
+      } else {
+        setSettingsTab('workers')
+      }
+      setSettingsOpen(true)
+      setInspectorOpen(false)
+    }
+    window.addEventListener('router-agents:open-settings', onOpen)
+    return () => window.removeEventListener('router-agents:open-settings', onOpen)
+  }, [])
 
-  /** Always show a modal so the click never feels dead (native browse is inside). */
   const onOpenProject = () => {
     setOpenProjectOpen(true)
   }
 
   const onNewSession = () => {
-    setTextPrompt({
-      title: t('prompt.sessionTitle'),
-      defaultValue: t('prompt.sessionDefault'),
-      onConfirm: (sessionTitle) => {
-        setTextPrompt(null)
-        void createSession(sessionTitle).catch((e) => alert(String(e)))
-      },
-    })
+    // Delayed naming: no title prompt at creation time.
+    // The Leader auto-names the session after the first task; the user can
+    // rename any time via the inline edit affordance in the chat header.
+    void createSession(undefined).catch((e) => toastError(String(e)))
+  }
+
+  const onRenameSession = (sessionId: string, title: string) => {
+    const trimmed = title.trim()
+    if (!trimmed) return
+    void renameSession(sessionId, trimmed).catch((e) => toastError(String(e)))
   }
 
   const onDeleteProject = (project: Project) => {
@@ -134,7 +91,7 @@ function AppShell({
       try {
         await deleteProject(project.id)
       } catch (e) {
-        alert(String(e))
+        toastError(String(e))
       }
     })()
   }
@@ -148,56 +105,25 @@ function AppShell({
       try {
         await deleteSession(session.id)
       } catch (e) {
-        alert(String(e))
+        toastError(String(e))
       }
     })()
   }
 
   const onModeChange = (mode: LeaderMode) => {
     if (!activeSession) return
-    void setSessionMode(activeSession.id, mode).catch((e) => alert(String(e)))
+    void setSessionMode(activeSession.id, mode).catch((e) => toastError(String(e)))
+  }
+
+  const leaveSettings = () => {
+    setSettingsOpen(false)
+    // Pick up sticky-error clears / model list after credentials change
+    void refresh()
   }
 
   return (
     <div className="app-root">
       <div className="window app-window">
-        <div className="titlebar">
-          <div className="traffic" aria-hidden>
-            <span className="r" />
-            <span className="y" />
-            <span className="g" />
-          </div>
-          <div className="titlebar-title">{title}</div>
-          <div className="titlebar-actions">
-            <ThemeSwitcher />
-            <LanguageSwitcher />
-            <button
-              type="button"
-              className="settings-btn"
-              title={t('settings.title')}
-              aria-label={t('settings.title')}
-              onClick={() => setSettingsOpen(true)}
-            >
-              <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>
-                ⚙
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-
-        <TextPromptModal
-          open={Boolean(textPrompt)}
-          title={textPrompt?.title ?? ''}
-          defaultValue={textPrompt?.defaultValue ?? ''}
-          placeholder={textPrompt?.placeholder}
-          confirmLabel={t('prompt.ok')}
-          cancelLabel={t('prompt.cancel')}
-          onCancel={() => setTextPrompt(null)}
-          onConfirm={(value) => textPrompt?.onConfirm(value)}
-        />
-
         <OpenProjectModal
           open={openProjectOpen}
           title={t('sidebar.openProject')}
@@ -210,99 +136,118 @@ function AppShell({
           onCancel={() => setOpenProjectOpen(false)}
           onOpen={(path) => {
             setOpenProjectOpen(false)
-            void openProject(path).catch((e) => alert(String(e)))
+            void openProject(path).catch((e) => toastError(String(e)))
           }}
         />
 
-        {error && !serverUp && (
-          <div
-            style={{
-              padding: '8px 14px',
-              background: 'var(--warning-soft)',
-              color: 'var(--warning)',
-              fontSize: 12,
-              borderBottom: '1px solid var(--border-subtle)',
-            }}
-          >
-            {t('app.bannerOffline', { error })}
-            <code style={{ marginLeft: 6 }}>{t('app.bannerCmd')}</code>
-          </div>
-        )}
-
-        <div className="shell">
-          <LeftSidebar
-            projects={snapshot.projects}
-            sessions={snapshot.sessions}
-            activeProjectId={snapshot.activeProjectId}
-            activeSessionId={snapshot.activeSessionId}
-            busySessionIds={busySessionIds}
-            onSelectSession={(s) => void activateSession(s)}
-            onSelectProject={(p) => void activateProject(p.id).catch((e) => alert(String(e)))}
-            onNewSession={onNewSession}
-            onOpenProject={onOpenProject}
-            onDeleteProject={onDeleteProject}
-            onDeleteSession={onDeleteSession}
-            onSeedDemo={() => void seedDemo().catch((e) => alert(String(e)))}
-          />
-
-          <ChatWorkspace
-            project={activeProject}
-            session={activeSession}
-            sessions={snapshot.sessions}
-            projects={snapshot.projects}
-            serverUp={serverUp}
-            onModeChange={onModeChange}
-            onOpenSettings={() => setSettingsOpen(true)}
-            settingsOpen={settingsOpen}
-            onBusySessionsChange={setBusySessionIds}
-          />
-
-          <RightPanel
+        {/* 设置全页：按线稿替换整个 shell（无项目侧栏） */}
+        {settingsOpen ? (
+          <SettingsPanel
+            onClose={leaveSettings}
+            initialTab={settingsTab}
             workers={snapshot.workers}
-            approvals={snapshot.approvals ?? []}
-            projectId={activeProject?.id ?? null}
-            sessionId={activeSession?.id ?? null}
-            memoryThreadId={activeSession?.memoryThreadId ?? null}
-            onToggle={(id, enabled) => void toggleWorker(id, enabled)}
-            onHealth={(id, depth) => void healthWorker(id, depth)}
-            onHealthAll={() => healthAllWorkers()}
-            onSetRoles={(id, body) => void setWorkerRoles(id, body)}
-            onSetModel={(id, model) => void setWorkerModel(id, model)}
-            onFetchModels={(id) => fetchWorkerModels(id)}
-            onResolveApproval={(id, decision) =>
-              void resolveApproval(id, decision).catch((e) => alert(String(e)))
-            }
-            onDemoApproval={() => void demoApproval().catch((e) => alert(String(e)))}
+            onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
+            onHealthWorker={(id, depth) => void healthWorker(id, depth)}
+            onHealthAllWorkers={() => healthAllWorkers()}
             onRegisterWorker={(body) => registerWorker(body)}
             onDetectWorkers={() => detectWorkers({ apply: true })}
             onRefreshSnapshot={() => void refresh()}
           />
-        </div>
+        ) : (
+          <div className={`shell${inspectorOpen ? ' with-inspector' : ''}`}>
+            <LeftSidebar
+              projects={snapshot.projects}
+              sessions={snapshot.sessions}
+              activeProjectId={snapshot.activeProjectId}
+              activeSessionId={snapshot.activeSessionId}
+              busySessionIds={busySessionIds}
+              onSelectSession={(s) => void activateSession(s)}
+              onSelectProject={(p) =>
+                void activateProject(p.id).catch((e) => toastError(String(e)))
+              }
+              onNewSession={onNewSession}
+              onOpenProject={onOpenProject}
+              onDeleteProject={onDeleteProject}
+              onDeleteSession={onDeleteSession}
+              onOpenSettings={(tab) => {
+                if (tab) setSettingsTab(tab)
+                setSettingsOpen(true)
+                setInspectorOpen(false)
+              }}
+            />
 
-        <div className="statusbar">
-          <span className="dot-live" style={{ opacity: serverUp ? 1 : 0.3 }} />
-          <span>{serverUp ? t('app.mastraConnected') : t('app.mastraOffline')}</span>
-          <span>·</span>
-          <span>
-            {t('app.workersCount', {
-              n: snapshot.workers.filter((w) => w.enabled).length,
-            })}
-          </span>
-          {activeProject?.defaultBranch && (
-            <>
-              <span>·</span>
-              <span className="mono">{activeProject.defaultBranch}</span>
-            </>
-          )}
-          <div className="spacer" />
-          <span>
-            {loading
-              ? t('app.loading')
-              : activeSession
-                ? `${t(modeLabelKey(activeSession.mode))} · ${t('app.modeSuffix')}`
-                : t('app.idle')}
-          </span>
-        </div>
+            <div className="main-column">
+              <ChatWorkspace
+                project={activeProject}
+                session={activeSession}
+                sessions={snapshot.sessions}
+                projects={snapshot.projects}
+                serverUp={serverUp}
+                onModeChange={onModeChange}
+                onRenameSession={onRenameSession}
+                onOpenSettings={(tab) => {
+                  if (tab) setSettingsTab(tab)
+                  setSettingsOpen(true)
+                  setInspectorOpen(false)
+                }}
+                settingsOpen={false}
+                onBusySessionsChange={setBusySessionIds}
+                onSetApprovalPolicy={(sessionId, policy) =>
+                  void setSessionApprovalPolicy(sessionId, policy).catch((e) =>
+                    toastError(String(e)),
+                  )
+                }
+                onSessionStatusChange={(sessionId, status, opts) =>
+                  setSessionStatus(sessionId, status, opts)
+                }
+                resolving={resolvingState}
+                snapshotApprovals={snapshot.approvals}
+                snapshotJobs={snapshot.jobs ?? EMPTY_JOBS}
+                snapshotWorkers={snapshot.workers}
+                onResolveApproval={(id, optionId, decision, surface) =>
+                  void resolveApproval(id, decision, optionId, surface).catch((e) =>
+                    toastError(String(e)),
+                  )
+                }
+                onResetContext={(jobId) =>
+                  void resetAcpContext(jobId).catch((e) => toastError(String(e)))
+                }
+                inspectorOpen={inspectorOpen}
+                onToggleInspector={() => setInspectorOpen((v) => !v)}
+              />
+            </div>
+
+            {inspectorOpen && (
+              <div className="inspector-host drawer">
+                <div className="drawer-panel">
+                  <RightPanel
+                    workers={snapshot.workers}
+                    approvals={snapshot.approvals ?? []}
+                    projectId={activeProject?.id ?? null}
+                    sessionId={activeSession?.id ?? null}
+                    onToggle={(id, enabled) => void toggleWorker(id, enabled)}
+                    onHealth={(id, depth) => void healthWorker(id, depth)}
+                    onHealthAll={() => healthAllWorkers()}
+                    onSetRoles={(id, body) => void setWorkerRoles(id, body)}
+                    onSetModel={(id, model, projectId) =>
+                      void setWorkerModel(id, model, projectId)
+                    }
+                    onFetchModels={(id, opts) => fetchWorkerModels(id, opts)}
+                    onResolveApproval={(id, optionId, decision, surface) =>
+                      void resolveApproval(id, decision, optionId, surface).catch(
+                        (e) => toastError(String(e)),
+                      )
+                    }
+                    resolving={resolvingState}
+                    onRegisterWorker={(body) => registerWorker(body)}
+                    onDetectWorkers={() => detectWorkers({ apply: true })}
+                    onRefreshSnapshot={() => void refresh()}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -317,7 +262,9 @@ export default function App() {
         serverLocale={state.snapshot.locale}
         onLocaleChange={(locale: Locale) => void state.setLocale(locale)}
       >
-        <AppShell {...state} />
+        <ToastProvider>
+          <AppShell {...state} />
+        </ToastProvider>
       </I18nProvider>
     </ThemeProvider>
   )

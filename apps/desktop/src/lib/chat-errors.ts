@@ -3,12 +3,7 @@
  * Full payloads / stacks go to the developer console only.
  */
 
-export type ChatErrorKind =
-  | 'missing_key'
-  | 'network'
-  | 'offline'
-  | 'model'
-  | 'generic'
+export type ChatErrorKind = 'missing_key' | 'billing' | 'network' | 'offline' | 'model' | 'generic'
 
 export type FriendlyChatError = {
   kind: ChatErrorKind
@@ -16,6 +11,8 @@ export type FriendlyChatError = {
   message: string
   /** Optional action hint */
   action?: 'open_settings'
+  /** Optional external billing/docs URL extracted from the provider error */
+  href?: string
 }
 
 function tryParseJsonBlob(raw: string): Record<string, unknown> | null {
@@ -61,26 +58,35 @@ function extractRawMessage(error: unknown): string {
  * Normalize any chat error into a friendly UI payload.
  * Always logs the original error to `console.error` for devtools.
  */
+function extractHttpUrl(text: string): string | undefined {
+  const m = text.match(/https?:\/\/[^\s)"']+/i)
+  if (!m) return undefined
+  // Trim common trailing punctuation from provider sentences
+  return m[0]!.replace(/[.,;:]+$/g, '')
+}
+
 export function formatChatError(
   error: unknown,
   copy: {
     missingKey: string
+    billing: string
     network: string
     offline: string
     model: string
     generic: string
   },
+  opts?: { log?: boolean },
 ): FriendlyChatError {
-  // Developer terminal — full fidelity
-  console.error('[chat]', error)
+  // Developer terminal — full fidelity (skip when re-formatting sticky text)
+  if (opts?.log !== false) {
+    console.error('[chat]', error)
+  }
 
   const raw = extractRawMessage(error)
   const parsed = tryParseJsonBlob(raw)
   const code =
     (typeof parsed?.code === 'string' && parsed.code) ||
-    (typeof (error as { code?: string })?.code === 'string'
-      ? (error as { code: string }).code
-      : '')
+    (typeof (error as { code?: string })?.code === 'string' ? (error as { code: string }).code : '')
   const inner =
     (typeof parsed?.error === 'string' && parsed.error) ||
     (typeof parsed?.message === 'string' && parsed.message) ||
@@ -94,6 +100,20 @@ export function formatChatError(
     )
   ) {
     return { kind: 'missing_key', message: copy.missingKey, action: 'open_settings' }
+  }
+
+  // Provider subscription / wallet exhausted (e.g. OpenCode Zen/Go)
+  if (
+    /insufficient balance|insufficient.?credit|payment required|billing|subscription.*(expired|inactive|lapsed)|quota exceeded|exceeded your.*quota|plan.*limit|余额不足|订阅.*(到期|过期)|账户余额/i.test(
+      hay,
+    )
+  ) {
+    return {
+      kind: 'billing',
+      message: copy.billing,
+      action: 'open_settings',
+      href: extractHttpUrl(inner) ?? extractHttpUrl(raw),
+    }
   }
 
   if (

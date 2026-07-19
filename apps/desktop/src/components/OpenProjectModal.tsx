@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  directoryPathFromFileList,
-  isAbsoluteFsPath,
-} from '../lib/directory-from-files'
+import { directoryPathFromFileList, isAbsoluteFsPath } from '../lib/directory-from-files'
+import { Modal } from './ui/Modal'
 
 interface Props {
   open: boolean
@@ -58,8 +56,6 @@ export function OpenProjectModal({
     }
     wasOpenRef.current = open
   }, [open])
-
-  if (!open) return null
 
   const applyPath = (picked: string) => {
     const p = picked.trim()
@@ -147,9 +143,11 @@ export function OpenProjectModal({
           const abs = resolveAbs(f)
           if (!abs) continue
           dir = directoryPathFromFileList(
-            [{ ...f, path: abs, webkitRelativePath: f.webkitRelativePath } as File & {
-              path?: string
-            }],
+            [
+              { ...f, path: abs, webkitRelativePath: f.webkitRelativePath } as File & {
+                path?: string
+              },
+            ],
             () => abs,
           )
           if (dir) break
@@ -193,108 +191,101 @@ export function OpenProjectModal({
   }
 
   return (
-    <div
-      className="settings-overlay text-prompt-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onCancel()
-      }}
+    <Modal
+      open={open}
+      onClose={onCancel}
+      label={title}
+      panelClassName="text-prompt-modal open-project-modal"
+      closeOnBackdrop={!busy}
     >
-      <div
-        className="text-prompt-modal open-project-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-prompt-title">{title}</h3>
+      <h3 className="text-prompt-title">{title}</h3>
 
-        <input
-          ref={(el) => {
-            dirInputRef.current = el
-            if (el) {
-              el.setAttribute('webkitdirectory', '')
-              el.setAttribute('directory', '')
-            }
-          }}
-          type="file"
-          multiple
-          style={{ display: 'none' }}
-          tabIndex={-1}
-          onChange={onDirInputChange}
-        />
+      <input
+        ref={(el) => {
+          dirInputRef.current = el
+          if (el) {
+            el.setAttribute('webkitdirectory', '')
+            el.setAttribute('directory', '')
+          }
+        }}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        tabIndex={-1}
+        onChange={onDirInputChange}
+      />
 
-        <label className="settings-field">
-          <span>{pathLabel}</span>
-          <div className="open-project-path-row">
-            <input
-              ref={inputRef}
-              className="settings-input mono"
-              value={path}
-              placeholder={pathPlaceholder}
-              disabled={busy}
-              onChange={(e) => {
-                setPath(e.target.value)
-                setError(null)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  if (!busy) submit()
-                }
-                if (e.key === 'Escape') {
-                  e.preventDefault()
-                  if (!busy) onCancel()
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="btn btn-soft btn-sm"
-              disabled={busy}
-              onClick={(e) => {
+      <label className="settings-field">
+        <span>{pathLabel}</span>
+        <div className="open-project-path-row">
+          <input
+            ref={inputRef}
+            className="settings-input mono"
+            value={path}
+            placeholder={pathPlaceholder}
+            disabled={busy}
+            onChange={(e) => {
+              setPath(e.target.value)
+              setError(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
                 e.preventDefault()
-                e.stopPropagation()
-                browse()
-              }}
-            >
-              {busy ? '…' : browseLabel}
-            </button>
-          </div>
-        </label>
-
-        {status && (
-          <p className="settings-field-hint" style={{ color: 'var(--accent, #6ea8fe)' }}>
-            {status}
-          </p>
-        )}
-        <p className="settings-field-hint">
-          说明：系统对话框的确认按钮可能显示为「上传」，这是 macOS/Chrome 的固定文案，
-          <strong>不会上传到网络</strong>，只是在本机选择文件夹。
-          也可在 Finder 中复制路径后粘贴到上方。
-        </p>
-        {error && <p className="settings-error">{error}</p>}
-        {path.trim() !== '' && (
-          <p
-            className="settings-field-hint mono"
-            style={{ wordBreak: 'break-all', color: 'var(--success, #3dd68c)' }}
-          >
-            ✓ {path}
-          </p>
-        )}
-        <div className="text-prompt-actions">
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={onCancel}>
-            {cancelLabel}
-          </button>
+                if (!busy) submit()
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                if (!busy) onCancel()
+              }
+            }}
+          />
           <button
             type="button"
-            className="btn btn-primary"
-            disabled={!path.trim() || busy}
-            onClick={submit}
+            className="btn btn-soft btn-sm"
+            disabled={busy}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              browse()
+            }}
           >
-            {openLabel}
+            {busy ? '…' : browseLabel}
           </button>
         </div>
+      </label>
+
+      {status && (
+        <p className="settings-field-hint" style={{ color: 'var(--accent, #6ea8fe)' }}>
+          {status}
+        </p>
+      )}
+      <p className="settings-field-hint">
+        说明：系统对话框的确认按钮可能显示为「上传」，这是 macOS/Chrome 的固定文案，
+        <strong>不会上传到网络</strong>，只是在本机选择文件夹。 也可在 Finder
+        中复制路径后粘贴到上方。
+      </p>
+      {error && <p className="settings-error">{error}</p>}
+      {path.trim() !== '' && (
+        <p
+          className="settings-field-hint mono"
+          style={{ wordBreak: 'break-all', color: 'var(--success, #3dd68c)' }}
+        >
+          ✓ {path}
+        </p>
+      )}
+      <div className="text-prompt-actions">
+        <button type="button" className="btn btn-ghost" disabled={busy} onClick={onCancel}>
+          {cancelLabel}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!path.trim() || busy}
+          onClick={submit}
+        >
+          {openLabel}
+        </button>
       </div>
-    </div>
+    </Modal>
   )
 }

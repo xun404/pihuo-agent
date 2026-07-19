@@ -36,10 +36,28 @@ describe('extractBudgetEvents', () => {
       mkMsg('user', [{ type: 'text', data: null }]),
       mkMsg('assistant', [
         { type: 'text', data: null },
-        { type: LEADER_STEP_BUDGET_PART_TYPE, data: { reason: 'max_steps', maxSteps: 10, usedSteps: 10, runId: 'r1', occurredAt: '2026-01-01' } },
+        {
+          type: LEADER_STEP_BUDGET_PART_TYPE,
+          data: {
+            reason: 'max_steps',
+            maxSteps: 10,
+            usedSteps: 10,
+            runId: 'r1',
+            occurredAt: '2026-01-01',
+          },
+        },
       ]),
       mkMsg('assistant', [
-        { type: LEADER_STEP_BUDGET_PART_TYPE, data: { reason: 'max_steps', maxSteps: 20, usedSteps: 20, runId: 'r2', occurredAt: '2026-01-02' } },
+        {
+          type: LEADER_STEP_BUDGET_PART_TYPE,
+          data: {
+            reason: 'max_steps',
+            maxSteps: 20,
+            usedSteps: 20,
+            runId: 'r2',
+            occurredAt: '2026-01-02',
+          },
+        },
       ]),
     ]
     const events = extractBudgetEvents(messages)
@@ -63,10 +81,7 @@ describe('extractBudgetEvents', () => {
   })
 
   it('skips messages without parts', () => {
-    const messages = [
-      { role: 'user' },
-      mkMsg('assistant', mkBudgetParts()),
-    ]
+    const messages = [{ role: 'user' }, mkMsg('assistant', mkBudgetParts())]
     const events = extractBudgetEvents(messages)
     assert.equal(events.length, 1)
     assert.equal(events[0].event.data.runId, 'run-1')
@@ -146,9 +161,7 @@ describe('findLatestActionableBudget', () => {
   })
 
   it('budget event in non-assistant message: user blocks, returns null', () => {
-    const messages = [
-      mkMsg('user', mkBudgetParts({ runId: 'weird', maxSteps: 5, usedSteps: 5 })),
-    ]
+    const messages = [mkMsg('user', mkBudgetParts({ runId: 'weird', maxSteps: 5, usedSteps: 5 }))]
     assert.equal(findLatestActionableBudget(messages), null)
   })
 })

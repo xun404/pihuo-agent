@@ -4,9 +4,12 @@ contextBridge.exposeInMainWorld('routerAgents', {
   platform: process.platform,
   versions: process.versions,
   isDesktop: true,
-  apiBase: process.env.VITE_MASTRA_URL ?? 'http://127.0.0.1:4111',
+  apiBase: process.env.ROUTER_DESKTOP_API_URL ?? 'http://127.0.0.1:4111',
+  getDesktopToken: () => ipcRenderer.invoke('desktop:getApiToken') as Promise<string | null>,
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
+    setThinkingIntensity: (level: 'off' | 'low' | 'medium' | 'high' | 'max') =>
+      ipcRenderer.invoke('settings:set-thinking-intensity', level),
     save: (payload: {
       leaderModel?: string
       thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'max'
@@ -26,16 +29,11 @@ contextBridge.exposeInMainWorld('routerAgents', {
     /**
      * Native OS folder picker — system dialog with "选择此文件夹", not HTML upload.
      */
-    openDirectory: (labels?: {
-      title?: string
-      buttonLabel?: string
-      message?: string
-    }) =>
+    openDirectory: (labels?: { title?: string; buttonLabel?: string; message?: string }) =>
       ipcRenderer.invoke('dialog:openDirectory', labels) as Promise<
         string | null | { ok: true; path: string } | { ok: false; reason: string }
       >,
-    confirm: (message: string) =>
-      ipcRenderer.invoke('dialog:confirm', message) as Promise<boolean>,
+    confirm: (message: string) => ipcRenderer.invoke('dialog:confirm', message) as Promise<boolean>,
     /**
      * Electron 32+ replacement for File.path (only if using file input).
      * @see https://www.electronjs.org/docs/latest/api/web-utils

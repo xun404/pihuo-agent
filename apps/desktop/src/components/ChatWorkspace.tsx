@@ -1,27 +1,53 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { LeaderMode, Project, Session } from '@router-agents/shared'
+import type {
+  ApprovalItem,
+  LeaderMode,
+  Project,
+  Session,
+  SessionApprovalPolicy,
+  WorkerJob,
+  WorkerRegistration,
+} from '@router-agents/shared'
 import { ChatPanel } from './ChatPanel'
 import { useI18n } from '../i18n/I18nProvider'
+import { IconTerminal } from './Icons'
 
 interface Props {
   project: Project | null
   session: Session | null
-  /** All known sessions — used to drop deleted ones from the keep-alive set */
   sessions: Session[]
   projects: Project[]
   serverUp: boolean
   onModeChange?: (mode: LeaderMode) => void
-  onOpenSettings?: () => void
+  /** Inline rename from chat header: (sessionId, newTitle) */
+  onRenameSession?: (sessionId: string, title: string) => void
+  onOpenSettings?: (tab?: 'general' | 'model' | 'workers' | 'about') => void
   settingsOpen?: boolean
-  /** Notify parent which sessions are currently streaming (for sidebar dots) */
   onBusySessionsChange?: (busyIds: Set<string>) => void
+  onSetApprovalPolicy?: (sessionId: string, policy: SessionApprovalPolicy) => void
+  onSessionStatusChange?: (
+    sessionId: string,
+    status: Session['status'],
+    opts?: { lastChatError?: string | null },
+  ) => void | Promise<void>
+  snapshotApprovals: ApprovalItem[]
+  snapshotJobs: WorkerJob[]
+  snapshotWorkers: WorkerRegistration[]
+  resolving?: Record<string, boolean>
+  onResolveApproval?: (
+    approvalId: string,
+    optionId: string | undefined,
+    decision: 'allow' | 'deny' | 'cancel',
+    surface: 'chat' | 'panel',
+  ) => void
+  onResetContext?: (jobId: string) => void
+  inspectorOpen?: boolean
+  onToggleInspector?: () => void
 }
 
 /**
  * Keeps multiple ChatPanel instances mounted so sessions can run in parallel.
  * Only the active session is visible; others stay alive (streams continue).
- * @see https://mastra.ai/docs/memory/message-history
- * @see https://mastra.ai/docs/long-running-agents/background-tasks
  */
 export function ChatWorkspace({
   project,
@@ -30,35 +56,50 @@ export function ChatWorkspace({
   projects,
   serverUp,
   onModeChange,
+  onRenameSession,
   onOpenSettings,
   settingsOpen,
   onBusySessionsChange,
+  onSetApprovalPolicy,
+  onSessionStatusChange,
+  snapshotApprovals,
+  snapshotJobs,
+  snapshotWorkers,
+  resolving = {},
+  onResolveApproval,
+  onResetContext,
+  inspectorOpen,
+  onToggleInspector,
 }: Props) {
   const { t } = useI18n()
-  // Session ids that stay mounted after first open (or while busy)
   const [aliveIds, setAliveIds] = useState<string[]>([])
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({})
 
-  // Open/activate → keep mounted
   useEffect(() => {
     if (!session?.id) return
     setAliveIds((prev) => (prev.includes(session.id) ? prev : [...prev, session.id]))
   }, [session?.id])
 
-  // Drop deleted sessions
   useEffect(() => {
     const valid = new Set(sessions.map((s) => s.id))
-    setAliveIds((prev) => prev.filter((id) => valid.has(id)))
+    setAliveIds((prev) => {
+      const next = prev.filter((id) => valid.has(id))
+      return next.length === prev.length ? prev : next
+    })
     setBusyMap((prev) => {
       const next: Record<string, boolean> = {}
       for (const [id, v] of Object.entries(prev)) {
         if (valid.has(id)) next[id] = v
       }
+      const prevKeys = Object.keys(prev)
+      const nextKeys = Object.keys(next)
+      if (prevKeys.length === nextKeys.length && nextKeys.every((id) => prev[id] === next[id])) {
+        return prev
+      }
       return next
     })
   }, [sessions])
 
-  // Report busy set to parent
   useEffect(() => {
     const busy = new Set(
       Object.entries(busyMap)
@@ -83,13 +124,27 @@ export function ChatWorkspace({
 
   if (!session) {
     return (
-      <main className="panel panel-center">
-        <div className="empty-state">
-          <div className="icon-lg">⌘</div>
-          <h3>{t('chat.openSession')}</h3>
-          <p>{t('chat.openSessionHint')}</p>
+      <main className="main home-main">
+        <div className="home">
+          <div className="logo-cloud" aria-hidden>
+            <IconTerminal />
+          </div>
+          <h1 className="greeting">
+            {project ? (
+              <>
+                {t('chat.greeting', { project: '\uE000' }).split('\uE000')[0]}
+                <em>{project.name}</em>
+                {t('chat.greeting', { project: '\uE000' }).split('\uE000')[1]}
+              </>
+            ) : (
+              t('chat.greetingNoProject')
+            )}
+          </h1>
+          <p className="home-hint">{t('chat.openSession')}</p>
           {!serverUp && (
-            <p style={{ color: 'var(--danger)', marginTop: 8 }}>{t('chat.serverDown')}</p>
+            <p className="home-hint" style={{ color: 'var(--danger)' }}>
+              {t('chat.serverDown')}
+            </p>
           )}
         </div>
       </main>
@@ -104,7 +159,6 @@ export function ChatWorkspace({
           <div
             key={s.id}
             className={`chat-workspace-pane${isActive ? ' active' : ''}`}
-            // Keep off-screen panes mounted (hidden) so streams continue
             aria-hidden={!isActive}
             style={{ display: isActive ? 'flex' : 'none' }}
           >
@@ -114,13 +168,31 @@ export function ChatWorkspace({
               serverUp={serverUp}
               isActive={isActive}
               onModeChange={isActive ? onModeChange : undefined}
+              onRenameSession={
+                isActive && onRenameSession ? (title) => onRenameSession(s.id, title) : undefined
+              }
               onOpenSettings={onOpenSettings}
               settingsOpen={settingsOpen}
               onBusyChange={(busy) =>
-                setBusyMap((prev) =>
-                  prev[s.id] === busy ? prev : { ...prev, [s.id]: busy },
-                )
+                setBusyMap((prev) => (prev[s.id] === busy ? prev : { ...prev, [s.id]: busy }))
               }
+              approvalPolicy={s.approvalPolicy}
+              onSetApprovalPolicy={
+                onSetApprovalPolicy ? (policy) => onSetApprovalPolicy(s.id, policy) : undefined
+              }
+              onSessionStatusChange={
+                onSessionStatusChange
+                  ? (status, opts) => onSessionStatusChange(s.id, status, opts)
+                  : undefined
+              }
+              snapshotApprovals={snapshotApprovals}
+              snapshotJobs={snapshotJobs}
+              snapshotWorkers={snapshotWorkers}
+              resolving={resolving}
+              onResolveApproval={onResolveApproval}
+              onResetContext={onResetContext}
+              inspectorOpen={inspectorOpen}
+              onToggleInspector={onToggleInspector}
             />
           </div>
         )

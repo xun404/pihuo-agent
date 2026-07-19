@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import type { WorkerKind, WorkerRegistration, WorkerRole } from '@router-agents/shared'
+import { WORKER_ROLES } from '@router-agents/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   fetchSettings,
@@ -9,8 +11,16 @@ import {
   type SettingsPayload,
   type SettingsProvider,
   type CustomProvider,
+  type CustomModelEntry,
+  type ApiStyle,
   type ThinkingIntensity,
 } from '../lib/settings'
+import {
+  api,
+  type RegistryAuthenticateResult,
+  type RegistryOperationSnapshot,
+  type RegistryPrepareResult,
+} from '../lib/api'
 import {
   buildModelId,
   defaultApiKeyEnv,
@@ -18,12 +28,86 @@ import {
   slugProviderId,
 } from '../lib/custom-provider-form'
 import { ProviderLogo, getProviderIconMeta } from '../lib/provider-icons'
+import { useTheme, type ColorPalette, type ThemeMode } from '../theme/ThemeProvider'
 
-type TabId = 'model' | 'gateway' | 'runtime' | 'about'
+/**
+ * 外观四选一：
+ * - 跟随系统 → 浅色=经典冷灰，深色=暗色
+ * - 经典 → 固定浅色冷灰
+ * - 深色 → 固定暗色
+ * - 暖色 → 固定浅色暖橙
+ */
+type AppearanceChoice = 'system' | 'classic' | 'dark' | 'warm'
+
+function appearanceChoice(mode: ThemeMode, palette: ColorPalette): AppearanceChoice {
+  if (mode === 'dark') return 'dark'
+  if (mode === 'system') return 'system'
+  // mode === 'light'
+  return palette === 'warm' ? 'warm' : 'classic'
+}
+
+function applyAppearanceChoice(
+  choice: AppearanceChoice,
+  setMode: (m: ThemeMode) => void,
+  setPalette: (p: ColorPalette) => void,
+) {
+  switch (choice) {
+    case 'system':
+      setMode('system')
+      setPalette('classic') // 系统浅色走经典
+      break
+    case 'classic':
+      setMode('light')
+      setPalette('classic')
+      break
+    case 'warm':
+      setMode('light')
+      setPalette('warm')
+      break
+    case 'dark':
+      setMode('dark')
+      break
+  }
+}
+import {
+  IconChevronLeft,
+  IconCpu,
+  IconInfo,
+  IconSettings,
+  IconWorkers,
+  WorkerBrandLogo,
+} from './Icons'
+import { roleMessageKey } from '../i18n/locales'
+import type { Locale } from '../i18n/locales'
+import { formatContextWindow, parseContextWindow } from '../lib/context-window'
+import { useToast } from './Toast'
+import { WorkerRegistryCombobox } from './WorkerRegistryCombobox'
+import {
+  createWorkerDraftFromRegistry,
+  resolveWorkerRegistrationRoute,
+} from '../lib/worker-registry'
+import { WorkerReadinessBadge } from './WorkerReadinessBadge'
+import { WorkerPrepareProgress, pollRegistryOperationUntilTerminal } from './WorkerPrepareProgress'
+import { RegistryAgentDetail } from './RegistryAgentDetail'
+import { WorkerAuthTerminalModal } from './WorkerAuthTerminalModal'
+import { useAcpRegistryCatalog } from '../hooks/useAcpRegistryCatalog'
+
+type TabId = 'general' | 'model' | 'workers' | 'about'
 
 interface Props {
-  open: boolean
   onClose: () => void
+  /** Open a specific settings tab (e.g. deep-link from WORKER_AUTH_REQUIRED CTA). */
+  initialTab?: TabId
+  workers: WorkerRegistration[]
+  onToggleWorker: (id: string, enabled: boolean) => void
+  onHealthWorker: (id: string, depth?: 'presence' | 'version' | 'acp') => void | Promise<void>
+  onHealthAllWorkers: () => void | Promise<unknown>
+  onRegisterWorker: (body: Partial<WorkerRegistration>) => Promise<void>
+  onDetectWorkers: () => Promise<{
+    recommended?: { kind: string; name: string; installed: boolean; installHint?: string }[]
+    candidates?: { kind: string; name: string; installed: boolean; installHint?: string }[]
+  } | void>
+  onRefreshSnapshot: () => void
 }
 
 const TAG_ZH: Record<string, string> = {
@@ -42,16 +126,19 @@ const TAG_EN: Record<string, string> = {
   reasoning: 'Reason',
 }
 
-/** Simple form state — OpenAI-compatible gateway, no env var clutter */
+/**
+ * Simple form state — provider-level fields only (OpenAI-compatible gateway).
+ * Model-level fields (id / contextWindow / thinkingIntensities) live on each
+ * CustomModelEntry and are managed via the inline add-model form + model list,
+ * NOT here. Saving the provider never overwrites the models[] array.
+ */
 type SimpleCustomForm = {
   name: string
   baseURL: string
   apiStyle: NonNullable<CustomProvider['apiStyle']>
-  model: string
   apiKey: string
-  contextWindow: string
-  /** Supported thinking levels for this gateway */
-  thinkingIntensities: ThinkingIntensity[]
+  /** Wireframe enable-control; default on */
+  enabled: boolean
   showAdvanced: boolean
 }
 
@@ -59,11 +146,25 @@ const emptySimpleForm = (): SimpleCustomForm => ({
   name: '',
   baseURL: '',
   apiStyle: 'openai',
-  model: '',
   apiKey: '',
+  enabled: true,
+  showAdvanced: false,
+})
+
+/**
+ * Inline "add model" form — model-level fields. Lives outside the provider
+ * form because models are appended independently to provider.models[].
+ */
+type AddModelForm = {
+  id: string
+  contextWindow: string
+  thinkingIntensities: ThinkingIntensity[]
+}
+
+const emptyAddModelForm = (): AddModelForm => ({
+  id: '',
   contextWindow: '',
   thinkingIntensities: [...DEFAULT_CUSTOM_THINKING_SUPPORT],
-  showAdvanced: false,
 })
 
 function formatCtx(n?: number): string | null {
@@ -73,13 +174,67 @@ function formatCtx(n?: number): string | null {
   return String(n)
 }
 
-export function SettingsPanel({ open, onClose }: Props) {
-  const { t, locale } = useI18n()
-  const [tab, setTab] = useState<TabId>('model')
+export function SettingsPanel({
+  onClose,
+  initialTab,
+  workers,
+  onToggleWorker,
+  onHealthWorker,
+  onHealthAllWorkers,
+  onRegisterWorker,
+  onDetectWorkers,
+  onRefreshSnapshot,
+}: Props) {
+  const { t, locale, setLocale } = useI18n()
+  const { mode: themeMode, setMode: setThemeMode, palette, setPalette } = useTheme()
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast()
+  const [tab, setTab] = useState<TabId>(initialTab ?? 'general')
+  // Sync external tab changes (e.g. "管理模型" entry pinning 'model') even
+  // when the panel is already open — useState initial value only fires on mount.
+  useEffect(() => {
+    if (initialTab) setTab(initialTab)
+  }, [initialTab])
+  const [regOpen, setRegOpen] = useState(false)
+  const [regName, setRegName] = useState('')
+  const [regCommand, setRegCommand] = useState('')
+  const [regArgs, setRegArgs] = useState('')
+  const [regKind, setRegKind] = useState<WorkerKind>('custom')
+  const [regEnv, setRegEnv] = useState<Record<string, string>>({})
+  const [regDescription, setRegDescription] = useState('')
+  const [regSelectedId, setRegSelectedId] = useState<string | null>(null)
+  const [regDistribution, setRegDistribution] = useState<'npx' | 'uvx' | 'binary'>('npx')
+  const [regManifestDigest, setRegManifestDigest] = useState<string>('')
+  const [regVersion, setRegVersion] = useState<string>('')
+  const [regTrustNoSha, setRegTrustNoSha] = useState(false)
+  const [regPrepareStatus, setRegPrepareStatus] = useState<string | null>(null)
+  const [pendingRegistryPrepare, setPendingRegistryPrepare] = useState<{
+    operation: RegistryOperationSnapshot<RegistryPrepareResult>
+    registration: Omit<Parameters<typeof api.registerRegistryWorker>[0], 'installationId'>
+  } | null>(null)
+  const [regPrimary, setRegPrimary] = useState<WorkerRole>('coder')
+  const [regRoles, setRegRoles] = useState<WorkerRole[]>(['coder', 'general'])
+  const [regEnabled, setRegEnabled] = useState(true)
+  const [regBusy, setRegBusy] = useState(false)
+  const [terminalAuth, setTerminalAuth] = useState<{
+    workerId: string
+    workerName: string
+    methodId: string
+  } | null>(null)
+  const [agentAuthOperation, setAgentAuthOperation] = useState<{
+    workerId: string
+    snapshot: RegistryOperationSnapshot<RegistryAuthenticateResult>
+  } | null>(null)
+  const agentAuthControllerRef = useRef<AbortController | null>(null)
+  const [secretEditor, setSecretEditor] = useState<{
+    workerId: string
+    workerName: string
+    envVarNames: string[]
+  } | null>(null)
+  const [secretBusy, setSecretBusy] = useState(false)
+  const secretControllerRef = useRef<AbortController | null>(null)
+  const [detecting, setDetecting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [okMsg, setOkMsg] = useState<string | null>(null)
   const [data, setData] = useState<SettingsPayload | null>(null)
   const [leaderModel, setLeaderModel] = useState('')
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({})
@@ -88,15 +243,32 @@ export function SettingsPanel({ open, onClose }: Props) {
   const [customProviders, setCustomProviders] = useState<CustomProvider[]>([])
   const [form, setForm] = useState<SimpleCustomForm>(emptySimpleForm())
   const [editingId, setEditingId] = useState<string | null>(null)
+  /** Inline "add model" form (model-level fields), separate from provider form */
+  const [addModelForm, setAddModelForm] = useState<AddModelForm>(emptyAddModelForm())
+  const [showAddModel, setShowAddModel] = useState(false)
+  /** Which model is expanded for inline editing (null = none) */
+  const [editingModelId, setEditingModelId] = useState<string | null>(null)
+  /** Inline edit-model form (mirrors AddModelForm fields) */
+  const [editModelForm, setEditModelForm] = useState<AddModelForm>(emptyAddModelForm())
   /** Explicit provider selection (sidebar); falls back from leaderModel */
   const [focusProviderId, setFocusProviderId] = useState<string | null>(null)
   const [leaderMaxSteps, setLeaderMaxSteps] = useState<number | null>(null)
   const [leaderMaxStepsDraft, setLeaderMaxStepsDraft] = useState<string>('')
   const [leaderMaxStepsError, setLeaderMaxStepsError] = useState<string | null>(null)
+  const [selectionStatus, setSelectionStatus] = useState<
+    'featured' | 'not_featured' | 'registry_unknown' | null
+  >(null)
+  const {
+    options: workerRegistry,
+    loading: workerRegistryLoading,
+    error: workerRegistryError,
+  } = useAcpRegistryCatalog({
+    enabled: regOpen,
+    fetchCatalog: (signal, refresh) => api.getWorkerRegistry(signal, refresh),
+  })
 
   const load = useCallback(async () => {
     setLoading(true)
-    setError(null)
     try {
       const s = await fetchSettings()
       setData(s)
@@ -115,28 +287,44 @@ export function SettingsPanel({ open, onClose }: Props) {
       setLeaderMaxSteps(steps)
       setLeaderMaxStepsDraft(String(steps))
       setLeaderMaxStepsError(null)
+      // Featured catalog: keep current selection visible + status chip
+      try {
+        const feat = await api.getModelsCatalog({
+          featured: true,
+          current: s.settings.leaderModel,
+        })
+        setSelectionStatus(feat.currentSelection?.status ?? null)
+      } catch {
+        setSelectionStatus(null)
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      toastError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [toastError])
 
   useEffect(() => {
-    if (open) {
-      setTab('model')
-      setOkMsg(null)
-      setForm(emptySimpleForm())
-      setEditingId(null)
-      setShowKey(false)
-      setLeaderMaxStepsError(null)
-      void load()
-    }
-  }, [open, load])
+    setTab(initialTab ?? 'general')
+    setForm(emptySimpleForm())
+    setEditingId(null)
+    setShowKey(false)
+    setLeaderMaxStepsError(null)
+    setRegOpen(false)
+    void load()
+  }, [load])
+
+  useEffect(
+    () => () => {
+      agentAuthControllerRef.current?.abort()
+      secretControllerRef.current?.abort()
+    },
+    [],
+  )
 
   const selectedProvider: SettingsProvider | undefined = useMemo(() => {
     if (!data) return undefined
-    if (focusProviderId) {
+    if (focusProviderId && focusProviderId !== '__new__') {
       const hit = data.providers.find((p) => p.id === focusProviderId)
       if (hit) return hit
     }
@@ -148,8 +336,29 @@ export function SettingsPanel({ open, onClose }: Props) {
     )
   }, [leaderModel, data, focusProviderId])
 
+  // When a custom provider is focused, keep the detail form hydrated (wireframe fields).
+  useEffect(() => {
+    if (!selectedProvider?.custom || focusProviderId === '__new__') return
+    if (editingId === selectedProvider.id && form.name) return
+    const cp = customProviders.find((c) => c.id === selectedProvider.id)
+    if (cp) {
+      startEdit(cp)
+      return
+    }
+    setEditingId(selectedProvider.id)
+    // Provider-level fields only — models are managed via the model list
+    setForm({
+      ...emptySimpleForm(),
+      name: selectedProvider.name,
+      baseURL: (selectedProvider as { baseURL?: string }).baseURL ?? '',
+      apiStyle: (selectedProvider as { apiStyle?: ApiStyle }).apiStyle ?? 'openai',
+    })
+    // startEdit is stable enough for this hydration path
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProvider?.id, selectedProvider?.custom, customProviders, focusProviderId])
+
   const needsKey = selectedProvider && !selectedProvider.configured
-  const keyDraft = selectedProvider ? draftKeys[selectedProvider.apiKeyEnv] ?? '' : ''
+  const keyDraft = selectedProvider ? (draftKeys[selectedProvider.apiKeyEnv] ?? '') : ''
   const keyDirty = Boolean(keyDraft && !keyDraft.includes('••••'))
 
   const modelLabel = useMemo(() => {
@@ -161,10 +370,13 @@ export function SettingsPanel({ open, onClose }: Props) {
     return leaderModel
   }, [data, leaderModel])
 
+  /** After key save: refresh snapshot only. Keep sticky chat error until next send. */
+  const afterSecretsSaved = async () => {
+    onRefreshSnapshot()
+  }
+
   const onSave = async () => {
     setSaving(true)
-    setError(null)
-    setOkMsg(null)
     try {
       const secrets: Record<string, string | null> = {}
       for (const [k, v] of Object.entries(draftKeys)) {
@@ -174,18 +386,23 @@ export function SettingsPanel({ open, onClose }: Props) {
       if (selectedProvider && keyDraft && !keyDraft.includes('••••')) {
         secrets[selectedProvider.apiKeyEnv] = keyDraft
       }
-      await saveSettings({
+      const secretsPayload = Object.keys(secrets).length ? secrets : undefined
+      const saved = await saveSettings({
         leaderModel: leaderModel.trim(),
         leaderMaxSteps: leaderMaxSteps ?? undefined,
-        secrets: Object.keys(secrets).length ? secrets : undefined,
+        secrets: secretsPayload,
         customProviders,
       })
-      setOkMsg(t('settings.saved'))
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      toastSuccess(secretsPayload ? t('settings.keySaved') : t('settings.saved'))
       setDraftKeys({})
       setShowKey(false)
       await load()
+      if (secretsPayload) {
+        await afterSecretsSaved()
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      toastError(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
     }
@@ -194,16 +411,19 @@ export function SettingsPanel({ open, onClose }: Props) {
   const onClearKey = async (envKey: string) => {
     setSaving(true)
     try {
-      await deleteSecret(envKey)
+      const deleted = await deleteSecret(envKey)
+      if (deleted.ok === false) throw new Error(deleted.error || t('settings.apiRestartFailed'))
       setDraftKeys((d) => {
         const n = { ...d }
         delete n[envKey]
         return n
       })
+      setForm((f) => ({ ...f, apiKey: '' }))
       await load()
-      setOkMsg(t('settings.keyCleared'))
+      await afterSecretsSaved()
+      toastSuccess(t('settings.keyCleared'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      toastError(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
     }
@@ -218,11 +438,39 @@ export function SettingsPanel({ open, onClose }: Props) {
       const next = p.models[0]?.id ?? `${p.id}/`
       setLeaderModel(next)
     }
+    // Wireframe: custom provider detail shows 名称 / 接口类型 / Base URL
+    if (p.custom) {
+      const cp = customProviders.find((c) => c.id === p.id)
+      if (cp) startEdit(cp)
+      else {
+        setEditingId(p.id)
+        setForm({
+          ...emptySimpleForm(),
+          name: p.name,
+          baseURL: '',
+          apiStyle: 'openai',
+        })
+      }
+    } else {
+      resetForm()
+    }
+  }
+
+  const workerLogoClass = (kind?: string) => {
+    const k = (kind ?? '').toLowerCase()
+    if (k === 'claude' || k.includes('claude')) return 'claude'
+    if (k === 'codex' || k.includes('codex')) return 'codex'
+    if (k === 'opencode' || k.includes('opencode')) return 'opencode'
+    return 'custom'
   }
 
   const pickModel = (id: string) => {
     setLeaderModel(id)
     setCustomModel(false)
+    void api
+      .getModelsCatalog({ featured: true, current: id })
+      .then((feat) => setSelectionStatus(feat.currentSelection?.status ?? null))
+      .catch(() => setSelectionStatus(null))
   }
 
   const resetForm = () => {
@@ -232,79 +480,319 @@ export function SettingsPanel({ open, onClose }: Props) {
 
   const startEdit = (p: CustomProvider) => {
     setEditingId(p.id)
-    const mid = p.models[0]?.id ?? ''
+    // Provider-level fields only — model-level fields live on each model entry
     setForm({
       name: p.name,
       baseURL: p.baseURL ?? '',
       apiStyle: p.apiStyle ?? 'openai',
-      model: shortModelName(mid, p.id) || p.models[0]?.label || '',
       apiKey: '',
-      contextWindow: p.contextWindow != null ? String(p.contextWindow) : '',
-      thinkingIntensities:
-        p.thinkingIntensities && p.thinkingIntensities.length > 0
-          ? [...p.thinkingIntensities]
-          : [...DEFAULT_CUSTOM_THINKING_SUPPORT],
+      enabled: p.enabled !== false,
       showAdvanced: false,
     })
   }
 
-  const saveCustomForm = () => {
+  /**
+   * Build a CustomProvider from provider-level form fields.
+   * CRITICAL: preserves the existing provider's models[] array — does NOT
+   * overwrite it with a single model. Models are added/removed via the
+   * dedicated add-model form / remove buttons, not via the provider save.
+   *
+   * For a brand-new provider (editingId === null), at least one model must
+   * already be staged (via the add-model form) — enforced here.
+   */
+  const buildCustomFromForm = (): CustomProvider | null => {
     const name = form.name.trim()
-    const modelInput = form.model.trim()
-    if (!name || !modelInput) {
-      setError(t('settings.customRequired'))
-      return
+    if (!name) {
+      toastError(t('settings.customRequired'))
+      return null
     }
 
     const id = editingId ?? slugProviderId(name, form.baseURL)
-    const builtinIds = new Set(
-      (data?.providers ?? []).filter((p) => !p.custom).map((p) => p.id),
-    )
+    const builtinIds = new Set((data?.providers ?? []).filter((p) => !p.custom).map((p) => p.id))
     if (builtinIds.has(id) && !editingId) {
-      setError(t('settings.customIdTaken'))
-      return
+      toastError(t('settings.customIdTaken'))
+      return null
     }
 
-    const apiKeyEnv = defaultApiKeyEnv(id)
-    const modelId = buildModelId(id, modelInput)
-    const modelLabelNext = shortModelName(modelId, id)
+    // Preserve existing models when editing; for new providers, require ≥1 staged model.
+    const existing = editingId
+      ? customProviders.find((c) => c.id === editingId)
+      : customProviders.find((c) => c.id === id)
+    const models = existing?.models ?? []
+    if (models.length === 0) {
+      toastError(t('settings.customModelRequired'))
+      return null
+    }
+
+    const apiKeyEnv = existing?.apiKeyEnv ?? defaultApiKeyEnv(id)
     const baseURL = form.baseURL.trim() || undefined
     const apiStyle = form.apiStyle ?? 'openai'
-    const ctxRaw = form.contextWindow.trim()
-    const contextWindow = ctxRaw && Number.isFinite(Number(ctxRaw)) ? Number(ctxRaw) : undefined
 
-    const thinkingIntensities =
-      form.thinkingIntensities.length > 0
-        ? THINKING_INTENSITY_OPTIONS.filter((l) => form.thinkingIntensities.includes(l))
-        : (['off'] as ThinkingIntensity[])
-
-    const next: CustomProvider = {
+    return {
       id,
       name,
       apiKeyEnv,
       baseURL,
       apiStyle,
+      enabled: form.enabled,
+      models,
+    }
+  }
+
+  /** Build a CustomModelEntry from the inline add-model form. */
+  const buildModelFromAddForm = (providerId: string): CustomModelEntry | null => {
+    const idRaw = addModelForm.id.trim()
+    if (!idRaw) {
+      toastError(t('settings.customModelRequired'))
+      return null
+    }
+    const modelId = buildModelId(providerId, idRaw)
+    const contextWindow = parseContextWindow(addModelForm.contextWindow) ?? undefined
+    const thinkingIntensities =
+      addModelForm.thinkingIntensities.length > 0
+        ? THINKING_INTENSITY_OPTIONS.filter((l) => addModelForm.thinkingIntensities.includes(l))
+        : (['off'] as ThinkingIntensity[])
+    return {
+      id: modelId,
+      label: shortModelName(modelId, providerId) || idRaw,
       contextWindow,
       thinkingIntensities,
-      models: [{ id: modelId, label: modelLabelNext, contextWindow }],
     }
+  }
+
+  /** Append a model to the active provider's models[] (dedupe by id), then persist. */
+  const addModelToActiveProvider = async () => {
+    const providerId =
+      editingId ?? (form.name.trim() ? slugProviderId(form.name.trim(), form.baseURL) : null)
+    if (!providerId) {
+      toastError(t('settings.customRequired'))
+      return
+    }
+    const entry = buildModelFromAddForm(providerId)
+    if (!entry) return
+
+    // Dedupe: if model id already exists, refuse
+    const existing = customProviders.find((c) => c.id === providerId)
+    if (existing?.models.some((m) => m.id === entry.id)) {
+      toastError(t('settings.customModelTaken'))
+      return
+    }
+
+    setSaving(true)
+    try {
+      const nextList = existing
+        ? customProviders.map((c) =>
+            c.id === providerId ? { ...c, models: [...c.models, entry] } : c,
+          )
+        : [
+            ...customProviders,
+            {
+              id: providerId,
+              name: form.name.trim(),
+              apiKeyEnv: defaultApiKeyEnv(providerId),
+              baseURL: form.baseURL.trim() || undefined,
+              apiStyle: form.apiStyle ?? 'openai',
+              enabled: form.enabled,
+              models: [entry],
+            } satisfies CustomProvider,
+          ]
+      setCustomProviders(nextList)
+      // Persist immediately so the new model survives a provider-form save later
+      const secrets: Record<string, string | null> = { ...draftKeys }
+      if (form.apiKey.trim() && !form.apiKey.includes('••••')) {
+        secrets[defaultApiKeyEnv(providerId)] = form.apiKey.trim()
+      }
+      const saved = await saveSettings({
+        leaderModel: entry.id,
+        leaderMaxSteps: leaderMaxSteps ?? undefined,
+        secrets: Object.keys(secrets).length ? secrets : undefined,
+        customProviders: nextList,
+      })
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      setLeaderModel(entry.id)
+      setAddModelForm(emptyAddModelForm())
+      setShowAddModel(false)
+      setEditingId(providerId)
+      setForm((f) => ({ ...f, apiKey: '' }))
+      toastSuccess(t('settings.customModelAdded'))
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Remove a model from the active provider's models[] and persist. */
+  const removeModelFromActiveProvider = async (modelId: string) => {
+    const providerId = editingId
+    if (!providerId) return
+    const existing = customProviders.find((c) => c.id === providerId)
+    if (!existing) return
+    // Refuse to delete the last model — a provider needs ≥1
+    if (existing.models.length <= 1) {
+      toastError(t('settings.customModelLast'))
+      return
+    }
+    setSaving(true)
+    try {
+      const nextList = customProviders.map((c) =>
+        c.id === providerId ? { ...c, models: c.models.filter((m) => m.id !== modelId) } : c,
+      )
+      setCustomProviders(nextList)
+      // If we removed the active leaderModel, fall back to the first remaining
+      const remaining = existing.models.filter((m) => m.id !== modelId)
+      const nextLeader = leaderModel === modelId ? (remaining[0]?.id ?? leaderModel) : leaderModel
+      const saved = await saveSettings({
+        leaderModel: nextLeader,
+        leaderMaxSteps: leaderMaxSteps ?? undefined,
+        customProviders: nextList,
+      })
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      if (leaderModel === modelId) setLeaderModel(nextLeader)
+      toastSuccess(t('settings.customModelRemoved'))
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Open inline edit for a model: load its current fields into editModelForm. */
+  const beginEditModel = (model: CustomModelEntry) => {
+    setEditingModelId(model.id)
+    setShowAddModel(false)
+    setEditModelForm({
+      id: shortModelName(model.id, editingId ?? '') || model.label,
+      contextWindow: formatContextWindow(model.contextWindow) ?? '',
+      thinkingIntensities: [
+        ...((model as { thinkingIntensities?: ThinkingIntensity[] }).thinkingIntensities ??
+          DEFAULT_CUSTOM_THINKING_SUPPORT),
+      ],
+    })
+  }
+
+  const cancelEditModel = () => {
+    setEditingModelId(null)
+    setEditModelForm(emptyAddModelForm())
+  }
+
+  /** Persist edits to a model's contextWindow / thinkingIntensities (id unchanged). */
+  const updateModelInActiveProvider = async () => {
+    const providerId = editingId
+    const modelId = editingModelId
+    if (!providerId || !modelId) return
+    const existing = customProviders.find((c) => c.id === providerId)
+    if (!existing) return
+    const target = existing.models.find((m) => m.id === modelId)
+    if (!target) return
+
+    setSaving(true)
+    try {
+      const contextWindow = parseContextWindow(editModelForm.contextWindow) ?? undefined
+      const thinkingIntensities =
+        editModelForm.thinkingIntensities.length > 0
+          ? THINKING_INTENSITY_OPTIONS.filter((l) => editModelForm.thinkingIntensities.includes(l))
+          : (['off'] as ThinkingIntensity[])
+      const nextList = customProviders.map((c) =>
+        c.id === providerId
+          ? {
+              ...c,
+              models: c.models.map((m) =>
+                m.id === modelId ? { ...m, contextWindow, thinkingIntensities } : m,
+              ),
+            }
+          : c,
+      )
+      setCustomProviders(nextList)
+      const saved = await saveSettings({
+        leaderModel,
+        leaderMaxSteps: leaderMaxSteps ?? undefined,
+        customProviders: nextList,
+      })
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      cancelEditModel()
+      toastSuccess(t('settings.customModelUpdated'))
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveCustomForm = () => {
+    const next = buildCustomFromForm()
+    if (!next) return
 
     setCustomProviders((list) => {
       if (editingId) return list.map((p) => (p.id === editingId ? next : p))
-      if (list.some((p) => p.id === id)) return list.map((p) => (p.id === id ? next : p))
+      if (list.some((p) => p.id === next.id)) return list.map((p) => (p.id === next.id ? next : p))
       return [...list, next]
     })
 
     if (form.apiKey.trim() && !form.apiKey.includes('••••')) {
-      setDraftKeys((d) => ({ ...d, [apiKeyEnv]: form.apiKey.trim() }))
+      setDraftKeys((d) => ({ ...d, [next.apiKeyEnv]: form.apiKey.trim() }))
     }
 
-    setLeaderModel(modelId)
-    setFocusProviderId(id)
-    resetForm()
-    setError(null)
-    setOkMsg(t('settings.customDrafted'))
+    setLeaderModel(next.models[0]!.id)
+    setFocusProviderId(next.id)
+    setEditingId(next.id)
+    toastSuccess(t('settings.customDrafted'))
     setTab('model')
+  }
+
+  /** Draft custom form into list, then persist (wireframe single 保存). */
+  const saveCustomAndPersist = async () => {
+    const next = buildCustomFromForm()
+    if (!next) return
+
+    let nextList: CustomProvider[]
+    if (editingId) {
+      nextList = customProviders.map((p) => (p.id === editingId ? next : p))
+      if (!customProviders.some((p) => p.id === editingId)) nextList = [...customProviders, next]
+    } else if (customProviders.some((p) => p.id === next.id)) {
+      nextList = customProviders.map((p) => (p.id === next.id ? next : p))
+    } else {
+      nextList = [...customProviders, next]
+    }
+
+    const secrets: Record<string, string | null> = { ...draftKeys }
+    if (form.apiKey.trim() && !form.apiKey.includes('••••')) {
+      secrets[next.apiKeyEnv] = form.apiKey.trim()
+    }
+    // Drop masked placeholders
+    const cleanSecrets: Record<string, string | null> = {}
+    for (const [k, v] of Object.entries(secrets)) {
+      if (v && !String(v).includes('••••') && String(v).trim()) cleanSecrets[k] = String(v)
+    }
+
+    setSaving(true)
+    try {
+      setCustomProviders(nextList)
+      setLeaderModel(next.models[0]!.id)
+      setFocusProviderId(next.id)
+      setEditingId(next.id)
+      const secretsPayload = Object.keys(cleanSecrets).length ? cleanSecrets : undefined
+      const saved = await saveSettings({
+        leaderModel: next.models[0]!.id,
+        leaderMaxSteps: leaderMaxSteps ?? undefined,
+        secrets: secretsPayload,
+        customProviders: nextList,
+      })
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      // Persist empty key field after save so user must re-type to rotate again
+      setForm((f) => ({ ...f, apiKey: '' }))
+      toastSuccess(secretsPayload ? t('settings.keySaved') : t('settings.saved'))
+      setDraftKeys({})
+      setShowKey(false)
+      await load()
+      if (secretsPayload) {
+        await afterSecretsSaved()
+      }
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const removeCustom = (id: string) => {
@@ -329,8 +817,6 @@ export function SettingsPanel({ open, onClose }: Props) {
       return
     }
     setSaving(true)
-    setError(null)
-    setOkMsg(null)
     setLeaderMaxStepsError(null)
     try {
       const secrets: Record<string, string | null> = {}
@@ -341,19 +827,24 @@ export function SettingsPanel({ open, onClose }: Props) {
       if (selectedProvider && keyDraft && !keyDraft.includes('••••')) {
         secrets[selectedProvider.apiKeyEnv] = keyDraft
       }
-      await saveSettings({
+      const secretsPayload = Object.keys(secrets).length ? secrets : undefined
+      const saved = await saveSettings({
         leaderModel: leaderModel.trim(),
         leaderMaxSteps: parsed,
-        secrets: Object.keys(secrets).length ? secrets : undefined,
+        secrets: secretsPayload,
         customProviders,
       })
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
       setLeaderMaxSteps(parsed)
-      setOkMsg(t('settings.runtime.saveSuccess'))
+      toastSuccess(secretsPayload ? t('settings.keySaved') : t('settings.runtime.saveSuccess'))
       setDraftKeys({})
       setShowKey(false)
       await load()
+      if (secretsPayload) {
+        await afterSecretsSaved()
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      toastError(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
     }
@@ -373,62 +864,312 @@ export function SettingsPanel({ open, onClose }: Props) {
     }
   }
 
-  if (!open) return null
-
-  const tabs: { id: TabId; label: string }[] = [
-    { id: 'model', label: t('settings.tabModel') },
-    { id: 'gateway', label: t('settings.tabProviders') },
-    { id: 'runtime', label: t('settings.tabRuntime') },
-    { id: 'about', label: t('settings.tabAbout') },
+  const navItems: { id: TabId; label: string }[] = [
+    { id: 'general', label: t('settings.navGeneral') },
+    { id: 'model', label: t('settings.navModel') },
+    { id: 'workers', label: t('settings.navWorkers') },
+    { id: 'about', label: t('settings.navAbout') },
   ]
 
-  const tagText = (tag: string) =>
-    locale === 'zh' ? (TAG_ZH[tag] ?? tag) : (TAG_EN[tag] ?? tag)
+  const tagText = (tag: string) => (locale === 'zh' ? (TAG_ZH[tag] ?? tag) : (TAG_EN[tag] ?? tag))
 
-  return (
-    <div
-      className="settings-overlay"
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="settings-modal settings-modal-v3">
-        <div className="settings-head">
-          <div>
-            <h2>{t('settings.title')}</h2>
-            <p className="settings-sub">{t('settings.subtitle')}</p>
+  const selectedRegistryOption = useMemo(
+    () => workerRegistry.find((o) => o.id === regSelectedId) ?? null,
+    [workerRegistry, regSelectedId],
+  )
+  const registrationRoute = resolveWorkerRegistrationRoute(
+    regSelectedId,
+    selectedRegistryOption,
+    regManifestDigest,
+  )
+  const isRegistryPath = registrationRoute.kind !== 'custom'
+
+  const startAgentAuthentication = async (workerId: string, methodId: string) => {
+    if (agentAuthControllerRef.current) return
+    const controller = new AbortController()
+    agentAuthControllerRef.current = controller
+    try {
+      const created = await api.authenticateRegistryWorker(workerId, methodId, controller.signal)
+      setAgentAuthOperation({ workerId, snapshot: created })
+      const completed = await pollRegistryOperationUntilTerminal<RegistryAuthenticateResult>({
+        operationId: created.operationId,
+        signal: controller.signal,
+        onSnapshot: (snapshot) => setAgentAuthOperation({ workerId, snapshot }),
+      })
+      setAgentAuthOperation(null)
+      onRefreshSnapshot?.()
+      const verifiedReadiness =
+        completed.result?.worker.readiness?.status === 'ready' ||
+        completed.result?.worker.readiness?.status === 'degraded'
+      if (completed.status === 'succeeded' && verifiedReadiness) {
+        toastSuccess(t('workers.authSucceeded'))
+      } else if (completed.status === 'failed' || completed.status === 'succeeded') {
+        const readiness = completed.result?.worker.readiness
+        toastError(
+          completed.code || readiness?.code
+            ? `${completed.code ?? readiness?.code}: ${completed.error ?? readiness?.message ?? ''}`.trim()
+            : (completed.error ?? readiness?.message ?? t('workers.authFailed')),
+        )
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setAgentAuthOperation(null)
+        toastError(error instanceof Error ? error.message : t('workers.authFailed'))
+      }
+    } finally {
+      if (agentAuthControllerRef.current === controller) {
+        agentAuthControllerRef.current = null
+      }
+    }
+  }
+
+  const cancelAgentAuthentication = async () => {
+    const active = agentAuthOperation
+    if (!active) return
+    agentAuthControllerRef.current?.abort()
+    try {
+      await api.cancelRegistryOperation<RegistryAuthenticateResult>(active.snapshot.operationId)
+    } catch {
+      /* operation may already be terminal */
+    }
+    setAgentAuthOperation(null)
+    onRefreshSnapshot?.()
+  }
+
+  const closeSecretEditor = () => {
+    secretControllerRef.current?.abort()
+    setSecretEditor(null)
+  }
+
+  const saveWorkerSecrets = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!secretEditor || secretBusy) return
+    const form = event.currentTarget
+    const controller = new AbortController()
+    secretControllerRef.current = controller
+    const values = new FormData(form)
+    setSecretBusy(true)
+    try {
+      for (const envName of secretEditor.envVarNames) {
+        const value = values.get(envName)
+        if (typeof value !== 'string' || !value) continue
+        await api.setWorkerSecret(secretEditor.workerId, envName, value, controller.signal)
+      }
+      await api.probeRegistryWorker(secretEditor.workerId, controller.signal)
+      setSecretEditor(null)
+      onRefreshSnapshot?.()
+      toastSuccess(t('workers.authSucceeded'))
+      form.reset()
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        toastError(error instanceof Error ? error.message : t('workers.authFailed'))
+      }
+    } finally {
+      if (secretControllerRef.current === controller) secretControllerRef.current = null
+      setSecretBusy(false)
+    }
+  }
+
+  const resetWorkerRegistration = () => {
+    setRegName('')
+    setRegCommand('')
+    setRegArgs('')
+    setRegKind('custom')
+    setRegEnv({})
+    setRegDescription('')
+    setRegSelectedId(null)
+    setRegManifestDigest('')
+    setRegVersion('')
+    setRegTrustNoSha(false)
+    setRegPrepareStatus(null)
+    setPendingRegistryPrepare(null)
+    setRegOpen(false)
+    onRefreshSnapshot?.()
+    toastSuccess(t('settings.saved'))
+  }
+
+  const finishRegistryRegistration = async (prepared: RegistryPrepareResult) => {
+    const pending = pendingRegistryPrepare
+    if (!pending) return
+    setRegPrepareStatus(t('workers.registryRegistering'))
+    try {
+      await api.registerRegistryWorker({
+        ...pending.registration,
+        installationId: prepared.installationId,
+      })
+      resetWorkerRegistration()
+    } catch (error) {
+      setPendingRegistryPrepare(null)
+      setRegPrepareStatus(null)
+      setRegBusy(false)
+      toastError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const saveWorker = async () => {
+    if (!regName.trim()) return
+    setRegBusy(true)
+    setRegPrepareStatus(null)
+    setPendingRegistryPrepare(null)
+    let operationStarted = false
+    try {
+      const roles = regRoles.includes(regPrimary)
+        ? regRoles
+        : ([regPrimary, ...regRoles] as WorkerRole[])
+
+      // Registry path: Owner prepare → register (never trust client command)
+      if (registrationRoute.kind === 'registry_unavailable') {
+        throw new Error(t('workers.registrySelectionUnavailable'))
+      }
+      if (registrationRoute.kind === 'registry') {
+        const selectedRegistryOption = registrationRoute.option
+        const dist = selectedRegistryOption.distributions?.includes(regDistribution)
+          ? regDistribution
+          : selectedRegistryOption.distribution
+        const operation = await api.prepareRegistryAgent({
+          registryId: selectedRegistryOption.id,
+          version: regVersion || selectedRegistryOption.version,
+          distribution: dist,
+          manifestDigest: regManifestDigest,
+          trust: regTrustNoSha
+            ? {
+                explicitNoSha: true,
+                acceptedAt: new Date().toISOString(),
+              }
+            : undefined,
+        })
+        setPendingRegistryPrepare({
+          operation,
+          registration: {
+            registryId: selectedRegistryOption.id,
+            version: regVersion || selectedRegistryOption.version,
+            distribution: dist,
+            manifestDigest: regManifestDigest,
+            name: regName.trim(),
+            primaryRole: regPrimary,
+            roles,
+            enabled: regEnabled,
+          },
+        })
+        operationStarted = true
+        return
+      } else {
+        // Custom / manual path
+        if (!onRegisterWorker || !regCommand.trim()) return
+        const args = regArgs.trim().split(/\s+/).filter(Boolean)
+        await onRegisterWorker({
+          name: regName.trim(),
+          command: regCommand.trim(),
+          args,
+          env: Object.keys(regEnv).length > 0 ? regEnv : undefined,
+          kind: regKind,
+          primaryRole: regPrimary,
+          roles,
+          enabled: regEnabled,
+          description: regDescription.trim() || undefined,
+        })
+      }
+      resetWorkerRegistration()
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : String(e))
+      setRegPrepareStatus(null)
+    } finally {
+      if (!operationStarted) setRegBusy(false)
+    }
+  }
+
+  const body = (
+    <div className="settings-body settings-page-body">
+      {loading && <p className="settings-muted">{t('app.loading')}</p>}
+
+      {!loading && tab === 'general' && (
+        <div className="settings-general">
+          <h2 className="settings-page-title">{t('settings.navGeneral')}</h2>
+          <p className="settings-page-desc">{t('settings.descGeneral')}</p>
+          <div className="settings-form-card">
+            <div className="settings-row card-row">
+              <div className="lbl-block">
+                <div className="lbl">{t('settings.appearance')}</div>
+                <div className="sub">{t('settings.appearanceDesc')}</div>
+              </div>
+              <select
+                className="field-select settings-select"
+                style={{ minWidth: 140, width: 'auto' }}
+                value={appearanceChoice(themeMode, palette)}
+                onChange={(e) =>
+                  applyAppearanceChoice(
+                    e.target.value as AppearanceChoice,
+                    setThemeMode,
+                    setPalette,
+                  )
+                }
+                aria-label={t('settings.appearance')}
+              >
+                <option value="system">{t('appearance.system')}</option>
+                <option value="classic">{t('appearance.classic')}</option>
+                <option value="dark">{t('appearance.dark')}</option>
+                <option value="warm">{t('appearance.warm')}</option>
+              </select>
+            </div>
+            <div className="settings-row card-row">
+              <div className="lbl-block">
+                <div className="lbl">{t('settings.language')}</div>
+                <div className="sub">{t('settings.languageDesc')}</div>
+              </div>
+              <select
+                className="field-select settings-select"
+                style={{ minWidth: 140, width: 'auto' }}
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as Locale)}
+                aria-label={t('settings.language')}
+              >
+                <option value="zh">{t('lang.zh')}</option>
+                <option value="en">{t('lang.en')}</option>
+              </select>
+            </div>
+            <div className="settings-row card-row">
+              <div className="lbl-block">
+                <div className="lbl">{t('settings.runtime.leaderMaxSteps')}</div>
+                <div className="sub">{t('settings.runtime.leaderMaxStepsDesc')}</div>
+              </div>
+              <input
+                type="number"
+                className="field-input settings-select"
+                style={{ width: 100 }}
+                min={10}
+                max={1000}
+                value={leaderMaxStepsDraft}
+                onChange={(e) => handleStepsChange(e.target.value)}
+                onBlur={() => {
+                  if (leaderMaxStepsError == null && leaderMaxStepsDraft.trim()) {
+                    void onSaveRuntime()
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && leaderMaxStepsError == null) {
+                    e.preventDefault()
+                    void onSaveRuntime()
+                  }
+                }}
+                aria-label={t('settings.runtime.leaderMaxSteps')}
+              />
+            </div>
+            {leaderMaxStepsError && <p className="settings-error">{leaderMaxStepsError}</p>}
           </div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            {t('settings.close')}
-          </button>
         </div>
+      )}
 
-        <div className="settings-tabs">
-          {tabs.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={tab === item.id ? 'active' : ''}
-              onClick={() => setTab(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="settings-body">
-          {loading && <p className="settings-muted">{t('app.loading')}</p>}
-          {error && <p className="settings-error">{error}</p>}
-          {okMsg && <p className="settings-ok">{okMsg}</p>}
-
-          {data && !loading && tab === 'model' && (
-            <div className="settings-model-layout">
-              <aside className="settings-provider-rail" aria-label={t('settings.provider')}>
-                <div className="settings-rail-label">{t('settings.provider')}</div>
-                {data.providers.map((p) => {
-                  const active = selectedProvider?.id === p.id
+      {data && !loading && tab === 'model' && (
+        <div className="settings-model-page">
+          <h2 className="settings-page-title">{t('settings.navModel')}</h2>
+          <p className="settings-page-desc">{t('settings.descModel')}</p>
+          <div className="settings-model-layout">
+            <aside className="settings-provider-rail" aria-label={t('settings.provider')}>
+              <div className="settings-rail-label">{t('settings.providerBuiltin')}</div>
+              {data.providers
+                .filter((p) => !p.custom)
+                .map((p) => {
+                  const active = selectedProvider?.id === p.id && focusProviderId !== '__new__'
                   const meta = getProviderIconMeta(p.id)
                   return (
                     <button
@@ -446,9 +1187,6 @@ export function SettingsPanel({ open, onClose }: Props) {
                       </span>
                       <span className="settings-rail-text">
                         <span className="settings-rail-name">{p.name}</span>
-                        {p.custom && (
-                          <span className="settings-rail-badge">{t('settings.customBadge')}</span>
-                        )}
                       </span>
                       <span
                         className={`settings-rail-dot${p.configured ? ' on' : ''}`}
@@ -457,471 +1195,1145 @@ export function SettingsPanel({ open, onClose }: Props) {
                     </button>
                   )
                 })}
-                <button
-                  type="button"
-                  className="settings-rail-add"
-                  onClick={() => setTab('gateway')}
-                >
-                  + {t('settings.addCustomProvider')}
-                </button>
-              </aside>
-
-              <div className="settings-model-main">
-                <div className="settings-active-bar">
-                  <div>
-                    <div className="settings-active-label">{t('settings.current')}</div>
-                    <div className="settings-active-title">{modelLabel}</div>
-                    <div className="settings-active-id mono">{leaderModel || '—'}</div>
-                  </div>
-                  <div className="settings-active-status">
-                    {selectedProvider?.configured ? (
-                      <span className="badge badge-green">{t('settings.keyReady')}</span>
-                    ) : (
-                      <span className="badge badge-warn">{t('settings.needKey')}</span>
-                    )}
-                  </div>
-                </div>
-
-                <section className="settings-section">
-                  <div className="settings-section-head">
-                    <h3>{t('settings.pickModel')}</h3>
-                    {selectedProvider?.docsUrl && (
-                      <a
-                        className="settings-link-inline"
-                        href={selectedProvider.docsUrl}
-                        target="_blank"
-                        rel="noreferrer"
+              <div className="settings-rail-label" style={{ marginTop: 12 }}>
+                {t('settings.providerCustom')}
+              </div>
+              {data.providers
+                .filter((p) => p.custom)
+                .map((p) => {
+                  const active =
+                    (selectedProvider?.id === p.id || editingId === p.id) &&
+                    focusProviderId !== '__new__'
+                  const meta = getProviderIconMeta(p.id)
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`settings-rail-item${active ? ' active' : ''}`}
+                      onClick={() => pickProvider(p)}
+                    >
+                      <span
+                        className="settings-rail-icon"
+                        style={{ background: `${meta.color}22` }}
+                        aria-hidden
                       >
-                        {t('settings.modelDocs')} ↗
-                      </a>
-                    )}
-                  </div>
-                  <div className="settings-model-list" role="listbox" aria-label={t('settings.pickModel')}>
-                    {(selectedProvider?.models ?? []).map((m) => {
-                      const active = leaderModel === m.id
-                      const tag = (m as { tag?: string }).tag
-                      const ctx = formatCtx((m as { contextWindow?: number }).contextWindow)
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          role="option"
-                          aria-selected={active}
-                          className={`settings-model-row${active ? ' active' : ''}`}
-                          onClick={() => pickModel(m.id)}
-                        >
-                          <span className="settings-model-row-main">
-                            <span className="settings-model-row-label">{m.label}</span>
-                            {tag && (
-                              <span className={`model-tag tag-${tag}`}>{tagText(tag)}</span>
-                            )}
-                          </span>
-                          <span className="settings-model-row-meta">
-                            {ctx && <span className="mono">{ctx} ctx</span>}
-                            {active && <span className="settings-model-check" aria-hidden>✓</span>}
-                          </span>
-                        </button>
-                      )
-                    })}
-                    {(selectedProvider?.models ?? []).length === 0 && (
-                      <p className="settings-muted">{t('settings.customEmpty')}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm settings-model-custom-toggle"
-                    onClick={() => setCustomModel((v) => !v)}
-                  >
-                    {customModel ? t('settings.hideCustom') : t('settings.showCustom')}
-                  </button>
-                  {customModel && (
-                    <input
-                      className="settings-input mono mt-8"
-                      value={leaderModel}
-                      onChange={(e) => {
-                        setLeaderModel(e.target.value)
-                        const prefix = e.target.value.split('/')[0]
-                        if (prefix && data.providers.some((p) => p.id === prefix)) {
-                          setFocusProviderId(prefix)
-                        }
-                      }}
-                      placeholder="provider/model-name"
-                      spellCheck={false}
-                    />
-                  )}
-                </section>
+                        <ProviderLogo providerId={p.id} size={16} />
+                      </span>
+                      <span className="settings-rail-text">
+                        <span className="settings-rail-name">{p.name}</span>
+                      </span>
+                      <span
+                        className={`settings-rail-dot${p.configured ? ' on' : ''}`}
+                        title={p.configured ? t('settings.configured') : t('settings.needKey')}
+                      />
+                    </button>
+                  )
+                })}
+              <button
+                type="button"
+                className={`settings-rail-add${focusProviderId === '__new__' ? ' active' : ''}`}
+                onClick={() => {
+                  setEditingId(null)
+                  setForm(emptySimpleForm())
+                  setFocusProviderId('__new__')
+                }}
+              >
+                + {t('settings.addProvider')}
+              </button>
+            </aside>
 
-                <section className="settings-section">
-                  <div className="settings-section-head">
-                    <h3>
-                      {t('settings.providerKey', {
-                        provider: selectedProvider?.name ?? '—',
-                      })}
-                    </h3>
-                  </div>
-                  {selectedProvider?.configured && !keyDirty && !showKey ? (
-                    <div className="key-status-row">
-                      <span className="badge badge-green">{t('settings.keyReady')}</span>
+            <div className="settings-model-main">
+              {focusProviderId === '__new__' || selectedProvider?.custom || editingId ? (
+                <>
+                  <div className="settings-provider-head">
+                    <div className="pname">
+                      {focusProviderId === '__new__'
+                        ? t('settings.addProvider')
+                        : form.name || selectedProvider?.name || t('settings.editCustom')}
+                    </div>
+                    {focusProviderId !== '__new__' && (
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm"
+                        className={`enable-switch${form.enabled ? ' is-on' : ''}`}
+                        role="switch"
+                        aria-checked={form.enabled}
+                        title={t('settings.enableProvider')}
+                        aria-label={t('settings.enableProvider')}
                         onClick={() => {
-                          setShowKey(true)
-                          if (selectedProvider) {
-                            setDraftKeys((d) => ({
-                              ...d,
-                              [selectedProvider.apiKeyEnv]: '',
-                            }))
+                          const next = !form.enabled
+                          setForm((f) => ({ ...f, enabled: next }))
+                          if (editingId) {
+                            setCustomProviders((list) =>
+                              list.map((p) => (p.id === editingId ? { ...p, enabled: next } : p)),
+                            )
                           }
                         }}
                       >
-                        {t('settings.updateKey')}
+                        <span className="enable-switch-knob" aria-hidden />
                       </button>
+                    )}
+                    <span className="spacer" />
+                    <button
+                      type="button"
+                      className="settings-save-btn"
+                      disabled={saving}
+                      onClick={() => void saveCustomAndPersist()}
+                    >
+                      {saving ? t('app.loading') : t('settings.save')}
+                    </button>
+                  </div>
+                  <div className="settings-field">
+                    <label>{t('settings.customName')}</label>
+                    <input
+                      className="settings-input"
+                      value={form.name}
+                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder={t('settings.customNamePh')}
+                    />
+                    <span className="settings-field-hint">{t('settings.customNamePh')}</span>
+                  </div>
+                  <div className="settings-field">
+                    <label>{t('settings.customBaseUrl')}</label>
+                    <div className="settings-input-combo">
+                      <input
+                        className="settings-input mono settings-input-combo-main"
+                        value={form.baseURL}
+                        onChange={(e) => setForm((f) => ({ ...f, baseURL: e.target.value }))}
+                        placeholder="https://api.example.com/v1"
+                        aria-label={t('settings.customBaseUrl')}
+                      />
+                      <select
+                        className="settings-input-combo-select"
+                        value={form.apiStyle}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            apiStyle: e.target.value as NonNullable<CustomProvider['apiStyle']>,
+                          }))
+                        }
+                        aria-label={t('settings.customApiStyle')}
+                      >
+                        <option value="openai">{t('settings.styleOpenai')}</option>
+                        <option value="anthropic">{t('settings.styleAnthropic')}</option>
+                        <option value="google">{t('settings.styleGoogle')}</option>
+                      </select>
+                    </div>
+                    <span className="settings-field-hint">
+                      {t('settings.customBaseUrlHint')} · {t('settings.customApiStyleHint')}
+                    </span>
+                  </div>
+                  <div className="settings-field">
+                    <label>{t('settings.customApiKey')}</label>
+                    <input
+                      type="password"
+                      className="settings-input"
+                      autoComplete="off"
+                      value={form.apiKey}
+                      onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
+                      placeholder={
+                        selectedProvider?.configured
+                          ? t('settings.keyOptionalUpdate')
+                          : t('settings.customApiKeyPh')
+                      }
+                    />
+                    {selectedProvider?.configured && !form.apiKey.trim() && (
+                      <span className="settings-field-hint">{t('settings.keyReplaceHint')}</span>
+                    )}
+                  </div>
+                  {/* ===== 模型列表（每个模型独立：ID / 上下文 / 思考强度）===== */}
+                  <section className="settings-section settings-model-section">
+                    <div className="settings-section-head">
+                      <h3>{t('settings.modelList')}</h3>
+                      {(() => {
+                        const providerId =
+                          editingId ??
+                          (form.name.trim() ? slugProviderId(form.name.trim(), form.baseURL) : null)
+                        const cnt = providerId
+                          ? (customProviders.find((c) => c.id === providerId)?.models.length ?? 0)
+                          : 0
+                        return <span className="settings-section-count">{cnt}</span>
+                      })()}
+                    </div>
+                    <div className="settings-model-list">
+                      {(() => {
+                        const providerId =
+                          editingId ??
+                          (form.name.trim() ? slugProviderId(form.name.trim(), form.baseURL) : null)
+                        const models = providerId
+                          ? (customProviders.find((c) => c.id === providerId)?.models ?? [])
+                          : []
+                        if (models.length === 0 && !showAddModel) {
+                          return (
+                            <p className="settings-muted settings-model-empty">
+                              {t('settings.customEmpty')}
+                            </p>
+                          )
+                        }
+                        return models.map((m) => {
+                          const active = leaderModel === m.id
+                          const isEditing = editingModelId === m.id
+                          const ctx = formatCtx((m as { contextWindow?: number }).contextWindow)
+                          const thinks =
+                            (m as { thinkingIntensities?: ThinkingIntensity[] })
+                              .thinkingIntensities ?? []
+                          return (
+                            <div key={m.id} className={`model-card${active ? ' active' : ''}`}>
+                              <div
+                                className="model-card-head"
+                                onClick={() => {
+                                  pickModel(m.id)
+                                  if (isEditing) cancelEditModel()
+                                  else beginEditModel(m)
+                                }}
+                              >
+                                <span className="m-mid">
+                                  <span className="m-name">
+                                    {m.id.includes('/')
+                                      ? m.id.split('/').slice(1).join('/')
+                                      : m.label}
+                                  </span>
+                                  <span className="m-id">{m.id}</span>
+                                </span>
+                                <span className="meta">
+                                  {ctx && <span className="ctx">{ctx}</span>}
+                                  {thinks.length > 0 && (
+                                    <span className="think-tags">
+                                      {thinks.slice(0, 4).map((lv) => (
+                                        <span key={lv} className={lv === 'off' ? 'off' : ''}>
+                                          {lv}
+                                        </span>
+                                      ))}
+                                    </span>
+                                  )}
+                                </span>
+                                {isEditing ? (
+                                  <div
+                                    className="edit-actions"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="btn-ghost btn-sm"
+                                      disabled={saving}
+                                      onClick={cancelEditModel}
+                                    >
+                                      {t('settings.cancelEdit')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="settings-save-btn btn-sm"
+                                      disabled={saving}
+                                      onClick={() => void updateModelInActiveProvider()}
+                                    >
+                                      {saving ? t('app.loading') : t('settings.save')}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="remove-btn"
+                                    title={t('settings.removeModel')}
+                                    aria-label={t('settings.removeModel')}
+                                    disabled={saving || models.length <= 1}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void removeModelFromActiveProvider(m.id)
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                              {isEditing && (
+                                <div className="model-card-body">
+                                  <div>
+                                    <div className="field-label">{t('settings.ctxWindow')}</div>
+                                    <input
+                                      className="settings-input mono"
+                                      value={editModelForm.contextWindow}
+                                      onChange={(e) =>
+                                        setEditModelForm((f) => ({
+                                          ...f,
+                                          contextWindow: e.target.value,
+                                        }))
+                                      }
+                                      placeholder={t('settings.ctxWindowPh')}
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="field-label">
+                                      {t('settings.perModelThinking')}
+                                    </div>
+                                    <div className="think-support-grid" role="group">
+                                      {THINKING_INTENSITY_OPTIONS.map((level) => {
+                                        const checked =
+                                          editModelForm.thinkingIntensities.includes(level)
+                                        return (
+                                          <button
+                                            key={level}
+                                            type="button"
+                                            className={`think-support-chip${checked ? ' on' : ''}`}
+                                            aria-pressed={checked}
+                                            onClick={() => {
+                                              setEditModelForm((f) => {
+                                                const set = new Set(f.thinkingIntensities)
+                                                if (set.has(level)) set.delete(level)
+                                                else set.add(level)
+                                                const next = THINKING_INTENSITY_OPTIONS.filter(
+                                                  (l) => set.has(l),
+                                                )
+                                                return {
+                                                  ...f,
+                                                  thinkingIntensities:
+                                                    next.length > 0
+                                                      ? next
+                                                      : (['off'] as ThinkingIntensity[]),
+                                                }
+                                              })
+                                            }}
+                                          >
+                                            {level}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })
+                      })()}
+
+                      {/* 行内添加模型表单（展开态）*/}
+                      {showAddModel ? (
+                        <div className="add-model-inline">
+                          <div className="inline-title">
+                            <span className="dot" aria-hidden />
+                            {t('settings.addModelInline')}
+                          </div>
+                          <div className="settings-field">
+                            <label>{t('settings.modelId')}</label>
+                            <input
+                              className="settings-input mono"
+                              value={addModelForm.id}
+                              onChange={(e) =>
+                                setAddModelForm((f) => ({ ...f, id: e.target.value }))
+                              }
+                              placeholder={t('settings.customModelPh')}
+                            />
+                            <span className="settings-field-hint">
+                              {t('settings.customModelHint')}
+                            </span>
+                          </div>
+                          <div className="add-model-inline-body">
+                            <div className="settings-field">
+                              <label>{t('settings.ctxWindow')}</label>
+                              <input
+                                className="settings-input mono"
+                                value={addModelForm.contextWindow}
+                                onChange={(e) =>
+                                  setAddModelForm((f) => ({
+                                    ...f,
+                                    contextWindow: e.target.value,
+                                  }))
+                                }
+                                placeholder={t('settings.ctxWindowPh')}
+                              />
+                              <span className="settings-field-hint">
+                                {t('settings.ctxWindowHint')}
+                              </span>
+                            </div>
+                            <div className="settings-field">
+                              <label>{t('settings.perModelThinking')}</label>
+                              <div className="think-support-grid" role="group">
+                                {THINKING_INTENSITY_OPTIONS.map((level) => {
+                                  const checked = addModelForm.thinkingIntensities.includes(level)
+                                  return (
+                                    <button
+                                      key={level}
+                                      type="button"
+                                      className={`think-support-chip${checked ? ' on' : ''}`}
+                                      aria-pressed={checked}
+                                      onClick={() => {
+                                        setAddModelForm((f) => {
+                                          const set = new Set(f.thinkingIntensities)
+                                          if (set.has(level)) set.delete(level)
+                                          else set.add(level)
+                                          const next = THINKING_INTENSITY_OPTIONS.filter((l) =>
+                                            set.has(l),
+                                          )
+                                          return {
+                                            ...f,
+                                            thinkingIntensities:
+                                              next.length > 0
+                                                ? next
+                                                : (['off'] as ThinkingIntensity[]),
+                                          }
+                                        })
+                                      }}
+                                    >
+                                      <span className="box" aria-hidden />
+                                      {level}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                              <span className="settings-field-hint">
+                                {t('settings.perModelThinkingHint')}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="add-model-inline-actions">
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={() => {
+                                setAddModelForm(emptyAddModelForm())
+                                setShowAddModel(false)
+                              }}
+                            >
+                              {t('settings.cancelEdit')}
+                            </button>
+                            <button
+                              type="button"
+                              className="settings-save-btn"
+                              disabled={saving}
+                              onClick={() => void addModelToActiveProvider()}
+                            >
+                              {saving ? t('app.loading') : t('settings.addModelBtn')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="add-model-toggle"
+                          onClick={() => {
+                            setAddModelForm(emptyAddModelForm())
+                            setShowAddModel(true)
+                          }}
+                        >
+                          <span className="plus" aria-hidden>
+                            +
+                          </span>
+                          {t('settings.addModel')}
+                        </button>
+                      )}
+                    </div>
+                    {focusProviderId === '__new__' && (
+                      <span className="settings-field-hint">{t('settings.firstModelHint')}</span>
+                    )}
+                  </section>
+                  {focusProviderId === '__new__' && (
+                    <div className="model-edit-actions">
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() =>
-                          selectedProvider && void onClearKey(selectedProvider.apiKeyEnv)
-                        }
+                        className="btn-ghost"
+                        onClick={() => {
+                          resetForm()
+                          setFocusProviderId(null)
+                        }}
                       >
-                        {t('settings.clear')}
+                        {t('settings.cancelEdit')}
+                      </button>
+                      <button type="button" className="settings-save-btn" onClick={saveCustomForm}>
+                        {t('settings.addToList')}
                       </button>
                     </div>
-                  ) : (
-                    <>
-                      <p className="settings-muted">
-                        {needsKey ? t('settings.keyRequired') : t('settings.keyOptionalUpdate')}
-                      </p>
-                      <div className="key-input-row">
-                        <input
-                          type={showKey ? 'text' : 'password'}
-                          className="settings-input"
-                          autoComplete="off"
-                          placeholder={
-                            selectedProvider?.configured
-                              ? '••••••••••••'
-                              : t('settings.enterKey')
-                          }
-                          value={keyDraft}
-                          onChange={(e) =>
-                            selectedProvider &&
-                            setDraftKeys((d) => ({
-                              ...d,
-                              [selectedProvider.apiKeyEnv]: e.target.value,
-                            }))
-                          }
-                        />
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="settings-provider-head">
+                    <div className="pname">
+                      {selectedProvider && (
+                        <span
+                          className="logo"
+                          style={{
+                            background: `${getProviderIconMeta(selectedProvider.id).color}22`,
+                          }}
+                          aria-hidden
+                        >
+                          <ProviderLogo providerId={selectedProvider.id} size={14} />
+                        </span>
+                      )}
+                      {selectedProvider?.name ?? '—'}
+                    </div>
+                    {/* 内置：以是否配置 Key 为态；滑块带文案，不可关停业务（仅展示） */}
+                    <button
+                      type="button"
+                      className={`enable-switch${selectedProvider?.configured ? ' is-on' : ''}`}
+                      role="switch"
+                      aria-checked={Boolean(selectedProvider?.configured)}
+                      title={
+                        selectedProvider?.configured
+                          ? t('settings.configured')
+                          : t('settings.needKey')
+                      }
+                      aria-label={t('settings.enableProvider')}
+                      disabled
+                    >
+                      <span className="enable-switch-knob" aria-hidden />
+                    </button>
+                    <span className="spacer" />
+                    <button
+                      type="button"
+                      className="settings-save-btn"
+                      disabled={saving || loading || !leaderModel.trim()}
+                      onClick={() => void onSave()}
+                    >
+                      {saving ? t('app.loading') : t('settings.save')}
+                    </button>
+                  </div>
+
+                  <section className="settings-section">
+                    <div className="settings-section-head">
+                      <h3>{t('settings.customApiKey')}</h3>
+                    </div>
+                    {selectedProvider?.configured && !keyDirty && !showKey ? (
+                      <div className="key-status-row">
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          onClick={() => setShowKey((v) => !v)}
+                          onClick={() => {
+                            setShowKey(true)
+                            if (selectedProvider) {
+                              setDraftKeys((d) => ({
+                                ...d,
+                                [selectedProvider.apiKeyEnv]: '',
+                              }))
+                            }
+                          }}
                         >
-                          {showKey ? t('settings.hide') : t('settings.show')}
+                          {t('settings.updateKey')}
                         </button>
-                        {selectedProvider?.configured && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            selectedProvider && void onClearKey(selectedProvider.apiKeyEnv)
+                          }
+                        >
+                          {t('settings.clear')}
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="settings-muted">
+                          {needsKey ? t('settings.keyRequired') : t('settings.keyOptionalUpdate')}
+                        </p>
+                        <div className="key-input-row">
+                          <input
+                            type={showKey ? 'text' : 'password'}
+                            className="settings-input"
+                            autoComplete="off"
+                            placeholder={
+                              selectedProvider?.configured ? '••••••••••••' : t('settings.enterKey')
+                            }
+                            value={keyDraft}
+                            onChange={(e) =>
+                              selectedProvider &&
+                              setDraftKeys((d) => ({
+                                ...d,
+                                [selectedProvider.apiKeyEnv]: e.target.value,
+                              }))
+                            }
+                          />
                           <button
                             type="button"
                             className="btn btn-ghost btn-sm"
-                            onClick={() => void onClearKey(selectedProvider.apiKeyEnv)}
+                            onClick={() => setShowKey((v) => !v)}
                           >
-                            {t('settings.clear')}
+                            {showKey ? t('settings.hide') : t('settings.show')}
                           </button>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </section>
-              </div>
-            </div>
-          )}
+                          {selectedProvider?.configured && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => void onClearKey(selectedProvider.apiKeyEnv)}
+                            >
+                              {t('settings.clear')}
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </section>
 
-          {data && !loading && tab === 'gateway' && (
-            <div className="settings-custom-providers">
-              <p className="settings-muted">{t('settings.customIntro')}</p>
-
-              {customProviders.length === 0 ? (
-                <p className="settings-muted">{t('settings.customEmpty')}</p>
-              ) : (
-                <div className="custom-provider-list">
-                  {customProviders.map((p) => (
-                    <div className="custom-provider-row" key={p.id}>
-                      <div className="custom-provider-meta">
-                        <strong>{p.name}</strong>
-                        <span className="settings-mono">
-                          {p.models[0]?.label || p.models[0]?.id || '—'}
-                          {p.apiStyle && p.apiStyle !== 'openai' ? ` · ${p.apiStyle}` : ''}
-                          {p.thinkingIntensities && p.thinkingIntensities.length > 0
-                            ? ` · ${t('settings.thinking')}: ${p.thinkingIntensities.join('/')}`
-                            : ''}
-                        </span>
-                        {p.baseURL && (
-                          <span className="settings-mono" title={p.baseURL}>
-                            {p.baseURL}
-                          </span>
-                        )}
-                      </div>
-                      <div className="custom-provider-actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            startEdit(p)
-                          }}
-                        >
-                          {t('settings.edit')}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            setLeaderModel(p.models[0]?.id ?? `${p.id}/`)
-                            setFocusProviderId(p.id)
-                            setTab('model')
-                          }}
-                        >
-                          {t('settings.useGateway')}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => removeCustom(p.id)}
-                        >
-                          {t('settings.remove')}
-                        </button>
-                      </div>
+                  <section className="settings-section">
+                    <div className="settings-section-head">
+                      <h3>{t('settings.pickModel')}</h3>
+                      <span className="settings-section-count">
+                        {(selectedProvider?.models ?? []).length}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <div
+                      className="settings-model-list"
+                      role="listbox"
+                      aria-label={t('settings.pickModel')}
+                    >
+                      {(selectedProvider?.models ?? []).map((m) => {
+                        const active = leaderModel === m.id
+                        const ctx = formatCtx((m as { contextWindow?: number }).contextWindow)
+                        const thinks =
+                          (m as { thinkingIntensities?: ThinkingIntensity[] })
+                            .thinkingIntensities ?? selectedProvider?.thinkingIntensities
+                        return (
+                          <div key={m.id} className={`model-card${active ? ' active' : ''}`}>
+                            <div className="model-card-head" onClick={() => pickModel(m.id)}>
+                              <span className="m-mid">
+                                <span className="m-name">
+                                  {m.id.includes('/')
+                                    ? m.id.split('/').slice(1).join('/')
+                                    : m.label}
+                                </span>
+                                <span className="m-id">{m.id}</span>
+                              </span>
+                              <span className="meta">
+                                {ctx && <span className="ctx">{ctx}</span>}
+                                {thinks && thinks.length > 0 && (
+                                  <span className="think-tags">
+                                    {thinks.slice(0, 4).map((lv) => (
+                                      <span key={lv} className={lv === 'off' ? 'off' : ''}>
+                                        {lv}
+                                      </span>
+                                    ))}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {(selectedProvider?.models ?? []).length === 0 && (
+                        <p className="settings-muted">{t('settings.customEmpty')}</p>
+                      )}
+                    </div>
+                  </section>
+                </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="custom-provider-form">
-                <h3>{editingId ? t('settings.editCustom') : t('settings.addCustomProvider')}</h3>
+      {!loading && tab === 'workers' && (
+        <div className="settings-workers">
+          <h2 className="settings-page-title">{t('settings.navWorkers')}</h2>
+          <p className="settings-page-desc">{t('settings.descWorkers')}</p>
 
-                <label className="settings-field">
-                  <span>{t('settings.customName')}</span>
-                  <input
-                    className="settings-input"
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder={t('settings.customNamePh')}
-                  />
-                </label>
+          <div className="worker-settings-stack">
+            <div className="settings-form-card worker-list-card">
+              <div className="worker-list-head">
+                <div className="model-list-label">{t('workers.registered')}</div>
+                <div className="worker-list-actions">
+                  <button
+                    type="button"
+                    className="settings-btn-soft"
+                    disabled={detecting || !onDetectWorkers}
+                    onClick={() => {
+                      if (!onDetectWorkers) return
+                      setDetecting(true)
+                      void Promise.resolve(onDetectWorkers())
+                        .then((res) => {
+                          const rec =
+                            res?.recommended ?? res?.candidates?.filter((c) => c.installed) ?? []
+                          if (rec.length > 0) {
+                            toastSuccess(
+                              t('workers.detectOk', {
+                                names: rec.map((c) => c.name).join(' · '),
+                              }),
+                            )
+                          } else {
+                            toastInfo(t('workers.detectNone'))
+                          }
+                          onRefreshSnapshot?.()
+                        })
+                        .catch((e) => toastError(String(e)))
+                        .finally(() => setDetecting(false))
+                    }}
+                  >
+                    {detecting ? t('app.loading') : t('workers.detect')}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-btn-soft"
+                    onClick={() => setRegOpen((v) => !v)}
+                  >
+                    {t('workers.register')}
+                  </button>
+                  {onHealthAllWorkers && (
+                    <button
+                      type="button"
+                      className="settings-btn-soft"
+                      onClick={() => void onHealthAllWorkers()}
+                    >
+                      {t('workers.healthAll')}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="settings-field-hint" style={{ margin: '0 0 4px' }}>
+                {t('workers.detectFirstRun')}
+              </p>
 
-                <label className="settings-field">
-                  <span>{t('settings.customBaseUrl')}</span>
-                  <input
-                    className="settings-input mono"
-                    value={form.baseURL}
-                    onChange={(e) => setForm((f) => ({ ...f, baseURL: e.target.value }))}
-                    placeholder="https://api.example.com/v1"
-                  />
-                  <span className="settings-field-hint">{t('settings.customBaseUrlHint')}</span>
-                </label>
-
-                <label className="settings-field">
-                  <span>{t('settings.customApiStyle')}</span>
-                  <div className="seg custom-style-seg">
-                    {(
-                      [
-                        ['openai', t('settings.styleOpenai')],
-                        ['anthropic', t('settings.styleAnthropic')],
-                        ['google', t('settings.styleGoogle')],
-                      ] as const
-                    ).map(([id, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className={form.apiStyle === id ? 'active' : ''}
-                        onClick={() => setForm((f) => ({ ...f, apiStyle: id }))}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="settings-field-hint">{t('settings.customApiStyleHint')}</span>
-                </label>
-
-                <label className="settings-field">
-                  <span>{t('settings.customModelId')}</span>
-                  <input
-                    className="settings-input mono"
-                    value={form.model}
-                    onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                    placeholder={t('settings.customModelPh')}
-                  />
-                  <span className="settings-field-hint">{t('settings.customModelHint')}</span>
-                </label>
-
-                <label className="settings-field">
-                  <span>{t('settings.customApiKey')}</span>
-                  <input
-                    type="password"
-                    className="settings-input"
-                    autoComplete="off"
-                    value={form.apiKey}
-                    onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
-                    placeholder={t('settings.customApiKeyPh')}
-                  />
-                  <span className="settings-field-hint">{t('settings.customApiKeyHint')}</span>
-                </label>
-
-                <div className="settings-field">
-                  <span>{t('settings.thinkingSupport')}</span>
-                  <p className="settings-field-hint">{t('settings.thinkingSupportHint')}</p>
-                  <div className="think-support-grid" role="group" aria-label={t('settings.thinkingSupport')}>
-                    {THINKING_INTENSITY_OPTIONS.map((level) => {
-                      const checked = form.thinkingIntensities.includes(level)
-                      return (
-                        <label key={level} className={`think-support-chip${checked ? ' on' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => {
-                              setForm((f) => {
-                                const set = new Set(f.thinkingIntensities)
-                                if (set.has(level)) set.delete(level)
-                                else set.add(level)
-                                const next = THINKING_INTENSITY_OPTIONS.filter((l) => set.has(l))
-                                return {
-                                  ...f,
-                                  thinkingIntensities: next.length > 0 ? next : (['off'] as ThinkingIntensity[]),
-                                }
-                              })
-                            }}
+              {workers.length === 0 && <p className="settings-muted">{t('workers.detectNone')}</p>}
+              {workers.map((w) => (
+                <div key={w.id} className="w-row worker-list-row worker-settings-row">
+                  <span
+                    className={`worker-logo ${workerLogoClass(w.kind)}`}
+                    title={w.name}
+                    aria-hidden
+                  >
+                    <WorkerBrandLogo kind={w.kind} size={14} />
+                  </span>
+                  <div className="info">
+                    <div className="n">
+                      {w.name}
+                      {w.health === 'healthy' && (
+                        <span className="tag-on" style={{ marginLeft: 6 }}>
+                          {t('workers.health.healthy')}
+                        </span>
+                      )}
+                      {w.readiness && (
+                        <span style={{ marginLeft: 6, verticalAlign: 'middle' }}>
+                          <WorkerReadinessBadge
+                            status={w.readiness.status}
+                            code={w.readiness.code}
+                            nextAction={w.readiness.nextAction}
+                            locale={locale === 'zh' ? 'zh' : 'en'}
                           />
-                          <span className="mono">{level}</span>
-                        </label>
+                        </span>
+                      )}
+                    </div>
+                    <div className="s mono">
+                      {w.source?.type === 'registry'
+                        ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
+                        : `${w.command} ${(w.args ?? []).join(' ')}`}
+                      {w.primaryRole
+                        ? ` · ${t('workers.primary')} ${t(roleMessageKey(w.primaryRole))}`
+                        : ''}
+                    </div>
+                    <div className="worker-role-line">
+                      <span className="role-pill on">{t(roleMessageKey(w.primaryRole))} ★</span>
+                      {(w.roles ?? [])
+                        .filter((r) => r !== w.primaryRole)
+                        .map((r) => (
+                          <span key={r} className="role-pill">
+                            {t(roleMessageKey(r))}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                  {w.readiness?.status === 'auth_required' &&
+                    (() => {
+                      const terminalMethod = w.capabilitySummary?.authMethods?.find(
+                        (candidate) => candidate.type === 'terminal',
+                      )
+                      const agentMethod = w.capabilitySummary?.authMethods?.find(
+                        (candidate) => candidate.type === 'agent',
+                      )
+                      const envMethod = w.capabilitySummary?.authMethods?.find(
+                        (candidate) => candidate.type === 'env_var',
+                      )
+                      const active =
+                        agentAuthOperation?.workerId === w.id ? agentAuthOperation.snapshot : null
+                      return (
+                        <div className="worker-settings-auth-actions">
+                          {terminalMethod && (
+                            <button
+                              type="button"
+                              className="settings-btn-soft worker-settings-auth-btn"
+                              onClick={() =>
+                                setTerminalAuth({
+                                  workerId: w.id,
+                                  workerName: w.name,
+                                  methodId: terminalMethod.id,
+                                })
+                              }
+                            >
+                              {t('workers.terminalOpen')}
+                            </button>
+                          )}
+                          {agentMethod && !active && (
+                            <button
+                              type="button"
+                              className="settings-btn-soft worker-settings-auth-btn"
+                              disabled={Boolean(agentAuthOperation)}
+                              onClick={() => void startAgentAuthentication(w.id, agentMethod.id)}
+                            >
+                              {t('workers.authAgent')}
+                            </button>
+                          )}
+                          {active && (
+                            <>
+                              <span className="settings-field-hint">
+                                {active.status === 'queued'
+                                  ? t('workers.authQueued')
+                                  : t('workers.authRunning')}
+                              </span>
+                              <button
+                                type="button"
+                                className="settings-btn-soft"
+                                onClick={() => void cancelAgentAuthentication()}
+                              >
+                                {t('workers.authCancel')}
+                              </button>
+                            </>
+                          )}
+                          {Boolean(envMethod?.envVarNames?.length) && (
+                            <button
+                              type="button"
+                              className="settings-btn-soft worker-settings-auth-btn"
+                              disabled={secretBusy}
+                              onClick={() =>
+                                setSecretEditor({
+                                  workerId: w.id,
+                                  workerName: w.name,
+                                  envVarNames: [...envMethod!.envVarNames!],
+                                })
+                              }
+                            >
+                              {t('workers.authConfigureSecrets')}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  <button
+                    type="button"
+                    className={`switch toggle${w.enabled ? ' on' : ''}`}
+                    role="switch"
+                    aria-checked={w.enabled}
+                    aria-label={t('workers.formEnabled')}
+                    onClick={() => onToggleWorker?.(w.id, !w.enabled)}
+                  />
+                </div>
+              ))}
+              {secretEditor && (
+                <form
+                  className="worker-secret-editor"
+                  onSubmit={(event) => void saveWorkerSecrets(event)}
+                >
+                  <div>
+                    <strong>{secretEditor.workerName}</strong>
+                    <p className="settings-field-hint">{t('workers.authSecretHint')}</p>
+                  </div>
+                  {secretEditor.envVarNames.map((envName) => (
+                    <label key={envName} className="settings-field">
+                      <span className="mono">{envName}</span>
+                      <input
+                        className="settings-input mono"
+                        type="password"
+                        name={envName}
+                        autoComplete="off"
+                        required
+                      />
+                    </label>
+                  ))}
+                  <div className="model-edit-actions">
+                    <button type="button" className="btn-ghost" onClick={closeSecretEditor}>
+                      {t('workers.cancel')}
+                    </button>
+                    <button type="submit" className="settings-save-btn" disabled={secretBusy}>
+                      {secretBusy ? t('app.loading') : t('workers.authSaveSecrets')}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {regOpen && (
+              <div className="settings-form-card worker-register-card">
+                <div className="worker-list-head">
+                  <div className="model-list-label">{t('workers.registerTitle')}</div>
+                </div>
+                <div className="settings-field">
+                  <label>{t('workers.registryAgent')}</label>
+                  <WorkerRegistryCombobox
+                    options={workerRegistry}
+                    selectedId={regSelectedId}
+                    loading={workerRegistryLoading}
+                    error={workerRegistryError}
+                    placeholder={t('workers.registrySearch')}
+                    loadingLabel={t('workers.registryLoading')}
+                    emptyLabel={t('workers.registryEmpty')}
+                    localInstallLabel={t('workers.registryLocalInstall')}
+                    onSelect={(option) => {
+                      if (!option) {
+                        setRegSelectedId(null)
+                        setRegManifestDigest('')
+                        setRegVersion('')
+                        return
+                      }
+                      const draft = createWorkerDraftFromRegistry(option)
+                      setRegSelectedId(draft.selectedId)
+                      setRegName(draft.name)
+                      setRegCommand(draft.command)
+                      setRegArgs(draft.args)
+                      setRegEnv(draft.env)
+                      setRegKind(draft.kind)
+                      setRegDescription(draft.description)
+                      setRegVersion(option.version)
+                      setRegManifestDigest(option.manifestDigest ?? '')
+                      setRegDistribution(option.distribution)
+                      setRegTrustNoSha(false)
+                      setRegPrimary('general')
+                      setRegRoles(['general'])
+                    }}
+                  />
+                  <span className="settings-field-hint">{t('workers.registryHint')}</span>
+                </div>
+                {selectedRegistryOption && (
+                  <div className="settings-field registry-prepare-panel">
+                    <RegistryAgentDetail
+                      option={selectedRegistryOption}
+                      distribution={regDistribution}
+                      trustNoSha={regTrustNoSha}
+                      onDistributionChange={(distribution) => {
+                        setRegDistribution(distribution)
+                        setRegTrustNoSha(false)
+                      }}
+                      onTrustNoShaChange={setRegTrustNoSha}
+                    />
+                    {selectedRegistryOption && !regManifestDigest && (
+                      <p className="settings-error" role="alert">
+                        {t('workers.registryManifestUnavailable')}
+                      </p>
+                    )}
+                    {regPrepareStatus && (
+                      <p className="settings-muted" style={{ marginTop: 8 }}>
+                        {regPrepareStatus}
+                      </p>
+                    )}
+                    {pendingRegistryPrepare && (
+                      <WorkerPrepareProgress
+                        initial={pendingRegistryPrepare.operation}
+                        onSucceeded={(result) => {
+                          void finishRegistryRegistration(result)
+                        }}
+                        onFailed={(operation) => {
+                          setRegBusy(false)
+                          if (operation.status === 'failed') {
+                            toastError(
+                              operation.code
+                                ? `${operation.code}: ${operation.error ?? ''}`.trim()
+                                : (operation.error ?? t('workers.registryPrepareFailed')),
+                            )
+                          }
+                        }}
+                        onCancel={() => setRegBusy(false)}
+                        onRetry={() => {
+                          setPendingRegistryPrepare(null)
+                          void saveWorker()
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+                {isRegistryPath && !selectedRegistryOption && (
+                  <p className="settings-error" role="alert">
+                    {t('workers.registrySelectionUnavailable')}
+                  </p>
+                )}
+                <div className="settings-field">
+                  <label>{t('workers.formName')}</label>
+                  <input
+                    className="settings-input"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                  />
+                </div>
+                {/* Registry path: command is Owner-materialized; keep custom fields for manual only */}
+                {!isRegistryPath && (
+                  <>
+                    <div className="settings-field">
+                      <label>{t('workers.formCommand')}</label>
+                      <input
+                        className="settings-input mono"
+                        value={regCommand}
+                        onChange={(e) => setRegCommand(e.target.value)}
+                        placeholder="claude / codex / opencode"
+                      />
+                    </div>
+                    <div className="settings-field">
+                      <label>{t('workers.formArgs')}</label>
+                      <input
+                        className="settings-input mono"
+                        value={regArgs}
+                        onChange={(e) => setRegArgs(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+                {isRegistryPath && (
+                  <p className="settings-field-hint">{t('workers.registryOwnerManagedHint')}</p>
+                )}
+                <div className="settings-field">
+                  <label>{t('workers.formPrimary')}</label>
+                  <select
+                    className="field-select"
+                    style={{ width: '100%', maxWidth: 280 }}
+                    value={regPrimary}
+                    onChange={(e) => {
+                      const r = e.target.value as WorkerRole
+                      setRegPrimary(r)
+                      setRegRoles((prev) =>
+                        prev.includes(r) ? prev : ([r, ...prev] as WorkerRole[]),
+                      )
+                    }}
+                  >
+                    {WORKER_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {t(roleMessageKey(r))}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="settings-field">
+                  <label>{t('workers.formRoles')}</label>
+                  <div className="role-grid">
+                    {WORKER_ROLES.map((r) => {
+                      const on = regRoles.includes(r)
+                      return (
+                        <button
+                          key={r}
+                          type="button"
+                          className={`role-chip${on ? ' on' : ''}`}
+                          onClick={() => {
+                            setRegRoles((prev) => {
+                              if (r === regPrimary) return prev
+                              return on ? prev.filter((x) => x !== r) : [...prev, r]
+                            })
+                          }}
+                        >
+                          <span className="box" aria-hidden />
+                          {t(roleMessageKey(r))}
+                          {r === regPrimary ? ' ★' : ''}
+                        </button>
                       )
                     })}
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => setForm((f) => ({ ...f, showAdvanced: !f.showAdvanced }))}
-                >
-                  {form.showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
-                </button>
-
-                {form.showAdvanced && (
-                  <label className="settings-field">
-                    <span>{t('settings.customContext')}</span>
-                    <input
-                      className="settings-input mono"
-                      type="number"
-                      min={0}
-                      value={form.contextWindow}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, contextWindow: e.target.value }))
-                      }
-                      placeholder="128000"
-                    />
-                    <span className="settings-field-hint">{t('settings.customContextHint')}</span>
-                  </label>
-                )}
-
-                <div className="custom-form-actions">
-                  {editingId && (
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={resetForm}>
-                      {t('settings.cancelEdit')}
-                    </button>
-                  )}
-                  <button type="button" className="btn btn-soft btn-sm" onClick={saveCustomForm}>
-                    {editingId ? t('settings.updateCustom') : t('settings.addToList')}
+                <div className="settings-row card-row">
+                  <div className="lbl-block">
+                    <div className="lbl">{t('workers.formEnabled')}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`switch${regEnabled ? ' on' : ''}`}
+                    role="switch"
+                    aria-checked={regEnabled}
+                    onClick={() => setRegEnabled((v) => !v)}
+                  />
+                </div>
+                <div className="model-edit-actions">
+                  <button type="button" className="btn-ghost" onClick={() => setRegOpen(false)}>
+                    {t('workers.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-save-btn"
+                    disabled={
+                      regBusy ||
+                      !regName.trim() ||
+                      (registrationRoute.kind === 'custom'
+                        ? !regCommand.trim()
+                        : registrationRoute.kind === 'registry_unavailable')
+                    }
+                    onClick={() => void saveWorker()}
+                  >
+                    {t('workers.formSave')}
                   </button>
                 </div>
-                <p className="settings-muted mt-8">{t('settings.customSaveHint')}</p>
               </div>
-            </div>
-          )}
-
-          {data && !loading && tab === 'runtime' && (
-            <div className="settings-runtime-section">
-              <h3>{t('settings.runtime.leaderMaxSteps')}</h3>
-              <p className="settings-runtime-desc">
-                {t('settings.runtime.leaderMaxStepsDesc')}
-              </p>
-              <div className="settings-runtime-field">
-                <label htmlFor="runtime-steps-input">{t('settings.runtime.leaderMaxSteps')}</label>
-                <input
-                  id="runtime-steps-input"
-                  type="number"
-                  className={`settings-runtime-input${leaderMaxStepsError ? ' input-error' : ''}`}
-                  min={10}
-                  max={1000}
-                  step={1}
-                  value={leaderMaxStepsDraft}
-                  onChange={(e) => handleStepsChange(e.target.value)}
-                />
-                {leaderMaxStepsError && (
-                  <span className="settings-runtime-error">{leaderMaxStepsError}</span>
-                )}
-              </div>
-              <div>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  disabled={saving || leaderMaxStepsError != null || !leaderMaxStepsDraft.trim()}
-                  onClick={() => void onSaveRuntime()}
-                >
-                  {saving ? t('app.loading') : t('settings.save')}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {data && !loading && tab === 'about' && (
-            <div className="settings-about">
-              <h3>{t('settings.security')}</h3>
-              <p className="settings-muted">
-                {t('settings.securityHint', {
-                  storage: data.storage,
-                  platform:
-                    data.platform ??
-                    (typeof navigator !== 'undefined' ? navigator.platform : 'os'),
-                })}
-              </p>
-              {data.safeStorageAvailable != null && (
-                <p className="settings-muted">
-                  {data.safeStorageAvailable
-                    ? t('settings.safeStorageOn')
-                    : t('settings.safeStorageOff')}
-                </p>
-              )}
-              {data.storagePath && <p className="settings-mono">{data.storagePath}</p>}
-              <h3 className="mt-8">{t('settings.sources')}</h3>
-              <p className="settings-muted">{t('settings.sourcesHint')}</p>
-              <ul className="settings-links">
-                <li>
-                  <a href="https://mastra.ai/models" target="_blank" rel="noreferrer">
-                    mastra.ai/models
-                  </a>
-                </li>
-                <li>
-                  <a href="https://models.dev/" target="_blank" rel="noreferrer">
-                    models.dev
-                  </a>
-                </li>
-              </ul>
-            </div>
-          )}
+            )}
+            {terminalAuth && (
+              <WorkerAuthTerminalModal
+                workerId={terminalAuth.workerId}
+                workerName={terminalAuth.workerName}
+                methodId={terminalAuth.methodId}
+                onClose={() => setTerminalAuth(null)}
+                onComplete={() => {
+                  setTerminalAuth(null)
+                  onRefreshSnapshot?.()
+                  toastSuccess(t('workers.terminalSucceeded'))
+                }}
+              />
+            )}
+          </div>
         </div>
+      )}
 
-        <div className="settings-foot">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            {t('settings.close')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={saving || loading || !leaderModel.trim()}
-            onClick={() => void onSave()}
-          >
-            {saving ? t('app.loading') : t('settings.save')}
-          </button>
+      {data && !loading && tab === 'about' && (
+        <div className="settings-about">
+          <h2 className="settings-page-title">{t('settings.navAbout')}</h2>
+          <p className="settings-page-desc">{t('settings.descAbout')}</p>
+          <div className="settings-form-card about-card">
+            <div className="app-name">{t('app.title')}</div>
+            <div className="ver">Desktop · 0.1.0</div>
+            <p>{t('settings.aboutBody')}</p>
+            <p className="settings-muted" style={{ marginTop: 12 }}>
+              {t('settings.securityHint', {
+                storage: data.storage,
+                platform:
+                  data.platform ?? (typeof navigator !== 'undefined' ? navigator.platform : 'os'),
+              })}
+            </p>
+            {data.storagePaths && (
+              <div className="settings-mono" style={{ marginTop: 8 }}>
+                <div>
+                  {t('settings.storageRoot')}: {data.storagePaths.root}
+                </div>
+                <div>
+                  {t('settings.storageData')}: {data.storagePaths.data}
+                </div>
+                <div>
+                  {t('settings.storageCache')}: {data.storagePaths.cache}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+    </div>
+  )
+
+  const navIcon = (id: TabId) => {
+    if (id === 'general') return <IconSettings size={16} />
+    if (id === 'model') return <IconCpu size={16} />
+    if (id === 'workers') return <IconWorkers size={16} />
+    return <IconInfo size={16} />
+  }
+
+  // 线稿 settings-shell：左侧 settings-nav（返回+四项），右侧 settings-main；无顶部大标题栏
+  return (
+    <div className="settings-shell">
+      <aside className="settings-nav" aria-label={t('settings.title')}>
+        {/* 系统 traffic lights 占位 + 拖拽区 */}
+        <div className="sidebar-top" aria-hidden />
+        <button type="button" className="settings-back" onClick={onClose}>
+          <IconChevronLeft size={14} />
+          {t('settings.back')}
+        </button>
+        <nav className="settings-nav-list">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`settings-nav-item${tab === item.id ? ' on' : ''}`}
+              onClick={() => setTab(item.id)}
+            >
+              <span className="glyph" aria-hidden>
+                {navIcon(item.id)}
+              </span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+      <div className="settings-main">{body}</div>
     </div>
   )
 }
