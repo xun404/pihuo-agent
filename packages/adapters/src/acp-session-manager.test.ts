@@ -4,10 +4,12 @@ import {
   AcpSessionManager,
   buildSessionReuseKey,
   computeExecutionFingerprint,
+  computeKeyDigest,
   resetAcpSessionManager,
 } from './acp-session-manager.js'
 import * as sessionManagerModule from './acp-session-manager.js'
 import type { SessionReuseKey, SessionEntryConfig } from './acp-session-manager.js'
+import { AcpSessionDriver } from './acp-session-driver.js'
 
 const SAFE_CWD = process.cwd()
 
@@ -32,7 +34,7 @@ function mkKey(overrides: Partial<SessionReuseKey> = {}): SessionReuseKey {
 }
 
 function keyToString(k: SessionReuseKey): string {
-  return `${k.routerSessionId}::${k.workerId}::${k.canonicalCwd}::${k.executionFingerprint.slice(0, 12)}`
+  return computeKeyDigest(k)
 }
 
 function makeFakeIdleEntry(key: SessionReuseKey): any {
@@ -40,12 +42,14 @@ function makeFakeIdleEntry(key: SessionReuseKey): any {
     key,
     state: 'idle',
     proc: { pid: 99999, exitCode: 0, signalCode: null, on: () => {}, stderr: { on: () => {} } },
-    session: {
-      prompt: () => {},
-      nextUpdate: () => Promise.resolve({ kind: 'stop', stopReason: 'end_turn' }),
+    driver: {
+      prompt: () => Promise.resolve({ ok: true, output: '', stopReason: 'end_turn' }),
+      cancel: () => Promise.resolve(),
+      close: () => {},
       dispose: () => {},
     },
-    ctx: { notify: () => Promise.resolve(), request: () => Promise.resolve() },
+    agentSessionId: 'fake-sid',
+    capabilities: {},
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
     generation: 1,
@@ -53,6 +57,209 @@ function makeFakeIdleEntry(key: SessionReuseKey): any {
     currentBinding: null,
     promptQueue: [],
     configOptions: [],
+  }
+}
+
+function emptyCatalogPort() {
+  return {
+    lookup: () => undefined,
+    listAll: () => [],
+    listByRouterSession: () => [],
+    listByWorker: () => [],
+    upsert: () => {},
+    touch: () => {},
+    markStale: () => {},
+    deleteByKey: () => {},
+    deleteByRouterSession: () => {},
+    deleteByRouterSessions: () => {},
+    deleteByWorker: () => {},
+    isAvailable: () => true,
+  }
+}
+
+describe('installation reference accounting', () => {
+  it('combines live and persisted installation references and reports legacy worker ids', () => {
+    const port = {
+      ...emptyCatalogPort(),
+      listAll: () => [
+        catalogRecord({
+          keyDigest: 'persisted-installation',
+          workerId: 'worker-persisted',
+          installationId: 'inst_persisted',
+          manifestDigest: 'sha256:persisted',
+        }),
+        catalogRecord({
+          keyDigest: 'legacy-session',
+          workerId: 'worker-legacy',
+        }),
+      ],
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port, catalogRequired: true })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    const liveKey = mkKey({ workerId: 'worker-live' })
+    const live = makeFakeIdleEntry(liveKey)
+    live.sessionConfig = mkConfig({
+      installationId: 'inst_live',
+      manifestDigest: 'sha256:live',
+    })
+    ;(mgr as any).entries.set(keyToString(liveKey), live)
+
+    assert.deepEqual(mgr.listInstallationReferences(), {
+      installationIds: ['inst_live', 'inst_persisted'],
+      legacyWorkerIds: ['worker-legacy'],
+    })
+  })
+
+  it('fails closed when the persisted catalog cannot be enumerated', () => {
+    const mgr = new AcpSessionManager({
+      catalogRequired: true,
+      catalogPort: { ...emptyCatalogPort(), listAll: undefined, isAvailable: () => true },
+    })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    assert.throws(
+      () => mgr.listInstallationReferences(),
+      (error: any) => error?.code === 'catalog_repair_required',
+    )
+  })
+
+  it('still fails closed on an unavailable durable catalog when reuse is disabled', () => {
+    const previousReuse = process.env.ACP_SESSION_REUSE
+    process.env.ACP_SESSION_REUSE = '0'
+    const mgr = new AcpSessionManager({
+      catalogRequired: true,
+      catalogPort: { ...emptyCatalogPort(), listAll: undefined, isAvailable: () => false },
+    })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    try {
+      assert.throws(
+        () => mgr.listInstallationReferences(),
+        (error: any) => error?.code === 'catalog_repair_required',
+      )
+      assert.throws(
+        () => mgr.deleteContextByWorker('worker-unavailable'),
+        (error: any) => error?.code === 'catalog_repair_required',
+      )
+    } finally {
+      if (previousReuse === undefined) delete process.env.ACP_SESSION_REUSE
+      else process.env.ACP_SESSION_REUSE = previousReuse
+    }
+  })
+
+  it('accounts for and deletes durable records even when dispatch reuse is disabled', () => {
+    const previousReuse = process.env.ACP_SESSION_REUSE
+    process.env.ACP_SESSION_REUSE = '0'
+    let listAllCalls = 0
+    let deletedWorker: string | undefined
+    const port = {
+      ...emptyCatalogPort(),
+      listAll: () => {
+        listAllCalls += 1
+        return [
+          catalogRecord({
+            keyDigest: 'reuse-disabled-installation',
+            workerId: 'worker-reuse-disabled',
+            installationId: 'inst_reuse_disabled',
+            manifestDigest: 'sha256:reuse-disabled',
+          }),
+        ]
+      },
+      listByWorker: (workerId: string) => [
+        catalogRecord({
+          keyDigest: 'reuse-disabled-worker',
+          workerId,
+          installationId: 'inst_reuse_disabled',
+        }),
+      ],
+      deleteByWorker: (workerId: string) => {
+        deletedWorker = workerId
+      },
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port, catalogRequired: true })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    try {
+      assert.deepEqual(mgr.listInstallationReferences(), {
+        installationIds: ['inst_reuse_disabled'],
+        legacyWorkerIds: [],
+      })
+      assert.equal(listAllCalls, 1)
+
+      mgr.deleteContextByWorker('worker-reuse-disabled')
+      assert.equal(deletedWorker, 'worker-reuse-disabled')
+    } finally {
+      if (previousReuse === undefined) delete process.env.ACP_SESSION_REUSE
+      else process.env.ACP_SESSION_REUSE = previousReuse
+    }
+  })
+
+  it('persists installation identity with a newly created ACP session', async () => {
+    const originalFactory = AcpSessionDriver.fromChildProcess
+    let persisted: any
+    ;(AcpSessionDriver as any).fromChildProcess = async () => ({
+      initialize: async () => ({ agentCapabilities: {} }),
+      get capabilities() {
+        return {}
+      },
+      sessionNew: async () => ({ sessionId: 'installation-session', configOptions: [] }),
+      get configOptions() {
+        return []
+      },
+      hasCapability: () => false,
+      prompt: async () => ({ ok: true, output: 'ok', stopReason: 'end_turn' }),
+      close: () => {},
+    })
+    const mgr = new AcpSessionManager({
+      catalogPort: {
+        ...emptyCatalogPort(),
+        upsert: (record: unknown) => {
+          persisted = record
+        },
+      },
+    })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    try {
+      await mgr.enqueuePrompt({
+        key: mkKey({ workerId: 'worker-installation' }),
+        config: {
+          command: process.execPath,
+          args: ['-e', 'setInterval(() => {}, 1000)'],
+          env: {},
+          model: undefined,
+          installationId: 'inst_created',
+          manifestDigest: 'sha256:created',
+        },
+        kind: 'custom',
+        task: 'create',
+        binding: { jobId: 'job-installation', sequence: 0 },
+      })
+      assert.equal(persisted?.installationId, 'inst_created')
+      assert.equal(persisted?.manifestDigest, 'sha256:created')
+    } finally {
+      await mgr.closeAll()
+      ;(AcpSessionDriver as any).fromChildProcess = originalFactory
+    }
+  })
+})
+
+function catalogRecord(overrides: Record<string, unknown> = {}) {
+  const now = new Date().toISOString()
+  return {
+    version: 1 as const,
+    keyDigest: computeKeyDigest(mkKey()),
+    routerSessionId: 'sess-1',
+    workerId: 'worker-a',
+    canonicalCwd: SAFE_CWD,
+    executionFingerprint: mkKey().executionFingerprint,
+    agentSessionId: 'private-agent-session-id',
+    capabilities: { loadSession: true, resume: true, close: false, delete: false },
+    state: 'ready' as const,
+    createdAt: now,
+    lastUsedAt: now,
+    ...overrides,
   }
 }
 
@@ -69,6 +276,7 @@ afterEach(() => {
   delete process.env.ACP_SESSION_REUSE
   delete process.env.ACP_SESSION_IDLE_MS
   delete process.env.ACP_SESSION_POOL_MAX
+  delete process.env.ACP_SESSION_CANCEL_GRACE_MS
 })
 
 describe('manager environment configuration', () => {
@@ -81,6 +289,28 @@ describe('manager environment configuration', () => {
 
     assert.equal((mgr as any).idleTimeoutMs, 12345)
     assert.equal((mgr as any).poolMax, 3)
+  })
+
+  it('falls back for invalid constructor and environment limits', () => {
+    process.env.ACP_SESSION_IDLE_MS = '-1'
+    process.env.ACP_SESSION_POOL_MAX = 'not-a-number'
+    const mgr = new AcpSessionManager({ idleTimeoutMs: 0, poolMax: -4 })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    assert.equal((mgr as any).idleTimeoutMs, 900_000)
+    assert.equal((mgr as any).poolMax, 8)
+  })
+
+  it('caps timer-backed session limits at the Node timer maximum', () => {
+    process.env.ACP_SESSION_IDLE_MS = '999999999999'
+    process.env.ACP_SESSION_CANCEL_GRACE_MS = '999999999999'
+    const mgr = new AcpSessionManager()
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    assert.equal((mgr as any).idleTimeoutMs, 2_147_483_647)
+    assert.equal((mgr as any).cancelGraceMs, 2_147_483_647)
   })
 })
 
@@ -144,6 +374,81 @@ describe('buildSessionReuseKey', () => {
 
 // -- 2. computeExecutionFingerprint --
 describe('computeExecutionFingerprint', () => {
+  it('keeps spawn-only worker secret values out of fingerprint input', () => {
+    let captured: Record<string, string> | undefined
+    const secretValue = 'target-worker-secret-value'
+    const fingerprint = computeExecutionFingerprint(
+      mkConfig({ workerSecrets: { AGENT_API_KEY: secretValue } } as Partial<SessionEntryConfig>),
+      (input) => {
+        captured = { ...input.explicitEnv }
+        return 'stable-test-fingerprint'
+      },
+    )
+    assert.equal(fingerprint, 'stable-test-fingerprint')
+    assert.equal(JSON.stringify(captured).includes(secretValue), false)
+    assert.equal(captured?.AGENT_API_KEY, undefined)
+  })
+
+  it('builds target-process env with only the selected worker secrets', () => {
+    const build = (sessionManagerModule as Record<string, unknown>).buildWorkerProcessEnv
+    assert.equal(typeof build, 'function')
+    const fn = build as (
+      config: SessionEntryConfig,
+      ambient: Record<string, string | undefined>,
+    ) => Record<string, string>
+    const selected = fn(
+      mkConfig({
+        workerSecrets: { AGENT_API_KEY: 'selected-only' },
+      } as Partial<SessionEntryConfig>),
+      { PATH: '/bin', UNRELATED_API_KEY: 'ambient-secret' },
+    )
+    const other = fn(mkConfig(), { PATH: '/bin', UNRELATED_API_KEY: 'ambient-secret' })
+    assert.equal(selected.AGENT_API_KEY, 'selected-only')
+    assert.equal(selected.UNRELATED_API_KEY, undefined)
+    assert.equal(other.AGENT_API_KEY, undefined)
+  })
+
+  it('changes when installationId or authRevision changes', () => {
+    const base = mkConfig()
+    const f1 = computeExecutionFingerprint({ ...base, installationId: 'inst_a', authRevision: 0 })
+    const f2 = computeExecutionFingerprint({ ...base, installationId: 'inst_b', authRevision: 0 })
+    const f3 = computeExecutionFingerprint({ ...base, installationId: 'inst_a', authRevision: 1 })
+    assert.notEqual(f1, f2)
+    assert.notEqual(f1, f3)
+  })
+
+  it('changes when the Registry manifest digest changes', () => {
+    const base = mkConfig({ installationId: 'inst_a' })
+    const f1 = computeExecutionFingerprint({ ...base, manifestDigest: 'sha256:first' })
+    const f2 = computeExecutionFingerprint({ ...base, manifestDigest: 'sha256:second' })
+    assert.notEqual(f1, f2)
+  })
+
+  it('changes when runtimeProfile or workerSecretRevisionHmac changes', () => {
+    const base = mkConfig()
+    const f1 = computeExecutionFingerprint({ ...base, runtimeProfile: 'generic-acp' })
+    const f2 = computeExecutionFingerprint({ ...base, runtimeProfile: 'opencode' })
+    const f3 = computeExecutionFingerprint({
+      ...base,
+      runtimeProfile: 'generic-acp',
+      workerSecretRevisionHmac: 'abc',
+    })
+    assert.notEqual(f1, f2)
+    assert.notEqual(f1, f3)
+  })
+
+  it('does not collide when env delimiters appear in keys or values', () => {
+    const f1 = computeExecutionFingerprint(mkConfig({ env: { A: 'b|C=d' } }))
+    const f2 = computeExecutionFingerprint(mkConfig({ env: { A: 'b', C: 'd' } }))
+    assert.notEqual(f1, f2)
+  })
+
+  it('is stable across explicit env insertion order', () => {
+    const f1 = computeExecutionFingerprint(mkConfig({ env: { B: '2', A: '1' } }))
+    const f2 = computeExecutionFingerprint(mkConfig({ env: { A: '1', B: '2' } }))
+    assert.equal(f1, f2)
+  })
+
   it('different model produces different fingerprint', () => {
     const f1 = computeExecutionFingerprint(mkConfig({ model: 'm1' }))
     const f2 = computeExecutionFingerprint(mkConfig({ model: 'm2' }))
@@ -223,6 +528,93 @@ describe('computeExecutionFingerprint', () => {
   })
 })
 
+// -- P0-2: Stable fingerprint across instances --
+describe('stable fingerprint across instances', () => {
+  it('delegates to an explicitly supplied fingerprintFn', () => {
+    let callCount = 0
+    const stableFn = (input: { command: string; args: readonly string[]; model?: string }) => {
+      callCount++
+      return `stable-${input.command}-${input.args.join('-')}-${input.model}`
+    }
+
+    const f = computeExecutionFingerprint(
+      mkConfig({ command: 'cmd', args: ['a', 'b'], model: 'm1' }),
+      stableFn,
+    )
+    assert.equal(callCount, 1)
+    assert.match(f, /^stable-cmd-a-b-m1$/)
+  })
+
+  it('falls back to an in-memory HMAC when no fingerprintFn is supplied', () => {
+    const f = computeExecutionFingerprint(mkConfig())
+    assert.match(f, /^[0-9a-f]{64}$/)
+  })
+
+  it('same fingerprintFn produces same fingerprint across manager instances', () => {
+    let callCount = 0
+    const stableFn = () => {
+      callCount++
+      return 'same-fingerprint'
+    }
+    const cfg = mkConfig()
+
+    const f1 = computeExecutionFingerprint(cfg, stableFn)
+
+    // Simulate process restart: recreate the manager with same fingerprintFn
+    resetAcpSessionManager()
+    const f2 = computeExecutionFingerprint(cfg, stableFn)
+
+    assert.equal(f1, f2)
+    assert.equal(callCount, 2)
+  })
+
+  it('computeKeyDigest is stable for identical structured keys', () => {
+    const stableFn = () => 'fixed-fp'
+
+    const key1 = buildSessionReuseKey(
+      { routerSessionId: 's', workerId: 'w', cwd: SAFE_CWD, config: mkConfig() },
+      stableFn,
+    )
+    const key2 = buildSessionReuseKey(
+      { routerSessionId: 's', workerId: 'w', cwd: SAFE_CWD, config: mkConfig() },
+      stableFn,
+    )
+    const d1 = computeKeyDigest(key1)
+    const d2 = computeKeyDigest(key2)
+    assert.equal(d1, d2)
+    assert.match(d1, /^[0-9a-f]{64}$/)
+  })
+
+  it('computeKeyDigest always returns a stable SHA-256 digest', () => {
+    const key = mkKey()
+    const d = computeKeyDigest(key)
+    assert.match(d, /^[0-9a-f]{64}$/)
+  })
+
+  it('keeps fingerprint providers isolated per manager instance', () => {
+    const first = new AcpSessionManager({
+      fingerprintFn: () => 'first-fingerprint',
+    })
+    const second = new AcpSessionManager({
+      fingerprintFn: () => 'second-fingerprint',
+    })
+    try {
+      const params = {
+        routerSessionId: 'sess-isolated',
+        workerId: 'worker-isolated',
+        cwd: SAFE_CWD,
+        config: mkConfig(),
+      }
+      assert.equal((first as any).buildReuseKey(params).executionFingerprint, 'first-fingerprint')
+      assert.equal((second as any).buildReuseKey(params).executionFingerprint, 'second-fingerprint')
+      assert.equal((first as any).buildReuseKey(params).executionFingerprint, 'first-fingerprint')
+    } finally {
+      void first.closeAll()
+      void second.closeAll()
+    }
+  })
+})
+
 describe('worker execution invalidation boundary', () => {
   it('invalidates when command, args, env, model, kind, or enabled changes', () => {
     const changed = (sessionManagerModule as Record<string, unknown>).workerExecutionConfigChanged
@@ -263,19 +655,54 @@ describe('session reuse', () => {
     ;(manager as any).entries.set(ks, makeFakeIdleEntry(key))
 
     const r1 = await manager.enqueuePrompt({
-      key, config, kind: 'opencode', task: 'task-1', binding,
+      key,
+      config,
+      kind: 'opencode',
+      task: 'task-1',
+      binding,
     })
     assert.ok(r1.ok)
     assert.equal(r1.reusedSession, true)
     assert.equal(manager.getDebugInfo().entries, 1)
 
     const r2 = await manager.enqueuePrompt({
-      key, config, kind: 'opencode', task: 'task-2',
+      key,
+      config,
+      kind: 'opencode',
+      task: 'task-2',
       binding: { jobId: 'j2', sequence: 0 },
     })
     assert.ok(r2.ok)
     assert.equal(r2.reusedSession, true)
     assert.equal(manager.getDebugInfo().entries, 1)
+  })
+
+  it('evicts a live connection after a transport-level prompt failure', async () => {
+    const key = mkKey()
+    const entry = makeFakeIdleEntry(key)
+    let closed = 0
+    entry.driver.prompt = async () => ({
+      ok: false,
+      output: 'partial',
+      error: 'private transport failure',
+    })
+    entry.driver.close = () => {
+      closed += 1
+    }
+    ;(manager as any).entries.set(keyToString(key), entry)
+
+    const result = await manager.enqueuePrompt({
+      key,
+      config: mkConfig(),
+      kind: 'custom',
+      task: 'continue',
+      binding: { jobId: 'job-transport-failure', sequence: 0 },
+    })
+
+    assert.equal(result.ok, false)
+    assert.equal(result.error, 'ACP agent failed while processing the task.')
+    assert.equal(manager.getDebugInfo().entries, 0)
+    assert.equal(closed, 1)
   })
 })
 
@@ -314,18 +741,23 @@ describe('FIFO serialization', () => {
     let callCount = 0
     let resolveFirst!: (value: any) => void
     const fakeEntry = makeFakeIdleEntry(key)
-    fakeEntry.session.nextUpdate = () => {
+    fakeEntry.driver.prompt = () => {
       callCount++
       if (callCount === 1) {
-        return new Promise((resolve) => { resolveFirst = resolve })
+        return new Promise((resolve) => {
+          resolveFirst = resolve
+        })
       }
-      return Promise.resolve({ kind: 'stop', stopReason: 'end_turn' })
+      return Promise.resolve({ ok: true, output: '', stopReason: 'end_turn' })
     }
 
     ;(manager as any).entries.set(ks, fakeEntry)
 
     const p1 = manager.enqueuePrompt({
-      key, config, kind: 'opencode', task: 'task-1',
+      key,
+      config,
+      kind: 'opencode',
+      task: 'task-1',
       binding: { jobId: 'j1', sequence: 0 },
     })
 
@@ -333,12 +765,15 @@ describe('FIFO serialization', () => {
     assert.equal(fakeEntry.state, 'running')
 
     const p2 = manager.enqueuePrompt({
-      key, config, kind: 'opencode', task: 'task-2',
+      key,
+      config,
+      kind: 'opencode',
+      task: 'task-2',
       binding: { jobId: 'j2', sequence: 0 },
     })
     assert.equal(fakeEntry.promptQueue.length, 1)
 
-    resolveFirst({ kind: 'stop', stopReason: 'end_turn' })
+    resolveFirst({ ok: true, output: '', stopReason: 'end_turn' })
     const r1 = await p1
     assert.ok(r1.ok)
 
@@ -355,28 +790,36 @@ describe('FIFO serialization', () => {
     let callCount = 0
     let resolveFirst!: (value: any) => void
     const fakeEntry = makeFakeIdleEntry(key)
-    fakeEntry.session.nextUpdate = () => {
+    fakeEntry.driver.prompt = () => {
       callCount++
       if (callCount === 1) {
-        return new Promise((resolve) => { resolveFirst = resolve })
+        return new Promise((resolve) => {
+          resolveFirst = resolve
+        })
       }
-      return Promise.resolve({ kind: 'stop', stopReason: 'end_turn' })
+      return Promise.resolve({ ok: true, output: '', stopReason: 'end_turn' })
     }
 
     ;(manager as any).entries.set(ks, fakeEntry)
 
     const p1 = manager.enqueuePrompt({
-      key, config, kind: 'opencode', task: 'task-1',
+      key,
+      config,
+      kind: 'opencode',
+      task: 'task-1',
       binding: { jobId: 'j1', sequence: 0 },
     })
 
     await new Promise((r) => setTimeout(r, 50))
     const p2 = manager.enqueuePrompt({
-      key, config, kind: 'opencode', task: 'task-2',
+      key,
+      config,
+      kind: 'opencode',
+      task: 'task-2',
       binding: { jobId: 'j2', sequence: 0 },
     })
 
-    resolveFirst({ kind: 'stop', stopReason: 'end_turn' })
+    resolveFirst({ ok: true, output: '', stopReason: 'end_turn' })
     await p1
     const r2 = await p2
     assert.ok(r2.ok)
@@ -400,12 +843,19 @@ describe('ACP_SESSION_REUSE=0', () => {
 
     // Override createAndExecute to throw sync — prevents a new entry from being added
     // to the map during the (normally async) spawn flow.
-    ;(mgr as any).createAndExecute = () => { throw new Error('no-spawn') }
+    ;(mgr as any).createAndExecute = () => {
+      throw new Error('no-spawn')
+    }
 
-    await mgr.enqueuePrompt({
-      key, config: mkConfig(), kind: 'opencode', task: 't',
-      binding: { jobId: 'j1', sequence: 0 },
-    }).catch(() => {})
+    await mgr
+      .enqueuePrompt({
+        key,
+        config: mkConfig(),
+        kind: 'opencode',
+        task: 't',
+        binding: { jobId: 'j1', sequence: 0 },
+      })
+      .catch(() => {})
 
     // The idle entry was deleted by the REUSE=0 path; no new entry was created.
     assert.equal(mgr.getDebugInfo().entries, 0)
@@ -474,7 +924,10 @@ describe('enqueue while starting is queued', () => {
     ;(manager as any).entries.set(ks, startingEntry)
 
     const p1 = manager.enqueuePrompt({
-      key, config, kind: 'opencode', task: 'task-1',
+      key,
+      config,
+      kind: 'opencode',
+      task: 'task-1',
       binding: { jobId: 'j1', sequence: 0 },
     })
     await new Promise((r) => setTimeout(r, 20))
@@ -501,7 +954,10 @@ describe('queued prompt abort', () => {
     const ac = new AbortController()
 
     const p = manager.enqueuePrompt({
-      key, config, kind: 'opencode', task: 'task-2',
+      key,
+      config,
+      kind: 'opencode',
+      task: 'task-2',
       binding: { jobId: 'j2', sequence: 0, signal: ac.signal },
     })
     p.catch(() => {}) // suppress unhandled rejection before await
@@ -550,6 +1006,103 @@ describe('queued prompt abort', () => {
 
     assert.equal(removeCount, 2, 'queued and active abort listeners should both be detached')
   })
+
+  it('evicts a session when an aborted agent races back with success', async () => {
+    const key = mkKey()
+    const entry = makeFakeIdleEntry(key)
+    let resolvePrompt!: (result: { ok: boolean; output: string; stopReason: string }) => void
+    entry.driver.prompt = () =>
+      new Promise((resolve) => {
+        resolvePrompt = resolve
+      })
+    ;(manager as any).entries.set(keyToString(key), entry)
+
+    const abort = new AbortController()
+    const pending = (manager as any).executePrompt(
+      entry,
+      'task',
+      { jobId: 'job-abort-race', sequence: 0, signal: abort.signal },
+      true,
+      'live_reused',
+    )
+    await Promise.resolve()
+    abort.abort()
+    resolvePrompt({ ok: true, output: 'late output', stopReason: 'end_turn' })
+
+    const result = await pending
+    assert.equal(result.ok, false)
+    assert.equal(result.error, 'Cancelled')
+    assert.equal(result.stopReason, 'cancelled')
+    assert.equal(result.output, 'late output')
+    assert.equal(manager.getDebugInfo().entries, 0)
+  })
+
+  it('bounds cancellation when the ACP prompt never settles', async () => {
+    const key = mkKey()
+    const mgr = new AcpSessionManager({ cancelGraceMs: 10 })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    const entry = makeFakeIdleEntry(key)
+    entry.driver.partialOutput = 'partial before cancellation'
+    entry.driver.prompt = () => new Promise(() => {})
+    ;(mgr as any).entries.set(keyToString(key), entry)
+
+    const abort = new AbortController()
+    const pending = (mgr as any).executePrompt(
+      entry,
+      'task',
+      { jobId: 'job-never-settles', sequence: 0, signal: abort.signal },
+      true,
+      'live_reused',
+    )
+    abort.abort()
+
+    const result = await Promise.race([
+      pending,
+      new Promise<'deadline-missed'>((resolve) => {
+        setTimeout(() => resolve('deadline-missed'), 100)
+      }),
+    ])
+    assert.notEqual(result, 'deadline-missed')
+    if (result === 'deadline-missed') return
+    assert.equal(result.ok, false)
+    assert.equal(result.error, 'Cancelled')
+    assert.equal(result.output, 'partial before cancellation')
+    assert.equal(mgr.getDebugInfo().entries, 0)
+  })
+
+  it('isolates session-ready observer failures from the agent prompt', async () => {
+    const key = mkKey()
+    const activities: string[] = []
+    const mgr = new AcpSessionManager({
+      onActivity: (event) => {
+        activities.push(event)
+      },
+    })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    const entry = makeFakeIdleEntry(key)
+    ;(mgr as any).entries.set(keyToString(key), entry)
+
+    const result = await (mgr as any).executePrompt(
+      entry,
+      'task',
+      {
+        jobId: 'job-observer-failure',
+        sequence: 0,
+        onSessionReady: () => {
+          throw new Error('private observer failure')
+        },
+      },
+      true,
+      'live_reused',
+    )
+
+    assert.equal(result.ok, true)
+    assert.equal(entry.state, 'idle')
+    assert.equal(mgr.getDebugInfo().entries, 1)
+    assert.deepEqual(activities, ['session_ready_observer_failed'])
+  })
 })
 
 // -- 6d. pool at capacity with no idle entries rejects (Bug 3: P1-4) --
@@ -577,7 +1130,10 @@ describe('pool at capacity rejects', () => {
     assert.equal(mgr.getDebugInfo().entries, 2)
 
     const result = await mgr.enqueuePrompt({
-      key: key3, config: mkConfig(), kind: 'opencode', task: 'task',
+      key: key3,
+      config: mkConfig(),
+      kind: 'opencode',
+      task: 'task',
       binding: { jobId: 'j3', sequence: 0 },
     })
 
@@ -616,7 +1172,7 @@ describe('pool at capacity rejects', () => {
   })
 })
 
-// -- 7. closeByRouterSession --
+// -- 7. closeLiveByRouterSession --
 describe('closeByRouterSession', () => {
   it('removes all entries for the given routerSessionId', () => {
     const keyA1 = mkKey({ routerSessionId: 'sess-A', workerId: 'w1' })
@@ -629,7 +1185,7 @@ describe('closeByRouterSession', () => {
 
     assert.equal(manager.getDebugInfo().entries, 3)
 
-    manager.closeByRouterSession('sess-A')
+    manager.closeLiveByRouterSession('sess-A')
 
     assert.equal(manager.getDebugInfo().entries, 1)
     assert.ok((manager as any).entries.has(keyToString(keyB)))
@@ -647,15 +1203,94 @@ describe('closeByRouterSession', () => {
     // Queue a prompt
     const qPromise = new Promise<void>((_resolve, reject) => {
       fakeEntry.promptQueue.push({
-        task: 't', binding: { jobId: 'j2', sequence: 0 },
+        task: 't',
+        binding: { jobId: 'j2', sequence: 0 },
         resolve: () => {},
         reject,
       })
     })
 
-    manager.closeByRouterSession(key.routerSessionId)
+    manager.closeLiveByRouterSession(key.routerSessionId)
 
     assert.rejects(qPromise, /closed by router session/i)
+  })
+
+  it('cannot resurrect or delete a replacement entry when startup closes concurrently', async () => {
+    const key = mkKey()
+    const keyStr = keyToString(key)
+    const originalFactory = AcpSessionDriver.fromChildProcess
+    let factorySeen!: () => void
+    const seen = new Promise<void>((resolve) => {
+      factorySeen = resolve
+    })
+    let finishInitialize!: () => void
+    const initialize = new Promise<void>((resolve) => {
+      finishInitialize = resolve
+    })
+    let sessionNewCalls = 0
+    let promptCalls = 0
+    let closeCalls = 0
+    ;(AcpSessionDriver as any).fromChildProcess = async () => {
+      factorySeen()
+      return {
+        initialize: async () => {
+          await initialize
+          return { agentCapabilities: {} }
+        },
+        get capabilities() {
+          return {}
+        },
+        sessionNew: async () => {
+          sessionNewCalls += 1
+          return { sessionId: 'must-not-be-created', configOptions: [] }
+        },
+        get configOptions() {
+          return []
+        },
+        prompt: async () => {
+          promptCalls += 1
+          return { ok: true, output: '', stopReason: 'end_turn' }
+        },
+        hasCapability: () => false,
+        close: () => {
+          closeCalls += 1
+        },
+      }
+    }
+
+    const mgr = new AcpSessionManager()
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    try {
+      const pending = mgr.enqueuePrompt({
+        key,
+        config: {
+          command: process.execPath,
+          args: ['-e', 'setInterval(() => {}, 1000)'],
+          env: {},
+          model: undefined,
+        },
+        kind: 'custom',
+        task: 'must not run',
+        binding: { jobId: 'job-startup-close', sequence: 0 },
+      })
+      pending.catch(() => {})
+      await seen
+
+      mgr.closeLiveByRouterSession(key.routerSessionId)
+      const replacement = makeFakeIdleEntry(key)
+      ;(mgr as any).entries.set(keyStr, replacement)
+      finishInitialize()
+
+      await assert.rejects(pending, /closed during startup/i)
+      assert.equal((mgr as any).entries.get(keyStr), replacement)
+      assert.equal(sessionNewCalls, 0)
+      assert.equal(promptCalls, 0)
+      assert.ok(closeCalls >= 1)
+    } finally {
+      ;(AcpSessionDriver as any).fromChildProcess = originalFactory
+      await mgr.closeAll()
+    }
   })
 })
 
@@ -876,5 +1511,1020 @@ describe('getDebugInfo', () => {
   it('returns zero entries for an empty pool', () => {
     assert.equal(manager.getDebugInfo().entries, 0)
     assert.deepEqual(manager.getDebugInfo().entriesByState, {})
+  })
+})
+
+// -- 11. Lifecycle: closeLiveByRouterSession (rename of closeByRouterSession) --
+describe('closeLiveByRouterSession', () => {
+  it('removes all live entries for the given routerSessionId, no catalog effect', () => {
+    const keyA1 = mkKey({ routerSessionId: 'sess-A', workerId: 'w1' })
+    const keyA2 = mkKey({ routerSessionId: 'sess-A', workerId: 'w2' })
+    const keyB = mkKey({ routerSessionId: 'sess-B' })
+
+    ;(manager as any).entries.set(keyToString(keyA1), makeFakeIdleEntry(keyA1))
+    ;(manager as any).entries.set(keyToString(keyA2), makeFakeIdleEntry(keyA2))
+    ;(manager as any).entries.set(keyToString(keyB), makeFakeIdleEntry(keyB))
+
+    assert.equal(manager.getDebugInfo().entries, 3)
+
+    manager.closeLiveByRouterSession('sess-A')
+
+    assert.equal(manager.getDebugInfo().entries, 1)
+    assert.ok((manager as any).entries.has(keyToString(keyB)))
+    assert.ok(!(manager as any).entries.has(keyToString(keyA1)))
+    assert.ok(!(manager as any).entries.has(keyToString(keyA2)))
+  })
+
+  it('rejects queued prompts for closed live entries', () => {
+    const key = mkKey()
+    const fakeEntry = makeFakeIdleEntry(key)
+    fakeEntry.state = 'running'
+    fakeEntry.currentBinding = { jobId: 'j1' }
+    ;(manager as any).entries.set(keyToString(key), fakeEntry)
+
+    const qPromise = new Promise<void>((_resolve, reject) => {
+      fakeEntry.promptQueue.push({
+        task: 't',
+        binding: { jobId: 'j2', sequence: 0 },
+        resolve: () => {},
+        reject,
+      })
+    })
+
+    manager.closeLiveByRouterSession(key.routerSessionId)
+
+    assert.rejects(qPromise, /closed by router session/i)
+  })
+})
+
+// -- 11b. Lifecycle: closeLiveByReuseKey --
+describe('closeLiveByReuseKey', () => {
+  it('closes only the specific entry, not other entries in the same router session', () => {
+    const keyA1 = mkKey({ routerSessionId: 'sess-A', workerId: 'w1' })
+    const keyA2 = mkKey({ routerSessionId: 'sess-A', workerId: 'w2' })
+    const keyB = mkKey({ routerSessionId: 'sess-B' })
+
+    ;(manager as any).entries.set(keyToString(keyA1), makeFakeIdleEntry(keyA1))
+    ;(manager as any).entries.set(keyToString(keyA2), makeFakeIdleEntry(keyA2))
+    ;(manager as any).entries.set(keyToString(keyB), makeFakeIdleEntry(keyB))
+
+    assert.equal(manager.getDebugInfo().entries, 3)
+
+    manager.closeLiveByReuseKey(keyA1)
+
+    assert.equal(manager.getDebugInfo().entries, 2)
+    assert.ok(!(manager as any).entries.has(keyToString(keyA1)), 'keyA1 should be removed')
+    assert.ok(
+      (manager as any).entries.has(keyToString(keyA2)),
+      'keyA2 (same session) should remain',
+    )
+    assert.ok((manager as any).entries.has(keyToString(keyB)), 'keyB should remain')
+  })
+
+  it('rejects queued prompts for the closed entry only', () => {
+    const keyA = mkKey({ routerSessionId: 'sess-A', workerId: 'w1' })
+    const keyA2 = mkKey({ routerSessionId: 'sess-A', workerId: 'w2' })
+
+    const fakeEntryA = makeFakeIdleEntry(keyA)
+    fakeEntryA.state = 'running'
+    fakeEntryA.currentBinding = { jobId: 'j1' }
+    ;(manager as any).entries.set(keyToString(keyA), fakeEntryA)
+
+    const fakeEntryA2 = makeFakeIdleEntry(keyA2)
+    fakeEntryA2.state = 'running'
+    fakeEntryA2.currentBinding = { jobId: 'j2' }
+    ;(manager as any).entries.set(keyToString(keyA2), fakeEntryA2)
+
+    const qReject1 = new Promise<void>((_resolve, reject) => {
+      fakeEntryA.promptQueue.push({
+        task: 't',
+        binding: { jobId: 'j3', sequence: 0 },
+        resolve: () => {},
+        reject,
+      })
+    })
+    const qReject2 = new Promise<void>((_resolve, reject) => {
+      fakeEntryA2.promptQueue.push({
+        task: 't2',
+        binding: { jobId: 'j4', sequence: 0 },
+        resolve: () => {},
+        reject,
+      })
+    })
+
+    manager.closeLiveByReuseKey(keyA)
+
+    assert.rejects(qReject1, /closed by router session/i)
+    // qReject2 should NOT be rejected - resolve it manually
+    assert.ok((manager as any).entries.has(keyToString(keyA2)), 'other entry should remain')
+  })
+
+  it('is a no-op when the key does not exist', () => {
+    const key = mkKey()
+    manager.closeLiveByReuseKey(key)
+    // Should not throw
+    assert.equal(manager.getDebugInfo().entries, 0)
+  })
+})
+
+// -- 12. Lifecycle: deleteContextByRouterSession --
+describe('deleteContextByRouterSession', () => {
+  it('closes live entries AND calls catalog deleteByRouterSession', () => {
+    let catalogDeleteCalled = false
+    let catalogDeleteArg: string | undefined
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: (id: string) => {
+        catalogDeleteCalled = true
+        catalogDeleteArg = id
+      },
+      deleteByWorker: () => {},
+      isAvailable: () => true,
+    }
+    manager.setCatalogPort(mockCatalog)
+
+    const keyA = mkKey({ routerSessionId: 'sess-A', workerId: 'w1' })
+    ;(manager as any).entries.set(keyToString(keyA), makeFakeIdleEntry(keyA))
+
+    manager.deleteContextByRouterSession('sess-A')
+
+    assert.equal(manager.getDebugInfo().entries, 0)
+    assert.ok(catalogDeleteCalled)
+    assert.equal(catalogDeleteArg, 'sess-A')
+  })
+
+  it('catalog unavailable fails closed after live entries are closed', () => {
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: () => {
+        throw new Error('unavailable')
+      },
+      deleteByWorker: () => {},
+      isAvailable: () => false,
+    }
+    manager.setCatalogPort(mockCatalog)
+
+    const keyA = mkKey({ routerSessionId: 'sess-A' })
+    ;(manager as any).entries.set(keyToString(keyA), makeFakeIdleEntry(keyA))
+    assert.equal(manager.getDebugInfo().entries, 1)
+
+    assert.throws(
+      () => manager.deleteContextByRouterSession('sess-A'),
+      (error: any) => error?.code === 'catalog_repair_required',
+    )
+
+    assert.equal(manager.getDebugInfo().entries, 0)
+  })
+})
+
+// -- 13. Lifecycle: deleteContextByWorker --
+describe('deleteContextByWorker', () => {
+  it('closes live entries AND calls catalog deleteByWorker', () => {
+    let catalogDeleteCalled = false
+    let catalogDeleteArg: string | undefined
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: () => {},
+      deleteByWorker: (id: string) => {
+        catalogDeleteCalled = true
+        catalogDeleteArg = id
+      },
+      isAvailable: () => true,
+    }
+    manager.setCatalogPort(mockCatalog)
+
+    const keyA = mkKey({ workerId: 'worker-x', routerSessionId: 'sess-1' })
+    const keyB = mkKey({ workerId: 'worker-x', routerSessionId: 'sess-2' })
+    ;(manager as any).entries.set(keyToString(keyA), makeFakeIdleEntry(keyA))
+    ;(manager as any).entries.set(keyToString(keyB), makeFakeIdleEntry(keyB))
+
+    manager.deleteContextByWorker('worker-x')
+
+    assert.equal(manager.getDebugInfo().entries, 0)
+    assert.ok(catalogDeleteCalled)
+    assert.equal(catalogDeleteArg, 'worker-x')
+  })
+
+  it('catalog unavailable fails closed after live entries are closed', () => {
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: () => {},
+      deleteByWorker: () => {
+        throw new Error('unavailable')
+      },
+      isAvailable: () => false,
+    }
+    manager.setCatalogPort(mockCatalog)
+
+    const keyA = mkKey({ workerId: 'worker-x' })
+    ;(manager as any).entries.set(keyToString(keyA), makeFakeIdleEntry(keyA))
+    assert.equal(manager.getDebugInfo().entries, 1)
+
+    assert.throws(
+      () => manager.deleteContextByWorker('worker-x'),
+      (error: any) => error?.code === 'catalog_repair_required',
+    )
+
+    assert.equal(manager.getDebugInfo().entries, 0)
+  })
+})
+
+// -- 14. Lifecycle: deleteContextByProject --
+describe('deleteContextByProject', () => {
+  it('closes live entries AND deletes all project sessions in one catalog mutation', () => {
+    const deleteCalls: string[][] = []
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSessions: (ids: string[]) => {
+        deleteCalls.push(ids)
+      },
+      deleteByWorker: () => {},
+      isAvailable: () => true,
+    }
+    manager.setCatalogPort(mockCatalog)
+
+    const keyA = mkKey({ routerSessionId: 'sess-A', workerId: 'w1' })
+    const keyB = mkKey({ routerSessionId: 'sess-B', workerId: 'w2' })
+    ;(manager as any).entries.set(keyToString(keyA), makeFakeIdleEntry(keyA))
+    ;(manager as any).entries.set(keyToString(keyB), makeFakeIdleEntry(keyB))
+    manager.setSessionProject('sess-A', 'proj-1')
+    manager.setSessionProject('sess-B', 'proj-1')
+
+    manager.deleteContextByProject('proj-1')
+
+    assert.equal(manager.getDebugInfo().entries, 0)
+    assert.deepEqual(deleteCalls, [['sess-A', 'sess-B']])
+  })
+
+  it('does not affect entries from other projects', () => {
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: () => {},
+      deleteByWorker: () => {},
+      isAvailable: () => true,
+    }
+    manager.setCatalogPort(mockCatalog)
+
+    const keyIn = mkKey({ routerSessionId: 'sess-A' })
+    const keyOut = mkKey({ routerSessionId: 'sess-B' })
+    ;(manager as any).entries.set(keyToString(keyIn), makeFakeIdleEntry(keyIn))
+    ;(manager as any).entries.set(keyToString(keyOut), makeFakeIdleEntry(keyOut))
+    manager.setSessionProject('sess-A', 'proj-1')
+
+    manager.deleteContextByProject('proj-1')
+
+    assert.equal(manager.getDebugInfo().entries, 1)
+    assert.ok((manager as any).entries.has(keyToString(keyOut)))
+  })
+})
+
+// -- 15. Lifecycle: closeAll preserves catalog --
+describe('closeAll catalog preservation', () => {
+  it('closeAll clears live entries but does NOT touch catalog', async () => {
+    let catalogTouched = false
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {
+        catalogTouched = true
+      },
+      deleteByRouterSession: () => {
+        catalogTouched = true
+      },
+      deleteByWorker: () => {
+        catalogTouched = true
+      },
+      isAvailable: () => true,
+    }
+    manager.setCatalogPort(mockCatalog)
+
+    const key = mkKey()
+    ;(manager as any).entries.set(keyToString(key), makeFakeIdleEntry(key))
+    assert.equal(manager.getDebugInfo().entries, 1)
+
+    await manager.closeAll()
+
+    assert.equal(manager.getDebugInfo().entries, 0)
+    assert.ok(!catalogTouched)
+  })
+})
+
+// -- 16. Lifecycle: TTL idle reap preserves catalog --
+describe('TTL idle reap catalog preservation', () => {
+  it('TTL closes live entry, catalog untouched', () => {
+    let catalogTouched = false
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {
+        catalogTouched = true
+      },
+      deleteByRouterSession: () => {
+        catalogTouched = true
+      },
+      deleteByWorker: () => {
+        catalogTouched = true
+      },
+      isAvailable: () => true,
+    }
+    const mgr = new AcpSessionManager({ idleTimeoutMs: 100 })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    mgr.setCatalogPort(mockCatalog)
+
+    const oldKey = mkKey({ routerSessionId: 'sess-old' })
+    const newKey = mkKey({ routerSessionId: 'sess-new' })
+
+    const oldEntry = makeFakeIdleEntry(oldKey)
+    oldEntry.lastUsedAt = Date.now() - 10_000
+    const newEntry = makeFakeIdleEntry(newKey)
+    newEntry.lastUsedAt = Date.now()
+
+    ;(mgr as any).entries.set(keyToString(oldKey), oldEntry)
+    ;(mgr as any).entries.set(keyToString(newKey), newEntry)
+    assert.equal(mgr.getDebugInfo().entries, 2)
+
+    ;(mgr as any).reapIdle()
+
+    assert.equal(mgr.getDebugInfo().entries, 1)
+    assert.ok(!(mgr as any).entries.has(keyToString(oldKey)))
+    assert.ok((mgr as any).entries.has(keyToString(newKey)))
+    assert.ok(!catalogTouched)
+  })
+})
+
+// -- 17. Lifecycle: LRU evict preserves catalog --
+describe('LRU evict catalog preservation', () => {
+  it('LRU evict closes live entry, catalog untouched', () => {
+    let catalogTouched = false
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {
+        catalogTouched = true
+      },
+      deleteByRouterSession: () => {
+        catalogTouched = true
+      },
+      deleteByWorker: () => {
+        catalogTouched = true
+      },
+      isAvailable: () => true,
+    }
+    manager.setCatalogPort(mockCatalog)
+
+    const oldestKey = mkKey({ routerSessionId: 'sess-oldest' })
+    const newestKey = mkKey({ routerSessionId: 'sess-newest' })
+
+    const oldestEntry = makeFakeIdleEntry(oldestKey)
+    oldestEntry.lastUsedAt = Date.now() - 3000
+    const newestEntry = makeFakeIdleEntry(newestKey)
+    newestEntry.lastUsedAt = Date.now()
+
+    ;(manager as any).entries.set(keyToString(oldestKey), oldestEntry)
+    ;(manager as any).entries.set(keyToString(newestKey), newestEntry)
+
+    ;(manager as any).evictLRU()
+
+    assert.equal(manager.getDebugInfo().entries, 1)
+    assert.ok(!(manager as any).entries.has(keyToString(oldestKey)))
+    assert.ok((manager as any).entries.has(keyToString(newestKey)))
+    assert.ok(!catalogTouched)
+  })
+})
+
+// -- P0-1: enqueuePrompt routes through openAndBind when catalog is available --
+describe('P0-1: enqueuePrompt with catalog routes through openAndBind', () => {
+  it('routes through openAndBind when catalog is available and reuse is enabled', async () => {
+    let openAndBindCalled = false
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: () => {},
+      deleteByWorker: () => {},
+      isAvailable: () => true,
+    }
+    const mgr = new AcpSessionManager({ poolMax: 4, catalogPort: mockCatalog })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    const origOpenAndBind = mgr.openAndBind.bind(mgr)
+    mgr.openAndBind = async function (req: any, onReady?: any) {
+      openAndBindCalled = true
+      return origOpenAndBind(req, onReady).catch((_e: any) => ({
+        ok: false,
+        error: 'simulated',
+        reusedSession: false,
+      }))
+    }
+
+    await mgr.enqueuePrompt({
+      key: mkKey(),
+      config: mkConfig(),
+      kind: 'opencode',
+      task: 'test',
+      binding: { jobId: 'j1', sequence: 0 },
+    })
+
+    assert.ok(
+      openAndBindCalled,
+      'enqueuePrompt should route to openAndBind when catalog is available',
+    )
+  })
+
+  it('does not route through openAndBind when catalog is not available', async () => {
+    let openAndBindCalled = false
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: () => {},
+      deleteByWorker: () => {},
+      isAvailable: () => false,
+    }
+    const mgr = new AcpSessionManager({ poolMax: 4, catalogPort: mockCatalog })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    const origOpenAndBind = mgr.openAndBind.bind(mgr)
+    mgr.openAndBind = async function (req: any, onReady?: any) {
+      openAndBindCalled = true
+      return origOpenAndBind(req, onReady).catch((_e: any) => ({
+        ok: false,
+        error: 'simulated',
+        reusedSession: false,
+      }))
+    }
+
+    await assert.rejects(
+      () =>
+        mgr.enqueuePrompt({
+          key: mkKey(),
+          config: mkConfig(),
+          kind: 'opencode',
+          task: 'test',
+          binding: { jobId: 'j1', sequence: 0 },
+        }),
+      (error: any) => error?.code === 'catalog_repair_required',
+    )
+
+    assert.ok(
+      !openAndBindCalled,
+      'enqueuePrompt should NOT route to openAndBind when catalog is unavailable',
+    )
+  })
+})
+
+// -- P0-4a: Catalog unavailable rejects dispatch --
+describe('P0-4a: catalog unavailable rejects dispatch', () => {
+  it('rejects with a typed public error when required runtime dependencies are absent', async () => {
+    const mgr = new AcpSessionManager({ poolMax: 4, catalogRequired: true })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    await assert.rejects(
+      () =>
+        mgr.enqueuePrompt({
+          key: mkKey(),
+          config: mkConfig(),
+          kind: 'opencode',
+          task: 'test',
+          binding: { jobId: 'j1', sequence: 0 },
+        }),
+      (error: any) =>
+        error?.code === 'acp_runtime_not_configured' &&
+        /restart the application/i.test(error?.publicMessage),
+    )
+  })
+
+  it('rejects with catalog_repair_required when catalog is configured but unavailable', async () => {
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: () => {},
+      deleteByWorker: () => {},
+      isAvailable: () => false,
+    }
+    const mgr = new AcpSessionManager({ poolMax: 4, catalogPort: mockCatalog })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    await assert.rejects(
+      () =>
+        mgr.enqueuePrompt({
+          key: mkKey(),
+          config: mkConfig(),
+          kind: 'opencode',
+          task: 'test',
+          binding: { jobId: 'j1', sequence: 0 },
+        }),
+      (error: any) =>
+        error?.code === 'catalog_repair_required' &&
+        /storage is unavailable/i.test(error?.publicMessage),
+    )
+  })
+
+  it('does not reject when catalog is available', async () => {
+    const mockCatalog = {
+      ...emptyCatalogPort(),
+      lookup: () => undefined,
+      upsert: () => {},
+      markStale: () => {},
+      deleteByKey: () => {},
+      deleteByRouterSession: () => {},
+      deleteByWorker: () => {},
+      isAvailable: () => true,
+    }
+    const mgr = new AcpSessionManager({ poolMax: 4, catalogPort: mockCatalog })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    // Will fail because openAndBind tries to spawn, but should not be catalog_repair_required
+    const p = mgr
+      .enqueuePrompt({
+        key: mkKey(),
+        config: mkConfig(),
+        kind: 'opencode',
+        task: 'test',
+        binding: { jobId: 'j1', sequence: 0 },
+      })
+      .catch((_e: any) => ({ ok: false, error: 'spawn_error', reusedSession: false }))
+
+    const result = await p
+    assert.notEqual(result.error, 'catalog_repair_required')
+  })
+
+  it('does not reject when no catalog is configured', async () => {
+    const mgr = new AcpSessionManager({ poolMax: 4 })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    ;(mgr as any).createAndExecute = () => ({ ok: false, error: 'no-spawn', reusedSession: false })
+
+    const result = await mgr.enqueuePrompt({
+      key: mkKey(),
+      config: mkConfig(),
+      kind: 'opencode',
+      task: 'test',
+      binding: { jobId: 'j1', sequence: 0 },
+    })
+
+    assert.notEqual(result.error, 'catalog_repair_required')
+  })
+})
+
+describe('catalog recovery state machine', () => {
+  function request() {
+    return {
+      key: mkKey(),
+      config: mkConfig({ model: undefined }),
+      kind: 'custom' as const,
+      task: 'continue',
+      binding: { jobId: 'job-recovery', sequence: 0 },
+    }
+  }
+
+  it('maps catalog lookup failures to the public catalog repair error', async () => {
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: () => {
+        throw new Error('private catalog path /secret/catalog.json')
+      },
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    await assert.rejects(
+      () => mgr.openAndBind(request()),
+      (error: any) => {
+        assert.equal(error.code, 'catalog_repair_required')
+        assert.doesNotMatch(error.publicMessage ?? error.message, /secret|catalog\.json/)
+        return true
+      },
+    )
+  })
+
+  it('does not mask a catalog mark-stale write failure as unsupported recovery', async () => {
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: () =>
+        catalogRecord({
+          capabilities: { loadSession: false, resume: false, close: false, delete: false },
+        }),
+      markStale: () => {
+        throw new Error('disk full')
+      },
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    await assert.rejects(
+      () => mgr.openAndBind(request()),
+      (error: any) => error?.code === 'catalog_repair_required',
+    )
+  })
+
+  it('reports catalog repair when persisting a recovery failure cannot be committed', async () => {
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: () => catalogRecord(),
+      markStale: () => {
+        throw new Error('read-only catalog')
+      },
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    ;(mgr as any).openSessionForRecovery = async () => {
+      throw new Error('private resume transport failure')
+    }
+
+    await assert.rejects(
+      () => mgr.openAndBind(request()),
+      (error: any) => error?.code === 'catalog_repair_required',
+    )
+  })
+
+  it('never falls back to load when resume is supported but fails', async () => {
+    const calls: string[] = []
+    const staleReasons: string[] = []
+    const record = catalogRecord()
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: () => record,
+      markStale: (_digest: string, reason: string) => {
+        staleReasons.push(reason)
+      },
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    ;(mgr as any).openSessionForRecovery = async (_req: unknown, disposition: string) => {
+      calls.push(disposition)
+      throw new Error('resume transport failed')
+    }
+
+    await assert.rejects(() => mgr.openAndBind(request()))
+    assert.deepEqual(calls, ['resume'])
+    assert.deepEqual(staleReasons, ['recovery_failed'])
+  })
+
+  it('reports a successfully resumed catalog context as reused', async () => {
+    const originalFactory = AcpSessionDriver.fromChildProcess
+    ;(AcpSessionDriver as any).fromChildProcess = async () => ({
+      initialize: async () => ({ agentCapabilities: {} }),
+      get capabilities() {
+        return {}
+      },
+      sessionResume: async () => ({ configOptions: [] }),
+      sessionLoad: async () => ({ configOptions: [] }),
+      get configOptions() {
+        return []
+      },
+      prompt: async () => ({ ok: true, output: 'continued', stopReason: 'end_turn' }),
+      close: () => {},
+    })
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: () => catalogRecord(),
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    try {
+      const result = await mgr.openAndBind({
+        ...request(),
+        config: {
+          command: process.execPath,
+          args: ['-e', 'setInterval(() => {}, 1000)'],
+          env: {},
+          model: undefined,
+        },
+      })
+      assert.equal(result.ok, true)
+      assert.equal(result.reusedSession, true)
+      assert.equal(result.sessionDisposition, 'resumed')
+    } finally {
+      await mgr.closeAll()
+      ;(AcpSessionDriver as any).fromChildProcess = originalFactory
+    }
+  })
+
+  it('marks unsupported recovery stale and exposes a resettable safe error', async () => {
+    const staleReasons: string[] = []
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: () =>
+        catalogRecord({
+          capabilities: { loadSession: false, resume: false, close: false, delete: false },
+        }),
+      markStale: (_digest: string, reason: string) => {
+        staleReasons.push(reason)
+      },
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    await assert.rejects(
+      () => mgr.openAndBind(request()),
+      (error: any) => {
+        assert.equal(error.code, 'recovery_not_supported')
+        assert.equal(error.canResetAcpContext, true)
+        assert.doesNotMatch(
+          error.publicMessage ?? error.message,
+          /private-agent-session-id|worker-a|sess-1|router-agents/,
+        )
+        return true
+      },
+    )
+    assert.deepEqual(staleReasons, ['recovery_not_supported'])
+  })
+
+  it('does not disclose the stale catalog identity in recovery errors', async () => {
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: () => catalogRecord({ state: 'stale' as const }),
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    await assert.rejects(
+      () => mgr.openAndBind(request()),
+      (error: any) => {
+        const publicText = error.publicMessage ?? error.message
+        assert.doesNotMatch(publicText, /private-agent-session-id|worker-a|sess-1|router-agents/)
+        assert.equal(publicText.includes(computeKeyDigest(request().key)), false)
+        assert.equal(error.canResetAcpContext, true)
+        return true
+      },
+    )
+  })
+})
+
+describe('pinned model transaction boundary', () => {
+  it('does nothing when no model is pinned', async () => {
+    let setCalls = 0
+    const driver = {
+      configOptions: [],
+      setConfigOption: async () => {
+        setCalls++
+      },
+    }
+    await (sessionManagerModule as any).applyPinnedModelOrThrow(driver, undefined)
+    assert.equal(setCalls, 0)
+  })
+
+  it('fails before prompt when the pinned model cannot be applied', async () => {
+    const driver = {
+      configOptions: [
+        {
+          id: 'model',
+          type: 'select',
+          name: 'Model',
+          currentValue: 'm1',
+          options: [{ value: 'm1', name: 'm1' }],
+        },
+      ],
+      setConfigOption: async () => {
+        throw new Error('private transport failure')
+      },
+    }
+    await assert.rejects(
+      () => (sessionManagerModule as any).applyPinnedModelOrThrow(driver, 'm1'),
+      (error: any) => {
+        assert.equal(error.code, 'model_configuration_failed')
+        assert.doesNotMatch(error.publicMessage ?? error.message, /private transport failure/)
+        return true
+      },
+    )
+  })
+
+  it('deletes an uncommitted remote session when catalog upsert fails', async () => {
+    const calls: string[] = []
+    const originalFactory = AcpSessionDriver.fromChildProcess
+    ;(AcpSessionDriver as any).fromChildProcess = async () => ({
+      initialize: async () => ({ agentCapabilities: {} }),
+      get capabilities() {
+        return {}
+      },
+      sessionNew: async () => ({ sessionId: 'uncommitted-private-id', configOptions: [] }),
+      get configOptions() {
+        return []
+      },
+      hasCapability: (capability: string) => capability === 'delete',
+      deleteSession: () => {
+        calls.push('remote-delete')
+        throw new Error('synchronous cleanup failure')
+      },
+      closeSession: async () => {
+        calls.push('remote-close')
+      },
+      close: () => {
+        calls.push('transport-close')
+      },
+      prompt: async () => {
+        calls.push('prompt')
+        return { ok: true, output: '', stopReason: 'end_turn' }
+      },
+    })
+
+    const port = {
+      ...emptyCatalogPort(),
+      upsert: () => {
+        throw new Error('disk full')
+      },
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    try {
+      await assert.rejects(
+        () =>
+          mgr.enqueuePrompt({
+            key: mkKey(),
+            config: {
+              command: process.execPath,
+              args: ['-e', 'setInterval(() => {}, 1000)'],
+              model: undefined,
+              env: {},
+            },
+            kind: 'custom',
+            task: 'must not run',
+            binding: { jobId: 'job-catalog-failure', sequence: 0 },
+          }),
+        (error: any) => error?.code === 'catalog_repair_required',
+      )
+      assert.deepEqual(calls.slice(0, 2), ['remote-delete', 'transport-close'])
+      assert.equal(calls.includes('prompt'), false)
+      assert.equal(calls.includes('remote-close'), false)
+    } finally {
+      ;(AcpSessionDriver as any).fromChildProcess = originalFactory
+      await mgr.closeAll()
+    }
+  })
+})
+
+describe('remote cleanup handoff', () => {
+  it('resets one reuse key through local close, catalog delete, then remote cleanup', async () => {
+    const key = mkKey({ routerSessionId: 'session-reset', workerId: 'worker-reset' })
+    const keyDigest = computeKeyDigest(key)
+    const record = catalogRecord({
+      keyDigest,
+      routerSessionId: key.routerSessionId,
+      workerId: key.workerId,
+    })
+    const order: string[] = []
+    const entry = makeFakeIdleEntry(key)
+    entry.driver.close = () => {
+      order.push('local-close')
+    }
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: (digest: string) => (digest === keyDigest ? record : undefined),
+      deleteByKey: (digest: string) => {
+        order.push(`catalog-delete:${digest}`)
+      },
+    }
+    const mgr = new AcpSessionManager({
+      catalogPort: port,
+      remoteCleanup: async () => {
+        order.push('remote-cleanup')
+      },
+    })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    ;(mgr as any).entries.set(keyDigest, entry)
+
+    mgr.deleteContextByReuseKey(key)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    assert.equal(mgr.getDebugInfo().entries, 0)
+    assert.deepEqual(order, ['local-close', `catalog-delete:${keyDigest}`, 'remote-cleanup'])
+  })
+
+  it('does not launch reset remote cleanup when its catalog deletion fails', async () => {
+    const key = mkKey({ routerSessionId: 'session-reset', workerId: 'worker-reset' })
+    const record = catalogRecord({ keyDigest: computeKeyDigest(key) })
+    const cleaned: string[] = []
+    const port = {
+      ...emptyCatalogPort(),
+      lookup: () => record,
+      deleteByKey: () => {
+        throw new Error('catalog write failed')
+      },
+    }
+    const mgr = new AcpSessionManager({
+      catalogPort: port,
+      remoteCleanup: async () => {
+        cleaned.push('remote')
+      },
+    })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    assert.throws(
+      () => mgr.deleteContextByReuseKey(key),
+      (error: any) => error?.code === 'catalog_repair_required',
+    )
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.deepEqual(cleaned, [])
+  })
+
+  it('captures catalog records, commits local delete, then launches remote cleanup', async () => {
+    const record = catalogRecord({ workerId: 'worker-cleanup' })
+    const order: string[] = []
+    const port = {
+      ...emptyCatalogPort(),
+      listByWorker: () => [record],
+      deleteByWorker: () => {
+        order.push('local-delete')
+      },
+    }
+    const cleaned: string[] = []
+    const mgr = new AcpSessionManager({
+      catalogPort: port,
+      remoteCleanup: async (captured: any) => {
+        order.push('remote-cleanup')
+        cleaned.push(captured.workerId)
+      },
+    } as any)
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    mgr.deleteContextByWorker('worker-cleanup')
+    await new Promise((resolve) => setImmediate(resolve))
+
+    assert.deepEqual(order, ['local-delete', 'remote-cleanup'])
+    assert.deepEqual(cleaned, ['worker-cleanup'])
+  })
+
+  it('does not launch remote cleanup when local catalog deletion fails', async () => {
+    const record = catalogRecord({ workerId: 'worker-cleanup' })
+    const cleaned: string[] = []
+    const port = {
+      ...emptyCatalogPort(),
+      listByWorker: () => [record],
+      deleteByWorker: () => {
+        throw new Error('catalog write failed')
+      },
+    }
+    const mgr = new AcpSessionManager({
+      catalogPort: port,
+      remoteCleanup: async (captured: any) => {
+        cleaned.push(captured.workerId)
+      },
+    })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    assert.throws(
+      () => mgr.deleteContextByWorker('worker-cleanup'),
+      (error: any) => error?.code === 'catalog_repair_required',
+    )
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.deepEqual(cleaned, [])
   })
 })

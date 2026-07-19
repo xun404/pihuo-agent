@@ -25,7 +25,9 @@ describe('resolveContainedPath', () => {
 
   afterEach(() => {
     rmSync(tmp, { recursive: true, force: true })
-    try { rmSync(outside, { recursive: true, force: true }) } catch {}
+    try {
+      rmSync(outside, { recursive: true, force: true })
+    } catch {}
   })
 
   it('resolves direct child', () => {

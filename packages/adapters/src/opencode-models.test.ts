@@ -27,13 +27,7 @@ not-a-model
 
   it('sorts pinned + zen + auth before openrouter', () => {
     const sorted = sortOpenCodeModelIds(
-      [
-        'openrouter/a/x',
-        'deepseek/chat',
-        'opencode/big-pickle',
-        'opencode-go/mimo',
-        'pinned/me',
-      ],
+      ['openrouter/a/x', 'deepseek/chat', 'opencode/big-pickle', 'opencode-go/mimo', 'pinned/me'],
       {
         pinnedModel: 'pinned/me',
         authProviders: new Set(['opencode', 'deepseek', 'opencode-go', 'openrouter']),

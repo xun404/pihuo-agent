@@ -9,6 +9,7 @@
  * - Minimal config under a temp HOME/.config/opencode/
  * - Reuse real XDG data/cache so auth still works for paid providers
  * - Prefer free Zen models (`opencode/big-pickle`) unless worker pins a valid model
+ * - Never silently remap an ineligible pin to a different model
  *
  * @see https://opencode.ai/docs/acp/
  * @see https://opencode.ai/docs/troubleshooting/
@@ -17,6 +18,15 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { WorkerModelOption } from '@router-agents/shared'
+import {
+  evaluateModelEligibility,
+  ModelEligibilityError,
+  type ProviderEvidence,
+} from './model-eligibility.js'
+import { resolveOpenCodeEvidencePaths } from './opencode-evidence-paths.js'
+
+export { ModelEligibilityError } from './model-eligibility.js'
 
 export const OPENCODE_SAFE_DEFAULT_MODEL =
   process.env.OPENCODE_MODEL?.trim() || 'opencode/big-pickle'
@@ -35,22 +45,62 @@ export function isLikelyOpenCodeZenModel(modelId: string): boolean {
   return modelId.startsWith('opencode/')
 }
 
+function diagnosticOverrideEnabled(pinned: string): boolean {
+  if (process.env.OPENCODE_ALLOW_CUSTOM_MODEL === '1') return true
+  if (pinned.startsWith('opencode-go/') && process.env.OPENCODE_ALLOW_GO === '1') return true
+  return false
+}
+
+export interface PickOpenCodeAcpModelOpts {
+  pinned?: string | null
+  candidates?: WorkerModelOption[]
+  providers?: Record<string, ProviderEvidence>
+  zenFreeAllowlist?: string[]
+  /** diagnostic only — OPENCODE_ALLOW_* also enables this */
+  allowOverride?: boolean
+}
+
 /**
  * Pick a model id safe for ACP:
- * - Keep worker pin if it looks like Zen free or env override
- * - Otherwise fall back to safe default (avoid disabled custom providers)
+ * - No pin → safe default
+ * - Pin eligible for execute → pin
+ * - Pin ineligible → throw ModelEligibilityError (no silent remap)
+ * - OPENCODE_ALLOW_CUSTOM_MODEL / OPENCODE_ALLOW_GO only diagnostic override
  */
-export function pickOpenCodeAcpModel(pinned?: string | null): string {
-  const p = pinned?.trim()
-  if (p && isLikelyOpenCodeZenModel(p)) return p
-  if (p && process.env.OPENCODE_ALLOW_CUSTOM_MODEL === '1') return p
-  // Custom providers (opencode-go/*, glm-coding-plan/*) often fail under ACP
-  // when disabled or missing auth in the isolated session.
-  if (p && !p.includes('glm-coding-plan') && !p.includes('disabled')) {
-    // still allow opencode-go if user explicitly set OPENCODE_MODEL or pin + allow
-    if (p.startsWith('opencode-go/') && process.env.OPENCODE_ALLOW_GO === '1') return p
+export function pickOpenCodeAcpModel(opts: PickOpenCodeAcpModelOpts = {}): string {
+  const p = opts.pinned?.trim() || ''
+  if (!p) return OPENCODE_SAFE_DEFAULT_MODEL
+
+  const allowOverride = opts.allowOverride === true || diagnosticOverrideEnabled(p)
+  if (allowOverride) return p
+
+  const zenFreeAllowlist = opts.zenFreeAllowlist ?? [...OPENCODE_ZEN_FREE_MODELS]
+  const candidates = opts.candidates
+  const providers = opts.providers
+
+  if (candidates && providers) {
+    const er = evaluateModelEligibility({
+      modelId: p,
+      candidates,
+      providers,
+      zenFreeAllowlist,
+      purpose: 'execute',
+    })
+    if (er.eligible) return p
+    throw new ModelEligibilityError(
+      `Model "${p}" is not eligible for ACP execute: ${er.errorCode ?? 'unknown'}`,
+      {
+        errorCode: er.errorCode ?? 'MODEL_SELECTION_UNVERIFIED',
+        providerId: er.providerId,
+        evidence: er.evidence,
+      },
+    )
   }
-  return OPENCODE_SAFE_DEFAULT_MODEL
+
+  // No eligibility context (discovery/spawn before catalog load): keep pin as-is.
+  // Never remap to a different model — callers that have candidates must pass them.
+  void zenFreeAllowlist
+  return p
 }
 
 export interface OpenCodeAcpPrep {
@@ -65,6 +115,7 @@ export interface OpenCodeAcpPrep {
 
 /**
  * Build env + isolated config so `opencode acp` can start under ACP SDK 1.2.1.
+ * Throws ModelEligibilityError when pin is ineligible (fail-closed).
  */
 export function prepareOpenCodeAcpEnv(opts?: {
   baseEnv?: NodeJS.ProcessEnv
@@ -72,54 +123,98 @@ export function prepareOpenCodeAcpEnv(opts?: {
   model?: string | null
   /** When true, still pass model to createACPTool for set_model */
   forceSetModel?: boolean
+  candidates?: WorkerModelOption[]
+  providers?: Record<string, ProviderEvidence>
+  zenFreeAllowlist?: string[]
+  allowOverride?: boolean
 }): OpenCodeAcpPrep {
   const base = opts?.baseEnv ?? process.env
   const realHome = base.HOME || process.env.HOME || tmpdir()
-  const configModel = pickOpenCodeAcpModel(opts?.model)
+  const hasExplicitXdgConfig = Object.prototype.hasOwnProperty.call(base, 'XDG_CONFIG_HOME')
+  const hasExplicitXdgData = Object.prototype.hasOwnProperty.call(base, 'XDG_DATA_HOME')
+  const hasExplicitXdgCache = Object.prototype.hasOwnProperty.call(base, 'XDG_CACHE_HOME')
+  const evidencePaths = resolveOpenCodeEvidencePaths({
+    realHome,
+    XDG_CONFIG_HOME: base.XDG_CONFIG_HOME,
+    XDG_DATA_HOME: base.XDG_DATA_HOME,
+    explicitXdgConfig: hasExplicitXdgConfig,
+    explicitXdgData: hasExplicitXdgData,
+  })
+  const configModel = pickOpenCodeAcpModel({
+    pinned: opts?.model,
+    candidates: opts?.candidates,
+    providers: opts?.providers,
+    zenFreeAllowlist: opts?.zenFreeAllowlist,
+    allowOverride: opts?.allowOverride,
+  })
 
   const root = mkdtempSync(join(tmpdir(), 'router-oc-acp-'))
   const confDir = join(root, '.config', 'opencode')
   mkdirSync(confDir, { recursive: true })
 
-  // No `server.port` — avoids ServeError when user has a fixed busy port in global config
+  // No `server.port` — avoids ServeError when user has a fixed busy port in global config.
+  // Project safe provider config for the selected model so "discoverable" stays "executable".
   const conf: Record<string, unknown> = {
     $schema: 'https://opencode.ai/config.json',
     model: configModel,
   }
-  writeFileSync(join(confDir, 'opencode.json'), JSON.stringify(conf, null, 2), 'utf8')
 
-  // Optional: surface why we overrode
   let hint = `OpenCode ACP isolated config model=${configModel}`
-  if (opts?.model && opts.model !== configModel) {
-    hint += ` (worker pin "${opts.model}" remapped — set OPENCODE_ALLOW_GO=1 or OPENCODE_ALLOW_CUSTOM_MODEL=1 to force)`
+  if (opts?.model?.trim() && opts.model.trim() !== configModel) {
+    hint += ` (override applied for pin "${opts.model}")`
   }
 
-  // Read user disabled_providers only for logging
   try {
-    const userConfPath = join(realHome, '.config/opencode/opencode.json')
-    if (existsSync(userConfPath)) {
+    const userConfPath = evidencePaths.disabledPaths[0]
+    if (userConfPath && existsSync(userConfPath)) {
       const raw = JSON.parse(readFileSync(userConfPath, 'utf8')) as {
         model?: string
         server?: { port?: number }
         disabled_providers?: string[]
+        provider?: Record<string, unknown>
+        providers?: Record<string, unknown>
       }
       if (raw.server?.port) {
         hint += `; ignored user server.port=${raw.server.port}`
       }
       if (raw.disabled_providers?.length) {
         hint += `; user disabled_providers=${raw.disabled_providers.join(',')}`
+        // Project disabled_providers so execute matches discovery evidence
+        conf.disabled_providers = raw.disabled_providers
+      }
+      // Project only the selected provider's config (not full custom secrets dump)
+      const providerId = configModel.includes('/')
+        ? configModel.slice(0, configModel.indexOf('/'))
+        : configModel
+      const userProviders = raw.provider ?? raw.providers
+      if (userProviders && typeof userProviders === 'object' && providerId in userProviders) {
+        const entry = (userProviders as Record<string, unknown>)[providerId]
+        if (entry && typeof entry === 'object') {
+          // Strip npm tokens / secret-looking fields; keep baseURL / options needed for custom providers
+          const safe: Record<string, unknown> = {}
+          for (const [k, v] of Object.entries(entry as Record<string, unknown>)) {
+            if (/secret|token|apiKey|api_key|password|credential/i.test(k)) continue
+            safe[k] = v
+          }
+          conf.provider = { [providerId]: safe }
+          hint += `; projected provider config for ${providerId}`
+        }
       }
     }
   } catch {
     /* ignore */
   }
 
+  writeFileSync(join(confDir, 'opencode.json'), JSON.stringify(conf, null, 2), 'utf8')
+
   const env: NodeJS.ProcessEnv = {
     ...base,
     HOME: root,
     // Keep credentials / package cache from the real user install
-    XDG_DATA_HOME: base.XDG_DATA_HOME || join(realHome, '.local/share'),
-    XDG_CACHE_HOME: base.XDG_CACHE_HOME || join(realHome, '.cache'),
+    XDG_DATA_HOME: hasExplicitXdgData ? base.XDG_DATA_HOME : join(realHome, '.local/share'),
+    XDG_CACHE_HOME: hasExplicitXdgCache ? base.XDG_CACHE_HOME : join(realHome, '.cache'),
+    // Keep OpenCode from loading the original config a second time; use projected config only.
+    XDG_CONFIG_HOME: join(root, '.config'),
     // Avoid inheriting a bad OPENCODE_CONFIG that reintroduces server.port
     OPENCODE_CONFIG: join(confDir, 'opencode.json'),
   }

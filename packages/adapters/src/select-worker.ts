@@ -1,8 +1,4 @@
-import {
-  workerHealthRank,
-  type WorkerRegistration,
-  type WorkerRole,
-} from '@router-agents/shared'
+import { workerHealthRank, type WorkerRegistration, type WorkerRole } from '@router-agents/shared'
 
 export interface SelectWorkerOptions {
   role?: WorkerRole
@@ -58,9 +54,7 @@ export function selectWorkerByRole(
 
   if (opts.role) {
     const role = opts.role
-    const capable = list.filter(
-      (w) => w.primaryRole === role || w.roles.includes(role),
-    )
+    const capable = list.filter((w) => w.primaryRole === role || w.roles.includes(role))
     if (capable.length === 0) return null
     if (!preferHealthy) {
       return capable.find((w) => w.primaryRole === role) ?? capable[0]!
@@ -84,8 +78,6 @@ export function listWorkersForRole(
   enabledOnly = true,
 ): WorkerRegistration[] {
   const list = enabledOnly ? workers.filter((w) => w.enabled) : workers
-  const capable = list.filter(
-    (w) => w.primaryRole === role || w.roles.includes(role),
-  )
+  const capable = list.filter((w) => w.primaryRole === role || w.roles.includes(role))
   return sortByHealthThenPrimary(capable, role)
 }
