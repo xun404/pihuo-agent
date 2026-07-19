@@ -47,6 +47,7 @@ import {
 } from './Icons'
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
+import { ComposerToolbar } from './ComposerToolbar'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
 import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
@@ -1171,306 +1172,31 @@ export function ChatPanel({
           }}
         />
         <div className="composer-tools">
-          <div className="mode-menu-wrap" ref={accessWrapRef}>
-            <button
-              type="button"
-              className={`chip menu${accessMode.accent ? ' access' : ''}`}
-              onClick={() => {
-                setAccessMenuOpen((v) => !v)
-                setModelMenuOpen(false)
-                setThinkMenuOpen(false)
-              }}
-            >
-              <AccessModeIcon id={accessMode.id} size={13} className="chip-ico" />
-              {t(accessMode.titleKey)}
-              <span className="caret">▾</span>
-            </button>
-            <AnimatePresence>
-              {accessMenuOpen && (
-                <motion.div
-                  className="pop-menu mode-menu"
-                  role="menu"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
-                >
-                  {ACCESS_MODES.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={`pop-item${accessModeId === m.id ? ' on' : ''}${
-                        m.accent ? ' access' : ''
-                      }`}
-                      role="menuitem"
-                      onClick={() => selectAccessMode(m.id)}
-                    >
-                      <span className={`pi${m.accent ? ' accent' : ''}`} aria-hidden>
-                        <AccessModeIcon id={m.id} size={16} />
-                      </span>
-                      <span className="pi-body">
-                        <div className="pi-title">{t(m.titleKey)}</div>
-                        <div className="pi-desc">{t(m.descKey)}</div>
-                      </span>
-                      {accessModeId === m.id && (
-                        <span className="check">
-                          <IconCheck size={14} />
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div className="spacer" />
-
-          <div className="model-wrap" ref={modelWrapRef}>
-            <span
-              className="ctx-meter-hit"
-              title={t('chat.ctxTitle')}
-              onClick={() => {
-                setCtxTipOpen((v) => !v)
-                setModelMenuOpen(false)
-                setModelSideOpen(false)
-                setThinkMenuOpen(false)
-              }}
-            >
-              <ContextRing
-                pct={ctxPct}
-                title={t('chat.ctxStats', {
-                  used: ctxUsedLabel,
-                  total: ctxTotalLabel,
-                  pct: ctxPctLabel,
-                })}
-              />
-              <AnimatePresence>
-                {ctxTipOpen && (
-                  <motion.div
-                    className="ctx-tip"
-                    role="dialog"
-                    aria-label={t('chat.ctxTitle')}
-                    initial={{ opacity: 0, x: '-50%', y: 4 }}
-                    animate={{ opacity: 1, x: '-50%', y: 0 }}
-                    exit={{ opacity: 0, x: '-50%', y: 4 }}
-                    transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
-                  >
-                    <div className="ctx-tip-head">
-                      <span className="t-title">{t('chat.ctxTitle')}</span>
-                      <span className="t-stats">
-                        {t('chat.ctxStats', {
-                          used: ctxUsedLabel,
-                          total: ctxTotalLabel,
-                          pct: ctxPctLabel,
-                        })}
-                      </span>
-                    </div>
-                    <div
-                      className="ctx-tip-bar"
-                      role="progressbar"
-                      aria-valuenow={Math.round(ctxPct)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      <div
-                        className="ctx-tip-bar-fill"
-                        style={{ width: `${Math.min(100, Math.max(0, ctxPct))}%` }}
-                      />
-                    </div>
-                    <div className="ctx-tip-cache">
-                      <span className="t-label">{t('chat.ctxCacheHit')}</span>
-                      <span className="t-value">99.89%</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="ctx-tip-btn"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        // Placeholder: compress context — implement later
-                      }}
-                    >
-                      {t('chat.ctxCompress')}
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </span>
-
-            {!modelsLoading && models.length === 0 ? (
-              <button type="button" className="chip menu" onClick={() => onOpenSettings?.('model')}>
-                {t('chat.noModelConfigured')} →
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="chip menu"
-                title={selectedModel}
-                disabled={modelsLoading}
-                onClick={() => {
-                  setModelMenuOpen((v) => !v)
-                  setCtxTipOpen(false)
-                  setAccessMenuOpen(false)
-                  if (!models.length) void loadModels()
-                }}
-              >
-                {modelsLoading ? t('app.loading') : modelChipLabel}
-                <span className="caret">▾</span>
-              </button>
-            )}
-
-            <AnimatePresence>
-              {modelMenuOpen && models.length > 0 && (
-                <motion.div
-                  className="pop-menu model-menu"
-                  role="menu"
-                  aria-label={t('chat.model')}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
-                >
-                  {/* 主面板两行：模型 / 思考强度。点击各自弹侧栏（紧贴左侧，top 对齐）*/}
-                  <button
-                    type="button"
-                    className="pop-row"
-                    role="menuitem"
-                    onClick={() => {
-                      setModelSideOpen((v) => !v)
-                      setThinkMenuOpen(false)
-                    }}
-                  >
-                    {t('chat.model')}
-                    <span className="val">
-                      {modelShort}
-                      <span className="arrow">‹</span>
-                    </span>
-                  </button>
-                  {supportedThinking.length > 0 && (
-                    <button
-                      type="button"
-                      className="pop-row"
-                      role="menuitem"
-                      onClick={() => {
-                        setThinkMenuOpen((v) => !v)
-                        setModelSideOpen(false)
-                      }}
-                    >
-                      {t('chat.think.label')}
-                      <span className="val">
-                        {thinkShort}
-                        <span className="arrow">‹</span>
-                      </span>
-                    </button>
-                  )}
-                  {/* 管理模型入口（主菜单底部，分隔线 + accent 按钮）*/}
-                  <div className="pop-manage">
-                    <button
-                      type="button"
-                      className="pop-row pop-manage-btn"
-                      onClick={() => {
-                        setModelMenuOpen(false)
-                        setModelSideOpen(false)
-                        setThinkMenuOpen(false)
-                        window.dispatchEvent(
-                          new CustomEvent('swarmdesk-agent:open-settings', {
-                            detail: { tab: 'model' },
-                          }),
-                        )
-                      }}
-                    >
-                      {t('chat.manageModels')}
-                    </button>
-                  </div>
-                  {/* 思考强度侧栏（紧贴主菜单左侧，top 对齐，从右滑入）*/}
-                  <AnimatePresence>
-                    {thinkMenuOpen && supportedThinking.length > 0 && (
-                      <motion.div
-                        className="pop-side pop-side-cascade"
-                        ref={thinkWrapRef}
-                        role="menu"
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -8 }}
-                        transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
-                      >
-                        {supportedThinking.map((level) => (
-                          <button
-                            key={level}
-                            type="button"
-                            className={`pop-row${thinkingIntensity === level ? ' on' : ''}`}
-                            role="menuitem"
-                            onClick={() => selectThinking(level)}
-                          >
-                            {t(THINK_LABEL_KEY[level])}
-                            {thinkingIntensity === level && (
-                              <span className="check">
-                                <IconCheck size={14} />
-                              </span>
-                            )}
-                          </button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  {/* 模型侧栏（紧贴主菜单左侧，top 对齐，从右滑入）：服务商分组 */}
-                  <AnimatePresence>
-                    {modelSideOpen && (
-                      <motion.div
-                        className="pop-side pop-side-cascade pop-side-models"
-                        ref={thinkWrapRef}
-                        role="menu"
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -8 }}
-                        transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
-                      >
-                        {byProvider.map(([providerId, group]) => (
-                          <div key={providerId} className="pop-prov-block">
-                            <div className="pop-prov-header">
-                              <span className="prov-ico" aria-hidden>
-                                <ProviderLogo providerId={providerId} size={14} />
-                              </span>
-                              <span>{group.name}</span>
-                            </div>
-                            {group.models.map((m) => (
-                              <button
-                                key={m.id}
-                                type="button"
-                                className={`pop-row pop-model-row${selectedModel === m.id ? ' on' : ''}`}
-                                role="menuitemradio"
-                                aria-checked={selectedModel === m.id}
-                                onClick={() => {
-                                  setSelectedModel(m.id)
-                                  selectedModelRef.current = m.id
-                                  const nextThink = clampThink(
-                                    thinkingIntensity,
-                                    m.thinkingIntensities,
-                                  )
-                                  setThinkingIntensity(nextThink)
-                                  thinkingIntensityRef.current = nextThink
-                                  setModelSideOpen(false)
-                                  setModelMenuOpen(false)
-                                  setThinkMenuOpen(false)
-                                }}
-                              >
-                                <span>{m.label}</span>
-                                {selectedModel === m.id && (
-                                  <span className="check">
-                                    <IconCheck size={14} />
-                                  </span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          <ComposerToolbar
+            mode={mode}
+            approvalPolicy={approvalPolicy}
+            selectedModel={selectedModel}
+            thinkingIntensity={thinkingIntensity}
+            models={models}
+            modelsLoading={modelsLoading}
+            tokenCount={approxTokens}
+            locale={locale}
+            onModeChange={(m) => {
+              setMode(m)
+              modeRef.current = m
+              onModeChange?.(m)
+            }}
+            onApprovalPolicyChange={(p) => onSetApprovalPolicy?.(p)}
+            onModelChange={(id) => {
+              setSelectedModel(id)
+              selectedModelRef.current = id
+            }}
+            onThinkingChange={(th) => {
+              setThinkingIntensity(th)
+              thinkingIntensityRef.current = th
+            }}
+            onOpenSettings={onOpenSettings}
+          />
 
           {busy ? (
             <button
