@@ -49,6 +49,7 @@ export type MessageKey =
   | 'chat.noModelHint'
   | 'chat.openSession'
   | 'chat.openSessionHint'
+  | 'chat.openProject'
   | 'chat.openSettings'
   | 'chat.placeholder'
   | 'chat.placeholderHome'
@@ -76,6 +77,7 @@ export type MessageKey =
   | 'chat.toolError'
   | 'chat.you'
   | 'common.refresh'
+  | 'common.loading'
   | 'files.empty'
   | 'files.error'
   | 'files.noProject'
@@ -85,6 +87,36 @@ export type MessageKey =
   | 'git.error'
   | 'git.insertions'
   | 'git.noProject'
+  | 'git.branchSwitcher.label'
+  | 'git.branchSwitcher.trigger.ariaLabel'
+  | 'git.branchSwitcher.searchPlaceholder'
+  | 'git.branchSwitcher.section.branches'
+  | 'git.branchSwitcher.empty'
+  | 'git.branchSwitcher.loading'
+  | 'git.branchSwitcher.detached'
+  | 'git.branchSwitcher.currentDirty'
+  | 'git.branchSwitcher.createAction'
+  | 'git.branchSwitcher.workerWarning'
+  | 'git.branchSwitcher.toast.switchSuccess'
+  | 'git.branchSwitcher.toast.createSuccess'
+  | 'git.branchSwitcher.createDialog.title'
+  | 'git.branchSwitcher.createDialog.description'
+  | 'git.branchSwitcher.createDialog.nameLabel'
+  | 'git.branchSwitcher.createDialog.placeholder'
+  | 'git.branchSwitcher.createDialog.startPointLabel'
+  | 'git.branchSwitcher.createDialog.startPointPlaceholder'
+  | 'git.branchSwitcher.createDialog.confirm'
+  | 'git.branchSwitcher.commitDialog.title'
+  | 'git.branchSwitcher.commitDialog.description'
+  | 'git.branchSwitcher.commitDialog.messageLabel'
+  | 'git.branchSwitcher.commitDialog.confirm'
+  | 'git.branchSwitcher.error.tracked-changes-would-be-overwritten'
+  | 'git.branchSwitcher.error.untracked-changes-would-be-overwritten'
+  | 'git.branchSwitcher.error.conflicts-present'
+  | 'git.branchSwitcher.error.operation-in-progress'
+  | 'git.branchSwitcher.error.branch-in-other-worktree'
+  | 'git.branchSwitcher.error.target-branch-not-found'
+  | 'git.branchSwitcher.error.request-failed'
   | 'jobs.cancel'
   | 'jobs.dispatch'
   | 'jobs.dispatchPlaceholder'
@@ -101,6 +133,7 @@ export type MessageKey =
   | 'prompt.noFolder'
   | 'prompt.ok'
   | 'prompt.projectPath'
+  | 'prompt.selectFolder'
   | 'right.approvals'
   | 'right.files'
   | 'right.git'
@@ -401,6 +434,7 @@ const zh: Dict = {
   'chat.openSession': '选择左侧 Session，或新建一个。',
   'chat.openSessionHint':
     '选择左侧 Session，或新建一个。Leader 会按角色协调 plan / coder / review / test 等 CLI Worker。',
+  'chat.openProject': '打开项目…',
   'chat.openSettings': '打开设置',
   'chat.placeholder': '描述任务，或指定角色/Worker…（⌘↵ 发送）',
   'chat.placeholderHome': '随心输入…',
@@ -428,6 +462,7 @@ const zh: Dict = {
   'chat.toolError': '失败',
   'chat.you': '你',
   'common.refresh': '刷新',
+  'common.loading': '加载中…',
   'files.empty': '目录为空',
   'files.error': '无法列出文件',
   'files.noProject': '请先打开项目',
@@ -437,6 +472,38 @@ const zh: Dict = {
   'git.error': '无法读取 Git 状态',
   'git.insertions': '新增行',
   'git.noProject': '请先打开项目',
+  'git.branchSwitcher.label': '分支',
+  'git.branchSwitcher.trigger.ariaLabel': '切换 Git 分支',
+  'git.branchSwitcher.searchPlaceholder': '搜索分支',
+  'git.branchSwitcher.section.branches': '分支',
+  'git.branchSwitcher.empty': '未找到匹配分支',
+  'git.branchSwitcher.loading': '读取中…',
+  'git.branchSwitcher.detached': '（分离 HEAD）',
+  'git.branchSwitcher.currentDirty': '未提交：{count} 个文件',
+  'git.branchSwitcher.createAction': '创建并检出新分支…',
+  'git.branchSwitcher.workerWarning':
+    '当前项目有 {count} 个进行中的任务，切换分支会影响它们看到的代码。是否继续？',
+  'git.branchSwitcher.toast.switchSuccess': '已切换到分支 {branchName}',
+  'git.branchSwitcher.toast.createSuccess': '已创建并切换到分支 {branchName}',
+  'git.branchSwitcher.createDialog.title': '创建新分支',
+  'git.branchSwitcher.createDialog.description': '从当前 HEAD 创建并切换到新分支。',
+  'git.branchSwitcher.createDialog.nameLabel': '分支名',
+  'git.branchSwitcher.createDialog.placeholder': 'feature/my-branch',
+  'git.branchSwitcher.createDialog.startPointLabel': '起点（可选）',
+  'git.branchSwitcher.createDialog.startPointPlaceholder': 'main / commit-ish',
+  'git.branchSwitcher.createDialog.confirm': '创建并切换',
+  'git.branchSwitcher.commitDialog.title': '提交并切换',
+  'git.branchSwitcher.commitDialog.description': '切换到 {target} 前需要先提交当前改动。',
+  'git.branchSwitcher.commitDialog.messageLabel': '提交信息',
+  'git.branchSwitcher.commitDialog.confirm': '提交并切换',
+  'git.branchSwitcher.error.tracked-changes-would-be-overwritten':
+    '本地已跟踪的改动会被覆盖，请先提交或暂存。',
+  'git.branchSwitcher.error.untracked-changes-would-be-overwritten': '未跟踪的工作区文件会被覆盖。',
+  'git.branchSwitcher.error.conflicts-present': '当前存在未解决的冲突。',
+  'git.branchSwitcher.error.operation-in-progress': '另一个 git 进程正在运行，请稍后再试。',
+  'git.branchSwitcher.error.branch-in-other-worktree': '该分支已在其它 worktree 检出。',
+  'git.branchSwitcher.error.target-branch-not-found': '目标分支不存在。',
+  'git.branchSwitcher.error.request-failed': '操作失败，请重试。',
   'jobs.cancel': '取消',
   'jobs.dispatch': '派发任务',
   'jobs.dispatchPlaceholder': '描述要委派给 Worker 的任务…',
@@ -454,6 +521,7 @@ const zh: Dict = {
   'prompt.noFolder': '未能读取文件夹绝对路径。请重试选择，或直接把路径粘贴到输入框。',
   'prompt.ok': '确定',
   'prompt.projectPath': '项目根目录绝对路径',
+  'prompt.selectFolder': '选择此文件夹',
   'right.approvals': '审批',
   'right.files': '文件',
   'right.git': 'Git',
@@ -766,6 +834,7 @@ const en: Dict = {
   'chat.openSession': 'Pick a session on the left or create one.',
   'chat.openSessionHint':
     'Pick a session on the left or create one. The Leader routes by role: plan / coder / review / test CLI workers.',
+  'chat.openProject': 'Open Project…',
   'chat.openSettings': 'Open settings',
   'chat.placeholder': 'Describe a task, or name a role/worker… (⌘↵ send)',
   'chat.placeholderHome': 'Ask anything…',
@@ -793,6 +862,7 @@ const en: Dict = {
   'chat.toolError': 'error',
   'chat.you': 'You',
   'common.refresh': 'Refresh',
+  'common.loading': 'Loading…',
   'files.empty': 'Directory is empty',
   'files.error': 'Could not list files',
   'files.noProject': 'Open a project first',
@@ -802,6 +872,39 @@ const en: Dict = {
   'git.error': 'Could not read git status',
   'git.insertions': 'insertions',
   'git.noProject': 'Open a project first',
+  'git.branchSwitcher.label': 'Branch',
+  'git.branchSwitcher.trigger.ariaLabel': 'Switch Git branch',
+  'git.branchSwitcher.searchPlaceholder': 'Search branches',
+  'git.branchSwitcher.section.branches': 'Branches',
+  'git.branchSwitcher.empty': 'No matching branches',
+  'git.branchSwitcher.loading': 'Reading…',
+  'git.branchSwitcher.detached': '(detached HEAD)',
+  'git.branchSwitcher.currentDirty': '{count} uncommitted file(s)',
+  'git.branchSwitcher.createAction': 'Create and checkout new branch…',
+  'git.branchSwitcher.workerWarning':
+    'This project has {count} running job(s). Switching branches will change the code they see. Continue?',
+  'git.branchSwitcher.toast.switchSuccess': 'Switched to branch {branchName}',
+  'git.branchSwitcher.toast.createSuccess': 'Created and switched to {branchName}',
+  'git.branchSwitcher.createDialog.title': 'Create new branch',
+  'git.branchSwitcher.createDialog.description': 'Create and checkout a new branch from current HEAD.',
+  'git.branchSwitcher.createDialog.nameLabel': 'Branch name',
+  'git.branchSwitcher.createDialog.placeholder': 'feature/my-branch',
+  'git.branchSwitcher.createDialog.startPointLabel': 'Start point (optional)',
+  'git.branchSwitcher.createDialog.startPointPlaceholder': 'main / commit-ish',
+  'git.branchSwitcher.createDialog.confirm': 'Create and switch',
+  'git.branchSwitcher.commitDialog.title': 'Commit and switch',
+  'git.branchSwitcher.commitDialog.description': 'Commit current changes before switching to {target}.',
+  'git.branchSwitcher.commitDialog.messageLabel': 'Commit message',
+  'git.branchSwitcher.commitDialog.confirm': 'Commit and switch',
+  'git.branchSwitcher.error.tracked-changes-would-be-overwritten':
+    'Local tracked changes would be overwritten. Commit or stash first.',
+  'git.branchSwitcher.error.untracked-changes-would-be-overwritten':
+    'Untracked working tree files would be overwritten.',
+  'git.branchSwitcher.error.conflicts-present': 'Unresolved conflicts in the index.',
+  'git.branchSwitcher.error.operation-in-progress': 'Another git process is running. Try again shortly.',
+  'git.branchSwitcher.error.branch-in-other-worktree': 'Branch is already checked out in another worktree.',
+  'git.branchSwitcher.error.target-branch-not-found': 'Target branch does not exist.',
+  'git.branchSwitcher.error.request-failed': 'Operation failed. Please retry.',
   'jobs.cancel': 'Cancel',
   'jobs.dispatch': 'Dispatch',
   'jobs.dispatchPlaceholder': 'Describe the task for the worker…',
@@ -819,6 +922,7 @@ const en: Dict = {
   'prompt.noFolder': 'No path received. Pick a folder and click Open, or paste a path.',
   'prompt.ok': 'OK',
   'prompt.projectPath': 'Absolute path to project root',
+  'prompt.selectFolder': 'Select this folder',
   'right.approvals': 'Approvals',
   'right.files': 'Files',
   'right.git': 'Git',
