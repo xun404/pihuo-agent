@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { directoryPathFromFileList, isAbsoluteFsPath } from '../lib/directory-from-files'
+import { isAbsoluteFsPath } from '../lib/directory-from-files'
+import { pickProjectDirectory } from '../lib/native-dialogs'
 import { Modal } from './ui/Modal'
 
 interface Props {
@@ -18,12 +19,10 @@ interface Props {
 /**
  * Open-project modal.
  *
- * Browse uses Chromium directory input + Electron webUtils.getPathForFile.
- * (Native dialog.showOpenDialog returns empty filePaths on this setup;
- *  osascript choose-folder auto-cancels when spawned from Electron.)
- *
- * Note: the system panel may label the confirm button "上传" — that is Chrome/macOS
- * localization for the file panel, not an actual network upload.
+ * Browse invokes the native OS folder picker via Electron IPC
+ * (dialog:openDirectory → pick-directory.ts → dialog.showOpenDialog /
+ * osascript / PowerShell / zenity). No HTML <input webkitdirectory>
+ * "upload" panel is used. Manual absolute-path entry remains as a fallback.
  */
 export function OpenProjectModal({
   open,
@@ -42,7 +41,6 @@ export function OpenProjectModal({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const dirInputRef = useRef<HTMLInputElement>(null)
   const wasOpenRef = useRef(false)
 
   useEffect(() => {
@@ -51,7 +49,6 @@ export function OpenProjectModal({
       setError(null)
       setStatus(null)
       setBusy(false)
-      if (dirInputRef.current) dirInputRef.current.value = ''
       requestAnimationFrame(() => inputRef.current?.focus())
     }
     wasOpenRef.current = open
@@ -86,107 +83,25 @@ export function OpenProjectModal({
     onOpen(p)
   }
 
-  const browse = () => {
+  const browse = async () => {
     setError(null)
-    setStatus('请在弹出的窗口中选择文件夹（确认按钮可能显示为「上传」，选中目录即可）')
-    const el = dirInputRef.current
-    if (!el) {
-      setError('无法打开文件夹选择，请手动粘贴路径')
-      return
-    }
-    el.value = ''
-    el.click()
-  }
-
-  const onDirInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setStatus('请在弹出的系统窗口中选择文件夹…')
     setBusy(true)
-    setError(null)
     try {
-      const list = e.target.files
-      if (!list || list.length === 0) {
-        setError('未选择文件夹（可再试一次，或粘贴路径）')
-        setStatus(null)
-        return
-      }
-
-      const resolveAbs = (file: File): string | null => {
-        const fn = window.routerAgents?.dialog?.getPathForFile
-        if (typeof fn === 'function') {
-          try {
-            const p = fn(file)
-            if (typeof p === 'string' && p.trim()) return p.trim()
-          } catch (err) {
-            console.error('[OpenProjectModal] getPathForFile', err)
-          }
-        }
-        const legacy = (file as File & { path?: string }).path
-        if (typeof legacy === 'string' && legacy.trim()) return legacy.trim()
-        return null
-      }
-
-      // Debug: log first file resolution
-      const sample = list.item(0)
-      const sampleAbs = sample ? resolveAbs(sample) : null
-      console.log('[OpenProjectModal] directory pick', {
-        count: list.length,
-        rel: sample?.webkitRelativePath,
-        abs: sampleAbs,
-        hasApi: typeof window.routerAgents?.dialog?.getPathForFile === 'function',
+      const picked = await pickProjectDirectory({
+        title,
+        buttonLabel: '选择此文件夹',
       })
-
-      let dir = directoryPathFromFileList(list, resolveAbs)
-
-      if (!dir) {
-        for (let i = 0; i < Math.min(list.length, 30); i++) {
-          const f = list.item(i)
-          if (!f) continue
-          const abs = resolveAbs(f)
-          if (!abs) continue
-          dir = directoryPathFromFileList(
-            [
-              { ...f, path: abs, webkitRelativePath: f.webkitRelativePath } as File & {
-                path?: string
-              },
-            ],
-            () => abs,
-          )
-          if (dir) break
-          // last resort: dirname of abs path
-          if (isAbsoluteFsPath(abs)) {
-            const slash = abs.lastIndexOf('/')
-            if (slash > 0) {
-              // Prefer root from webkitRelativePath
-              const root = (f.webkitRelativePath || '').split('/')[0]
-              if (root && abs.includes(`/${root}/`)) {
-                dir = abs.slice(0, abs.indexOf(`/${root}/`) + root.length + 1)
-              } else if (root && abs.endsWith(`/${root}`) === false) {
-                const idx = abs.indexOf(`/${root}/`)
-                if (idx >= 0) dir = abs.slice(0, idx + 1 + root.length)
-                else {
-                  // strip filename only
-                  dir = abs.slice(0, slash)
-                }
-              } else {
-                dir = abs.slice(0, slash)
-              }
-            }
-          }
-          if (dir && isAbsoluteFsPath(dir)) break
-        }
+      if (picked) {
+        applyPath(picked)
+      } else {
+        setStatus(null)
       }
-
-      if (dir && isAbsoluteFsPath(dir)) {
-        applyPath(dir)
-        return
-      }
-
-      setError(
-        '已选中文件夹，但无法解析绝对路径。请把路径粘贴到上方输入框（可在 Finder 中右键文件夹 → 按住 Option → 复制路径名）。',
-      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
       setStatus(null)
     } finally {
       setBusy(false)
-      e.target.value = ''
     }
   }
 
@@ -199,21 +114,6 @@ export function OpenProjectModal({
       closeOnBackdrop={!busy}
     >
       <h3 className="text-prompt-title">{title}</h3>
-
-      <input
-        ref={(el) => {
-          dirInputRef.current = el
-          if (el) {
-            el.setAttribute('webkitdirectory', '')
-            el.setAttribute('directory', '')
-          }
-        }}
-        type="file"
-        multiple
-        style={{ display: 'none' }}
-        tabIndex={-1}
-        onChange={onDirInputChange}
-      />
 
       <label className="settings-field">
         <span>{pathLabel}</span>
@@ -246,7 +146,7 @@ export function OpenProjectModal({
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              browse()
+              void browse()
             }}
           >
             {busy ? '…' : browseLabel}
@@ -260,9 +160,7 @@ export function OpenProjectModal({
         </p>
       )}
       <p className="settings-field-hint">
-        说明：系统对话框的确认按钮可能显示为「上传」，这是 macOS/Chrome 的固定文案，
-        <strong>不会上传到网络</strong>，只是在本机选择文件夹。 也可在 Finder
-        中复制路径后粘贴到上方。
+        点击「{browseLabel}」打开系统文件夹选择器；或在 Finder 中复制路径后粘贴到上方输入框。
       </p>
       {error && <p className="settings-error">{error}</p>}
       {path.trim() !== '' && (
