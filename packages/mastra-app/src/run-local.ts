@@ -13,7 +13,7 @@ const mastra = createMastra({
   studioToken: randomBytes(32).toString('hex'),
 })
 
-const agent = mastra.getAgentById('router-leader')
+const agent = mastra.getAgentById('swarmdesk-leader')
 const result = await agent.generate(
   'List available workers and suggest who should implement a left sidebar status dot feature.',
 )

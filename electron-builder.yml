@@ -1,6 +1,6 @@
-appId: net.rmbz.open-dev.agent-desktop
-productName: Router Agents
-artifactName: Router-Agents-${version}-${os}-${arch}.${ext}
+appId: app.swarmdesk.agent
+productName: SwarmDesk
+artifactName: SwarmDesk-Agent-${version}-${os}-${arch}.${ext}
 asar: true
 npmRebuild: false
 directories:
@@ -37,7 +37,7 @@ win:
         - x64
 linux:
   category: Development
-  executableName: router-agents
+  executableName: swarmdesk-agent
   target:
     - target: AppImage
       arch:
@@ -48,4 +48,4 @@ linux:
 publish:
   provider: github
   owner: xun404
-  repo: router-agents
+  repo: swarmdesk-agent

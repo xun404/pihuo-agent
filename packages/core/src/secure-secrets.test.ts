@@ -27,10 +27,10 @@ describe('secure-secrets', () => {
 
   before(() => {
     dataDir = mkdtempSync(join(tmpdir(), 'router-secure-secrets-'))
-    prevDataDir = process.env.ROUTER_DATA_DIR
-    prevSecret = process.env.ROUTER_CREDENTIAL_SECRET
-    process.env.ROUTER_DATA_DIR = dataDir
-    process.env.ROUTER_CREDENTIAL_SECRET = 'secure-secrets-test-key'
+    prevDataDir = process.env.SWARMDESK_AGENT_DATA_DIR
+    prevSecret = process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET
+    process.env.SWARMDESK_AGENT_DATA_DIR = dataDir
+    process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET = 'secure-secrets-test-key'
   })
 
   after(() => {
@@ -39,10 +39,10 @@ describe('secure-secrets', () => {
     } catch {
       /* ignore */
     }
-    if (prevDataDir === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = prevDataDir
-    if (prevSecret === undefined) delete process.env.ROUTER_CREDENTIAL_SECRET
-    else process.env.ROUTER_CREDENTIAL_SECRET = prevSecret
+    if (prevDataDir === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = prevDataDir
+    if (prevSecret === undefined) delete process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET
+    else process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET = prevSecret
     try {
       rmSync(dataDir, { recursive: true, force: true })
     } catch {
@@ -70,8 +70,8 @@ describe('secure-secrets', () => {
 
   it('rejects runtime and process-control names as provider secret keys', () => {
     for (const key of [
-      'ROUTER_INTERNAL_TOKEN',
-      'ROUTER_STUDIO_TOKEN',
+      'SWARMDESK_AGENT_INTERNAL_TOKEN',
+      'SWARMDESK_AGENT_STUDIO_TOKEN',
       'MASTRA_API_TOKEN',
       'NODE_OPTIONS',
       'ELECTRON_RUN_AS_NODE',
@@ -97,7 +97,7 @@ describe('secure-secrets', () => {
             {
               id: 'unsafe-provider',
               name: 'Unsafe',
-              apiKeyEnv: 'ROUTER_STUDIO_TOKEN',
+              apiKeyEnv: 'SWARMDESK_AGENT_STUDIO_TOKEN',
               models: [{ id: 'unsafe-provider/model', label: 'Model' }],
             },
           ],

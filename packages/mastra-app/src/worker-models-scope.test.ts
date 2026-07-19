@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { LocalStore, WorkerModelCatalogStore } from '@router-agents/core'
+import { LocalStore, WorkerModelCatalogStore } from '@swarmdesk-agent/core'
 import {
   evaluateWorkerModelPin,
   getWorkerCatalogForDispatch,

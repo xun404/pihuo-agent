@@ -29,7 +29,7 @@ describe('cleanupRemoteAcpSession', () => {
           lastUsedAt: now,
         },
         {
-          command: '__router_agents_missing_cleanup_executable__',
+          command: '__swarmdesk_agent_missing_cleanup_executable__',
           args: [],
           env: {},
           kind: 'custom',

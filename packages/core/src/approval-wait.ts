@@ -1,4 +1,4 @@
-import type { ApprovalDecision } from '@router-agents/shared'
+import type { ApprovalDecision } from '@swarmdesk-agent/shared'
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 

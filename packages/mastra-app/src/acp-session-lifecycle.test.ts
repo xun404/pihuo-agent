@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { AcpSessionCatalog, type AcpSessionRecord } from '@router-agents/core'
+import { AcpSessionCatalog, type AcpSessionRecord } from '@swarmdesk-agent/core'
 import {
   AcpSessionManager,
   buildSessionReuseKey,
@@ -14,8 +14,8 @@ import {
   type SessionReuseKey,
   type SessionEntryConfig,
   type WorkerExecutionConfig,
-} from '@router-agents/adapters'
-import type { AcpSessionCatalogPort, AcpSessionCatalogRecord } from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
+import type { AcpSessionCatalogPort, AcpSessionCatalogRecord } from '@swarmdesk-agent/adapters'
 
 const SAFE_CWD = process.cwd()
 

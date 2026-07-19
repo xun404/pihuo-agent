@@ -2,7 +2,7 @@
  * Access mode: unifies Leader mode + approval policy into one Composer control.
  * @see docs/superpowers/specs/2026-07-16-desktop-ui-redesign-design.md §5.3 / §9.2
  */
-import type { LeaderMode, SessionApprovalPolicy } from '@router-agents/shared'
+import type { LeaderMode, SessionApprovalPolicy } from '@swarmdesk-agent/shared'
 
 export type AccessModeId = 'confirm' | 'auto_edit' | 'plan' | 'full_access'
 

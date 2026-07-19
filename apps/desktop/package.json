@@ -1,5 +1,5 @@
 {
-  "name": "@router-agents/desktop",
+  "name": "@swarmdesk-agent/desktop",
   "version": "0.1.0",
   "description": "Desktop multi-agent command center powered by Mastra and ACP",
   "private": true,
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.232",
-    "@router-agents/shared": "0.1.0",
+    "@swarmdesk-agent/shared": "0.1.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "ai": "6.0.230",

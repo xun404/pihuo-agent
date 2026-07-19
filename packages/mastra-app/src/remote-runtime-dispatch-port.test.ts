@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createRemoteRuntimeDispatchPort } from './remote-runtime-dispatch-port.js'
 import { writeRuntimeDiscovery } from './runtime-discovery.js'
-import type { WorkerJob } from '@router-agents/shared'
+import type { WorkerJob } from '@swarmdesk-agent/shared'
 
 function openJob(id: string): WorkerJob {
   return {

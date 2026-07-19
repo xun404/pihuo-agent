@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Locale as SharedLocale } from '@router-agents/shared'
+import type { Locale as SharedLocale } from '@swarmdesk-agent/shared'
 import { catalogs, detectLocale, formatMessage, type Locale, type MessageKey } from './locales'
 
 interface I18nContextValue {
@@ -19,7 +19,7 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null)
 
-const STORAGE_KEY = 'router-agents.locale'
+const STORAGE_KEY = 'swarmdesk-agent.locale'
 
 function readStoredLocale(): Locale | null {
   try {

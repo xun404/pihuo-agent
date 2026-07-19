@@ -32,7 +32,7 @@ import type {
   AcpRegistryPackageDistribution,
   AcpRegistryTarget,
   WorkerLaunchSpec,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import {
   assertExecutableInsideStaging,
   detectArchiveKind,
@@ -63,7 +63,7 @@ export type PrepareRequest = {
   agent: AcpRegistryAgentMetadata
   distribution: AcpRegistryDistributionKind
   target: AcpRegistryTarget
-  /** Absolute agents root, e.g. ~/.router-agents/agents */
+  /** Absolute agents root, e.g. ~/.swarmdesk-agent/agents */
   agentsRoot: string
   trust?: PrepareTrustDecision
   fetchImpl?: typeof fetch

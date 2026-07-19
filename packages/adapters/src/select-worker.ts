@@ -1,4 +1,4 @@
-import { workerHealthRank, type WorkerRegistration, type WorkerRole } from '@router-agents/shared'
+import { workerHealthRank, type WorkerRegistration, type WorkerRole } from '@swarmdesk-agent/shared'
 
 export interface SelectWorkerOptions {
   role?: WorkerRole

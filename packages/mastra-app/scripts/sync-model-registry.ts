@@ -2,7 +2,7 @@
  * Maintenance: generate versioned RegistrySnapshot from installed @mastra/core.
  * Run from packages/mastra-app (depends on Mastra). Does not run on request path.
  *
- * Usage: npm run sync:model-registry -w @router-agents/mastra-app
+ * Usage: npm run sync:model-registry -w @swarmdesk-agent/mastra-app
  */
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -12,7 +12,7 @@ import {
   writePersistedRegistrySnapshot,
   persistedRegistryPath,
   type RegistrySnapshot,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 
 const require = createRequire(import.meta.url)
 const here = dirname(fileURLToPath(import.meta.url))

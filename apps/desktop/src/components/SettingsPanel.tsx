@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import type { WorkerKind, WorkerRegistration, WorkerRole } from '@router-agents/shared'
-import { WORKER_ROLES } from '@router-agents/shared'
+import type { WorkerKind, WorkerRegistration, WorkerRole } from '@swarmdesk-agent/shared'
+import { WORKER_ROLES } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   fetchSettings,

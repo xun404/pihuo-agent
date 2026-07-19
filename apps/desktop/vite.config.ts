@@ -14,8 +14,8 @@ export default defineConfig({
               vite: {
                 resolve: {
                   alias: {
-                    '@router-agents/core': path.join(__dirname, '../../packages/core/src/index.ts'),
-                    '@router-agents/shared': path.join(
+                    '@swarmdesk-agent/core': path.join(__dirname, '../../packages/core/src/index.ts'),
+                    '@swarmdesk-agent/shared': path.join(
                       __dirname,
                       '../../packages/shared/src/index.ts',
                     ),
@@ -42,12 +42,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.join(__dirname, 'src'),
-      '@router-agents/shared': path.join(__dirname, '../../packages/shared/src/index.ts'),
-      '@router-agents/core': path.join(__dirname, '../../packages/core/src/index.ts'),
+      '@swarmdesk-agent/shared': path.join(__dirname, '../../packages/shared/src/index.ts'),
+      '@swarmdesk-agent/core': path.join(__dirname, '../../packages/core/src/index.ts'),
     },
   },
   // Avoid pre-bundling workspace TS packages incorrectly
   optimizeDeps: {
-    exclude: ['@router-agents/shared', '@router-agents/core'],
+    exclude: ['@swarmdesk-agent/shared', '@swarmdesk-agent/core'],
   },
 })

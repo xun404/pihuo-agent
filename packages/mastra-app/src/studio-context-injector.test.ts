@@ -60,7 +60,7 @@ describe('studio trusted binding', () => {
     const result = await applyTrustedRouterBinding({
       requestContext,
       headers: {
-        'x-router-memory-thread-id': 'thread-1',
+        'x-swarmdesk-agent-memory-thread-id': 'thread-1',
       },
       resolveSessionContext: async (id) => (id === 'thread-1' ? trusted : null),
     })
@@ -69,7 +69,7 @@ describe('studio trusted binding', () => {
     assert.deepEqual(mapContext(requestContext), trusted)
   })
 
-  it('leaves chat usable without binding; dispatch needs ROUTER_SESSION_BINDING_REQUIRED', async () => {
+  it('leaves chat usable without binding; dispatch needs SWARMDESK_AGENT_SESSION_BINDING_REQUIRED', async () => {
     const requestContext = new RequestContext()
 
     const result = await applyTrustedRouterBinding({
@@ -102,7 +102,7 @@ describe('studio trusted binding', () => {
     const result = await applyTrustedRouterBinding({
       requestContext,
       headers: {
-        'x-router-memory-thread-id': 'thread-store',
+        'x-swarmdesk-agent-memory-thread-id': 'thread-store',
         // incomplete desktop headers (no session/project) → must resolve via port
       },
       body: {
@@ -124,10 +124,10 @@ describe('studio trusted binding', () => {
     const result = await applyTrustedRouterBinding({
       requestContext,
       headers: {
-        'x-router-session-id': 'sess-forged',
-        'x-router-project-id': 'proj-forged',
-        'x-router-project-root': '/forged',
-        'x-router-memory-thread-id': 'thread-forged',
+        'x-swarmdesk-agent-session-id': 'sess-forged',
+        'x-swarmdesk-agent-project-id': 'proj-forged',
+        'x-swarmdesk-agent-project-root': '/forged',
+        'x-swarmdesk-agent-memory-thread-id': 'thread-forged',
       },
       resolveSessionContext: async (id) => {
         called = true
@@ -157,10 +157,10 @@ describe('studio trusted binding', () => {
     const result = await applyTrustedRouterBinding({
       requestContext,
       headers: {
-        'x-router-session-id': 'sess-forged',
-        'x-router-project-id': 'proj-forged',
-        'x-router-project-root': '/forged',
-        'x-router-memory-thread-id': 'thread-x',
+        'x-swarmdesk-agent-session-id': 'sess-forged',
+        'x-swarmdesk-agent-project-id': 'proj-forged',
+        'x-swarmdesk-agent-project-root': '/forged',
+        'x-swarmdesk-agent-memory-thread-id': 'thread-x',
       },
       resolveSessionContext: async () => trusted,
     })
@@ -173,7 +173,7 @@ describe('studio trusted binding', () => {
     const requestContext = new RequestContext()
     const result = await applyTrustedRouterBinding({
       requestContext,
-      headers: { 'x-router-memory-thread-id': 'thread-orphan' },
+      headers: { 'x-swarmdesk-agent-memory-thread-id': 'thread-orphan' },
       resolveSessionContext: async () => null,
     })
     assert.equal(result, 'unbound')
@@ -186,7 +186,7 @@ describe('extractMemoryThreadIdOnly', () => {
   it('reads memory thread from header', () => {
     assert.equal(
       extractMemoryThreadIdOnly({
-        headers: { 'x-router-memory-thread-id': 't1' },
+        headers: { 'x-swarmdesk-agent-memory-thread-id': 't1' },
       }),
       't1',
     )
@@ -227,16 +227,16 @@ describe('extractRouterHeadersFromRequest', () => {
   it('requires full desktop tuple', () => {
     assert.equal(
       extractRouterHeadersFromRequest({
-        headers: { 'x-router-memory-thread-id': 'only-thread' },
+        headers: { 'x-swarmdesk-agent-memory-thread-id': 'only-thread' },
       }),
       undefined,
     )
     assert.deepEqual(
       extractRouterHeadersFromRequest({
         headers: {
-          'x-router-session-id': 's',
-          'x-router-project-id': 'p',
-          'x-router-memory-thread-id': 't',
+          'x-swarmdesk-agent-session-id': 's',
+          'x-swarmdesk-agent-project-id': 'p',
+          'x-swarmdesk-agent-memory-thread-id': 't',
         },
       }),
       { sessionId: 's', projectId: 'p', projectRoot: undefined, memoryThreadId: 't' },

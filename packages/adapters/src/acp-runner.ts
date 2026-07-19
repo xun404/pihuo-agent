@@ -1,4 +1,4 @@
-import type { WorkerModelOption, WorkerRegistration } from '@router-agents/shared'
+import type { WorkerModelOption, WorkerRegistration } from '@swarmdesk-agent/shared'
 import type { AcpSpawnConfig } from './acp-config.js'
 import { formatWorkerModelError } from './acp-errors.js'
 import { probeWorkerHealth } from './health.js'

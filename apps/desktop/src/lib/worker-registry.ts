@@ -5,7 +5,7 @@ import type {
   AcpRegistryTarget,
   WorkerKind,
   WorkerReadinessStatus,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 export type WorkerRegistryDistribution = 'binary' | 'npx' | 'uvx'
 

@@ -16,22 +16,22 @@ import { randomBytes } from 'node:crypto'
 
 describe('worker-secrets', () => {
   let dir: string
-  const prevData = process.env.ROUTER_DATA_DIR
-  const prevInjected = process.env.ROUTER_SECRETS_PARENT_INJECTED
+  const prevData = process.env.SWARMDESK_AGENT_DATA_DIR
+  const prevInjected = process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
 
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'worker-sec-'))
-    process.env.ROUTER_DATA_DIR = dir
-    delete process.env.ROUTER_SECRETS_PARENT_INJECTED
+    process.env.SWARMDESK_AGENT_DATA_DIR = dir
+    delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
     setTestMasterKey(randomBytes(32))
   })
 
   after(() => {
     setTestMasterKey(null)
-    if (prevData === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = prevData
-    if (prevInjected === undefined) delete process.env.ROUTER_SECRETS_PARENT_INJECTED
-    else process.env.ROUTER_SECRETS_PARENT_INJECTED = prevInjected
+    if (prevData === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = prevData
+    if (prevInjected === undefined) delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
+    else process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED = prevInjected
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -115,7 +115,7 @@ describe('worker-secrets', () => {
 
   it('rejects reserved env names', () => {
     assert.throws(() => setWorkerSecret('w1', 'PATH', 'x'), /reserved|Invalid/i)
-    assert.throws(() => setWorkerSecret('w1', 'ROUTER_FOO', 'x'), /reserved|Invalid/i)
+    assert.throws(() => setWorkerSecret('w1', 'SWARMDESK_AGENT_FOO', 'x'), /reserved|Invalid/i)
   })
 
   it('clear empties secrets but bumps revision', () => {

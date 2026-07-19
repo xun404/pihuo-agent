@@ -7,7 +7,7 @@ import type {
   Session,
   SessionApprovalPolicy,
   WorkerRole,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import { api } from '../lib/api'
 
 const empty: AppSnapshot = {

@@ -7,16 +7,16 @@ import { loadSettings, loadSecrets, saveSettings, setSecret } from './secure-sec
 
 test('a corrupt encrypted payload is never overwritten by a later mutation', () => {
   const dir = mkdtempSync(join(tmpdir(), 'router-secrets-durability-'))
-  const previousDir = process.env.ROUTER_DATA_DIR
-  const previousSecret = process.env.ROUTER_CREDENTIAL_SECRET
-  const previousParentInjection = process.env.ROUTER_SECRETS_PARENT_INJECTED
+  const previousDir = process.env.SWARMDESK_AGENT_DATA_DIR
+  const previousSecret = process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET
+  const previousParentInjection = process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
   const originalConsoleError = console.error
 
   try {
-    process.env.ROUTER_DATA_DIR = dir
+    process.env.SWARMDESK_AGENT_DATA_DIR = dir
     // Pin the derived master key so the test is deterministic across machines.
-    process.env.ROUTER_CREDENTIAL_SECRET = 'test-durability-key'
-    delete process.env.ROUTER_SECRETS_PARENT_INJECTED
+    process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET = 'test-durability-key'
+    delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
     setSecret('FIRST_API_KEY', 'original-secret')
 
     const encryptedPath = join(dir, 'secrets.enc')
@@ -34,22 +34,22 @@ test('a corrupt encrypted payload is never overwritten by a later mutation', () 
     )
   } finally {
     console.error = originalConsoleError
-    if (previousDir === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = previousDir
-    if (previousSecret === undefined) delete process.env.ROUTER_CREDENTIAL_SECRET
-    else process.env.ROUTER_CREDENTIAL_SECRET = previousSecret
-    if (previousParentInjection === undefined) delete process.env.ROUTER_SECRETS_PARENT_INJECTED
-    else process.env.ROUTER_SECRETS_PARENT_INJECTED = previousParentInjection
+    if (previousDir === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = previousDir
+    if (previousSecret === undefined) delete process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET
+    else process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET = previousSecret
+    if (previousParentInjection === undefined) delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
+    else process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED = previousParentInjection
     rmSync(dir, { recursive: true, force: true })
   }
 })
 
 test('a corrupt settings file is never silently replaced from defaults', () => {
   const dir = mkdtempSync(join(tmpdir(), 'router-settings-durability-'))
-  const previousDir = process.env.ROUTER_DATA_DIR
+  const previousDir = process.env.SWARMDESK_AGENT_DATA_DIR
 
   try {
-    process.env.ROUTER_DATA_DIR = dir
+    process.env.SWARMDESK_AGENT_DATA_DIR = dir
     const settingsPath = join(dir, 'settings.json')
     writeFileSync(settingsPath, '{invalid-json')
     const corruptBytes = readFileSync(settingsPath)
@@ -62,8 +62,8 @@ test('a corrupt settings file is never silently replaced from defaults', () => {
       [],
     )
   } finally {
-    if (previousDir === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = previousDir
+    if (previousDir === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = previousDir
     rmSync(dir, { recursive: true, force: true })
   }
 })

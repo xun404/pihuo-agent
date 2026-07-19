@@ -13,8 +13,8 @@ export type ResolvedTheme = 'light' | 'dark'
 /** Light surface palette: warm (Claude-like) vs classic cool gray */
 export type ColorPalette = 'warm' | 'classic'
 
-const THEME_KEY = 'router-agents.theme'
-const PALETTE_KEY = 'router-agents.palette'
+const THEME_KEY = 'swarmdesk-agent.theme'
+const PALETTE_KEY = 'swarmdesk-agent.palette'
 
 interface ThemeContextValue {
   mode: ThemeMode

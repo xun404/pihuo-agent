@@ -1,4 +1,4 @@
-import { ACP_PUBLIC_ERROR_CODES } from '@router-agents/shared'
+import { ACP_PUBLIC_ERROR_CODES } from '@swarmdesk-agent/shared'
 
 const PUBLIC_ERROR_CODES = new Set<string>(ACP_PUBLIC_ERROR_CODES)
 const PUBLIC_ERROR_TEXT: Readonly<Record<string, string>> = Object.freeze({

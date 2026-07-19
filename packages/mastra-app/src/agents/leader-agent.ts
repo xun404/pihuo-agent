@@ -3,8 +3,8 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { summarizeWorkerModels } from '@router-agents/adapters'
-import { getSharedStore, loadSettings, resolveRouterDataPaths } from '@router-agents/core'
+import { summarizeWorkerModels } from '@swarmdesk-agent/adapters'
+import { getSharedStore, loadSettings, resolveRouterDataPaths } from '@swarmdesk-agent/core'
 import { resolveGoalMaxRuns, resolveMemoryLastMessages } from '../runtime-config.js'
 import {
   cancelJobTool,
@@ -20,8 +20,8 @@ function workerModelRosterBlock(): string {
   try {
     // client-only / Studio: do not touch local Store; use list-workers tool instead
     if (
-      process.env.ROUTER_CLIENT_ONLY === '1' ||
-      process.env.ROUTER_RUNTIME_ROLE === 'client-only'
+      process.env.SWARMDESK_AGENT_CLIENT_ONLY === '1' ||
+      process.env.SWARMDESK_AGENT_RUNTIME_ROLE === 'client-only'
     ) {
       return '(remote roster — call list-workers for live state)'
     }
@@ -34,7 +34,7 @@ function workerModelRosterBlock(): string {
 
 function buildLeaderInstructions(): string {
   const roster = workerModelRosterBlock()
-  return `You are the Router Agents Leader (Mastra Supervisor).
+  return `You are the SwarmDesk Leader (Mastra Supervisor).
 
 You run inside a macOS desktop command center. Users work in Projects and Sessions.
 You coordinate specialized CLI coding agents (workers) rather than editing large codebases yourself.
@@ -179,7 +179,7 @@ function memoryDbUrl(): string {
  * @see https://mastra.ai/docs/long-running-agents/goals
  */
 export const leaderStorage = new LibSQLStore({
-  id: 'router-agents-storage',
+  id: 'swarmdesk-agent-storage',
   url: memoryDbUrl(),
 })
 
@@ -216,8 +216,8 @@ export function createLeaderMemory(): Memory {
 export const leaderMemory = createLeaderMemory()
 
 export const leaderAgent = new Agent({
-  id: 'router-leader',
-  name: 'Router Leader',
+  id: 'swarmdesk-leader',
+  name: 'SwarmDesk Leader',
   description:
     'Orchestration leader that plans work and delegates to role-specialized CLI workers (plan, coder, review, test, research).',
   // Per-request model + optional gateway url/apiKey (never mutates process.env base URL)

@@ -88,10 +88,10 @@ export async function verifyNodePtyRoundTrip(input) {
   if (!isLoadedNodePtyModule(ptyModule)) {
     throw new Error('Staged node-pty package did not expose spawn')
   }
-  const marker = 'ROUTER_PTY_100x30'
+  const marker = 'SWARMDESK_AGENT_PTY_100x30'
   const script = [
     "process.stdin.setEncoding('utf8')",
-    "process.stdout.write('ROUTER_PTY_READY\\n')",
+    "process.stdout.write('SWARMDESK_AGENT_PTY_READY\\n')",
     "process.stdin.once('data', () => {",
     '  let polls = 0',
     '  const timer = setInterval(() => {',
@@ -153,7 +153,7 @@ export async function verifyNodePtyRoundTrip(input) {
       })
       dataDisposable = terminal.onData((chunk) => {
         output += chunk
-        if (!wrote && output.includes('ROUTER_PTY_READY')) {
+        if (!wrote && output.includes('SWARMDESK_AGENT_PTY_READY')) {
           wrote = true
           terminal.resize(100, 30)
           terminal.write('continue\r')

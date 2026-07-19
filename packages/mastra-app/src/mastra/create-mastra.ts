@@ -63,7 +63,7 @@ export function createMastra(options: CreateMastraOptions): Mastra {
         allowHeaders: [
           'Content-Type',
           'Authorization',
-          'X-Router-Desktop-Token',
+          'X-SwarmDesk-Agent-Desktop-Token',
           'x-mastra-client-type',
         ],
       },
@@ -91,10 +91,10 @@ export function createMastra(options: CreateMastraOptions): Mastra {
               await applyTrustedRouterBinding({
                 requestContext,
                 headers: {
-                  'x-router-session-id': c.req.header('x-router-session-id'),
-                  'x-router-project-id': c.req.header('x-router-project-id'),
-                  'x-router-project-root': c.req.header('x-router-project-root'),
-                  'x-router-memory-thread-id': c.req.header('x-router-memory-thread-id'),
+                  'x-swarmdesk-agent-session-id': c.req.header('x-swarmdesk-agent-session-id'),
+                  'x-swarmdesk-agent-project-id': c.req.header('x-swarmdesk-agent-project-id'),
+                  'x-swarmdesk-agent-project-root': c.req.header('x-swarmdesk-agent-project-root'),
+                  'x-swarmdesk-agent-memory-thread-id': c.req.header('x-swarmdesk-agent-memory-thread-id'),
                 },
                 body,
                 resolveSessionContext: (memoryThreadId) =>

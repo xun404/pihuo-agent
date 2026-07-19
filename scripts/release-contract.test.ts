@@ -11,11 +11,11 @@ import {
 } from './release-contract.mjs'
 
 const completeAssets = [
-  'Router-Agents-0.1.0-mac-arm64.dmg',
-  'Router-Agents-0.1.0-mac-arm64.zip',
-  'Router-Agents-0.1.0-win-x64.exe',
-  'Router-Agents-0.1.0-linux-x64.AppImage',
-  'Router-Agents-0.1.0-linux-x64.deb',
+  'SwarmDesk-Agent-0.1.0-mac-arm64.dmg',
+  'SwarmDesk-Agent-0.1.0-mac-arm64.zip',
+  'SwarmDesk-Agent-0.1.0-win-x64.exe',
+  'SwarmDesk-Agent-0.1.0-linux-x64.AppImage',
+  'SwarmDesk-Agent-0.1.0-linux-x64.deb',
 ]
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -48,7 +48,7 @@ describe('desktop release contract', () => {
         'latest-mac.yml',
         'latest.yml',
         'latest-linux.yml',
-        'Router-Agents-0.1.0-mac-arm64.zip.blockmap',
+        'SwarmDesk-Agent-0.1.0-mac-arm64.zip.blockmap',
       ]),
     )
   })
@@ -63,7 +63,7 @@ describe('desktop release contract', () => {
       /Duplicate release asset: macDmg/,
     )
     assert.throws(
-      () => verifyReleaseAssets([...completeAssets, 'Router-Agents-0.1.0-mac-x64.dmg']),
+      () => verifyReleaseAssets([...completeAssets, 'SwarmDesk-Agent-0.1.0-mac-x64.dmg']),
       /Unexpected primary release asset/,
     )
   })
@@ -111,7 +111,7 @@ describe('desktop release contract', () => {
       () =>
         verifyRuntimeManifestContract({
           ...manifest,
-          bundledRegistryExternalImports: ['@router-agents/adapters'],
+          bundledRegistryExternalImports: ['@swarmdesk-agent/adapters'],
         }),
       /source imports/i,
     )

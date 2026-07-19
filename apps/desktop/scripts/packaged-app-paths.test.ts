@@ -10,9 +10,9 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedExecutable({
         platform: 'darwin',
         releaseDir: '/repo/release',
-        productName: 'Router Agents',
+        productName: 'SwarmDesk',
       }),
-      '/repo/release/mac-arm64/Router Agents.app/Contents/MacOS/Router Agents',
+      '/repo/release/mac-arm64/SwarmDesk.app/Contents/MacOS/SwarmDesk',
     )
   })
 
@@ -21,9 +21,9 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedExecutable({
         platform: 'win32',
         releaseDir: String.raw`C:\repo\release`,
-        productName: 'Router Agents',
+        productName: 'SwarmDesk',
       }),
-      String.raw`C:\repo\release\win-unpacked\Router Agents.exe`,
+      String.raw`C:\repo\release\win-unpacked\SwarmDesk.exe`,
     )
   })
 
@@ -32,9 +32,9 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedExecutable({
         platform: 'linux',
         releaseDir: '/repo/release',
-        productName: 'Router Agents',
+        productName: 'SwarmDesk',
       }),
-      '/repo/release/linux-unpacked/router-agents',
+      '/repo/release/linux-unpacked/swarmdesk-agent',
     )
   })
 
@@ -43,15 +43,15 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedRuntimeDir({
         platform: 'darwin',
         releaseDir: '/repo/release',
-        productName: 'Router Agents',
+        productName: 'SwarmDesk',
       }),
-      '/repo/release/mac-arm64/Router Agents.app/Contents/Resources/runtime',
+      '/repo/release/mac-arm64/SwarmDesk.app/Contents/Resources/runtime',
     )
     assert.equal(
       resolvePackagedRuntimeDir({
         platform: 'win32',
         releaseDir: String.raw`C:\repo\release`,
-        productName: 'Router Agents',
+        productName: 'SwarmDesk',
       }),
       String.raw`C:\repo\release\win-unpacked\resources\runtime`,
     )
@@ -59,7 +59,7 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedRuntimeDir({
         platform: 'linux',
         releaseDir: '/repo/release',
-        productName: 'Router Agents',
+        productName: 'SwarmDesk',
       }),
       '/repo/release/linux-unpacked/resources/runtime',
     )
@@ -71,7 +71,7 @@ describe('packaged desktop executable paths', () => {
         resolvePackagedExecutable({
           platform: 'freebsd',
           releaseDir: '/repo/release',
-          productName: 'Router Agents',
+          productName: 'SwarmDesk',
         }),
       /Unsupported packaged smoke platform/,
     )

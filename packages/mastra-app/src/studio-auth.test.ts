@@ -9,8 +9,8 @@ describe('Studio authentication boundary', () => {
     const request = new Request('http://127.0.0.1:4112/api/agents')
 
     assert.deepEqual(await auth.authenticateToken(token, request), {
-      id: 'router-agents-studio',
-      name: 'Router Agents Studio',
+      id: 'swarmdesk-agent-studio',
+      name: 'SwarmDesk Studio',
       role: 'admin',
     })
     assert.equal(await auth.authenticateToken('i'.repeat(32), request), null)

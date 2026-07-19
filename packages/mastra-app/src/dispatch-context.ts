@@ -38,7 +38,7 @@ export function resolveDispatchContext(context: DispatchToolContext): DispatchCo
   }
   if (!routerSessionId || !routerProjectId || !memoryThreadId) {
     throw new Error(
-      'ROUTER_SESSION_BINDING_REQUIRED: dispatch requires bound Router Session context ' +
+      'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED: dispatch requires bound Router Session context ' +
         '(routerSessionId, routerProjectId, memoryThreadId). ' +
         `Got: session=${routerSessionId}, project=${routerProjectId}, thread=${memoryThreadId}`,
     )

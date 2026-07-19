@@ -13,21 +13,21 @@ describe('deriveMasterKey', () => {
     assert.equal(key.length, 32)
   })
 
-  it('ROUTER_CREDENTIAL_SECRET override wins and is deterministic', () => {
-    const a = deriveMasterKey({ ROUTER_CREDENTIAL_SECRET: 'my-secret' }, 'darwin', '/tmp/h1')
-    const b = deriveMasterKey({ ROUTER_CREDENTIAL_SECRET: 'my-secret' }, 'linux', '/tmp/h2')
+  it('SWARMDESK_AGENT_CREDENTIAL_SECRET override wins and is deterministic', () => {
+    const a = deriveMasterKey({ SWARMDESK_AGENT_CREDENTIAL_SECRET: 'my-secret' }, 'darwin', '/tmp/h1')
+    const b = deriveMasterKey({ SWARMDESK_AGENT_CREDENTIAL_SECRET: 'my-secret' }, 'linux', '/tmp/h2')
     assert.deepEqual(a, b)
     assert.deepEqual(a, sha256('my-secret'))
   })
 
-  it('whitespace-only ROUTER_CREDENTIAL_SECRET is ignored', () => {
-    const a = deriveMasterKey({ ROUTER_CREDENTIAL_SECRET: '   ' }, 'darwin', '/tmp/h')
+  it('whitespace-only SWARMDESK_AGENT_CREDENTIAL_SECRET is ignored', () => {
+    const a = deriveMasterKey({ SWARMDESK_AGENT_CREDENTIAL_SECRET: '   ' }, 'darwin', '/tmp/h')
     const b = deriveMasterKey({}, 'darwin', '/tmp/h')
     assert.deepEqual(a, b)
   })
 
   it('derives from platform + username + homedir when no override', () => {
-    // The derived identity string is `router-agents:<platform>:<username>:<home>`.
+    // The derived identity string is `swarmdesk-agent:<platform>:<username>:<home>`.
     // We cannot easily stub userInfo() here, so assert the homedir/platform
     // sensitivity by comparing two homes on the same platform.
     const a = deriveMasterKey({}, 'darwin', '/tmp/home-a')

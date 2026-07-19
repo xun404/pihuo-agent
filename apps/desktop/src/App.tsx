@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { LeaderMode, Project, Session, WorkerJob } from '@router-agents/shared'
+import type { LeaderMode, Project, Session, WorkerJob } from '@swarmdesk-agent/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { RightPanel } from './components/RightPanel'
@@ -61,8 +61,8 @@ function AppShell({
       setSettingsOpen(true)
       setInspectorOpen(false)
     }
-    window.addEventListener('router-agents:open-settings', onOpen)
-    return () => window.removeEventListener('router-agents:open-settings', onOpen)
+    window.addEventListener('swarmdesk-agent:open-settings', onOpen)
+    return () => window.removeEventListener('swarmdesk-agent:open-settings', onOpen)
   }, [])
 
   const onOpenProject = () => {

@@ -6,14 +6,14 @@ import {
   getSharedStore,
   getWorkerModelCatalogStore,
   globalActivityLog,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import {
   applyHealthReport,
   parseHealthDepth,
   getAcpSessionManager,
   formatPublicError,
   type SessionEntryConfig,
-} from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
 import {
   apiGetRegistryCatalog,
   apiDeleteWorker,
@@ -33,8 +33,8 @@ import type {
   Locale,
   WorkerRegistration,
   WorkerRole,
-} from '@router-agents/shared'
-import { normalizeWorkerRoles } from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
+import { normalizeWorkerRoles } from '@swarmdesk-agent/shared'
 import { basename } from 'node:path'
 import { asAcpHttpFailure } from '../acp-http-error.js'
 import {
@@ -214,7 +214,7 @@ export const apiRoutes = [
       try {
         const session = store().updateSessionApprovalPolicy(
           id,
-          body.approvalPolicy as import('@router-agents/shared').SessionApprovalPolicy,
+          body.approvalPolicy as import('@swarmdesk-agent/shared').SessionApprovalPolicy,
         )
         return c.json({ session, snapshot: store().snapshot() })
       } catch (e) {
@@ -875,7 +875,7 @@ export const apiRoutes = [
     handler: async (c) => {
       const rootPath = process.cwd()
       const project = store().upsertProject({
-        name: 'router-agents',
+        name: 'swarmdesk-agent',
         rootPath,
         defaultBranch: 'main',
       })

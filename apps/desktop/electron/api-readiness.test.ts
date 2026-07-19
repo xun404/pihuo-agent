@@ -18,12 +18,12 @@ function validIdentity() {
   return {
     health: {
       ok: true,
-      service: 'router-agents-api',
+      service: 'swarmdesk-agent-api',
       port: 4111,
       pid: 4242,
       startedAt,
       ownerEpoch,
-      workspaceId: workspaceIdentity('/repo/router-agents'),
+      workspaceId: workspaceIdentity('/repo/swarmdesk-agent'),
     },
     discovery: {
       port: 4111,
@@ -31,10 +31,10 @@ function validIdentity() {
       startedAt,
       ownerEpoch,
       desktopToken: 'd'.repeat(32),
-      workspaceId: workspaceIdentity('/repo/router-agents'),
+      workspaceId: workspaceIdentity('/repo/swarmdesk-agent'),
     },
     expectedPort: 4111,
-    expectedWorkspaceRoot: '/repo/router-agents',
+    expectedWorkspaceRoot: '/repo/swarmdesk-agent',
   }
 }
 
@@ -97,10 +97,10 @@ describe('legacy API retirement boundary', () => {
     assert.deepEqual(parseListenerPids('81092\n81092\nnope\n42\n'), [81092, 42])
   })
 
-  it('accepts only a Router Agents listener owned by this workspace', () => {
+  it('accepts only a SwarmDesk listener owned by this workspace', () => {
     assert.equal(
       isOwnedLegacyApiProcess({
-        health: { ok: true, service: 'router-agents-api' },
+        health: { ok: true, service: 'swarmdesk-agent-api' },
         listenerPid: 81092,
         command: 'node --import tsx src/http-server.ts',
         cwd: '/repo/packages/mastra-app',
@@ -113,7 +113,7 @@ describe('legacy API retirement boundary', () => {
 
   it('rejects unrelated, mismatched-pid, and other-workspace listeners', () => {
     const base = {
-      health: { ok: true, service: 'router-agents-api', pid: 81092, port: 4111 },
+      health: { ok: true, service: 'swarmdesk-agent-api', pid: 81092, port: 4111 },
       listenerPid: 81092,
       command: 'node --import tsx src/http-server.ts',
       cwd: '/repo/packages/mastra-app',

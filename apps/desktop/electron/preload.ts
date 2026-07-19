@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('routerAgents', {
   platform: process.platform,
   versions: process.versions,
   isDesktop: true,
-  apiBase: process.env.ROUTER_DESKTOP_API_URL ?? 'http://127.0.0.1:4111',
+  apiBase: process.env.SWARMDESK_AGENT_DESKTOP_API_URL ?? 'http://127.0.0.1:4111',
   getDesktopToken: () => ipcRenderer.invoke('desktop:getApiToken') as Promise<string | null>,
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),

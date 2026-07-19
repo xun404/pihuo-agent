@@ -7,7 +7,7 @@ import type {
   SessionApprovalPolicy,
   WorkerJob,
   WorkerRegistration,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import { ChatPanel } from './ChatPanel'
 import { useI18n } from '../i18n/I18nProvider'
 import { IconTerminal } from './Icons'

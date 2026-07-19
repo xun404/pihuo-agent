@@ -10,7 +10,7 @@ import {
   type WorkerKind,
   type WorkerRole,
   type WorkerRunEvent,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 export const DEFAULT_WORKER_JOB_TIMEOUT_MS = 600_000
 export const DEFAULT_WORKER_WRITER_TIMEOUT_MS = 5_000

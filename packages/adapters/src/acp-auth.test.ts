@@ -89,7 +89,7 @@ describe('sanitizeAuthMethods', () => {
 
   it('never retains terminal control variables or secret-looking env entries', () => {
     for (const env of [
-      { ROUTER_API_TOKEN: 'not-a-secret-value' },
+      { SWARMDESK_AGENT_API_TOKEN: 'not-a-secret-value' },
       { MASTRA_STUDIO_TOKEN: 'not-a-secret-value' },
       { ELECTRON_RUN_AS_NODE: '1' },
       { NODE_OPTIONS: '--require attacker.js' },

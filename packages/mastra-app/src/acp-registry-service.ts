@@ -12,9 +12,9 @@ import {
   verifyBundledAcpRegistryArtifacts,
   type AcpRegistryCatalog,
   type AcpRegistryWorkerOption,
-} from '@router-agents/adapters'
-import { loadAcpRegistryCatalogStore, saveAcpRegistryCatalogStore } from '@router-agents/core'
-import type { AcpRegistryCatalogSnapshot } from '@router-agents/shared'
+} from '@swarmdesk-agent/adapters'
+import { loadAcpRegistryCatalogStore, saveAcpRegistryCatalogStore } from '@swarmdesk-agent/core'
+import type { AcpRegistryCatalogSnapshot } from '@swarmdesk-agent/shared'
 import { projectRegistryPublicError } from './acp-registry-public-error.js'
 
 export function loadBundledRegistrySnapshot(): AcpRegistryCatalogSnapshot {
@@ -132,7 +132,7 @@ export async function refreshRegistryCatalog(
     if (e instanceof AcpRegistrySchemaError && e.code === 'ACP_REGISTRY_SCHEMA_UNSUPPORTED') {
       const diagnostic = projectRegistryPublicError({
         code: e.code,
-        message: 'Registry schema is not supported; update Router Agents',
+        message: 'Registry schema is not supported; update SwarmDesk',
         status: 409,
       }).error
       return {

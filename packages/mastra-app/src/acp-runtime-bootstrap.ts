@@ -6,5 +6,5 @@
 import { initializeAcpRuntime } from './acp-runtime.js'
 
 export const acpRuntime = initializeAcpRuntime({
-  role: process.env.ROUTER_RUNTIME_ROLE === 'owner' ? 'owner' : 'client-only',
+  role: process.env.SWARMDESK_AGENT_RUNTIME_ROLE === 'owner' ? 'owner' : 'client-only',
 })

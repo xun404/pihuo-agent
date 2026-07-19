@@ -8,7 +8,7 @@ import {
   resolveRouterDataPaths,
   type OwnerLeaseHandle,
   type OwnerLeaseDeps,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import {
   cleanupRemoteAcpSession,
   getAcpSessionManager,
@@ -16,8 +16,8 @@ import {
   type AcpSessionManager,
   type AcpSessionCatalogRecord,
   type AcpFingerprintFn,
-} from '@router-agents/adapters'
-import type { WorkerRegistration } from '@router-agents/shared'
+} from '@swarmdesk-agent/adapters'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 import {
   createLocalRuntimeDispatchPort,
   setRuntimeDispatchPort,
@@ -187,8 +187,8 @@ export function initializeAcpRuntime(options: AcpRuntimeOptions = {}): AcpRuntim
 
   // Studio / client-only: never create writable Store or steal lease.
   if (role === 'client-only') {
-    process.env.ROUTER_CLIENT_ONLY = '1'
-    process.env.ROUTER_RUNTIME_ROLE = 'client-only'
+    process.env.SWARMDESK_AGENT_CLIENT_ONLY = '1'
+    process.env.SWARMDESK_AGENT_RUNTIME_ROLE = 'client-only'
     // Optional readOnly store only if caller injects one — default empty stub
     const store = options.store ?? {
       listWorkers: () => [],
@@ -196,9 +196,9 @@ export function initializeAcpRuntime(options: AcpRuntimeOptions = {}): AcpRuntim
     return enterRemoteClient(signature, store, resolved.catalogPath)
   }
 
-  process.env.ROUTER_CLIENT_ONLY = '0'
-  process.env.ROUTER_RUNTIME_ROLE =
-    role === 'owner' ? 'owner' : (process.env.ROUTER_RUNTIME_ROLE ?? 'auto')
+  process.env.SWARMDESK_AGENT_CLIENT_ONLY = '0'
+  process.env.SWARMDESK_AGENT_RUNTIME_ROLE =
+    role === 'owner' ? 'owner' : (process.env.SWARMDESK_AGENT_RUNTIME_ROLE ?? 'auto')
 
   // Lease-first: never construct a writable Store until we own the catalog.
   let lease: OwnerLeaseHandle | null = null
@@ -211,8 +211,8 @@ export function initializeAcpRuntime(options: AcpRuntimeOptions = {}): AcpRuntim
         )
       }
       // auto → remote-client: stub store only (no owner LocalStore / state.json side effects)
-      process.env.ROUTER_CLIENT_ONLY = '1'
-      process.env.ROUTER_RUNTIME_ROLE = 'client-only'
+      process.env.SWARMDESK_AGENT_CLIENT_ONLY = '1'
+      process.env.SWARMDESK_AGENT_RUNTIME_ROLE = 'client-only'
       const stubStore = options.store ?? { listWorkers: () => [] }
       return enterRemoteClient(signature, stubStore, resolved.catalogPath)
     }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { AcpSessionRuntimeError } from '@router-agents/adapters'
+import { AcpSessionRuntimeError } from '@swarmdesk-agent/adapters'
 import { asAcpHttpFailure } from './acp-http-error.js'
 
 describe('asAcpHttpFailure', () => {

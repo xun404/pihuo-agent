@@ -13,28 +13,28 @@ import {
   setWorkerSecret,
 } from './worker-secrets.js'
 
-const CAPABILITY_ENV = 'ROUTER_WORKER_SECRETS_KEY'
+const CAPABILITY_ENV = 'SWARMDESK_AGENT_WORKER_SECRETS_KEY'
 
 function withWorkerSecretEnvironment(
   run: (context: { dir: string; masterKey: Buffer }) => void,
 ): void {
   const dir = mkdtempSync(join(tmpdir(), 'worker-secrets-boundary-'))
-  const previousDir = process.env.ROUTER_DATA_DIR
-  const previousInjected = process.env.ROUTER_SECRETS_PARENT_INJECTED
+  const previousDir = process.env.SWARMDESK_AGENT_DATA_DIR
+  const previousInjected = process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
   const previousCapability = process.env[CAPABILITY_ENV]
   const masterKey = randomBytes(32)
   try {
-    process.env.ROUTER_DATA_DIR = dir
-    delete process.env.ROUTER_SECRETS_PARENT_INJECTED
+    process.env.SWARMDESK_AGENT_DATA_DIR = dir
+    delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
     delete process.env[CAPABILITY_ENV]
     secureSecretsModule.setTestMasterKey(masterKey)
     run({ dir, masterKey })
   } finally {
     secureSecretsModule.setTestMasterKey(null)
-    if (previousDir === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = previousDir
-    if (previousInjected === undefined) delete process.env.ROUTER_SECRETS_PARENT_INJECTED
-    else process.env.ROUTER_SECRETS_PARENT_INJECTED = previousInjected
+    if (previousDir === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = previousDir
+    if (previousInjected === undefined) delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
+    else process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED = previousInjected
     if (previousCapability === undefined) delete process.env[CAPABILITY_ENV]
     else process.env[CAPABILITY_ENV] = previousCapability
     rmSync(dir, { recursive: true, force: true })
@@ -51,7 +51,7 @@ test('parent and trusted API child share the worker-secret encrypted namespace',
     assert.equal(Buffer.from(capability, 'base64').length, 32)
 
     secureSecretsModule.setTestMasterKey(null)
-    process.env.ROUTER_SECRETS_PARENT_INJECTED = '1'
+    process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED = '1'
     process.env[CAPABILITY_ENV] = capability
     assert.deepEqual(loadWorkerSecretsForSpawn('worker-a'), {
       AGENT_API_KEY: 'parent-value',
@@ -62,7 +62,7 @@ test('parent and trusted API child share the worker-secret encrypted namespace',
     assert.equal(JSON.stringify(publicStatus).includes('parent-value'), false)
     assert.equal(JSON.stringify(publicStatus).includes('child-value'), false)
 
-    delete process.env.ROUTER_SECRETS_PARENT_INJECTED
+    delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
     delete process.env[CAPABILITY_ENV]
     secureSecretsModule.setTestMasterKey(masterKey)
     assert.deepEqual(loadWorkerSecretsForSpawn('worker-a'), {
@@ -79,7 +79,7 @@ test('injected child fails closed for missing, malformed, or wrong capabilities'
     const original = readFileSync(encryptedPath)
 
     secureSecretsModule.setTestMasterKey(null)
-    process.env.ROUTER_SECRETS_PARENT_INJECTED = '1'
+    process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED = '1'
     delete process.env[CAPABILITY_ENV]
     assert.throws(() => listWorkerSecretKeyNames('worker-a'), /capability/i)
 

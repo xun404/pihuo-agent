@@ -9,7 +9,7 @@ describe('desktop runtime layout', () => {
         isPackaged: false,
         moduleDir: '/repo/apps/desktop/dist-electron',
         resourcesPath: '/unused',
-        userDataPath: '/Users/me/Library/Application Support/Router Agents',
+        userDataPath: '/Users/me/Library/Application Support/SwarmDesk',
       }),
       {
         mode: 'development',
@@ -26,17 +26,17 @@ describe('desktop runtime layout', () => {
       resolveDesktopRuntimeLayout({
         isPackaged: true,
         moduleDir:
-          '/Applications/Router Agents.app/Contents/Resources/app.asar/apps/desktop/dist-electron',
-        resourcesPath: '/Applications/Router Agents.app/Contents/Resources',
-        userDataPath: '/Users/me/Library/Application Support/Router Agents',
+          '/Applications/SwarmDesk.app/Contents/Resources/app.asar/apps/desktop/dist-electron',
+        resourcesPath: '/Applications/SwarmDesk.app/Contents/Resources',
+        userDataPath: '/Users/me/Library/Application Support/SwarmDesk',
       }),
       {
         mode: 'packaged',
-        identityRoot: '/Users/me/Library/Application Support/Router Agents',
+        identityRoot: '/Users/me/Library/Application Support/SwarmDesk',
         rendererDist:
-          '/Applications/Router Agents.app/Contents/Resources/app.asar/apps/desktop/dist',
-        apiEntry: '/Applications/Router Agents.app/Contents/Resources/runtime/http-server.mjs',
-        apiCwd: '/Applications/Router Agents.app/Contents/Resources/runtime',
+          '/Applications/SwarmDesk.app/Contents/Resources/app.asar/apps/desktop/dist',
+        apiEntry: '/Applications/SwarmDesk.app/Contents/Resources/runtime/http-server.mjs',
+        apiCwd: '/Applications/SwarmDesk.app/Contents/Resources/runtime',
       },
     )
   })

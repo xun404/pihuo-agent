@@ -5,7 +5,7 @@ import {
   deleteRouterSessionResource,
   reconcileWorkerRuntimeResources,
 } from './acp-resource-lifecycle.js'
-import type { WorkerRegistration } from '@router-agents/shared'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 
 function worker(overrides: Partial<WorkerRegistration> = {}): WorkerRegistration {
   return {

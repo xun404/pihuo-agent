@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { WorkerRunState } from '@router-agents/shared'
+import type { WorkerRunState } from '@swarmdesk-agent/shared'
 
 import { I18nProvider } from '../i18n/I18nProvider.js'
 import { WorkerRunCard } from './WorkerRunCard.js'

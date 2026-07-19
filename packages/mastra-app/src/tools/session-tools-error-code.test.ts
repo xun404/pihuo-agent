@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { WorkerJob, WorkerRunEvent } from '@router-agents/shared'
+import type { WorkerJob, WorkerRunEvent } from '@swarmdesk-agent/shared'
 import { applyTerminalEventToJob, jobToTerminalEvent, jobToToolResult } from './session-tools.js'
 
 function failedJob(): WorkerJob {

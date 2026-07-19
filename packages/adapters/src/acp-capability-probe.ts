@@ -2,7 +2,7 @@
  * Capability probe: initialize → session/new (auth gate) → readiness.
  * Does not mutate command health; outputs WorkerReadiness + capability summary.
  */
-import type { WorkerReadiness, WorkerReadinessNextAction } from '@router-agents/shared'
+import type { WorkerReadiness, WorkerReadinessNextAction } from '@swarmdesk-agent/shared'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { Readable, Writable } from 'node:stream'
 import {

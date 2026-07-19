@@ -1,5 +1,5 @@
-import type { WorkerJob, WorkerRunEvent } from '@router-agents/shared'
-import { isTerminalWorkerEvent } from '@router-agents/shared'
+import type { WorkerJob, WorkerRunEvent } from '@swarmdesk-agent/shared'
+import { isTerminalWorkerEvent } from '@swarmdesk-agent/shared'
 import type {
   ResolveApprovalPortInput,
   RouterSessionContext,
@@ -39,8 +39,8 @@ function sanitizeError(err: unknown): Error {
     .replace(/token[=:]\s*[A-Za-z0-9._\-+=/]+/gi, 'token=[redacted]')
   if (/ECONNREFUSED|ENOTFOUND|fetch failed|connect failed|network/i.test(scrubbed)) {
     return publicRuntimeError(
-      'ROUTER_RUNTIME_UNAVAILABLE',
-      'ROUTER_RUNTIME_UNAVAILABLE: main runtime is unreachable',
+      'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE',
+      'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE: main runtime is unreachable',
     )
   }
   if (/401|403|auth/i.test(scrubbed)) {
@@ -50,8 +50,8 @@ function sanitizeError(err: unknown): Error {
     )
   }
   return publicRuntimeError(
-    'ROUTER_RUNTIME_UNAVAILABLE',
-    'ROUTER_RUNTIME_UNAVAILABLE: main runtime request failed',
+    'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE',
+    'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE: main runtime request failed',
   )
 }
 
@@ -62,8 +62,8 @@ function resolveEndpoint(deps: RemoteRuntimeDispatchDeps): RuntimeEndpoint {
   const discovery = readRuntimeDiscovery(deps.discoveryPath ?? defaultRuntimeDiscoveryPath())
   if (!discovery) {
     throw publicRuntimeError(
-      'ROUTER_RUNTIME_UNAVAILABLE',
-      'ROUTER_RUNTIME_UNAVAILABLE: runtime discovery not found',
+      'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE',
+      'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE: runtime discovery not found',
     )
   }
   return {
@@ -160,8 +160,8 @@ export function createRemoteRuntimeDispatchPort(
           }
           if (!res.ok) {
             throw publicRuntimeError(
-              'ROUTER_RUNTIME_UNAVAILABLE',
-              'ROUTER_RUNTIME_UNAVAILABLE: main runtime request failed',
+              'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE',
+              'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE: main runtime request failed',
             )
           }
           return (await res.json()) as T
@@ -170,8 +170,8 @@ export function createRemoteRuntimeDispatchPort(
         () => {
           abort.abort()
           return publicRuntimeError(
-            'ROUTER_RUNTIME_UNAVAILABLE',
-            'ROUTER_RUNTIME_UNAVAILABLE: main runtime request timed out',
+            'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE',
+            'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE: main runtime request timed out',
           )
         },
       )

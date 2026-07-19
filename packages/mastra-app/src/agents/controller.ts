@@ -10,7 +10,7 @@ let initPromise: Promise<AgentController> | null = null
 
 export function getLeaderControllerConfig() {
   return {
-    id: 'router-agents-controller',
+    id: 'swarmdesk-agent-controller',
     modes: [
       {
         id: 'ask',

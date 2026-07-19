@@ -39,7 +39,7 @@ import {
   resolveRouterDataPaths,
   type CustomProviderSettings,
   type ThinkingIntensity,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import {
   applyHealthReport,
   parseHealthDepth,
@@ -47,7 +47,7 @@ import {
   applyDetectionToWorkers,
   formatPublicError,
   type SessionEntryConfig,
-} from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
 import {
   apiGetRegistryCatalog,
   apiStartPrepareRegistry,
@@ -86,8 +86,8 @@ import type {
   Locale,
   WorkerRegistration,
   WorkerRole,
-} from '@router-agents/shared'
-import { normalizeWorkerRoles } from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
+import { normalizeWorkerRoles } from '@swarmdesk-agent/shared'
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 import { pipeUIMessageStreamToResponse } from 'ai'
@@ -102,8 +102,8 @@ import {
   createBudgetMarkerMessage,
 } from './leader-step-budget.js'
 import { generateSessionTitle, extractFirstUserText } from './session-title-generator.js'
-import { isPlaceholderSessionTitle } from '@router-agents/core'
-import type { LeaderStepBudgetEvent } from '@router-agents/shared'
+import { isPlaceholderSessionTitle } from '@swarmdesk-agent/core'
+import type { LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
 import { initializeAcpRuntime } from './acp-runtime.js'
 import { asAcpHttpFailure } from './acp-http-error.js'
 import {
@@ -128,7 +128,7 @@ import {
   extractBearerToken,
   tokenMatches,
 } from './desktop-auth.js'
-import { isTerminalWorkerEvent, type WorkerRunEvent } from '@router-agents/shared'
+import { isTerminalWorkerEvent, type WorkerRunEvent } from '@swarmdesk-agent/shared'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomBytes } from 'node:crypto'
 import { HttpJsonBodyError, readJsonBody as readJson } from './http-json-body.js'
@@ -136,13 +136,13 @@ import { resolveHttpPort, resolveMemoryLastMessages } from './runtime-config.js'
 
 const port = resolveHttpPort()
 const runtimeWorkspaceRoot = pathResolve(
-  process.env.ROUTER_WORKSPACE_ROOT?.trim() ||
+  process.env.SWARMDESK_AGENT_WORKSPACE_ROOT?.trim() ||
     (basename(process.cwd()) === 'mastra-app'
       ? pathResolve(process.cwd(), '../..')
       : process.cwd()),
 )
 const runtimeWorkspaceId = createHash('sha256').update(runtimeWorkspaceRoot).digest('hex')
-const studioApiToken = process.env.ROUTER_STUDIO_TOKEN?.trim() || randomBytes(32).toString('hex')
+const studioApiToken = process.env.SWARMDESK_AGENT_STUDIO_TOKEN?.trim() || randomBytes(32).toString('hex')
 /** Request-scoped so every send()/CORS path echoes the correct Origin. */
 const requestAls = new AsyncLocalStorage<IncomingMessage>()
 
@@ -177,7 +177,7 @@ const sessionMgr = acpRuntime.manager
 let internalRuntimeToken: string | null = null
 /** Desktop Electron API token — only via preload IPC from runtime.json desktopToken. */
 let desktopApiToken: string | null = null
-const runtimeDiscoveryPath = process.env.ROUTER_RUNTIME_PATH ?? defaultRuntimeDiscoveryPath()
+const runtimeDiscoveryPath = process.env.SWARMDESK_AGENT_RUNTIME_PATH ?? defaultRuntimeDiscoveryPath()
 const runtimeStartedAt = new Date().toISOString()
 
 function currentReq(): IncomingMessage | undefined {
@@ -190,7 +190,7 @@ function corsFor(req?: IncomingMessage): Record<string, string> {
   return {
     'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS,PUT,PATCH',
     'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, X-Router-Desktop-Token, Last-Event-ID',
+      'Content-Type, Authorization, X-SwarmDesk-Agent-Desktop-Token, Last-Event-ID',
     Vary: 'Origin',
   }
 }
@@ -301,8 +301,8 @@ const server = createServer(async (req, res) => {
           const resolved = await dispatchPort.resolveSessionContext(body.context.memoryThreadId)
           if (!resolved) {
             send(res, 403, {
-              error: 'ROUTER_SESSION_BINDING_REQUIRED',
-              code: 'ROUTER_SESSION_BINDING_REQUIRED',
+              error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED',
+              code: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED',
             })
             return
           }
@@ -312,7 +312,7 @@ const server = createServer(async (req, res) => {
           ) {
             send(res, 403, {
               error: 'context session mismatch',
-              code: 'ROUTER_SESSION_MISMATCH',
+              code: 'SWARMDESK_AGENT_SESSION_MISMATCH',
             })
             return
           }
@@ -322,7 +322,7 @@ const server = createServer(async (req, res) => {
           ) {
             send(res, 403, {
               error: 'context project mismatch',
-              code: 'ROUTER_SESSION_MISMATCH',
+              code: 'SWARMDESK_AGENT_SESSION_MISMATCH',
             })
             return
           }
@@ -623,7 +623,7 @@ const server = createServer(async (req, res) => {
           if (resourceFromClient && resourceFromClient !== boundProjectId) {
             send(res, 403, {
               error: 'resourceId does not match session project',
-              code: 'ROUTER_RESOURCE_MISMATCH',
+              code: 'SWARMDESK_AGENT_RESOURCE_MISMATCH',
             })
             return
           }
@@ -882,7 +882,7 @@ const server = createServer(async (req, res) => {
 
       if (method === 'POST' && path === '/api/models/catalog/refresh') {
         // Admin refresh — may write models-cache + registry snapshot (desktop-auth required)
-        const { syncLeaderModelCatalog } = await import('@router-agents/core')
+        const { syncLeaderModelCatalog } = await import('@swarmdesk-agent/core')
         const result = syncLeaderModelCatalog()
         send(res, 200, {
           ok: true,
@@ -1218,12 +1218,12 @@ const server = createServer(async (req, res) => {
       if (method === 'POST' && path === '/api/demo/seed') {
         // Prefer monorepo root when API runs from packages/mastra-app
         const rootPath =
-          process.env.ROUTER_AGENTS_ROOT ??
+          process.env.SWARMDESK_AGENT_AGENTS_ROOT ??
           (process.cwd().endsWith('mastra-app')
             ? pathResolve(process.cwd(), '../..')
             : process.cwd())
         const project = store.upsertProject({
-          name: 'router-agents',
+          name: 'swarmdesk-agent',
           rootPath: pathResolve(rootPath),
           defaultBranch: 'main',
         })
@@ -1369,8 +1369,8 @@ const server = createServer(async (req, res) => {
               installationId: body.installationId,
               name: body.name,
               primaryRole: body.primaryRole as
-                import('@router-agents/shared').WorkerRole | undefined,
-              roles: body.roles as import('@router-agents/shared').WorkerRole[] | undefined,
+                import('@swarmdesk-agent/shared').WorkerRole | undefined,
+              roles: body.roles as import('@swarmdesk-agent/shared').WorkerRole[] | undefined,
               enabled: body.enabled,
               command: body.command,
               args: body.args,
@@ -2091,7 +2091,7 @@ const server = createServer(async (req, res) => {
         try {
           const session = store.updateSessionStatus(
             statusMatch.id!,
-            body.status as import('@router-agents/shared').SessionStatus,
+            body.status as import('@swarmdesk-agent/shared').SessionStatus,
             body.lastChatError !== undefined
               ? { lastChatError: body.lastChatError }
               : body.status === 'error'
@@ -2124,7 +2124,7 @@ const server = createServer(async (req, res) => {
         try {
           const session = store.updateSessionApprovalPolicy(
             policyMatch.id!,
-            body.approvalPolicy as import('@router-agents/shared').SessionApprovalPolicy,
+            body.approvalPolicy as import('@swarmdesk-agent/shared').SessionApprovalPolicy,
           )
           send(res, 200, { session, snapshot: store.snapshot() })
         } catch (e) {
@@ -2179,7 +2179,7 @@ const server = createServer(async (req, res) => {
         // Identity fields let Electron verify discovery matches this process before reusing.
         send(res, 200, {
           ok: true,
-          service: 'router-agents-api',
+          service: 'swarmdesk-agent-api',
           pid: process.pid,
           startedAt: runtimeStartedAt,
           ownerEpoch: `${process.pid}:${runtimeStartedAt}`,
@@ -2230,7 +2230,7 @@ const server = createServer(async (req, res) => {
       }
 
       if (method === 'POST' && path === '/api/settings') {
-        if (process.env.ROUTER_SECRETS_PARENT_INJECTED === '1') {
+        if (process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED === '1') {
           send(res, 409, {
             error: 'Settings mutations must be performed by the Desktop owner.',
             code: 'SETTINGS_OWNER_REQUIRED',
@@ -2323,7 +2323,7 @@ const server = createServer(async (req, res) => {
       }
 
       if (method === 'DELETE' && path === '/api/settings/secrets') {
-        if (process.env.ROUTER_SECRETS_PARENT_INJECTED === '1') {
+        if (process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED === '1') {
           send(res, 409, {
             error: 'Settings mutations must be performed by the Desktop owner.',
             code: 'SETTINGS_OWNER_REQUIRED',
@@ -2540,9 +2540,9 @@ server.listen(port, '127.0.0.1', () => {
   })
   internalRuntimeToken = discovery.internalToken ?? discovery.token
   desktopApiToken = discovery.desktopToken ?? discovery.token
-  console.log(`router-agents API+chat listening on http://127.0.0.1:${port}`)
+  console.log(`swarmdesk-agent API+chat listening on http://127.0.0.1:${port}`)
   console.log(`  REST  /api/*`)
-  console.log(`  Chat  POST /chat/:agentId  (e.g. /chat/router-leader)`)
+  console.log(`  Chat  POST /chat/:agentId  (e.g. /chat/swarmdesk-leader)`)
   console.log(`  WS    /api/workers/:id/auth-terminal/:attemptId/ws (Sec-WebSocket-Protocol token)`)
   console.log(`  Internal runtime APIs ready (bearer auth)`)
   globalActivityLog.append('system', `API server started on :${port}`)

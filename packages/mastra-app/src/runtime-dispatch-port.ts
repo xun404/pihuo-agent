@@ -4,9 +4,9 @@ import type {
   WorkerJob,
   WorkerRole,
   WorkerRunEvent,
-} from '@router-agents/shared'
-import { isTerminalWorkerEvent } from '@router-agents/shared'
-import type { LocalStore } from '@router-agents/core'
+} from '@swarmdesk-agent/shared'
+import { isTerminalWorkerEvent } from '@swarmdesk-agent/shared'
+import type { LocalStore } from '@swarmdesk-agent/core'
 import type { ScheduleRequest, ScheduleResult } from './scheduler.js'
 import type { WorkerEventEmitter } from './worker-events.js'
 

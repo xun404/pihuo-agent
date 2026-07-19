@@ -1,11 +1,11 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { getSharedStore } from '@router-agents/core'
+import { getSharedStore } from '@swarmdesk-agent/core'
 import { getWorkerScheduler } from '../scheduler.js'
 import { getRuntimeDispatchPort } from '../runtime-dispatch-port.js'
 import type { RuntimeDispatchPort } from '../runtime-dispatch-port.js'
-import type { WorkerJob, WorkerKind, WorkerRole, WorkerRunEvent } from '@router-agents/shared'
-import { isJobOpen, isTerminalWorkerEvent } from '@router-agents/shared'
+import type { WorkerJob, WorkerKind, WorkerRole, WorkerRunEvent } from '@swarmdesk-agent/shared'
+import { isJobOpen, isTerminalWorkerEvent } from '@swarmdesk-agent/shared'
 import {
   enrichTerminalWorkerEvent,
   MAX_TIMER_DELAY_MS,
@@ -162,7 +162,7 @@ const jobStatusSchema = z.enum([
 
 export const listProjectsTool = createTool({
   id: 'list-projects',
-  description: 'List local projects known to Router Agents.',
+  description: 'List local projects known to SwarmDesk.',
   inputSchema: z.object({}),
   outputSchema: z.object({
     projects: z.array(

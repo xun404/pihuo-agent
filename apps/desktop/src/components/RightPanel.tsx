@@ -6,8 +6,8 @@ import type {
   WorkerKind,
   WorkerRegistration,
   WorkerRole,
-} from '@router-agents/shared'
-import { WORKER_ROLES } from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
+import { WORKER_ROLES } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
 import { api, type FileEntryDto, type GitStatusResponse } from '../lib/api'

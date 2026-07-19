@@ -73,7 +73,7 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: |
-            release/Router-Agents-*
+            release/SwarmDesk-Agent-*
             release/latest*.yml
           if-no-files-found: error
           retention-days: 7

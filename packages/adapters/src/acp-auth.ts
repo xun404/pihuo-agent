@@ -66,7 +66,7 @@ const CONTROL_ENV_NAMES = new Set([
   'COREPACK_HOME',
 ])
 const CONTROL_ENV_PREFIXES = [
-  'ROUTER_',
+  'SWARMDESK_AGENT_',
   'MASTRA_',
   'ELECTRON_',
   'LD_',

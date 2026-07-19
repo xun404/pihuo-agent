@@ -6,10 +6,10 @@ import {
   parseHealthDepth,
   probeWorkerHealth,
   type ProbeDepth,
-} from '@router-agents/adapters'
-import { globalActivityLog, getSharedStore } from '@router-agents/core'
-import type { WorkerHealthReport, WorkerRegistration } from '@router-agents/shared'
-import { isModelCacheFresh, WORKER_MODELS_TTL_MS } from '@router-agents/shared'
+} from '@swarmdesk-agent/adapters'
+import { globalActivityLog, getSharedStore } from '@swarmdesk-agent/core'
+import type { WorkerHealthReport, WorkerRegistration } from '@swarmdesk-agent/shared'
+import { isModelCacheFresh, WORKER_MODELS_TTL_MS } from '@swarmdesk-agent/shared'
 import { refreshWorkerModels } from './worker-models.js'
 
 const MAX_NODE_TIMER_MS = 2_147_483_647
@@ -128,8 +128,8 @@ export function scheduleAutoWorkerHealth(): void {
     void (async () => {
       try {
         const { detectAcpWorkers, applyDetectionToWorkers } =
-          await import('@router-agents/adapters')
-        const { createId } = await import('@router-agents/core')
+          await import('@swarmdesk-agent/adapters')
+        const { createId } = await import('@swarmdesk-agent/core')
         const candidates = await detectAcpWorkers()
         const existing = store().listWorkers()
         // First boot: many unknown workers — apply detection

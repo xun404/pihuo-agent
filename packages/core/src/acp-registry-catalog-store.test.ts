@@ -7,7 +7,7 @@ import {
   loadAcpRegistryCatalogStore,
   saveAcpRegistryCatalogStore,
 } from './acp-registry-catalog-store.js'
-import type { AcpRegistryCatalogSnapshot } from '@router-agents/shared'
+import type { AcpRegistryCatalogSnapshot } from '@swarmdesk-agent/shared'
 
 describe('acp-registry-catalog-store', () => {
   let dir: string

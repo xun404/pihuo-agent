@@ -8,7 +8,7 @@ import {
   type WorkerRole,
   type WorkerRunEvent,
   type WorkerRunState,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 export function isActiveWorkerStatus(status: WorkerRunState['status']): boolean {
   return status === 'running' || status === 'pending_approval'

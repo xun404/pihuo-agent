@@ -14,12 +14,12 @@ import {
   setWorkerSecret,
   resetSharedStoreForTests,
   removeWorkerReference,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import type {
   AcpRegistryCatalogSnapshot,
   WorkerReadiness,
   WorkerRegistration,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import {
   AcpSessionManager,
   AcpInstallError,
@@ -28,7 +28,7 @@ import {
   type CapabilityProbeResult,
   type SpawnedAcpLogoutResult,
   type SpawnedAcpSetupInput,
-} from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
 import {
   apiAdoptRegistryManagement,
   apiAuthenticateWorker,
@@ -61,7 +61,7 @@ import {
 
 describe('acp-registry-api', () => {
   let dir: string
-  const prevData = process.env.ROUTER_DATA_DIR
+  const prevData = process.env.SWARMDESK_AGENT_DATA_DIR
   const prevCat = process.env.ACP_REGISTRY_CATALOG_PATH
   const prevInst = process.env.ACP_AGENT_INSTALLATIONS_PATH
 
@@ -138,10 +138,10 @@ describe('acp-registry-api', () => {
 
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'acp-api-'))
-    process.env.ROUTER_DATA_DIR = dir
+    process.env.SWARMDESK_AGENT_DATA_DIR = dir
     process.env.ACP_REGISTRY_CATALOG_PATH = join(dir, 'acp-registry.json')
     process.env.ACP_AGENT_INSTALLATIONS_PATH = join(dir, 'installs.json')
-    delete process.env.ROUTER_SECRETS_PARENT_INJECTED
+    delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
     setTestMasterKey(randomBytes(32))
     resetSharedStoreForTests()
     const snapshot: AcpRegistryCatalogSnapshot = {
@@ -196,8 +196,8 @@ describe('acp-registry-api', () => {
   after(() => {
     setTestMasterKey(null)
     resetSharedStoreForTests()
-    if (prevData === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = prevData
+    if (prevData === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = prevData
     if (prevCat === undefined) delete process.env.ACP_REGISTRY_CATALOG_PATH
     else process.env.ACP_REGISTRY_CATALOG_PATH = prevCat
     if (prevInst === undefined) delete process.env.ACP_AGENT_INSTALLATIONS_PATH
@@ -614,7 +614,7 @@ describe('acp-registry-api', () => {
     resetInstallations()
     const worker = await registerSeededWorker({ installationId: 'inst-probe-ready' })
     setWorkerSecret(worker.id, 'AGENT_API_KEY', 'worker-only-secret')
-    process.env.ROUTER_INTERNAL_TOKEN = 'must-never-forward'
+    process.env.SWARMDESK_AGENT_INTERNAL_TOKEN = 'must-never-forward'
     process.env.OPENAI_API_KEY = 'leader-secret'
 
     let captured: SpawnedAcpSetupInput | undefined
@@ -666,7 +666,7 @@ describe('acp-registry-api', () => {
     assert.equal(captured?.cwd, findInstallationById(worker.installationId!)?.installDir)
     assert.equal(captured?.terminalAuthReady, true)
     assert.equal(captured?.env.AGENT_API_KEY, 'worker-only-secret')
-    assert.equal(captured?.env.ROUTER_INTERNAL_TOKEN, undefined)
+    assert.equal(captured?.env.SWARMDESK_AGENT_INTERNAL_TOKEN, undefined)
     assert.equal(captured?.env.OPENAI_API_KEY, undefined)
     assert.equal(result.worker.readiness?.status, 'ready')
 

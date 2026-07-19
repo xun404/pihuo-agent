@@ -11,10 +11,10 @@ describe('resolveRouterDataPaths', () => {
     'LOCALAPPDATA',
     'XDG_CONFIG_HOME',
     'XDG_CACHE_HOME',
-    'ROUTER_DATA_DIR',
-    'ROUTER_AGENTS_DIR',
-    'ROUTER_AGENTS_STATE',
-    'ROUTER_RUNTIME_PATH',
+    'SWARMDESK_AGENT_DATA_DIR',
+    'SWARMDESK_AGENT_AGENTS_DIR',
+    'SWARMDESK_AGENT_AGENTS_STATE',
+    'SWARMDESK_AGENT_RUNTIME_PATH',
     'ACP_CATALOG_PATH',
     'MASTRA_MEMORY_URL',
   ]
@@ -35,52 +35,52 @@ describe('resolveRouterDataPaths', () => {
     if (prevPlatform !== undefined) process.env.HOME = prevPlatform
   })
 
-  it('uses XDG_CONFIG_HOME/router-agents by default (posix)', () => {
-    delete process.env.ROUTER_DATA_DIR
-    delete process.env.ROUTER_AGENTS_DIR
-    delete process.env.ROUTER_AGENTS_STATE
-    delete process.env.ROUTER_RUNTIME_PATH
+  it('uses XDG_CONFIG_HOME/swarmdesk-agent by default (posix)', () => {
+    delete process.env.SWARMDESK_AGENT_DATA_DIR
+    delete process.env.SWARMDESK_AGENT_AGENTS_DIR
+    delete process.env.SWARMDESK_AGENT_AGENTS_STATE
+    delete process.env.SWARMDESK_AGENT_RUNTIME_PATH
     delete process.env.XDG_CONFIG_HOME
     delete process.env.XDG_CACHE_HOME
     process.env.HOME = '/tmp/fake-home-ra'
     const p = resolveRouterDataPaths()
-    // root = ~/.config/router-agents
-    assert.equal(p.rootDir, '/tmp/fake-home-ra/.config/router-agents')
+    // root = ~/.config/swarmdesk-agent
+    assert.equal(p.rootDir, '/tmp/fake-home-ra/.config/swarmdesk-agent')
     assert.equal(p.configDir, p.rootDir)
     // data + cache are subdirs of root
-    assert.equal(p.dataDir, '/tmp/fake-home-ra/.config/router-agents/data')
-    assert.equal(p.cacheDir, '/tmp/fake-home-ra/.config/router-agents/cache')
+    assert.equal(p.dataDir, '/tmp/fake-home-ra/.config/swarmdesk-agent/data')
+    assert.equal(p.cacheDir, '/tmp/fake-home-ra/.config/swarmdesk-agent/cache')
     // files derive from their layer
-    assert.equal(p.statePath, '/tmp/fake-home-ra/.config/router-agents/data/state.json')
-    assert.equal(p.runtimePath, '/tmp/fake-home-ra/.config/router-agents/data/runtime.json')
-    assert.equal(p.catalogPath, '/tmp/fake-home-ra/.config/router-agents/data/acp-sessions.json')
-    assert.equal(p.memoryDbPath, '/tmp/fake-home-ra/.config/router-agents/data/mastra-memory.db')
+    assert.equal(p.statePath, '/tmp/fake-home-ra/.config/swarmdesk-agent/data/state.json')
+    assert.equal(p.runtimePath, '/tmp/fake-home-ra/.config/swarmdesk-agent/data/runtime.json')
+    assert.equal(p.catalogPath, '/tmp/fake-home-ra/.config/swarmdesk-agent/data/acp-sessions.json')
+    assert.equal(p.memoryDbPath, '/tmp/fake-home-ra/.config/swarmdesk-agent/data/mastra-memory.db')
     assert.equal(
       p.modelRegistryPath,
-      '/tmp/fake-home-ra/.config/router-agents/data/mastra-model-registry.json',
+      '/tmp/fake-home-ra/.config/swarmdesk-agent/data/mastra-model-registry.json',
     )
     assert.equal(
       p.modelsCachePath,
-      '/tmp/fake-home-ra/.config/router-agents/cache/models-cache.json',
+      '/tmp/fake-home-ra/.config/swarmdesk-agent/cache/models-cache.json',
     )
     // secrets/settings live at root (config layer)
     assert.equal(p.secretsDir, p.rootDir)
   })
 
   it('honors XDG_CONFIG_HOME when set (posix)', () => {
-    delete process.env.ROUTER_DATA_DIR
-    delete process.env.ROUTER_AGENTS_DIR
+    delete process.env.SWARMDESK_AGENT_DATA_DIR
+    delete process.env.SWARMDESK_AGENT_AGENTS_DIR
     process.env.HOME = '/tmp/fake-home-ra'
     process.env.XDG_CONFIG_HOME = '/tmp/xdg-config'
     const p = resolveRouterDataPaths()
-    assert.equal(p.rootDir, '/tmp/xdg-config/router-agents')
-    assert.equal(p.dataDir, '/tmp/xdg-config/router-agents/data')
+    assert.equal(p.rootDir, '/tmp/xdg-config/swarmdesk-agent')
+    assert.equal(p.dataDir, '/tmp/xdg-config/swarmdesk-agent/data')
   })
 
-  it('ROUTER_DATA_DIR pins the entire root (config+data+cache beneath it)', () => {
+  it('SWARMDESK_AGENT_DATA_DIR pins the entire root (config+data+cache beneath it)', () => {
     process.env.HOME = '/tmp/fake-home-ra'
-    process.env.ROUTER_DATA_DIR = '/tmp/custom-root'
-    delete process.env.ROUTER_AGENTS_STATE
+    process.env.SWARMDESK_AGENT_DATA_DIR = '/tmp/custom-root'
+    delete process.env.SWARMDESK_AGENT_AGENTS_STATE
     const p = resolveRouterDataPaths()
     assert.equal(p.rootDir, '/tmp/custom-root')
     assert.equal(p.configDir, '/tmp/custom-root')
@@ -90,24 +90,24 @@ describe('resolveRouterDataPaths', () => {
     assert.equal(resolveRouterDataDir(), '/tmp/custom-root')
   })
 
-  it('ROUTER_AGENTS_DIR is an alias for ROUTER_DATA_DIR', () => {
-    delete process.env.ROUTER_DATA_DIR
-    process.env.ROUTER_AGENTS_DIR = '/tmp/alias-root'
+  it('SWARMDESK_AGENT_AGENTS_DIR is an alias for SWARMDESK_AGENT_DATA_DIR', () => {
+    delete process.env.SWARMDESK_AGENT_DATA_DIR
+    process.env.SWARMDESK_AGENT_AGENTS_DIR = '/tmp/alias-root'
     const p = resolveRouterDataPaths()
     assert.equal(p.rootDir, '/tmp/alias-root')
   })
 
   it('per-file env overrides win over derived paths', () => {
-    process.env.ROUTER_DATA_DIR = '/tmp/custom-root'
-    process.env.ROUTER_AGENTS_STATE = '/tmp/elsewhere/state.json'
-    process.env.ROUTER_RUNTIME_PATH = '/tmp/elsewhere/runtime.json'
+    process.env.SWARMDESK_AGENT_DATA_DIR = '/tmp/custom-root'
+    process.env.SWARMDESK_AGENT_AGENTS_STATE = '/tmp/elsewhere/state.json'
+    process.env.SWARMDESK_AGENT_RUNTIME_PATH = '/tmp/elsewhere/runtime.json'
     const p = resolveRouterDataPaths()
     assert.equal(p.statePath, '/tmp/elsewhere/state.json')
     assert.equal(p.runtimePath, '/tmp/elsewhere/runtime.json')
   })
 
   it('MASTRA_MEMORY_URL overrides memory db path (file: URL or raw)', () => {
-    process.env.ROUTER_DATA_DIR = '/tmp/custom-root'
+    process.env.SWARMDESK_AGENT_DATA_DIR = '/tmp/custom-root'
     process.env.MASTRA_MEMORY_URL = 'file:/tmp/custom/memory.db'
     assert.equal(resolveRouterDataPaths().memoryDbPath, '/tmp/custom/memory.db')
     process.env.MASTRA_MEMORY_URL = '/tmp/raw/memory.db'
@@ -116,8 +116,8 @@ describe('resolveRouterDataPaths', () => {
 
   it('uses %APPDATA% on windows for root', () => {
     // emulate windows platform by stubbing the platform check inputs
-    delete process.env.ROUTER_DATA_DIR
-    delete process.env.ROUTER_AGENTS_DIR
+    delete process.env.SWARMDESK_AGENT_DATA_DIR
+    delete process.env.SWARMDESK_AGENT_AGENTS_DIR
     delete process.env.XDG_CONFIG_HOME
     process.env.HOME = '/tmp/fake-home-ra'
     process.env.USERPROFILE = '/tmp/fake-home-ra'
@@ -127,7 +127,7 @@ describe('resolveRouterDataPaths', () => {
     // resolveRouterDataDir when XDG_CONFIG_HOME simulates the windows base.
     process.env.XDG_CONFIG_HOME = '/tmp/fake-home-ra/AppData/Roaming'
     const p = resolveRouterDataPaths()
-    assert.equal(p.rootDir, '/tmp/fake-home-ra/AppData/Roaming/router-agents')
-    assert.equal(p.dataDir, '/tmp/fake-home-ra/AppData/Roaming/router-agents/data')
+    assert.equal(p.rootDir, '/tmp/fake-home-ra/AppData/Roaming/swarmdesk-agent')
+    assert.equal(p.dataDir, '/tmp/fake-home-ra/AppData/Roaming/swarmdesk-agent/data')
   })
 })

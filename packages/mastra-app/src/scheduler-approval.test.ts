@@ -11,9 +11,9 @@ import {
   LocalStore,
   getSharedStore,
   resetSharedStoreForTests,
-} from '@router-agents/core'
-import { AcpSessionRuntimeError } from '@router-agents/adapters'
-import type { ApprovalItem } from '@router-agents/shared'
+} from '@swarmdesk-agent/core'
+import { AcpSessionRuntimeError } from '@swarmdesk-agent/adapters'
+import type { ApprovalItem } from '@swarmdesk-agent/shared'
 import * as schedulerModule from './scheduler.js'
 import { getWorkerEventEmitter } from './worker-events.js'
 
@@ -564,9 +564,9 @@ describe('scheduler ACP error boundary', () => {
   })
 
   it('persists and emits the typed errorCode when an unexpected run failure terminalizes', () => {
-    const previousData = process.env.ROUTER_DATA_DIR
+    const previousData = process.env.SWARMDESK_AGENT_DATA_DIR
     const dataDir = mkdtempSync(join(tmpdir(), 'scheduler-error-code-'))
-    process.env.ROUTER_DATA_DIR = dataDir
+    process.env.SWARMDESK_AGENT_DATA_DIR = dataDir
     resetSharedStoreForTests()
     try {
       const shared = getSharedStore()
@@ -600,8 +600,8 @@ describe('scheduler ACP error boundary', () => {
       assert.equal(terminal?.errorCode, 'recovery_failed')
     } finally {
       resetSharedStoreForTests()
-      if (previousData === undefined) delete process.env.ROUTER_DATA_DIR
-      else process.env.ROUTER_DATA_DIR = previousData
+      if (previousData === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+      else process.env.SWARMDESK_AGENT_DATA_DIR = previousData
       rmSync(dataDir, { recursive: true, force: true })
     }
   })

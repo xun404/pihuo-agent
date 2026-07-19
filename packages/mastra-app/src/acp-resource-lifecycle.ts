@@ -1,5 +1,5 @@
-import { workerExecutionConfigChanged } from '@router-agents/adapters'
-import type { WorkerRegistration } from '@router-agents/shared'
+import { workerExecutionConfigChanged } from '@swarmdesk-agent/adapters'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 
 interface AcpContextManager {
   deleteContextByRouterSession(sessionId: string): void

@@ -14,7 +14,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import type { AcpRegistryAgentMetadata } from '@router-agents/shared'
+import type { AcpRegistryAgentMetadata } from '@swarmdesk-agent/shared'
 import { AcpInstallError, prepareRegistryAgent } from './acp-agent-installer.js'
 import { digestOfAgentEntry } from './acp-registry-schema.js'
 

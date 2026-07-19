@@ -32,7 +32,7 @@ import type {
   SessionApprovalPolicy,
   WorkerSource,
   WorkerRuntimeProfile,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import {
   DEFAULT_SESSION_TITLE,
   isPlaceholderSessionTitle,
@@ -43,7 +43,7 @@ import {
   normalizeWorkerHealth,
   normalizeWorkerRoles,
   isValidSessionApprovalPolicy,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import { createId } from './id.js'
 import {
   enqueueApproval,
@@ -64,7 +64,7 @@ function now(): string {
   return new Date().toISOString()
 }
 
-// Title helpers live in @router-agents/shared so the desktop renderer (which
+// Title helpers live in @swarmdesk-agent/shared so the desktop renderer (which
 // depends only on shared, not core) can import them too. Re-exported here for
 // back-compat with the http-server import path.
 export { DEFAULT_SESSION_TITLE, isPlaceholderSessionTitle }
@@ -267,7 +267,7 @@ export class LocalStore {
   private revision = 0
 
   constructor(
-    path = process.env.ROUTER_AGENTS_STATE ?? defaultStatePath(),
+    path = process.env.SWARMDESK_AGENT_AGENTS_STATE ?? defaultStatePath(),
     opts?: { mode?: LocalStoreMode },
   ) {
     this.path = path

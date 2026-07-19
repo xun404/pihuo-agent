@@ -9,8 +9,8 @@ import {
   markInstallationRemoved,
   findInstallationById,
   type AcpAgentInstallationRecord,
-} from '@router-agents/core'
-import type { WorkerRegistration } from '@router-agents/shared'
+} from '@swarmdesk-agent/core'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 
 export type DetachWorkerResult = {
   workerId: string

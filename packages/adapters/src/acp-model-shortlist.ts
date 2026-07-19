@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import type { WorkerModelOption } from '@router-agents/shared'
+import type { WorkerModelOption } from '@swarmdesk-agent/shared'
 import {
   buildProviderEvidenceMap,
   buildShortlistAndSearchIndex,

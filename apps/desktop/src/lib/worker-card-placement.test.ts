@@ -5,7 +5,7 @@ import {
   projectWorkerCardPlacements,
   shouldRenderGenericToolShell,
 } from './worker-card-placement.js'
-import type { WorkerRunState } from '@router-agents/shared'
+import type { WorkerRunState } from '@swarmdesk-agent/shared'
 
 function makeState(overrides: Partial<WorkerRunState> & { jobId: string }): WorkerRunState {
   return {

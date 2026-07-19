@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { WorkerEventEmitter } from './worker-events.js'
-import type { WorkerRunEvent } from '@router-agents/shared'
+import type { WorkerRunEvent } from '@swarmdesk-agent/shared'
 
 describe('WorkerEventEmitter.detectGap', () => {
   it('returns null when journal covers afterSequence', () => {

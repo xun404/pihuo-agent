@@ -6,7 +6,7 @@ import type {
   WorkerReadiness,
   WorkerReadinessStatus,
   WorkerRegistration,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 const DISPATCHABLE: ReadonlySet<WorkerReadinessStatus> = new Set(['ready', 'degraded'])
 

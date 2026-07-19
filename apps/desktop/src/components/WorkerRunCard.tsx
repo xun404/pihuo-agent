@@ -5,7 +5,7 @@ import type {
   WorkerRole,
   ApprovalItem,
   AcpToolKind,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import { MarkdownContent } from './MarkdownContent'
 import { ApprovalActions } from './ApprovalActions'
 import { resolveWorkerBrand, WorkerBrandLogo } from './Icons'
@@ -294,7 +294,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                         className="worker-card-auth-btn"
                         onClick={() => {
                           window.dispatchEvent(
-                            new CustomEvent('router-agents:open-settings', {
+                            new CustomEvent('swarmdesk-agent:open-settings', {
                               detail: {
                                 tab: 'workers',
                                 workerId: state.workerId,

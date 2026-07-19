@@ -1,5 +1,5 @@
 {
-  "name": "@router-agents/core",
+  "name": "@swarmdesk-agent/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "@router-agents/shared": "0.1.0"
+    "@swarmdesk-agent/shared": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

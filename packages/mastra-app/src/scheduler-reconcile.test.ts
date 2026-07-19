@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { getSharedStore, resetSharedStoreForTests } from '@router-agents/core'
+import { getSharedStore, resetSharedStoreForTests } from '@swarmdesk-agent/core'
 import { WorkerScheduler } from './scheduler.js'
 
 describe('WorkerScheduler.reconcileOrphanJobs', () => {
@@ -12,14 +12,14 @@ describe('WorkerScheduler.reconcileOrphanJobs', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'sched-reconcile-'))
-    prevState = process.env.ROUTER_AGENTS_STATE
-    process.env.ROUTER_AGENTS_STATE = join(dir, 'state.json')
+    prevState = process.env.SWARMDESK_AGENT_AGENTS_STATE
+    process.env.SWARMDESK_AGENT_AGENTS_STATE = join(dir, 'state.json')
     resetSharedStoreForTests()
   })
 
   afterEach(() => {
-    if (prevState !== undefined) process.env.ROUTER_AGENTS_STATE = prevState
-    else delete process.env.ROUTER_AGENTS_STATE
+    if (prevState !== undefined) process.env.SWARMDESK_AGENT_AGENTS_STATE = prevState
+    else delete process.env.SWARMDESK_AGENT_AGENTS_STATE
     resetSharedStoreForTests()
     try {
       rmSync(dir, { recursive: true, force: true })

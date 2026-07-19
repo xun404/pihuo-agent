@@ -21,7 +21,7 @@ import {
   selectWorkerByRole,
   type AcpSpawnConfig,
   type SessionEntryConfig,
-} from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import {
@@ -35,7 +35,7 @@ import {
   loadWorkerSecretsSnapshotForSpawn,
   type AcpToolKind,
   type ApprovalWaitOutcome,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import {
   isHealthReportFresh,
   isJobOpen,
@@ -50,7 +50,7 @@ import {
   type WorkerRegistration,
   type WorkerRole,
   type WorkerRunEvent,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import {
   emitWorkerEvent,
   getWorkerEventEmitter,

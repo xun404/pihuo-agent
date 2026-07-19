@@ -1,4 +1,4 @@
-import { isAcpSessionRuntimeError } from '@router-agents/adapters'
+import { isAcpSessionRuntimeError } from '@swarmdesk-agent/adapters'
 
 export interface AcpHttpFailure {
   status: 503

@@ -13,7 +13,7 @@ export class HttpJsonBodyError extends Error {
 }
 
 export function resolveMaxJsonBodyBytes(
-  raw: string | number | undefined = process.env.ROUTER_MAX_JSON_BODY_BYTES,
+  raw: string | number | undefined = process.env.SWARMDESK_AGENT_MAX_JSON_BODY_BYTES,
 ): number {
   const parsed = Number(raw)
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_MAX_JSON_BODY_BYTES
