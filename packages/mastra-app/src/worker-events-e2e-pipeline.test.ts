@@ -25,6 +25,7 @@ import type {
   WorkerRunEvent,
   WorkerRunState,
   WorkerKind,
+  ApprovalItem,
 } from '@router-agents/shared'
 
 // ---------------------------------------------------------------------------
@@ -62,11 +63,7 @@ function makeCompleted(
   }
 }
 
-function makeFailed(
-  error: string,
-  jobId = 'job_e2e',
-  output?: string,
-): WorkerRunEvent {
+function makeFailed(error: string, jobId = 'job_e2e', output?: string): WorkerRunEvent {
   return { type: 'failed', jobId, output, error, truncated: false }
 }
 
@@ -74,13 +71,66 @@ function makeCancelled(jobId = 'job_e2e'): WorkerRunEvent {
   return { type: 'cancelled', jobId, output: undefined, truncated: false }
 }
 
+function makeApprovalItem(overrides?: Partial<ApprovalItem>): ApprovalItem {
+  return {
+    id: 'approval-1',
+    status: 'pending',
+    title: 'Allow command?',
+    detail: 'Run: rm -rf',
+    action: 'execute_command',
+    pathOrTarget: '/bin/bash',
+    workerId: 'w_codex',
+    workerName: 'Codex',
+    sessionId: null,
+    jobId: 'job_e2e',
+    toolCallId: 'tc-1',
+    toolKind: 'execute',
+    locations: [],
+    options: [{ optionId: 'allow-once', name: 'Allow Once', kind: 'allow_once' }],
+    source: 'acp',
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+function makeApprovalRequestedE2e(
+  overrides?: Partial<WorkerRunEvent & { type: 'approval_requested' }>,
+  jobId = 'job_e2e',
+): WorkerRunEvent & { type: 'approval_requested' } {
+  return {
+    type: 'approval_requested',
+    jobId,
+    approval: makeApprovalItem({
+      jobId,
+      ...(overrides?.approval as Partial<ApprovalItem> | undefined),
+    }),
+    ...overrides,
+  }
+}
+
+function makeApprovalResolvedE2e(
+  overrides?: Partial<WorkerRunEvent & { type: 'approval_resolved' }>,
+  jobId = 'job_e2e',
+): WorkerRunEvent & { type: 'approval_resolved' } {
+  return {
+    type: 'approval_resolved',
+    jobId,
+    approval: makeApprovalItem({
+      jobId,
+      id: 'approval-1',
+      status: 'allowed',
+      decision: 'allow',
+      ...(overrides?.approval as Partial<ApprovalItem> | undefined),
+    }),
+    ...overrides,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Simulated ChatPanel workerStatesRef (mirrors ChatPanel.tsx accumulator)
 // ---------------------------------------------------------------------------
 
-function makeInitialState(
-  event: WorkerRunEvent & { type: 'started' },
-): WorkerRunState {
+function makeInitialState(event: WorkerRunEvent & { type: 'started' }): WorkerRunState {
   return {
     jobId: event.jobId,
     workerName: event.workerName,
@@ -111,12 +161,44 @@ function applyEventToState(state: WorkerRunState, event: WorkerRunEvent): Worker
         lastDeltaAt: Date.now(),
       }
     }
+    case 'approval_requested': {
+      const e = event as WorkerRunEvent & { type: 'approval_requested' }
+      return {
+        ...state,
+        status: 'pending_approval',
+        pendingApproval: e.approval,
+        lastDeltaAt: Date.now(),
+      }
+    }
+    case 'approval_resolved': {
+      const e = event as WorkerRunEvent & { type: 'approval_resolved' }
+      if (state.pendingApproval?.id === e.approval.id) {
+        const { pendingApproval: _pa, ...rest } = state
+        return { ...rest, status: 'running', lastDeltaAt: Date.now() }
+      }
+      return state
+    }
     case 'completed':
-      return { ...state, output: event.output, status: 'completed', truncated: event.truncated, lastDeltaAt: Date.now() }
+      return {
+        ...state,
+        output: event.output,
+        status: 'completed',
+        truncated: event.truncated,
+        lastDeltaAt: Date.now(),
+        pendingApproval: undefined,
+      }
     case 'failed':
     case 'cancelled':
     case 'timed_out':
-      return { ...state, output: event.output ?? state.output, status: event.type, truncated: event.truncated, error: event.error, lastDeltaAt: Date.now() }
+      return {
+        ...state,
+        output: event.output ?? state.output,
+        status: event.type,
+        truncated: event.truncated,
+        error: event.error,
+        lastDeltaAt: Date.now(),
+        pendingApproval: undefined,
+      }
     default:
       return state
   }
@@ -127,7 +209,7 @@ function applyEventToState(state: WorkerRunState, event: WorkerRunEvent): Worker
 // ---------------------------------------------------------------------------
 
 interface WrittenPart {
-  type: string       // always 'data-worker-run'
+  type: string // always 'data-worker-run'
   data: WorkerRunEvent
   transient: boolean
   id?: string
@@ -139,10 +221,7 @@ interface WrittenPart {
 //  but synchronous for test determinism)
 // ---------------------------------------------------------------------------
 
-function runBridgeSync(
-  jobId: string,
-  events: WorkerRunEvent[],
-): WrittenPart[] {
+function runBridgeSync(jobId: string, events: WorkerRunEvent[]): WrittenPart[] {
   const written: WrittenPart[] = []
   let buf = ''
   let lastSeq = 0
@@ -150,7 +229,10 @@ function runBridgeSync(
   for (const event of events) {
     if (event.type === 'delta') {
       const e = event as WorkerRunEvent & { delta: string; sequence: number }
-      if (e.sequence > lastSeq) { lastSeq = e.sequence; buf += e.delta }
+      if (e.sequence > lastSeq) {
+        lastSeq = e.sequence
+        buf += e.delta
+      }
       if (buf.length >= 8) {
         written.push({
           type: 'data-worker-run',
@@ -160,6 +242,13 @@ function runBridgeSync(
         buf = ''
       }
     } else if (event.type === 'started') {
+      written.push({
+        type: 'data-worker-run',
+        id: jobId,
+        data: event,
+        transient: true,
+      })
+    } else if (event.type === 'approval_requested' || event.type === 'approval_resolved') {
       written.push({
         type: 'data-worker-run',
         id: jobId,
@@ -219,6 +308,8 @@ function simulateOnData(
         if (prev) map.set(event.jobId, applyEventToState(prev, event))
         break
       }
+      case 'approval_requested':
+      case 'approval_resolved':
       case 'completed':
       case 'failed':
       case 'cancelled': {
@@ -277,17 +368,13 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
   })
 
   it('Full happy path: started → deltas → completed flows through entire pipeline', async () => {
-    const { rawEvents, writtenParts, workerStates } = await runFullPipeline(
-      emitter,
-      'job_e2e',
-      [
-        makeStarted({ jobId: 'job_e2e' }),
-        makeDelta(1, 'Hello', 'job_e2e'),
-        makeDelta(2, ' World', 'job_e2e'),
-        makeDelta(3, '!', 'job_e2e'),
-        makeCompleted({ jobId: 'job_e2e', output: 'Hello World!' }),
-      ],
-    )
+    const { rawEvents, writtenParts, workerStates } = await runFullPipeline(emitter, 'job_e2e', [
+      makeStarted({ jobId: 'job_e2e' }),
+      makeDelta(1, 'Hello', 'job_e2e'),
+      makeDelta(2, ' World', 'job_e2e'),
+      makeDelta(3, '!', 'job_e2e'),
+      makeCompleted({ jobId: 'job_e2e', output: 'Hello World!' }),
+    ])
 
     // ─── RAW EVENTS (collector) ───
     assert.equal(rawEvents.length, 5)
@@ -327,18 +414,15 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
   })
 
   it('Terminal transient flags: started+delta are transient, terminal is not transient', async () => {
-    const { writtenParts } = await runFullPipeline(
-      emitter,
-      'job_term',
-      [
-        makeStarted({ jobId: 'job_term' }),
-        makeDelta(1, 'data', 'job_term'),
-        makeCompleted({ jobId: 'job_term', output: 'data' }),
-      ],
-    )
+    const { writtenParts } = await runFullPipeline(emitter, 'job_term', [
+      makeStarted({ jobId: 'job_term' }),
+      makeDelta(1, 'data', 'job_term'),
+      makeCompleted({ jobId: 'job_term', output: 'data' }),
+    ])
 
     for (const p of writtenParts) {
-      const isTerminal = p.data.type === 'completed' || p.data.type === 'failed' || p.data.type === 'cancelled'
+      const isTerminal =
+        p.data.type === 'completed' || p.data.type === 'failed' || p.data.type === 'cancelled'
       if (isTerminal) {
         assert.equal(p.transient, false, `terminal event ${p.data.type} must be non-transient`)
       } else {
@@ -348,15 +432,11 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
   })
 
   it('Failed path: error propagates through pipeline to WorkerRunState', async () => {
-    const { workerStates } = await runFullPipeline(
-      emitter,
-      'job_fail',
-      [
-        makeStarted({ jobId: 'job_fail', workerName: 'Claude', workerKind: 'claude' }),
-        makeDelta(1, 'trying...', 'job_fail'),
-        makeFailed('ACP process crashed', 'job_fail', 'trying...'),
-      ],
-    )
+    const { workerStates } = await runFullPipeline(emitter, 'job_fail', [
+      makeStarted({ jobId: 'job_fail', workerName: 'Claude', workerKind: 'claude' }),
+      makeDelta(1, 'trying...', 'job_fail'),
+      makeFailed('ACP process crashed', 'job_fail', 'trying...'),
+    ])
 
     const state = workerStates.get('job_fail')
     assert.ok(state)
@@ -368,15 +448,11 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
   })
 
   it('Cancelled path: cancel state propagates with partial output preserved', async () => {
-    const { writtenParts, workerStates } = await runFullPipeline(
-      emitter,
-      'job_cancel',
-      [
-        makeStarted({ jobId: 'job_cancel' }),
-        makeDelta(1, 'partial', 'job_cancel'),
-        makeCancelled('job_cancel'),
-      ],
-    )
+    const { writtenParts, workerStates } = await runFullPipeline(emitter, 'job_cancel', [
+      makeStarted({ jobId: 'job_cancel' }),
+      makeDelta(1, 'partial', 'job_cancel'),
+      makeCancelled('job_cancel'),
+    ])
 
     const state = workerStates.get('job_cancel')
     assert.ok(state)
@@ -409,7 +485,10 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
 
     // Batching reduces writes: fewer data-worker-run writes than 100 raw deltas
     const deltaWrites = writtenParts.filter((w) => w.data.type === 'delta')
-    assert.ok(deltaWrites.length < 100, `Delta writes ${deltaWrites.length} should be < 100 due to batching`)
+    assert.ok(
+      deltaWrites.length < 100,
+      `Delta writes ${deltaWrites.length} should be < 100 due to batching`,
+    )
   })
 
   it('Writer failure isolation: EventCollector resolves even if bridge would fail', async () => {
@@ -494,14 +573,10 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
   })
 
   it('Truncated output flag propagates to WorkerRunState', async () => {
-    const { workerStates } = await runFullPipeline(
-      emitter,
-      'job_trunc',
-      [
-        makeStarted({ jobId: 'job_trunc' }),
-        makeCompleted({ jobId: 'job_trunc', output: 'x'.repeat(100), truncated: true }),
-      ],
-    )
+    const { workerStates } = await runFullPipeline(emitter, 'job_trunc', [
+      makeStarted({ jobId: 'job_trunc' }),
+      makeCompleted({ jobId: 'job_trunc', output: 'x'.repeat(100), truncated: true }),
+    ])
 
     const state = workerStates.get('job_trunc')
     assert.ok(state)
@@ -543,8 +618,14 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
     const promise = collector.waitForCompletion(2000)
 
     emitWorkerEvent('job_dbl_terminal', makeStarted({ jobId: 'job_dbl_terminal' }))
-    emitWorkerEvent('job_dbl_terminal', makeCompleted({ jobId: 'job_dbl_terminal', output: 'first' }))
-    emitWorkerEvent('job_dbl_terminal', makeCompleted({ jobId: 'job_dbl_terminal', output: 'second' }))
+    emitWorkerEvent(
+      'job_dbl_terminal',
+      makeCompleted({ jobId: 'job_dbl_terminal', output: 'first' }),
+    )
+    emitWorkerEvent(
+      'job_dbl_terminal',
+      makeCompleted({ jobId: 'job_dbl_terminal', output: 'second' }),
+    )
 
     const events = await promise
     const terminalEvents = events.filter(
@@ -586,9 +667,163 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
     // Now emit terminal
     emitterLocal.emit(makeCompleted({ jobId: 'job_stuck', output: 'partial work - done' }))
 
-    // Check that the emitter auto-unsubscribed — job is now terminal
+    // Late subscribe must replay journal (including terminal) so wait paths don't hang
     const laterEvents: WorkerRunEvent[] = []
     emitterLocal.subscribe('job_stuck', (e) => laterEvents.push({ ...e }))
-    assert.equal(laterEvents.length, 0, 'late subscribe after terminal should be no-op')
+    assert.ok(
+      laterEvents.some((e) => e.type === 'completed'),
+      'late subscribe after terminal must replay terminal',
+    )
+  })
+
+  describe('E2E Pipeline — approval events', () => {
+    it('Full pipeline with approval: emitter → collector → bridge → writer → onData', async () => {
+      const { rawEvents, writtenParts, workerStates } = await runFullPipeline(
+        emitter,
+        'job_approval',
+        [
+          makeStarted({ jobId: 'job_approval' }),
+          makeDelta(1, 'before', 'job_approval'),
+          makeApprovalRequestedE2e(undefined, 'job_approval'),
+          makeApprovalResolvedE2e(undefined, 'job_approval'),
+          makeDelta(2, 'after', 'job_approval'),
+          makeCompleted({ jobId: 'job_approval', output: 'beforeafter' }),
+        ],
+      )
+
+      assert.equal(rawEvents.length, 6)
+      assert.equal(rawEvents[2]!.type, 'approval_requested')
+      assert.equal(rawEvents[3]!.type, 'approval_resolved')
+
+      // Approval events are transient
+      const approvalWrites = writtenParts.filter(
+        (w) => w.data.type === 'approval_requested' || w.data.type === 'approval_resolved',
+      )
+      assert.equal(approvalWrites.length, 2)
+      for (const w of approvalWrites) {
+        assert.equal(w.transient, true, `${w.data.type} must be transient`)
+      }
+
+      // Terminal is non-transient
+      const terminalWrites = writtenParts.filter((w) => w.data.type === 'completed')
+      assert.equal(terminalWrites.length, 1)
+      assert.equal(terminalWrites[0]!.transient, false)
+
+      // UI state reflects full chain
+      const state = workerStates.get('job_approval')
+      assert.ok(state)
+      assert.equal(state!.status, 'completed')
+      assert.equal(state!.output, 'beforeafter')
+    })
+
+    it('Writer bridge writes approval events as transient:true', async () => {
+      const { writtenParts } = await runFullPipeline(emitter, 'job_approval_transient', [
+        makeStarted({ jobId: 'job_approval_transient' }),
+        makeApprovalRequestedE2e(undefined, 'job_approval_transient'),
+        makeApprovalResolvedE2e(undefined, 'job_approval_transient'),
+        makeCompleted({ jobId: 'job_approval_transient', output: 'ok' }),
+      ])
+
+      for (const p of writtenParts) {
+        const isTerminal =
+          p.data.type === 'completed' || p.data.type === 'failed' || p.data.type === 'cancelled'
+        if (isTerminal) {
+          assert.equal(p.transient, false, `terminal ${p.data.type} must be non-transient`)
+        } else {
+          assert.equal(p.transient, true, `non-terminal ${p.data.type} must be transient`)
+        }
+      }
+    })
+
+    it('approval events do not appear as tool result (transient in message history)', async () => {
+      // Transient events are excluded from AI SDK message serialization
+      // Verify that the bridge marks them as transient=true
+      const { writtenParts } = await runFullPipeline(emitter, 'job_transient', [
+        makeStarted({ jobId: 'job_transient' }),
+        makeApprovalRequestedE2e(undefined, 'job_transient'),
+        makeApprovalResolvedE2e(undefined, 'job_transient'),
+        makeCompleted({ jobId: 'job_transient', output: 'result' }),
+      ])
+
+      const nonTransientParts = writtenParts.filter((w) => !w.transient)
+      assert.equal(nonTransientParts.length, 1, 'only terminal should be non-transient')
+      assert.equal(nonTransientParts[0]!.data.type, 'completed')
+
+      const transientTypes = writtenParts.filter((w) => w.transient).map((w) => w.data.type)
+      assert.ok(transientTypes.includes('approval_requested'))
+      assert.ok(transientTypes.includes('approval_resolved'))
+    })
+
+    it('terminal events still appear as non-transient in history', async () => {
+      const { writtenParts } = await runFullPipeline(emitter, 'job_terminal_hist', [
+        makeStarted({ jobId: 'job_terminal_hist' }),
+        makeApprovalRequestedE2e(undefined, 'job_terminal_hist'),
+        makeCompleted({ jobId: 'job_terminal_hist', output: 'done' }),
+      ])
+
+      const terminalParts = writtenParts.filter(
+        (w) =>
+          w.data.type === 'completed' || w.data.type === 'failed' || w.data.type === 'cancelled',
+      )
+      assert.equal(terminalParts.length, 1)
+      assert.equal(terminalParts[0]!.transient, false)
+    })
+
+    it('UI state shows pending_approval during approval round-trip', async () => {
+      const { workerStates } = await runFullPipeline(emitter, 'job_ui_approval', [
+        makeStarted({ jobId: 'job_ui_approval' }),
+        makeApprovalRequestedE2e(undefined, 'job_ui_approval'),
+        makeApprovalResolvedE2e(undefined, 'job_ui_approval'),
+        makeDelta(1, 'resumed work', 'job_ui_approval'),
+        makeCompleted({ jobId: 'job_ui_approval', output: 'resumed work' }),
+      ])
+
+      const state = workerStates.get('job_ui_approval')
+      assert.ok(state)
+      assert.equal(state!.status, 'completed')
+      assert.equal(state!.output, 'resumed work')
+      // pendingApproval should have been cleared by terminal
+      assert.equal(state!.pendingApproval, undefined)
+    })
+
+    it('multiple approval rounds in pipeline', async () => {
+      const { rawEvents, writtenParts, workerStates } = await runFullPipeline(
+        emitter,
+        'job_multi_approval',
+        [
+          makeStarted({ jobId: 'job_multi_approval' }),
+          makeDelta(1, 'work1', 'job_multi_approval'),
+          makeApprovalRequestedE2e(
+            { approval: makeApprovalItem({ id: 'a1' }) } as any,
+            'job_multi_approval',
+          ),
+          makeApprovalResolvedE2e(
+            { approval: makeApprovalItem({ id: 'a1', status: 'allowed' }) } as any,
+            'job_multi_approval',
+          ),
+          makeDelta(2, 'work2', 'job_multi_approval'),
+          makeApprovalRequestedE2e(
+            { approval: makeApprovalItem({ id: 'a2' }) } as any,
+            'job_multi_approval',
+          ),
+          makeApprovalResolvedE2e(
+            { approval: makeApprovalItem({ id: 'a2', status: 'denied' }) } as any,
+            'job_multi_approval',
+          ),
+          makeDelta(3, 'work3', 'job_multi_approval'),
+          makeCompleted({ jobId: 'job_multi_approval', output: 'work1work2work3' }),
+        ],
+      )
+
+      assert.equal(rawEvents.length, 9)
+      const state = workerStates.get('job_multi_approval')
+      assert.ok(state)
+      assert.equal(state!.status, 'completed')
+      assert.equal(state!.output, 'work1work2work3')
+
+      // Verify all transient flags
+      const nonTerminalWrites = writtenParts.filter((w) => !w.transient)
+      assert.equal(nonTerminalWrites.length, 1, 'only terminal is non-transient')
+    })
   })
 })

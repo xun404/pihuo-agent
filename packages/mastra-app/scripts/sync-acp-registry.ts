@@ -1,0 +1,285 @@
+/**
+ * Maintenance-only: download official ACP Registry snapshot + schemas,
+ * validate against bundled schema + compatibility patch, atomically update
+ * packages/adapters/src/bundled/*.
+ *
+ * Never run on app startup or as part of npm test.
+ *
+ * Usage:
+ *   npm run sync:acp-registry
+ *   npm run sync:acp-registry -- --check
+ */
+import { createHash } from 'node:crypto'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+  openSync,
+  fsyncSync,
+  closeSync,
+  unlinkSync,
+} from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import Ajv2020 from 'ajv/dist/2020.js'
+import addFormats from 'ajv-formats'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = resolve(__dirname, '../../..')
+const BUNDLED_DIR = join(REPO_ROOT, 'packages/adapters/src/bundled')
+
+const REGISTRY_URL =
+  process.env.ACP_REGISTRY_URL?.trim() ||
+  'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json'
+const REGISTRY_SCHEMA_URL =
+  process.env.ACP_REGISTRY_SCHEMA_URL?.trim() ||
+  'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.schema.json'
+const AGENT_SCHEMA_URL =
+  process.env.ACP_AGENT_SCHEMA_URL?.trim() ||
+  'https://cdn.agentclientprotocol.com/registry/v1/latest/agent.schema.json'
+
+const MAX_BYTES = 5 * 1024 * 1024
+
+type Json = null | boolean | number | string | Json[] | { [k: string]: Json }
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+/** Stable JSON for digests: sort object keys recursively. */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(sortValue(value))
+}
+
+function sortValue(value: unknown): Json {
+  if (value === null || typeof value !== 'object') {
+    return value as Json
+  }
+  if (Array.isArray(value)) {
+    return value.map(sortValue)
+  }
+  const rec = value as Record<string, unknown>
+  const out: Record<string, Json> = {}
+  for (const key of Object.keys(rec).sort()) {
+    out[key] = sortValue(rec[key])
+  }
+  return out
+}
+
+export function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
+}
+
+async function fetchBytes(url: string): Promise<Buffer> {
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(30_000),
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
+  const ab = await res.arrayBuffer()
+  if (ab.byteLength > MAX_BYTES) {
+    throw new Error(`Response too large (${ab.byteLength} > ${MAX_BYTES}): ${url}`)
+  }
+  return Buffer.from(ab)
+}
+
+function atomicWrite(path: string, body: string | Buffer): void {
+  mkdirSync(dirname(path), { recursive: true })
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+  writeFileSync(tmp, body, { mode: 0o600 })
+  const fd = openSync(tmp, 'r+')
+  try {
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+  renameSync(tmp, path)
+}
+
+function applyRegistryCompatPatch(schema: Record<string, unknown>): Record<string, unknown> {
+  const props = isRecord(schema.properties)
+    ? { ...schema.properties }
+    : ({} as Record<string, unknown>)
+  props.extensions = {
+    type: 'array',
+    description:
+      'Compatibility: live registry.json includes extensions:[] though official schema omits it.',
+    items: {},
+  }
+  return { ...schema, properties: props }
+}
+
+function validateRegistry(
+  registry: unknown,
+  registrySchema: Record<string, unknown>,
+  agentSchema: Record<string, unknown>,
+): void {
+  const ajv = new Ajv2020({
+    allErrors: true,
+    strict: false,
+    validateSchema: false,
+  })
+
+  addFormats(ajv as any)
+  ajv.addSchema(agentSchema, 'agent.schema.json')
+  const patched = applyRegistryCompatPatch(registrySchema)
+  const validate = ajv.compile(patched)
+  if (!validate(registry)) {
+    const msg = (validate.errors ?? [])
+      .slice(0, 8)
+      .map((e) => `${e.instancePath || '/'} ${e.message}`)
+      .join('; ')
+    throw new Error(`Registry schema validation failed: ${msg}`)
+  }
+  if (!isRecord(registry) || !Array.isArray(registry.agents)) {
+    throw new Error('Registry payload missing agents array')
+  }
+  const ids = new Set<string>()
+  for (const agent of registry.agents) {
+    if (!isRecord(agent) || typeof agent.id !== 'string') {
+      throw new Error('Registry agent missing id')
+    }
+    if (ids.has(agent.id)) throw new Error(`Duplicate agent id: ${agent.id}`)
+    ids.add(agent.id)
+    if (!isRecord(agent.distribution)) {
+      throw new Error(`Agent ${agent.id} missing distribution object`)
+    }
+  }
+}
+
+function writeMeta(params: {
+  sourceUrl: string
+  schemaVersion: string
+  digest: string
+  agentCount: number
+}): void {
+  const body = `/**
+ * Metadata for the bundled ACP registry snapshot.
+ * Regenerated by \\\`npm run sync:acp-registry\\\`.
+ */
+export const BUNDLED_ACP_REGISTRY_META = ${JSON.stringify(
+    {
+      sourceUrl: params.sourceUrl,
+      syncedAt: new Date().toISOString(),
+      schemaVersion: params.schemaVersion,
+      digest: params.digest,
+      agentCount: params.agentCount,
+    },
+    null,
+    2,
+  )} as const
+`
+  atomicWrite(join(BUNDLED_DIR, 'acp-registry-meta.ts'), body)
+}
+
+async function main(): Promise<void> {
+  const checkOnly = process.argv.includes('--check')
+  const offline = process.argv.includes('--offline')
+  console.log(
+    `[sync:acp-registry] mode=${checkOnly ? 'check' : 'write'}${offline ? ' offline' : ''}`,
+  )
+
+  let registryJson: unknown
+  let registrySchema: Record<string, unknown>
+  let agentSchema: Record<string, unknown>
+
+  if (offline) {
+    console.log('[sync:acp-registry] validating existing bundled files only')
+    registryJson = JSON.parse(readFileSync(join(BUNDLED_DIR, 'acp-registry.json'), 'utf8'))
+    registrySchema = JSON.parse(
+      readFileSync(join(BUNDLED_DIR, 'acp-registry.schema.json'), 'utf8'),
+    ) as Record<string, unknown>
+    agentSchema = JSON.parse(
+      readFileSync(join(BUNDLED_DIR, 'acp-agent.schema.json'), 'utf8'),
+    ) as Record<string, unknown>
+  } else {
+    console.log(`[sync:acp-registry] url=${REGISTRY_URL}`)
+    const [registryBuf, registrySchemaBuf, agentSchemaBuf] = await Promise.all([
+      fetchBytes(REGISTRY_URL),
+      fetchBytes(REGISTRY_SCHEMA_URL),
+      fetchBytes(AGENT_SCHEMA_URL),
+    ])
+    registryJson = JSON.parse(registryBuf.toString('utf8')) as unknown
+    registrySchema = JSON.parse(registrySchemaBuf.toString('utf8')) as Record<string, unknown>
+    agentSchema = JSON.parse(agentSchemaBuf.toString('utf8')) as Record<string, unknown>
+  }
+
+  validateRegistry(registryJson, registrySchema, agentSchema)
+
+  const digest = sha256Hex(canonicalJson(registryJson))
+  const version =
+    isRecord(registryJson) && typeof registryJson.version === 'string'
+      ? registryJson.version
+      : 'unknown'
+  const agentCount =
+    isRecord(registryJson) && Array.isArray(registryJson.agents) ? registryJson.agents.length : 0
+
+  console.log(
+    `[sync:acp-registry] schema=${version} agents=${agentCount} digest=sha256:${digest.slice(0, 16)}…`,
+  )
+
+  const existingPath = join(BUNDLED_DIR, 'acp-registry.json')
+  if (checkOnly) {
+    if (!existsSync(existingPath)) {
+      console.error('[sync:acp-registry] missing bundled snapshot')
+      process.exitCode = 1
+      return
+    }
+    if (offline) {
+      console.log('[sync:acp-registry] check ok (offline validate + digest recompute)')
+      writeMeta({
+        sourceUrl: REGISTRY_URL,
+        schemaVersion: version,
+        digest: `sha256:${digest}`,
+        agentCount,
+      })
+      return
+    }
+    const existing = readFileSync(existingPath, 'utf8')
+    const existingDigest = sha256Hex(canonicalJson(JSON.parse(existing)))
+    if (existingDigest !== digest) {
+      console.error(
+        `[sync:acp-registry] drift: local=${existingDigest.slice(0, 16)}… remote=${digest.slice(0, 16)}…`,
+      )
+      process.exitCode = 1
+      return
+    }
+    console.log('[sync:acp-registry] check ok (no drift)')
+    return
+  }
+
+  if (offline) {
+    writeMeta({
+      sourceUrl: REGISTRY_URL,
+      schemaVersion: version,
+      digest: `sha256:${digest}`,
+      agentCount,
+    })
+    console.log('[sync:acp-registry] offline: updated meta only')
+    return
+  }
+
+  atomicWrite(join(BUNDLED_DIR, 'acp-registry.json'), `${JSON.stringify(registryJson, null, 2)}\n`)
+  atomicWrite(
+    join(BUNDLED_DIR, 'acp-registry.schema.json'),
+    `${JSON.stringify(registrySchema, null, 2)}\n`,
+  )
+  atomicWrite(
+    join(BUNDLED_DIR, 'acp-agent.schema.json'),
+    `${JSON.stringify(agentSchema, null, 2)}\n`,
+  )
+  writeMeta({
+    sourceUrl: REGISTRY_URL,
+    schemaVersion: version,
+    digest: `sha256:${digest}`,
+    agentCount,
+  })
+  console.log('[sync:acp-registry] wrote bundled schema + snapshot + meta')
+}
+
+main().catch((err) => {
+  console.error('[sync:acp-registry] failed', err)
+  process.exitCode = 1
+})

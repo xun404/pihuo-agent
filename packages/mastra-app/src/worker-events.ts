@@ -2,9 +2,36 @@
  * WorkerRunEvent emission system for Scheduler → tool bridge → Chat UI.
  *
  * Event order is enforced: started → delta* → terminal (completed|failed|cancelled).
- * Each jobId gets exactly one terminal event, after which all subscribers are unsubscribed.
+ * Each jobId gets exactly one terminal event. A bounded journal supports atomic
+ * replay+subscribe so late subscribers still receive prior (and terminal) events.
  */
-import type { WorkerKind, WorkerRole, WorkerRunEvent } from '@router-agents/shared'
+import {
+  isTerminalWorkerEvent,
+  type WorkerKind,
+  type WorkerRole,
+  type WorkerRunEvent,
+} from '@router-agents/shared'
+
+export const DEFAULT_WORKER_JOB_TIMEOUT_MS = 600_000
+export const DEFAULT_WORKER_WRITER_TIMEOUT_MS = 5_000
+export const MAX_TIMER_DELAY_MS = 2_147_483_647
+
+/** Safe positive timer value shared by scheduler, local tool waits, and remote observers. */
+export function resolveWorkerJobTimeoutMs(
+  raw: string | number | undefined = process.env.WORKER_JOB_TIMEOUT_MS,
+): number {
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_WORKER_JOB_TIMEOUT_MS
+  return Math.min(Math.floor(parsed), MAX_TIMER_DELAY_MS)
+}
+
+export function resolveWorkerWriterTimeoutMs(
+  raw: string | number | undefined = process.env.WORKER_WRITER_TIMEOUT_MS,
+): number {
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_WORKER_WRITER_TIMEOUT_MS
+  return Math.min(Math.floor(parsed), MAX_TIMER_DELAY_MS)
+}
 
 export type WorkerEventIdentity = {
   workerName?: string
@@ -17,7 +44,7 @@ export function enrichTerminalWorkerEvent(
   event: WorkerRunEvent,
   fallback: WorkerEventIdentity,
 ): WorkerRunEvent {
-  if (event.type === 'started' || event.type === 'delta') return event
+  if (!isTerminalWorkerEvent(event)) return event
   return {
     ...event,
     workerName: event.workerName ?? fallback.workerName,
@@ -69,6 +96,34 @@ export async function raceWithTimeout<T>(
   }
 }
 
+export interface WorkerEventWriter {
+  custom(options: { type: string; data: unknown; transient?: boolean; id?: string }): Promise<void>
+}
+
+export type WorkerEventWriteResult = { ok: true } | { ok: false; timedOut: boolean; error: unknown }
+
+/** A disconnected/backpressured Chat writer must never hold the Leader turn forever. */
+export async function writeWorkerEventWithDeadline(
+  writer: WorkerEventWriter,
+  options: Parameters<WorkerEventWriter['custom']>[0],
+  timeoutMs = resolveWorkerWriterTimeoutMs(),
+): Promise<WorkerEventWriteResult> {
+  let timedOut = false
+  try {
+    await raceWithTimeout(
+      Promise.resolve().then(() => writer.custom(options)),
+      resolveWorkerWriterTimeoutMs(timeoutMs),
+      () => {
+        timedOut = true
+        return new Error('Worker event writer timed out')
+      },
+    )
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, timedOut, error }
+  }
+}
+
 export function subscribeAbort(signal: AbortSignal, handler: () => void): () => void {
   let active = true
   const onAbort = () => {
@@ -109,39 +164,113 @@ function sanitiseDelta(delta: string): string {
   return out
 }
 
+/**
+ * Events cross several independently-owned boundaries (scheduler, HTTP stream,
+ * chat writer). Keep approval sub-objects isolated as well as the event shell so
+ * a consumer cannot mutate another consumer's view or the replay journal.
+ */
+function cloneWorkerRunEvent(event: WorkerRunEvent): WorkerRunEvent {
+  if (event.type !== 'approval_requested' && event.type !== 'approval_resolved') {
+    return { ...event }
+  }
+  return {
+    ...event,
+    approval: {
+      ...event.approval,
+      options: event.approval.options.map((option) => ({ ...option })),
+      locations: event.approval.locations?.map((location) => ({ ...location })),
+      selectedOption: event.approval.selectedOption
+        ? { ...event.approval.selectedOption }
+        : undefined,
+    },
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Job state tracking (event ordering)
+// Job state tracking (event ordering + bounded journal)
 // ---------------------------------------------------------------------------
+
+/** Max events retained per job (started + deltas + terminal). Drops oldest non-terminal if exceeded. */
+const DEFAULT_JOURNAL_MAX = 512
 
 type JobState = {
   started: boolean
   terminal: boolean
+  /** Monotonic sequence for journal entries (independent of delta.sequence). */
+  emitSequence: number
+  journal: Array<{ seq: number; event: WorkerRunEvent }>
   cleanupTimer?: ReturnType<typeof setTimeout>
+}
+
+export type SubscribeOptions = {
+  /**
+   * Replay journal entries with emitSequence strictly greater than this value.
+   * Defaults to 0 (replay all retained events).
+   */
+  afterSequence?: number
+}
+
+/** Gap when client cursor is older than the retained journal range (TTL trim / bound). */
+export type JournalGapInfo = {
+  gap: true
+  afterSequence: number
+  retainedFrom: number
+  retainedTo: number
+  /** Highest emitSequence ever assigned (may exceed retainedTo after TTL wipe). */
+  emitSequenceHighWater: number
 }
 
 // ---------------------------------------------------------------------------
 // WorkerEventEmitter (singleton)
 // ---------------------------------------------------------------------------
 
-type EventHandler = (event: WorkerRunEvent) => void
+/** Optional emitSequence is the monotonic journal cursor for reconnect (Last-Event-ID). */
+export type EventHandler = (event: WorkerRunEvent, meta?: { emitSequence: number }) => void
 
 export class WorkerEventEmitter {
   #subscribers = new Map<string, Set<EventHandler>>()
   #jobStates = new Map<string, JobState>()
   #terminalTtlMs: number
+  #journalMax: number
 
-  constructor(options: { terminalTtlMs?: number } = {}) {
-    this.#terminalTtlMs = options.terminalTtlMs ?? 60_000
+  constructor(options: { terminalTtlMs?: number; journalMax?: number } = {}) {
+    const terminalTtlMs = Number(options.terminalTtlMs)
+    this.#terminalTtlMs =
+      Number.isFinite(terminalTtlMs) && terminalTtlMs > 0
+        ? Math.min(Math.floor(terminalTtlMs), MAX_TIMER_DELAY_MS)
+        : 60_000
+    const journalMax = Number(options.journalMax)
+    this.#journalMax =
+      Number.isFinite(journalMax) && journalMax > 0
+        ? Math.min(Math.floor(journalMax), 10_000)
+        : DEFAULT_JOURNAL_MAX
   }
 
   /**
-   * Subscribe to all events for a given jobId.
+   * Atomically replay retained events (after `afterSequence`) then subscribe for future ones.
+   * Late subscribers on a terminal job receive the journal replay (including terminal) and
+   * are not left waiting forever.
    * Returns an unsubscribe function.
-   * If the job has already terminated, the handler is NOT registered
-   * and an empty no-op is returned.
    */
-  subscribe(jobId: string, handler: EventHandler): () => void {
+  subscribe(jobId: string, handler: EventHandler, options?: SubscribeOptions): () => void {
+    const afterSequence = options?.afterSequence ?? 0
     const state = this.#jobStates.get(jobId)
+
+    // Replay first (synchronous), then register for future — prevents lost events
+    // between replay and registration for events that arrive during this call.
+    if (state?.journal.length) {
+      for (const entry of state.journal) {
+        if (entry.seq > afterSequence) {
+          try {
+            handler(cloneWorkerRunEvent(entry.event), { emitSequence: entry.seq })
+          } catch {
+            // drop handler errors during replay
+          }
+        }
+      }
+    }
+
+    // If already terminal, do not register for future (no more events will come).
     if (state?.terminal) {
       return () => {}
     }
@@ -165,12 +294,97 @@ export class WorkerEventEmitter {
     }
   }
 
+  /**
+   * Read journal snapshot for a job (for diagnostics / remote catch-up).
+   * Entries have emitSequence greater than `afterSequence`.
+   */
+  getJournal(jobId: string, afterSequence = 0): Array<{ seq: number; event: WorkerRunEvent }> {
+    const state = this.#jobStates.get(jobId)
+    if (!state) return []
+    return state.journal
+      .filter((entry) => entry.seq > afterSequence)
+      .map((entry) => ({ seq: entry.seq, event: cloneWorkerRunEvent(entry.event) }))
+  }
+
+  /**
+   * Detect whether the client cursor is missing events (trimmed journal / TTL).
+   * Uses retained sequences: gap when the next expected seq (after+1) is not present
+   * but a later seq still is, or when higher events were wiped entirely.
+   */
+  detectGap(jobId: string, afterSequence = 0): JournalGapInfo | null {
+    const state = this.#jobStates.get(jobId)
+    if (!state) return null
+    const after = Number.isFinite(afterSequence) ? Math.max(0, afterSequence) : 0
+    const retainedTo = state.journal.length
+      ? state.journal[state.journal.length - 1]!.seq
+      : state.emitSequence
+    const highWater = state.emitSequence
+
+    if (state.journal.length === 0) {
+      if (after > 0 && highWater > after) {
+        return {
+          gap: true,
+          afterSequence: after,
+          retainedFrom: highWater + 1,
+          retainedTo: highWater,
+          emitSequenceHighWater: highWater,
+        }
+      }
+      return null
+    }
+
+    // Unseen retained entries in order
+    const unseen = state.journal.filter((e) => e.seq > after)
+    if (unseen.length === 0) {
+      // Client is caught up with retained; if high-water is further and wiped, gap
+      if (highWater > after && highWater > retainedTo) {
+        return {
+          gap: true,
+          afterSequence: after,
+          retainedFrom: highWater + 1,
+          retainedTo: highWater,
+          emitSequenceHighWater: highWater,
+        }
+      }
+      return null
+    }
+
+    // Hole before first unseen, or hole between retained entries the client will receive
+    if (unseen[0]!.seq > after + 1) {
+      return {
+        gap: true,
+        afterSequence: after,
+        retainedFrom: unseen[0]!.seq,
+        retainedTo,
+        emitSequenceHighWater: highWater,
+      }
+    }
+    for (let i = 1; i < unseen.length; i++) {
+      if (unseen[i]!.seq > unseen[i - 1]!.seq + 1) {
+        return {
+          gap: true,
+          afterSequence: after,
+          retainedFrom: unseen[i]!.seq,
+          retainedTo,
+          emitSequenceHighWater: highWater,
+        }
+      }
+    }
+    return null
+  }
+
+  isTerminal(jobId: string): boolean {
+    return this.#jobStates.get(jobId)?.terminal === true
+  }
+
   /** Publish an event to all subscribers for its jobId. */
   emit(event: WorkerRunEvent): void {
+    // Never sanitise or retain the caller-owned object.
+    event = cloneWorkerRunEvent(event)
     const jobId = event.jobId
     let state = this.#jobStates.get(jobId)
     if (!state) {
-      state = { started: false, terminal: false }
+      state = { started: false, terminal: false, emitSequence: 0, journal: [] }
       this.#jobStates.set(jobId, state)
     }
 
@@ -181,7 +395,9 @@ export class WorkerEventEmitter {
     } else {
       // Allow terminal-only events (preflight failure, queued cancel, timed_out)
       if (!state.started) {
-        const isTerminalOnly = (event.type === 'failed' || event.type === 'cancelled' || event.type === 'timed_out') && !state.started
+        const isTerminalOnly =
+          (event.type === 'failed' || event.type === 'cancelled' || event.type === 'timed_out') &&
+          !state.started
         if (!isTerminalOnly) return
       }
       if (state.terminal) return // already terminated
@@ -190,8 +406,7 @@ export class WorkerEventEmitter {
         ;(event as WorkerRunEvent & { delta: string }).delta = sanitiseDelta(
           (event as WorkerRunEvent & { delta: string }).delta,
         )
-      } else {
-        // terminal event
+      } else if (isTerminalWorkerEvent(event)) {
         state.terminal = true
         const ev = event as any
         if (typeof ev.output === 'string') {
@@ -199,6 +414,12 @@ export class WorkerEventEmitter {
         }
       }
     }
+
+    // Append to bounded journal before delivery so concurrent subscribe sees it.
+    state.emitSequence += 1
+    const seq = state.emitSequence
+    state.journal.push({ seq, event })
+    this.#trimJournal(state)
 
     if (state.terminal && !state.cleanupTimer) {
       state.cleanupTimer = setTimeout(() => {
@@ -211,21 +432,37 @@ export class WorkerEventEmitter {
 
     // ---- deliver ----
     const handlers = this.#subscribers.get(jobId)
-    if (!handlers || handlers.size === 0) return
-
-    // Snapshot to avoid issues if a handler unsubscribes during iteration
-    const snapshot = [...handlers]
-    for (const handler of snapshot) {
-      try {
-        handler(event)
-      } catch {
-        // silently drop handler errors so other subscribers still receive the event
+    if (!handlers || handlers.size === 0) {
+      // still keep journal for late subscribers
+    } else {
+      // Snapshot to avoid issues if a handler unsubscribes during iteration
+      const snapshot = [...handlers]
+      for (const handler of snapshot) {
+        try {
+          handler(cloneWorkerRunEvent(event), { emitSequence: seq })
+        } catch {
+          // silently drop handler errors so other subscribers still receive the event
+        }
       }
     }
 
     // ---- auto-unsubscribe on terminal ----
     if (state.terminal) {
       this.#subscribers.delete(jobId)
+    }
+  }
+
+  #trimJournal(state: JobState): void {
+    if (state.journal.length <= this.#journalMax) return
+    // Prefer keeping started (first) + terminal (last) + most recent deltas.
+    const overflow = state.journal.length - this.#journalMax
+    if (overflow <= 0) return
+    // Drop oldest non-critical entries from the middle/start after index 0 if started exists
+    const keepStarted = state.journal[0]?.event.type === 'started'
+    const startIdx = keepStarted ? 1 : 0
+    const dropCount = Math.min(overflow, state.journal.length - startIdx - (state.terminal ? 1 : 0))
+    if (dropCount > 0) {
+      state.journal.splice(startIdx, dropCount)
     }
   }
 
@@ -284,19 +521,14 @@ export class EventCollector {
     this.emitter = emitter ?? getWorkerEventEmitter()
   }
 
-  /** Start collecting events for the job. */
+  /** Start collecting events for the job (includes journal replay). */
   start(): void {
     if (this._unsub) return // already started
 
     this._unsub = this.emitter.subscribe(this.jobId, (event) => {
       if (this._settled) return
       this.events.push(event)
-      if (
-        event.type === 'completed' ||
-        event.type === 'failed' ||
-        event.type === 'cancelled' ||
-        event.type === 'timed_out'
-      ) {
+      if (isTerminalWorkerEvent(event)) {
         this._settled = true
         if (this._timeout) clearTimeout(this._timeout)
         this._unsub?.()
@@ -308,6 +540,7 @@ export class EventCollector {
   /**
    * Returns a promise that resolves with all collected events
    * when the terminal event arrives (or on timeout).
+   * If the job already terminated before start(), resolves via journal replay.
    */
   waitForCompletion(timeoutMs?: number): Promise<WorkerRunEvent[]> {
     if (!this._completePromise) {
@@ -325,6 +558,15 @@ export class EventCollector {
         }
       })
       this.start()
+      // If replay already delivered terminal synchronously, resolve now.
+      if (this._settled) {
+        // already resolved in subscribe handler
+      } else if (this.events.some(isTerminalWorkerEvent)) {
+        this._settled = true
+        if (this._timeout) clearTimeout(this._timeout)
+        this._unsub?.()
+        this._resolveComplete?.(this.events)
+      }
     }
     return this._completePromise
   }

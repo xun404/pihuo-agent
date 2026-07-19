@@ -7,13 +7,26 @@ import {
   probeWorkerHealth,
   type ProbeDepth,
 } from '@router-agents/adapters'
-import {
-  globalActivityLog,
-  getSharedStore,
-} from '@router-agents/core'
+import { globalActivityLog, getSharedStore } from '@router-agents/core'
 import type { WorkerHealthReport, WorkerRegistration } from '@router-agents/shared'
+import { isModelCacheFresh, WORKER_MODELS_TTL_MS } from '@router-agents/shared'
+import { refreshWorkerModels } from './worker-models.js'
 
-const store = getSharedStore()
+const MAX_NODE_TIMER_MS = 2_147_483_647
+
+export function resolveWorkerPeriodicInterval(
+  value: unknown,
+  fallbackMs: number,
+  minimumMs = 1_000,
+): number {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric < minimumMs) return fallbackMs
+  return Math.min(Math.floor(numeric), MAX_NODE_TIMER_MS)
+}
+
+function store() {
+  return getSharedStore()
+}
 
 export function depthToLevel(depth: ProbeDepth) {
   if (depth === 'acp') return 'acp_handshake' as const
@@ -31,17 +44,13 @@ export async function checkOneWorker(
     cwd,
   })
   const updated = applyHealthReport(worker, report)
-  store.upsertWorker(updated)
-  globalActivityLog.append(
-    'system',
-    `Worker health ${updated.name}: ${report.status}`,
-    {
-      workerId: updated.id,
-      status: report.status,
-      level: report.level,
-      message: report.message,
-    },
-  )
+  store().upsertWorker(updated)
+  globalActivityLog.append('system', `Worker health ${updated.name}: ${report.status}`, {
+    workerId: updated.id,
+    status: report.status,
+    level: report.level,
+    message: report.message,
+  })
   return { worker: updated, report }
 }
 
@@ -57,7 +66,7 @@ export async function checkWorkersBatch(opts: {
 }> {
   const depth = parseHealthDepth(opts.depth)
   const onlyEnabled = opts.onlyEnabled !== false
-  let list = store.listWorkers()
+  let list = store().listWorkers()
   if (onlyEnabled) list = list.filter((w) => w.enabled)
   if (opts.workerIds?.length) {
     const set = new Set(opts.workerIds)
@@ -93,28 +102,36 @@ export function scheduleAutoWorkerHealth(): void {
   if (process.env.WORKER_HEALTH_AUTO === '0' || process.env.WORKER_HEALTH_AUTO === 'false') {
     return
   }
-  const ttl = Number(process.env.WORKER_HEALTH_TTL_MS ?? 300_000) || 300_000
+  const ttl = resolveWorkerPeriodicInterval(process.env.WORKER_HEALTH_TTL_MS, 300_000)
 
+  let healthRunInFlight = false
   const run = () => {
-    void checkWorkersBatch({ depth: 'version', onlyEnabled: true }).catch((e) => {
-      console.warn('[workers-health] auto check failed', e)
-    })
+    if (healthRunInFlight) return
+    healthRunInFlight = true
+    void checkWorkersBatch({ depth: 'version', onlyEnabled: true })
+      .catch((e) => {
+        console.warn('[workers-health] auto check failed', e)
+      })
+      .finally(() => {
+        healthRunInFlight = false
+      })
   }
 
   // Don't block server listen
-  setTimeout(run, 800)
-  setInterval(run, ttl)
+  const startupHealthTimer = setTimeout(run, 800)
+  startupHealthTimer.unref?.()
+  const healthTimer = setInterval(run, ttl)
+  healthTimer.unref?.()
 
   // Soft auto-detect once shortly after boot (enable installed CLIs)
-  setTimeout(() => {
+  const detectTimer = setTimeout(() => {
     void (async () => {
       try {
-        const { detectAcpWorkers, applyDetectionToWorkers } = await import(
-          '@router-agents/adapters'
-        )
+        const { detectAcpWorkers, applyDetectionToWorkers } =
+          await import('@router-agents/adapters')
         const { createId } = await import('@router-agents/core')
         const candidates = await detectAcpWorkers()
-        const existing = store.listWorkers()
+        const existing = store().listWorkers()
         // First boot: many unknown workers — apply detection
         const neverProbed = existing.every((w) => !w.lastSeenAt)
         if (!neverProbed && candidates.every((c) => !c.installed)) return
@@ -125,9 +142,9 @@ export function scheduleAutoWorkerHealth(): void {
         })
         for (const w of merged.workers) {
           if (w.id.startsWith('detect-')) {
-            store.upsertWorker({ ...w, id: createId('worker') })
+            store().upsertWorker({ ...w, id: createId('worker') })
           } else {
-            store.upsertWorker(w)
+            store().upsertWorker(w)
           }
         }
         if (merged.recommended.length) {
@@ -142,4 +159,29 @@ export function scheduleAutoWorkerHealth(): void {
       }
     })()
   }, 1200)
+  detectTimer.unref?.()
+
+  // Periodically refresh stale model caches via SWR (non-force, single-flight/backoff)
+  const modelsRefreshMs = resolveWorkerPeriodicInterval(
+    process.env.WORKER_MODELS_REFRESH_MS,
+    900_000,
+  )
+  const modelsTimer = setInterval(() => {
+    const workers = store()
+      .listWorkers()
+      .filter((w) => w.enabled)
+    for (const w of workers) {
+      const stale =
+        w.modelCatalogState === 'stale' ||
+        w.modelCatalogState === 'empty' ||
+        w.modelsState === 'stale' ||
+        !isModelCacheFresh(w.modelsFetchedAt, WORKER_MODELS_TTL_MS)
+      if (stale) {
+        void refreshWorkerModels(w.id, undefined, { force: false }).catch((e) => {
+          console.warn(`[workers-health] model cache refresh failed for ${w.name}`, e)
+        })
+      }
+    }
+  }, modelsRefreshMs)
+  modelsTimer.unref?.()
 }
