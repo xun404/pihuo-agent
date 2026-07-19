@@ -1,0 +1,51 @@
+appId: net.rmbz.open-dev.agent-desktop
+productName: Router Agents
+artifactName: Router-Agents-${version}-${os}-${arch}.${ext}
+asar: true
+npmRebuild: false
+directories:
+  output: release
+files:
+  - package.json
+  - apps/desktop/dist/**/*
+  - apps/desktop/dist-electron/**/*
+extraMetadata:
+  main: apps/desktop/dist-electron/main.js
+  author:
+    name: xun404
+    email: xun404@users.noreply.github.com
+extraResources:
+  - from: apps/desktop/dist-runtime
+    to: runtime
+  # electron-builder filters a source-root node_modules directory. Copy it
+  # through a dedicated matcher so the packaged API can resolve native deps.
+  - from: apps/desktop/dist-runtime/node_modules
+    to: runtime/node_modules
+mac:
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+linux:
+  category: Development
+  executableName: router-agents
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+publish:
+  provider: github
+  owner: xun404
+  repo: router-agents

@@ -1,0 +1,126 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag to build or recover
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  quality:
+    name: Verify release source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - run: npm run verify:release-tag
+      - run: npm test
+      - run: npm run verify:workflows
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+
+  package:
+    name: Package ${{ matrix.artifact }}
+    needs: quality
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            artifact: desktop-macos-arm64
+            builderArgs: --mac --arm64
+          - os: windows-2025
+            artifact: desktop-windows-x64
+            builderArgs: --win --x64
+          - os: ubuntu-24.04
+            artifact: desktop-linux-x64
+            builderArgs: --linux --x64
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb libopenjp2-tools
+      - run: npm ci
+      - run: npm run verify:release-tag
+      - run: npm run build
+      - run: npm run build:runtime
+      - run: npm run verify:runtime
+      - run: npx electron-builder --dir ${{ matrix.builderArgs }} --publish never
+      - run: npm run smoke:packaged
+      - run: npx electron-builder ${{ matrix.builderArgs }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/Router-Agents-*
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish complete GitHub Release
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
+      - run: node scripts/verify-release-assets.mjs release-assets
+      - name: Generate SHA-256 checksums
+        run: |
+          cd release-assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' \
+            | sort \
+            | while IFS= read -r file; do sha256sum "$file"; done \
+            > SHA256SUMS.txt
+      - name: Create or recover release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --verify-tag \
+              --generate-notes \
+              --title "Router Agents $RELEASE_TAG"
+          fi
