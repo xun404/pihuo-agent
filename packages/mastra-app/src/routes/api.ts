@@ -1,20 +1,30 @@
 import { registerApiRoute } from '@mastra/core/server'
 import {
   createId,
-  mapAcpPermissionToEnqueue,
   getGitStatus,
   listProjectFiles,
-  waitForApprovalDecision,
   getSharedStore,
+  getWorkerModelCatalogStore,
   globalActivityLog,
 } from '@router-agents/core'
 import {
   applyHealthReport,
   parseHealthDepth,
   getAcpSessionManager,
-  workerExecutionConfigChanged,
+  formatPublicError,
+  type SessionEntryConfig,
 } from '@router-agents/adapters'
-import { refreshWorkerModels } from '../worker-models.js'
+import {
+  apiGetRegistryCatalog,
+  apiDeleteWorker,
+  apiWorkerReadinessStatus,
+  apiListWorkerSecretStatus,
+  apiGetWorkerAuthMethods,
+  apiListCleanupCandidates,
+  registryApiPublicError,
+  registryCatalogApiPublicError,
+} from '../acp-registry-api.js'
+import { getWorkerModels, evaluateWorkerModelPin, applyWorkerModelPin } from '../worker-models.js'
 import { checkOneWorker, checkWorkersBatch } from '../workers-health.js'
 import { getWorkerScheduler } from '../scheduler.js'
 import type {
@@ -26,16 +36,33 @@ import type {
 } from '@router-agents/shared'
 import { normalizeWorkerRoles } from '@router-agents/shared'
 import { basename } from 'node:path'
+import { asAcpHttpFailure } from '../acp-http-error.js'
+import {
+  deleteRouterProjectResource,
+  deleteRouterSessionResource,
+  reconcileWorkerRuntimeResources,
+} from '../acp-resource-lifecycle.js'
 
-const store = getSharedStore()
+/** Lazy — avoid constructing owner Store at module import (Studio client-only path). */
+function store() {
+  return getSharedStore()
+}
 
-export { store as routeStore }
+const REGISTRY_OWNER_REQUIRED = {
+  error: 'Registry mutations are available only through the Owner API',
+  code: 'WORKER_NOT_READY',
+} as const
+
+/** Lazy accessor for tests/helpers that previously imported a module-level store. */
+export function routeStore() {
+  return store()
+}
 
 export const apiRoutes = [
   registerApiRoute('/api/snapshot', {
     method: 'GET',
     handler: async (c) => {
-      return c.json(store.snapshot())
+      return c.json(store().snapshot())
     },
   }),
 
@@ -52,7 +79,7 @@ export const apiRoutes = [
   registerApiRoute('/api/locale', {
     method: 'GET',
     handler: async (c) => {
-      return c.json({ locale: store.getLocale() })
+      return c.json({ locale: store().getLocale() })
     },
   }),
 
@@ -63,15 +90,15 @@ export const apiRoutes = [
       if (body.locale !== 'zh' && body.locale !== 'en') {
         return c.json({ error: 'locale must be zh or en' }, 400)
       }
-      const locale = store.setLocale(body.locale)
-      return c.json({ locale, snapshot: store.snapshot() })
+      const locale = store().setLocale(body.locale)
+      return c.json({ locale, snapshot: store().snapshot() })
     },
   }),
 
   registerApiRoute('/api/projects', {
     method: 'GET',
     handler: async (c) => {
-      return c.json({ projects: store.listProjects() })
+      return c.json({ projects: store().listProjects() })
     },
   }),
 
@@ -84,7 +111,7 @@ export const apiRoutes = [
         defaultBranch?: string
       }
       if (!body.rootPath) return c.json({ error: 'rootPath required' }, 400)
-      const project = store.upsertProject({
+      const project = store().upsertProject({
         name: body.name ?? basename(body.rootPath),
         rootPath: body.rootPath,
         defaultBranch: body.defaultBranch,
@@ -97,7 +124,45 @@ export const apiRoutes = [
     method: 'GET',
     handler: async (c) => {
       const projectId = c.req.query('projectId')
-      return c.json({ sessions: store.listSessions(projectId || undefined) })
+      return c.json({ sessions: store().listSessions(projectId || undefined) })
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:id', {
+    method: 'DELETE',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      try {
+        deleteRouterSessionResource({
+          manager: getAcpSessionManager(),
+          store: store(),
+          sessionId: id,
+        })
+      } catch (error) {
+        const failure = asAcpHttpFailure(error)
+        if (failure) return c.json(failure.body, failure.status)
+        throw error
+      }
+      return c.json({ ok: true, snapshot: store().snapshot() })
+    },
+  }),
+
+  registerApiRoute('/api/projects/:id', {
+    method: 'DELETE',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      try {
+        deleteRouterProjectResource({
+          manager: getAcpSessionManager(),
+          store: store(),
+          projectId: id,
+        })
+      } catch (error) {
+        const failure = asAcpHttpFailure(error)
+        if (failure) return c.json(failure.body, failure.status)
+        throw error
+      }
+      return c.json({ ok: true, snapshot: store().snapshot() })
     },
   }),
 
@@ -112,7 +177,7 @@ export const apiRoutes = [
       if (!body.projectId || !body.title) {
         return c.json({ error: 'projectId and title required' }, 400)
       }
-      const session = store.createSession(body)
+      const session = store().createSession(body)
       return c.json({ session })
     },
   }),
@@ -121,8 +186,40 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const id = c.req.param('id')
-      const session = store.setActiveSession(id)
+      const session = store().setActiveSession(id)
       return c.json({ session })
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:id/approval-policy', {
+    method: 'POST',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const body = (await c.req.json()) as { approvalPolicy?: string }
+      const validPolicies = new Set([
+        'manual',
+        'allow_once',
+        'allow_always',
+        'reject_once',
+        'reject_always',
+      ])
+      if (!body.approvalPolicy || !validPolicies.has(body.approvalPolicy)) {
+        return c.json(
+          {
+            error: `Invalid approvalPolicy. Must be one of: ${[...validPolicies].join(', ')}`,
+          },
+          400,
+        )
+      }
+      try {
+        const session = store().updateSessionApprovalPolicy(
+          id,
+          body.approvalPolicy as import('@router-agents/shared').SessionApprovalPolicy,
+        )
+        return c.json({ session, snapshot: store().snapshot() })
+      } catch (e) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 404)
+      }
     },
   }),
 
@@ -130,8 +227,158 @@ export const apiRoutes = [
     method: 'GET',
     handler: async (c) => {
       const role = c.req.query('role') as WorkerRole | undefined
-      const workers = role ? store.listWorkersByRole(role) : store.listWorkers()
+      const workers = role ? store().listWorkersByRole(role) : store().listWorkers()
       return c.json({ workers })
+    },
+  }),
+
+  registerApiRoute('/api/workers/registry', {
+    method: 'GET',
+    handler: async (c) => {
+      try {
+        return c.json(await apiGetRegistryCatalog({ refresh: false }))
+      } catch (error) {
+        const p = registryCatalogApiPublicError(error)
+        return c.json({ error: p.error, code: p.code }, p.status as 502)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/workers/registry/prepare', {
+    method: 'POST',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
+    },
+  }),
+
+  registerApiRoute('/api/workers/registry/register', {
+    method: 'POST',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
+    },
+  }),
+
+  registerApiRoute('/api/workers/registry/cleanup-candidates', {
+    method: 'GET',
+    handler: async (c) => c.json(apiListCleanupCandidates()),
+  }),
+
+  registerApiRoute('/api/workers/registry/installations/:installationId', {
+    method: 'DELETE',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/readiness', {
+    method: 'GET',
+    handler: async (c) => {
+      try {
+        return c.json(apiWorkerReadinessStatus(c.req.param('id')))
+      } catch (error) {
+        const p = registryApiPublicError(error)
+        return c.json({ error: p.error, code: p.code }, p.status as 400 | 404 | 409 | 500)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/auth-methods', {
+    method: 'GET',
+    handler: async (c) => {
+      try {
+        return c.json(apiGetWorkerAuthMethods(c.req.param('id')))
+      } catch (error) {
+        const p = registryApiPublicError(error)
+        return c.json({ error: p.error, code: p.code }, p.status as 400 | 404 | 409 | 500)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/probe', {
+    method: 'POST',
+    handler: async (c) => c.json(REGISTRY_OWNER_REQUIRED, 409),
+  }),
+
+  registerApiRoute('/api/workers/:id/authenticate', {
+    method: 'POST',
+    handler: async (c) => c.json(REGISTRY_OWNER_REQUIRED, 409),
+  }),
+
+  registerApiRoute('/api/workers/:id/secrets', {
+    method: 'GET',
+    handler: async (c) => {
+      try {
+        return c.json(apiListWorkerSecretStatus(c.req.param('id')))
+      } catch (error) {
+        const p = registryApiPublicError(error)
+        return c.json({ error: p.error, code: p.code }, p.status as 400 | 404 | 409 | 500)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/secrets', {
+    method: 'POST',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/secrets', {
+    method: 'DELETE',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/logout', {
+    method: 'POST',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id', {
+    method: 'DELETE',
+    handler: async (c) => {
+      try {
+        const worker = store()
+          .listWorkers()
+          .find((candidate) => candidate.id === c.req.param('id'))
+        if (worker?.source?.type === 'registry') {
+          return c.json(REGISTRY_OWNER_REQUIRED, 409)
+        }
+        const remove = c.req.query('removeInstallation') === '1'
+        return c.json(
+          apiDeleteWorker({
+            workerId: c.req.param('id'),
+            removeUnreferencedInstallation: remove,
+          }),
+        )
+      } catch (error) {
+        const p = registryApiPublicError(error)
+        return c.json({ error: p.error, code: p.code }, p.status as 400 | 404 | 409 | 500)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/upgrade', {
+    method: 'POST',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/adopt-registry', {
+    method: 'POST',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/auth-terminal', {
+    method: 'POST',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
     },
   }),
 
@@ -140,11 +387,25 @@ export const apiRoutes = [
     handler: async (c) => {
       const id = c.req.param('id')
       const body = (await c.req.json()) as { enabled: boolean }
-      const previous = store.listWorkers().find((candidate) => candidate.id === id)
-      const worker = store.setWorkerEnabled(id, Boolean(body.enabled))
-      if (previous && workerExecutionConfigChanged(previous, worker)) {
-        getAcpSessionManager().invalidateWorker(worker.id)
+      const previous = store()
+        .listWorkers()
+        .find((candidate) => candidate.id === id)
+      const nextEnabled = Boolean(body.enabled)
+      if (previous) {
+        try {
+          reconcileWorkerRuntimeResources({
+            before: previous,
+            after: { ...previous, enabled: nextEnabled },
+            manager: getAcpSessionManager(),
+            catalogStore: getWorkerModelCatalogStore(),
+          })
+        } catch (error) {
+          const failure = asAcpHttpFailure(error)
+          if (failure) return c.json(failure.body, failure.status)
+          throw error
+        }
       }
+      const worker = store().setWorkerEnabled(id, nextEnabled)
       return c.json({ worker })
     },
   }),
@@ -160,7 +421,7 @@ export const apiRoutes = [
       if (!body.primaryRole || !Array.isArray(body.roles)) {
         return c.json({ error: 'primaryRole and roles required' }, 400)
       }
-      const worker = store.setWorkerRoles(id, body)
+      const worker = store().setWorkerRoles(id, body)
       return c.json({ worker })
     },
   }),
@@ -169,22 +430,49 @@ export const apiRoutes = [
     method: 'GET',
     handler: async (c) => {
       const id = c.req.param('id')
-      const worker = store.listWorkers().find((w) => w.id === id)
+      const worker = store()
+        .listWorkers()
+        .find((w) => w.id === id)
       if (!worker) return c.json({ error: 'not found' }, 404)
       try {
-        const active = store.getActive()
-        const refResult = await refreshWorkerModels(id, active.project?.rootPath)
+        const q = c.req.query('q')?.trim() ?? ''
+        const limit = Number(c.req.query('limit') ?? 50)
+        const force = c.req.query('force') === '1' || c.req.query('force') === 'true'
+        const requestedProjectId = c.req.query('projectId')?.trim() || undefined
+        const requestedProject = requestedProjectId
+          ? store()
+              .listProjects()
+              .find((project) => project.id === requestedProjectId)
+          : store().getActive().project
+        if (requestedProjectId && !requestedProject) {
+          return c.json({ error: 'project not found', projectId: requestedProjectId }, 404)
+        }
+        // All paths (including q=) go through SWR controller
+        const refResult = await getWorkerModels({
+          workerId: id,
+          cwd: requestedProject?.rootPath,
+          force,
+          q: q || undefined,
+          limit,
+        })
         return c.json({
           ok: refResult.ok,
           models: refResult.models ?? [],
           error: refResult.error,
+          errorCode: refResult.errorCode,
           worker: refResult.worker,
-          snapshot: store.snapshot(),
+          snapshot: store().snapshot(),
           cached: refResult.cached,
           stale: refResult.stale,
+          catalogState: refResult.catalogState,
+          currentPinState: refResult.currentPinState,
+          search: Boolean(q),
         })
       } catch (e) {
-        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500)
+        const failure = asAcpHttpFailure(e)
+        return failure
+          ? c.json(failure.body, failure.status)
+          : c.json({ error: e instanceof Error ? e.message : String(e) }, 500)
       }
     },
   }),
@@ -193,16 +481,49 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const id = c.req.param('id')
-      const body = (await c.req.json()) as { model?: string | null }
+      const body = (await c.req.json()) as { model?: string | null; projectId?: string | null }
       try {
-        const previous = store.listWorkers().find((candidate) => candidate.id === id)
-        const worker = store.setWorkerModel(id, body.model)
-        if (previous && workerExecutionConfigChanged(previous, worker)) {
-          getAcpSessionManager().invalidateWorker(worker.id)
+        const previous = store()
+          .listWorkers()
+          .find((candidate) => candidate.id === id)
+        const nextModel =
+          typeof body.model === 'string' && body.model.trim() ? body.model.trim() : undefined
+        const requestedProjectId = body.projectId?.trim() || undefined
+        const requestedProject = requestedProjectId
+          ? store()
+              .listProjects()
+              .find((project) => project.id === requestedProjectId)
+          : store().getActive().project
+        if (requestedProjectId && !requestedProject) {
+          return c.json({ error: 'project not found', projectId: requestedProjectId }, 404)
         }
-        return c.json({ worker, snapshot: store.snapshot() })
+        const pinCheck = evaluateWorkerModelPin(id, body.model, {
+          cwd: requestedProject?.rootPath,
+        })
+        if (!pinCheck.ok) {
+          return c.json(
+            {
+              error: formatPublicError(pinCheck.errorCode, pinCheck.error ?? 'Model pin rejected'),
+              errorCode: pinCheck.errorCode,
+            },
+            400,
+          )
+        }
+        if (previous) {
+          reconcileWorkerRuntimeResources({
+            before: previous,
+            after: { ...previous, model: nextModel },
+            manager: getAcpSessionManager(),
+            catalogStore: getWorkerModelCatalogStore(),
+          })
+        }
+        const worker = applyWorkerModelPin(id, body.model)
+        return c.json({ worker, snapshot: store().snapshot() })
       } catch (e) {
-        return c.json({ error: e instanceof Error ? e.message : String(e) }, 404)
+        const failure = asAcpHttpFailure(e)
+        return failure
+          ? c.json(failure.body, failure.status)
+          : c.json({ error: e instanceof Error ? e.message : String(e) }, 404)
       }
     },
   }),
@@ -215,7 +536,7 @@ export const apiRoutes = [
         depth?: string
         onlyEnabled?: boolean
       }
-      const active = store.getActive()
+      const active = store().getActive()
       const batch = await checkWorkersBatch({
         workerIds: body.workerIds,
         depth: body.depth,
@@ -224,8 +545,8 @@ export const apiRoutes = [
       })
       return c.json({
         ...batch,
-        workers: store.listWorkers(),
-        snapshot: store.snapshot(),
+        workers: store().listWorkers(),
+        snapshot: store().snapshot(),
       })
     },
   }),
@@ -234,18 +555,18 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const id = c.req.param('id')
-      const workers = store.listWorkers()
+      const workers = store().listWorkers()
       const worker = workers.find((w) => w.id === id)
       if (!worker) return c.json({ error: 'not found' }, 404)
       const body = (await c.req.json().catch(() => ({}))) as { depth?: string }
       const depth = parseHealthDepth(body.depth ?? c.req.query('depth'))
-      const active = store.getActive()
+      const active = store().getActive()
       const { worker: updated, report } = await checkOneWorker(
         worker,
         depth,
         active.project?.rootPath,
       )
-      return c.json({ worker: updated, report, snapshot: store.snapshot() })
+      return c.json({ worker: updated, report, snapshot: store().snapshot() })
     },
   }),
 
@@ -280,12 +601,25 @@ export const apiRoutes = [
         health: 'unknown',
       }
       const previous = body.id
-        ? store.listWorkers().find((candidate) => candidate.id === body.id)
+        ? store()
+            .listWorkers()
+            .find((candidate) => candidate.id === body.id)
         : undefined
-      store.upsertWorkerLogged(worker)
-      if (previous && workerExecutionConfigChanged(previous, worker)) {
-        getAcpSessionManager().invalidateWorker(worker.id)
+      if (previous) {
+        try {
+          reconcileWorkerRuntimeResources({
+            before: previous,
+            after: worker,
+            manager: getAcpSessionManager(),
+            catalogStore: getWorkerModelCatalogStore(),
+          })
+        } catch (error) {
+          const failure = asAcpHttpFailure(error)
+          if (failure) return c.json(failure.body, failure.status)
+          throw error
+        }
       }
+      store().upsertWorkerLogged(worker)
       return c.json({ worker })
     },
   }),
@@ -296,12 +630,17 @@ export const apiRoutes = [
       const status = c.req.query('status')
       const pendingOnly = c.req.query('pending') === '1' || c.req.query('pending') === 'true'
       if (pendingOnly) {
-        return c.json({ approvals: store.listPendingApprovals() })
+        return c.json({ approvals: store().listPendingApprovals() })
       }
-      if (status === 'pending' || status === 'allowed' || status === 'denied' || status === 'cancelled') {
-        return c.json({ approvals: store.listApprovals(status) })
+      if (
+        status === 'pending' ||
+        status === 'allowed' ||
+        status === 'denied' ||
+        status === 'cancelled'
+      ) {
+        return c.json({ approvals: store().listApprovals(status) })
       }
-      return c.json({ approvals: store.listApprovals() })
+      return c.json({ approvals: store().listApprovals() })
     },
   }),
 
@@ -316,16 +655,24 @@ export const apiRoutes = [
         workerId?: string
         workerName?: string
         sessionId?: string | null
-        options?: { optionId: string; name: string }[]
+        options: Array<{
+          optionId: string
+          name: string
+          kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always'
+        }>
         source?: 'acp' | 'tool' | 'manual'
       }
       if (!body.title) return c.json({ error: 'title required' }, 400)
-      const item = store.enqueueApproval({
-        ...body,
-        sessionId: body.sessionId ?? store.getActive().session?.id ?? null,
-        source: body.source ?? 'manual',
-      })
-      return c.json({ approval: item, snapshot: store.snapshot() })
+      try {
+        const item = store().enqueueApproval({
+          ...body,
+          sessionId: body.sessionId ?? store().getActive().session?.id ?? null,
+          source: body.source ?? 'manual',
+        })
+        return c.json({ approval: item, snapshot: store().snapshot() })
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : 'Invalid approval' }, 400)
+      }
     },
   }),
 
@@ -336,38 +683,25 @@ export const apiRoutes = [
       const body = (await c.req.json()) as {
         decision: ApprovalDecision
         optionId?: string
+        surface?: 'chat' | 'panel'
       }
       if (!body.decision || !['allow', 'deny', 'cancel'].includes(body.decision)) {
         return c.json({ error: 'decision must be allow|deny|cancel' }, 400)
       }
-      try {
-        const approval = store.resolveApproval(id, body.decision, body.optionId)
-        return c.json({ approval, snapshot: store.snapshot() })
-      } catch (e) {
-        return c.json({ error: e instanceof Error ? e.message : String(e) }, 400)
+      if (body.surface !== 'chat' && body.surface !== 'panel') {
+        return c.json({ error: 'surface must be chat|panel' }, 400)
       }
-    },
-  }),
-
-  /** Seed a demo ACP-style permission for UI testing without a live agent. */
-  registerApiRoute('/api/approvals/demo', {
-    method: 'POST',
-    handler: async (c) => {
-      const { session } = store.getActive()
-      const item = store.enqueueApproval(
-        mapAcpPermissionToEnqueue({
-          title: 'Write file',
-          action: 'write',
-          pathOrTarget: 'apps/desktop/src/components/SessionList.tsx',
-          workerName: 'Claude Code',
-          sessionId: session?.id ?? null,
-          options: [
-            { optionId: 'allow', name: 'Allow' },
-            { optionId: 'deny', name: 'Deny' },
-          ],
-        }),
-      )
-      return c.json({ approval: item, snapshot: store.snapshot() })
+      try {
+        const approval = getWorkerScheduler().resolveApproval(id, body.decision, {
+          optionId: body.optionId,
+          surface: body.surface,
+        })
+        return c.json({ approval, snapshot: store().snapshot() })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        const status = /already/i.test(msg) ? 409 : 400
+        return c.json({ error: msg }, status as 400 | 409)
+      }
     },
   }),
 
@@ -408,10 +742,86 @@ export const apiRoutes = [
     },
   }),
 
+  registerApiRoute('/api/jobs/:id/acp-context/reset', {
+    method: 'POST',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+      if (typeof body.agentSessionId === 'string') {
+        return c.json({ error: 'agentSessionId must not be provided in body' }, 400)
+      }
+
+      const job = store().getJob(id)
+      if (!job) {
+        return c.json({ error: 'Job not found' }, 404)
+      }
+
+      const activeSessionId = store().getActive().session?.id
+      if (!activeSessionId || job.sessionId !== activeSessionId) {
+        return c.json({ error: 'Job does not belong to active session' }, 400)
+      }
+
+      const manager = getAcpSessionManager()
+      let deleted = false
+      try {
+        if (job.reuseKeyDigest) {
+          deleted = manager.deleteContextByDigest(job.reuseKeyDigest).deleted
+        } else {
+          const worker = store()
+            .listWorkers()
+            .find((w) => w.id === job.workerId)
+          if (worker) {
+            const sessionConfig: SessionEntryConfig = {
+              command: worker.command,
+              args: [...worker.args],
+              model: worker.model?.trim() || undefined,
+              env: { ...worker.env },
+            }
+            const reuseKey = manager.buildReuseKey({
+              routerSessionId: job.sessionId,
+              workerId: worker.id,
+              cwd: job.cwd,
+              config: sessionConfig,
+            })
+            manager.deleteContextByReuseKey(reuseKey)
+            deleted = true
+          }
+        }
+      } catch (error) {
+        const failure = asAcpHttpFailure(error)
+        if (failure) return c.json(failure.body, failure.status)
+        throw error
+      }
+      store().updateJob(job.id, {
+        meta: {
+          ...job.meta,
+          acpContextResetAt: new Date().toISOString(),
+          acpContextResetDeleted: deleted,
+        },
+      })
+
+      globalActivityLog.append('job', `ACP context reset for job ${job.id}`, {
+        jobId: job.id,
+        workerId: job.workerId,
+        sessionId: job.sessionId,
+      })
+
+      return c.json({
+        ok: true,
+        jobId: job.id,
+        deleted,
+        message: deleted
+          ? 'ACP context reset. Retry the dispatch to create a fresh session.'
+          : 'No live/catalog context found for this job digest (already clean).',
+        snapshot: store().snapshot(),
+      })
+    },
+  }),
+
   registerApiRoute('/api/git', {
     method: 'GET',
     handler: async (c) => {
-      const { project } = store.getActive()
+      const { project } = store().getActive()
       if (!project) return c.json({ error: 'no active project', ok: false, files: [] }, 400)
       return c.json(await getGitStatus(project.rootPath))
     },
@@ -421,7 +831,9 @@ export const apiRoutes = [
     method: 'GET',
     handler: async (c) => {
       const id = c.req.param('id')
-      const project = store.listProjects().find((p) => p.id === id)
+      const project = store()
+        .listProjects()
+        .find((p) => p.id === id)
       if (!project) return c.json({ error: 'project not found' }, 404)
       return c.json(await getGitStatus(project.rootPath))
     },
@@ -430,7 +842,7 @@ export const apiRoutes = [
   registerApiRoute('/api/files', {
     method: 'GET',
     handler: async (c) => {
-      const { project } = store.getActive()
+      const { project } = store().getActive()
       if (!project) return c.json({ error: 'no active project', ok: false, entries: [] }, 400)
       const depth = Number(c.req.query('depth') ?? 3)
       return c.json(
@@ -445,7 +857,9 @@ export const apiRoutes = [
     method: 'GET',
     handler: async (c) => {
       const id = c.req.param('id')
-      const project = store.listProjects().find((p) => p.id === id)
+      const project = store()
+        .listProjects()
+        .find((p) => p.id === id)
       if (!project) return c.json({ error: 'project not found' }, 404)
       const depth = Number(c.req.query('depth') ?? 3)
       return c.json(
@@ -460,18 +874,18 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const rootPath = process.cwd()
-      const project = store.upsertProject({
+      const project = store().upsertProject({
         name: 'router-agents',
         rootPath,
         defaultBranch: 'main',
       })
-      const locale = store.getLocale()
-      const session = store.createSession({
+      const locale = store().getLocale()
+      const session = store().createSession({
         projectId: project.id,
         title: locale === 'en' ? 'Implement session sidebar' : '实现 Session 侧栏',
         mode: 'build',
       })
-      return c.json({ project, session, snapshot: store.snapshot() })
+      return c.json({ project, session, snapshot: store().snapshot() })
     },
   }),
 ]

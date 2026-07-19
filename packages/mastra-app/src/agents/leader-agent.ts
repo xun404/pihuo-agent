@@ -1,8 +1,11 @@
 import { Agent } from '@mastra/core/agent'
 import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { summarizeWorkerModels } from '@router-agents/adapters'
-import { getSharedStore } from '@router-agents/core'
+import { getSharedStore, loadSettings, resolveRouterDataPaths } from '@router-agents/core'
+import { resolveGoalMaxRuns, resolveMemoryLastMessages } from '../runtime-config.js'
 import {
   cancelJobTool,
   dispatchWorkerTool,
@@ -15,6 +18,13 @@ import {
 
 function workerModelRosterBlock(): string {
   try {
+    // client-only / Studio: do not touch local Store; use list-workers tool instead
+    if (
+      process.env.ROUTER_CLIENT_ONLY === '1' ||
+      process.env.ROUTER_RUNTIME_ROLE === 'client-only'
+    ) {
+      return '(remote roster — call list-workers for live state)'
+    }
     const workers = getSharedStore().listWorkers()
     return summarizeWorkerModels(workers)
   } catch {
@@ -91,7 +101,7 @@ Prefer concrete file paths and acceptance criteria in tool dispatches.
 `
 }
 
-function resolveLeaderModel(requestContext?: { get?: (key: string) => unknown }): string {
+function resolveLeaderModelId(requestContext?: { get?: (key: string) => unknown }): string {
   // Per-request override from chat model picker (requestContext)
   try {
     const fromCtx = requestContext?.get?.('leaderModel')
@@ -104,15 +114,63 @@ function resolveLeaderModel(requestContext?: { get?: (key: string) => unknown })
   return process.env.LEADER_MODEL?.trim() || 'openai/gpt-5.5'
 }
 
+/**
+ * Request-scoped model config. Custom gateway baseURL/apiKey are returned on the
+ * model object — never by mutating global OPENAI_BASE_URL / ANTHROPIC_BASE_URL.
+ */
+export function resolveLeaderModelConfig(requestContext?: {
+  get?: (key: string) => unknown
+}): string | { id: `${string}/${string}`; url?: string; apiKey?: string } {
+  const modelId = resolveLeaderModelId(requestContext)
+  if (!modelId.includes('/')) return modelId
+
+  let custom: Array<{
+    id: string
+    baseURL?: string
+    apiKeyEnv?: string
+    apiStyle?: string
+  }> = []
+  try {
+    custom = loadSettings().customProviders ?? []
+  } catch {
+    custom = []
+  }
+
+  const providerId = modelId.slice(0, modelId.indexOf('/'))
+  const match = custom.find((c) => c.id === providerId || c.id.replace(/_/g, '-') === providerId)
+  if (!match?.baseURL?.trim()) {
+    // Builtin / no custom base — plain model id (Mastra uses process env keys)
+    return modelId
+  }
+
+  const apiKeyEnv = match.apiKeyEnv?.trim()
+  // Authoritative: the env name configured on the custom provider (saved secret).
+  // applySecretsToEnv forces aliases equal so shell ambient cannot diverge.
+  const apiKey = apiKeyEnv ? process.env[apiKeyEnv]?.trim() : undefined
+  return {
+    id: modelId as `${string}/${string}`,
+    url: match.baseURL.trim().replace(/\/$/, ''),
+    ...(apiKey ? { apiKey } : {}),
+  }
+}
+
 function resolveJudgeModel(): string {
-  return process.env.GOAL_JUDGE_MODEL?.trim() || process.env.LEADER_MODEL?.trim() || 'openai/gpt-5-mini'
+  return (
+    process.env.GOAL_JUDGE_MODEL?.trim() || process.env.LEADER_MODEL?.trim() || 'openai/gpt-5-mini'
+  )
 }
 
 function memoryDbUrl(): string {
-  return (
-    process.env.MASTRA_MEMORY_URL ??
-    `file:${process.env.HOME ?? process.cwd()}/.router-agents/mastra-memory.db`
-  )
+  if (process.env.MASTRA_MEMORY_URL?.trim()) return process.env.MASTRA_MEMORY_URL.trim()
+  const dbPath = resolveRouterDataPaths().memoryDbPath
+  // The data layer dir may not exist yet on first run; LibSQLStore opens the
+  // db at construction time (module top-level), so ensure the parent exists.
+  try {
+    mkdirSync(dirname(dbPath), { recursive: true })
+  } catch {
+    /* best effort — libsql will surface a clearer error if unwritable */
+  }
+  return `file:${dbPath}`
 }
 
 /**
@@ -131,13 +189,13 @@ export const leaderStorage = new LibSQLStore({
  * @see https://mastra.ai/docs/memory/overview
  */
 export function createLeaderMemory(): Memory {
-  const lastMessages = Number(process.env.MASTRA_LAST_MESSAGES ?? '40')
+  const lastMessages = resolveMemoryLastMessages()
   const omEnabled = process.env.MASTRA_OM === '1' || process.env.MASTRA_OM === 'true'
 
   return new Memory({
     storage: leaderStorage,
     options: {
-      lastMessages: Number.isFinite(lastMessages) && lastMessages > 0 ? lastMessages : 40,
+      lastMessages,
       workingMemory: {
         enabled: true,
         scope: 'resource',
@@ -162,8 +220,8 @@ export const leaderAgent = new Agent({
   name: 'Router Leader',
   description:
     'Orchestration leader that plans work and delegates to role-specialized CLI workers (plan, coder, review, test, research).',
-  // Per-request model from chat picker via requestContext; else LEADER_MODEL settings
-  model: ({ requestContext }) => resolveLeaderModel(requestContext),
+  // Per-request model + optional gateway url/apiKey (never mutates process.env base URL)
+  model: ({ requestContext }) => resolveLeaderModelConfig(requestContext),
   // Rebuild each turn so the Leader sees the latest Workers panel model pins / catalogs
   instructions: () => buildLeaderInstructions(),
   tools: {
@@ -185,7 +243,7 @@ export const leaderAgent = new Agent({
   // @see https://mastra.ai/docs/long-running-agents/goals
   goal: {
     judge: () => resolveJudgeModel(),
-    maxRuns: Number(process.env.GOAL_MAX_RUNS ?? '30') || 30,
+    maxRuns: resolveGoalMaxRuns(),
     prompt:
       'Mark the goal complete only when the acceptance criteria are met with evidence (tests, file results, or clear completion). Prefer continue with a specific next step when unfinished.',
   },

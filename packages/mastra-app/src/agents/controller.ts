@@ -15,7 +15,8 @@ export function getLeaderControllerConfig() {
       {
         id: 'ask',
         name: 'Ask',
-        instructions: 'Answer questions. Do not make destructive changes or dispatch implementers unless asked.',
+        instructions:
+          'Answer questions. Do not make destructive changes or dispatch implementers unless asked.',
       },
       {
         id: 'plan',
@@ -33,7 +34,8 @@ export function getLeaderControllerConfig() {
       {
         id: 'review',
         name: 'Review',
-        instructions: 'Focus on code review and risk. Prefer review-role workers. Summarize findings.',
+        instructions:
+          'Focus on code review and risk. Prefer review-role workers. Summarize findings.',
       },
     ],
   }
@@ -72,7 +74,11 @@ export function controllerStatusSnapshot() {
   const cfg = getLeaderControllerConfig()
   return {
     id: cfg.id,
-    modes: cfg.modes.map((m) => ({ id: m.id, name: m.name, default: Boolean(m.metadata?.default) })),
+    modes: cfg.modes.map((m) => ({
+      id: m.id,
+      name: m.name,
+      default: Boolean(m.metadata?.default),
+    })),
     agentId: leaderAgent.id,
     storage: 'libsql',
     docs: 'https://mastra.ai/docs/agent-controller/overview',

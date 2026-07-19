@@ -2,19 +2,153 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import { getSharedStore } from '@router-agents/core'
 import { getWorkerScheduler } from '../scheduler.js'
-import type { WorkerKind, WorkerRole, WorkerRunEvent } from '@router-agents/shared'
+import { getRuntimeDispatchPort } from '../runtime-dispatch-port.js'
+import type { RuntimeDispatchPort } from '../runtime-dispatch-port.js'
+import type { WorkerJob, WorkerKind, WorkerRole, WorkerRunEvent } from '@router-agents/shared'
+import { isJobOpen, isTerminalWorkerEvent } from '@router-agents/shared'
 import {
   enrichTerminalWorkerEvent,
+  MAX_TIMER_DELAY_MS,
   raceWithTimeout,
+  resolveWorkerJobTimeoutMs,
   splitWorkerDeltaChunks,
   subscribeAbort,
+  writeWorkerEventWithDeadline,
   type WorkerEventIdentity,
+  type WorkerEventWriter,
 } from '../worker-events.js'
+import { authorizeDispatchCwd, resolveDispatchContext } from '../dispatch-context.js'
 
-const store = getSharedStore()
-const scheduler = getWorkerScheduler()
-const WORKER_JOB_TIMEOUT_MS = Number(process.env.WORKER_JOB_TIMEOUT_MS) || 600_000
+export function applyTerminalEventToJob(job: WorkerJob, event: WorkerRunEvent): WorkerJob {
+  if (!isTerminalWorkerEvent(event)) return job
+  if (event.type === 'completed') {
+    return {
+      ...job,
+      status: 'succeeded',
+      output: event.output,
+      workerName: event.workerName ?? job.workerName,
+      role: event.role ?? job.role,
+      finishedAt: job.finishedAt ?? new Date().toISOString(),
+      message: job.message ?? 'Job succeeded',
+      error: undefined,
+      errorCode: undefined,
+    }
+  }
+  const status =
+    event.type === 'timed_out' ? 'timed_out' : event.type === 'cancelled' ? 'cancelled' : 'failed'
+  return {
+    ...job,
+    status,
+    output: event.output ?? job.output,
+    error: event.error,
+    errorCode: event.errorCode,
+    workerName: event.workerName ?? job.workerName,
+    role: event.role ?? job.role,
+    finishedAt: job.finishedAt ?? new Date().toISOString(),
+    message: event.error ?? `Job ${status}`,
+  }
+}
 
+export function jobToToolResult(job: WorkerJob) {
+  return {
+    ok: job.status === 'succeeded',
+    jobId: job.id,
+    status: job.status,
+    workerName: job.workerName,
+    workerId: job.workerId,
+    role: job.role,
+    cwd: job.cwd,
+    task: job.task,
+    message: job.message ?? `Job ${job.status}`,
+    output: job.output,
+    error: job.error,
+    errorCode: job.errorCode,
+    // For UI duration (WorkerRunCard) when hydrating from tool parts / history
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    createdAt: job.createdAt,
+  }
+}
+
+export function jobToTerminalEvent(job: WorkerJob): WorkerRunEvent {
+  if (job.status === 'succeeded') {
+    return {
+      type: 'completed',
+      jobId: job.id,
+      output: job.output ?? '',
+      truncated: false,
+      workerName: job.workerName,
+      role: job.role,
+    }
+  }
+  const type =
+    job.status === 'cancelled' ? 'cancelled' : job.status === 'timed_out' ? 'timed_out' : 'failed'
+  return {
+    type,
+    jobId: job.id,
+    output: job.output,
+    error: job.error ?? job.message,
+    errorCode: job.errorCode,
+    truncated: false,
+    workerName: job.workerName,
+    role: job.role,
+  }
+}
+
+/** Wait for a terminal WorkerRunEvent via port.events (works for Local and Remote). */
+async function waitForTerminalEvent(
+  port: RuntimeDispatchPort,
+  jobId: string,
+  signal: AbortSignal | undefined,
+  onEvent?: (event: WorkerRunEvent) => void,
+): Promise<WorkerRunEvent | null> {
+  for await (const event of port.events(jobId, signal)) {
+    onEvent?.(event)
+    if (isTerminalWorkerEvent(event)) return event
+  }
+  return null
+}
+
+class WorkerJobWaitTimeoutError extends Error {
+  constructor(jobId: string) {
+    super(`Job ${jobId} timed out waiting for terminal status`)
+    this.name = 'WorkerJobWaitTimeoutError'
+  }
+}
+
+async function waitForTerminalWithDeadline(
+  port: RuntimeDispatchPort,
+  jobId: string,
+  externalSignal: AbortSignal | undefined,
+  onEvent?: (event: WorkerRunEvent) => void,
+): Promise<WorkerRunEvent | null> {
+  const observer = new AbortController()
+  const signal = externalSignal
+    ? AbortSignal.any([externalSignal, observer.signal])
+    : observer.signal
+  const timeoutMs = Math.min(MAX_TIMER_DELAY_MS, Math.floor(resolveWorkerJobTimeoutMs() * 1.2))
+  try {
+    return await raceWithTimeout(
+      waitForTerminalEvent(port, jobId, signal, onEvent),
+      timeoutMs,
+      () => {
+        observer.abort()
+        return new WorkerJobWaitTimeoutError(jobId)
+      },
+    )
+  } finally {
+    // Release fetch readers/subscriptions even when the timeout race wins.
+    observer.abort()
+  }
+}
+
+/** Lazy accessors — avoid forcing Store/Scheduler construction at import time on client-only. */
+function store() {
+  return getSharedStore()
+}
+function scheduler() {
+  return getWorkerScheduler()
+}
 const roleSchema = z.enum(['plan', 'coder', 'review', 'test', 'research', 'general'])
 const jobStatusSchema = z.enum([
   'queued',
@@ -41,12 +175,14 @@ export const listProjectsTool = createTool({
     ),
   }),
   execute: async () => {
-    const projects = store.listProjects().map((p) => ({
-      id: p.id,
-      name: p.name,
-      rootPath: p.rootPath,
-      defaultBranch: p.defaultBranch,
-    }))
+    const projects = store()
+      .listProjects()
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        rootPath: p.rootPath,
+        defaultBranch: p.defaultBranch,
+      }))
     return { projects }
   },
 })
@@ -54,7 +190,7 @@ export const listProjectsTool = createTool({
 export const listWorkersTool = createTool({
   id: 'list-workers',
   description:
-    'List registered CLI workers with roles, health, configured model, and available model catalog. Prefer healthy non-busy workers. For OpenCode, require a selected model (modelConfigured=true) before dispatch — default CLI models often fail with “Model is disabled”.',
+    'List registered workers (builtin, custom, and Registry) with roles, command health, ACP readiness, and model catalog. Prefer ready non-busy workers. Call this before dispatch-worker to get current worker ids/names. For OpenCode-profile workers, require modelConfigured=true before dispatch.',
   inputSchema: z.object({
     enabledOnly: z.boolean().optional().default(true),
     role: roleSchema.optional().describe('Only workers that can serve this role'),
@@ -78,20 +214,36 @@ export const listWorkersTool = createTool({
         /** Pinned ACP model id for session/set_config_option (empty = CLI default) */
         model: z.string().optional(),
         modelConfigured: z.boolean(),
-        /** Cached catalog from last “fetch models” in Workers panel */
+        /** Shortlist only (Worker.availableModels) — not full search index */
         availableModels: z.array(
           z.object({
             modelId: z.string(),
             name: z.string(),
           }),
         ),
+        modelsState: z.string().optional(),
+        modelCatalogState: z.string().optional(),
         /** OpenCode without a pin is risky — ask user to pick a model in Workers */
         needsModelSelection: z.boolean(),
+        /** CLI binary presence/version health */
+        commandHealth: z.string().optional(),
+        /** ACP session boundary health */
+        acpHealth: z.string().optional(),
+        /** Registry identity (no archive URLs or secrets) */
+        registryId: z.string().optional(),
+        registryVersion: z.string().optional(),
+        sourceType: z.string().optional(),
+        runtimeProfile: z.string().optional(),
+        readinessStatus: z.string().optional(),
+        readinessCode: z.string().optional(),
+        nextAction: z.string().optional(),
+        dispatchable: z.boolean(),
       }),
     ),
   }),
   execute: async ({ enabledOnly, role }) => {
-    let workers = role ? store.listWorkersByRole(role, enabledOnly) : store.listWorkers()
+    const { evaluateWorkerReadinessGate } = await import('../acp-worker-readiness.js')
+    let workers = role ? store().listWorkersByRole(role, enabledOnly) : store().listWorkers()
     if (enabledOnly) workers = workers.filter((w) => w.enabled)
     workers = [...workers].sort((a, b) => {
       const rank = (s: string) =>
@@ -100,14 +252,20 @@ export const listWorkersTool = createTool({
     })
     return {
       workers: workers.map((w) => {
-        const openJobs = store.countOpenJobs({ workerId: w.id })
+        const openJobs = store().countOpenJobs({ workerId: w.id })
         const model = w.model?.trim() || undefined
+        // Shortlist only — never expose full OpenRouter search index here
         const availableModels = (w.availableModels ?? []).map((m) => ({
           modelId: m.modelId,
           name: m.name || m.modelId,
         }))
         const modelConfigured = Boolean(model)
-        const needsModelSelection = w.kind === 'opencode' && !modelConfigured
+        const needsModelSelection =
+          (w.kind === 'opencode' || w.runtimeProfile === 'opencode') && !modelConfigured
+        const commandHealth = w.commandHealth?.status ?? w.cliHealth ?? undefined
+        const acpHealth = w.acpHealth?.status ?? w.acpSessionHealth ?? undefined
+        const gate = evaluateWorkerReadinessGate(w)
+        const source = w.source
         return {
           id: w.id,
           name: w.name,
@@ -125,7 +283,19 @@ export const listWorkersTool = createTool({
           model,
           modelConfigured,
           availableModels,
+          modelsState: w.modelsState,
+          modelCatalogState: w.modelCatalogState ?? w.modelsState,
           needsModelSelection,
+          commandHealth,
+          acpHealth,
+          registryId: source?.type === 'registry' ? source.registryId : undefined,
+          registryVersion: source?.type === 'registry' ? source.registryVersion : undefined,
+          sourceType: source?.type,
+          runtimeProfile: w.runtimeProfile,
+          readinessStatus: w.readiness?.status,
+          readinessCode: w.readiness?.code,
+          nextAction: w.readiness?.nextAction,
+          dispatchable: gate.ok,
         }
       }),
     }
@@ -155,11 +325,9 @@ export const getActiveContextTool = createTool({
       .nullable(),
   }),
   execute: async () => {
-    const { project, session } = store.getActive()
+    const { project, session } = store().getActive()
     return {
-      project: project
-        ? { id: project.id, name: project.name, rootPath: project.rootPath }
-        : null,
+      project: project ? { id: project.id, name: project.name, rootPath: project.rootPath } : null,
       session: session
         ? {
             id: session.id,
@@ -181,17 +349,18 @@ export const getActiveContextTool = createTool({
 export const dispatchWorkerTool = createTool({
   id: 'dispatch-worker',
   description:
-    'Delegate a task to a CLI worker (Claude/Codex/OpenCode). Prefer role=plan|coder|review|test|research|general, or workerIdOrKind=codex|claude|opencode. By default waits until the job finishes and returns output — use this when the user wants to see the worker reply. Set wait=false only for long background work, then poll get-job. Never invent results: only trust status=succeeded + output. If error mentions Model is disabled / 【模型不可用】, tell the user to pick a model in the Workers panel (especially OpenCode).',
+    'Delegate a task to a registered worker. First call list-workers to get current worker id/name/role/readiness. Prefer role=plan|coder|review|test|research|general, or pass workerIdOrKind as an exact worker id from list-workers. Do not hardcode product names. By default waits until the job finishes and returns output. Set wait=false only for long fire-and-forget work, then poll get-job. Never invent results: only trust status=succeeded + output. If errorCode is WORKER_AUTH_REQUIRED, tell the user to authenticate that Agent in Settings — do not wait for OAuth in this turn. If error mentions Model is disabled / 【模型不可用】, tell the user to pick a model in the Workers panel.',
   inputSchema: z.object({
-    role: roleSchema
-      .optional()
-      .describe('Desired worker role for this task'),
+    role: roleSchema.optional().describe('Desired worker role for this task'),
     workerIdOrKind: z
       .string()
       .optional()
-      .describe('Optional worker id or kind override: claude, codex, opencode'),
+      .describe('Optional exact worker id from list-workers, or kind/name match'),
     task: z.string().describe('Clear task prompt for the coding agent'),
-    cwd: z.string().optional().describe('Working directory; defaults to active project root'),
+    cwd: z
+      .string()
+      .optional()
+      .describe('Working directory under the bound project root; defaults to project root'),
     wait: z
       .boolean()
       .optional()
@@ -214,36 +383,61 @@ export const dispatchWorkerTool = createTool({
   }),
   execute: async (input, context) => {
     const { role, workerIdOrKind, task, cwd, wait } = input as {
-      role?: WorkerRole; workerIdOrKind?: string; task: string; cwd?: string; wait?: boolean
+      role?: WorkerRole
+      workerIdOrKind?: string
+      task: string
+      cwd?: string
+      wait?: boolean
     }
     const ctx = context as any
-    const requestContext = ctx?.requestContext
-    const routerSessionId = requestContext?.get?.('routerSessionId') as string | undefined
-    const routerProjectId = requestContext?.get?.('routerProjectId') as string | undefined
-    const routerProjectRoot = requestContext?.get?.('routerProjectRoot') as string | undefined
-    const memoryThreadId = requestContext?.get?.('memoryThreadId') as string | undefined
-    if (routerSessionId && memoryThreadId && ctx?.agent?.threadId !== memoryThreadId) {
-      throw new Error(`Thread mismatch: agent thread ${ctx.agent?.threadId} vs session ${memoryThreadId}`)
+    const { routerSessionId, routerProjectId, routerProjectRoot, memoryThreadId } =
+      resolveDispatchContext(ctx)
+    const cwdAuth = authorizeDispatchCwd(routerProjectRoot, cwd)
+    if (!cwdAuth.ok) {
+      return {
+        ok: false,
+        jobId: '',
+        status: 'failed' as const,
+        workerName: '',
+        role,
+        cwd: cwd ?? routerProjectRoot ?? '',
+        task,
+        message: cwdAuth.error,
+        error: cwdAuth.error,
+      }
     }
-    if (!routerSessionId || !routerProjectId || !memoryThreadId) {
-      throw new Error(
-        `dispatchWorkerTool requires routerSessionId, routerProjectId, and memoryThreadId in RequestContext. Got: session=${routerSessionId}, project=${routerProjectId}, thread=${memoryThreadId}`
+    const workdir = cwdAuth.cwd
+    const sync = process.env.DISPATCH_MODE === 'async' ? wait === true : wait !== false
+
+    const writer = ctx?.writer as Partial<WorkerEventWriter> | undefined
+    let writerTimedOut = false
+    const writeEvent = async (
+      options: Parameters<WorkerEventWriter['custom']>[0],
+      phase: string,
+    ): Promise<boolean> => {
+      if (!writer?.custom || writerTimedOut) return false
+      const result = await writeWorkerEventWithDeadline(
+        { custom: writer.custom.bind(writer) },
+        options,
       )
+      if (!result.ok) {
+        if (result.timedOut) writerTimedOut = true
+        console.error(`[dispatchWorkerTool] ${phase} writer failed`, result.error)
+      }
+      return result.ok
     }
-    const project = { id: routerProjectId, rootPath: routerProjectRoot }
-    const session = { id: routerSessionId, projectId: routerProjectId, memoryThreadId }
-    const workdir = cwd ?? project?.rootPath ?? process.cwd()
-    const sync =
-      process.env.DISPATCH_MODE === 'async'
-        ? wait === true
-        : wait !== false
 
-    const writer = ctx?.writer as {
-      custom?: (opts: { type: string; data: unknown; transient?: boolean; id?: string }) => Promise<void>
-    } | undefined
-
-    let onEvent: ((event: WorkerRunEvent) => void) | undefined
+    // Bounded queue: drop oldest deltas when backpressured (keep started/approval/terminal)
+    const EVENT_QUEUE_MAX = 256
     const eventQueue: WorkerRunEvent[] = []
+    const pushEvent = (event: WorkerRunEvent) => {
+      eventQueue.push(event)
+      while (eventQueue.length > EVENT_QUEUE_MAX) {
+        const idx = eventQueue.findIndex((e) => e.type === 'delta')
+        if (idx >= 0) eventQueue.splice(idx, 1)
+        else break // only non-deltas left — keep them
+      }
+    }
     let buf = ''
     let lastSeq = 0
     let pumpRunning = true
@@ -252,160 +446,203 @@ export const dispatchWorkerTool = createTool({
     let workerRole: WorkerRole | undefined
     let workerModel: string | undefined
 
-    if (sync && writer?.custom) {
-      onEvent = (event: WorkerRunEvent) => {
-        eventQueue.push(event)
-      }
-    }
-
-    const { job } = await scheduler.enqueue({
+    const port = getRuntimeDispatchPort()
+    const job = await port.dispatch({
+      context: {
+        routerSessionId: routerSessionId,
+        routerProjectId: routerProjectId,
+        routerProjectRoot: routerProjectRoot,
+        memoryThreadId,
+      },
       task,
       role,
       workerIdOrKind,
       cwd: workdir,
-      sessionId: session?.id,
-      projectId: project?.id ?? session?.projectId,
-      threadId: session?.memoryThreadId,
       source: 'leader',
       wait: false,
-      onEvent,
     })
 
+    // Chat/observer abort must NOT cancel the agent job — only explicit cancel-job does.
+    // We still stop waiting/streaming when abort fires (via port.events signal).
     const abortSignal = ctx?.abortSignal as AbortSignal | undefined
     const detachAbort = abortSignal
       ? subscribeAbort(abortSignal, () => {
-        scheduler.cancel(job.id).catch(() => {})
-      })
+          /* observer disconnect: do not port.cancel */
+        })
       : () => {}
 
     try {
+      // Preflight / already-terminal from dispatch — no events stream needed.
+      if (sync && !isJobOpen(job.status)) {
+        if (writer?.custom) {
+          const terminal = jobToTerminalEvent(job)
+          await writeEvent(
+            { type: 'data-worker-run', id: job.id, data: terminal, transient: false },
+            'preflight terminal',
+          )
+        }
+        return jobToToolResult(job)
+      }
+
       // Stream worker events via Mastra writer for wait=true
       if (sync && writer?.custom) {
-      const jid = job.id
-      workerName ??= job.workerName
-      workerRole ??= job.role
+        const jid = job.id
+        workerName ??= job.workerName
+        workerRole ??= job.role
 
-      async function pump() {
-        let lastFlush = Date.now()
-        let writerSequence = 0
-        const FLUSH_MS = 50
-        const MAX_CHUNK = 8192
+        async function pump() {
+          let lastFlush = Date.now()
+          let writerSequence = 0
+          const FLUSH_MS = 50
+          const MAX_CHUNK = 8192
 
-        async function drainBuf() {
-          const text = buf
-          buf = ''
-          const split = splitWorkerDeltaChunks(jid, text, writerSequence, MAX_CHUNK)
-          writerSequence = split.nextSequence
-          for (const event of split.events) {
-            try {
-              await writer!.custom!({ type: 'data-worker-run', data: event, transient: true })
-            } catch (error) {
-              console.error('[dispatchWorkerTool] delta writer failed for', jid, error)
+          async function drainBuf() {
+            const text = buf
+            buf = ''
+            const split = splitWorkerDeltaChunks(jid, text, writerSequence, MAX_CHUNK)
+            writerSequence = split.nextSequence
+            for (const event of split.events) {
+              await writeEvent(
+                { type: 'data-worker-run', data: event, transient: true },
+                `delta for ${jid}`,
+              )
             }
           }
-        }
 
-        while (pumpRunning || eventQueue.length > 0) {
-          while (eventQueue.length > 0) {
-            const event = eventQueue.shift()!
-            if (event.type === 'delta') {
-              const e = event as WorkerRunEvent & { delta: string; sequence: number }
-              if (e.sequence > lastSeq) { lastSeq = e.sequence; buf += e.delta }
-            } else if (event.type === 'started') {
-              workerName = event.workerName
-              workerKind = event.workerKind
-              workerRole = event.role
-              workerModel = event.model
-              try { await writer!.custom!({ type: 'data-worker-run', id: jid, data: event, transient: true }) } catch {}
-              lastFlush = Date.now()
-            } else {
+          while (pumpRunning || eventQueue.length > 0) {
+            while (eventQueue.length > 0) {
+              const event = eventQueue.shift()!
+              if (event.type === 'delta') {
+                const e = event as WorkerRunEvent & { delta: string; sequence: number }
+                if (e.sequence > lastSeq) {
+                  lastSeq = e.sequence
+                  buf += e.delta
+                }
+              } else if (event.type === 'started') {
+                workerName = event.workerName
+                workerKind = event.workerKind
+                workerRole = event.role
+                workerModel = event.model
+                await writeEvent(
+                  { type: 'data-worker-run', id: jid, data: event, transient: true },
+                  `started for ${jid}`,
+                )
+                lastFlush = Date.now()
+              } else if (
+                event.type === 'approval_requested' ||
+                event.type === 'approval_resolved'
+              ) {
+                await writeEvent(
+                  { type: 'data-worker-run', id: jid, data: event, transient: true },
+                  `approval for ${jid}`,
+                )
+                lastFlush = Date.now()
+              } else {
+                await drainBuf()
+                const identity: WorkerEventIdentity = {
+                  workerName,
+                  workerKind,
+                  role: workerRole,
+                  model: workerModel,
+                }
+                const data = enrichTerminalWorkerEvent(event, identity)
+                await writeEvent(
+                  { type: 'data-worker-run', id: jid, data, transient: false },
+                  `terminal for ${jid}`,
+                )
+                lastFlush = Date.now()
+              }
+            }
+
+            if (buf.length > 0 && Date.now() - lastFlush >= FLUSH_MS) {
               await drainBuf()
-              const identity: WorkerEventIdentity = {
-                workerName,
-                workerKind,
-                role: workerRole,
-                model: workerModel,
-              }
-              const data = enrichTerminalWorkerEvent(event, identity)
-              try {
-                await writer!.custom!({ type: 'data-worker-run', id: jid, data, transient: false })
-              } catch (e) {
-                console.error('[dispatchWorkerTool] terminal writer failed for', jid, e)
-              }
               lastFlush = Date.now()
             }
-          }
 
-          if (buf.length > 0 && Date.now() - lastFlush >= FLUSH_MS) {
-            await drainBuf()
-            lastFlush = Date.now()
+            if (pumpRunning || eventQueue.length > 0) {
+              await new Promise((resolve) => setTimeout(resolve, 10))
+            }
           }
-
-          if (pumpRunning || eventQueue.length > 0) {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-          }
+          await drainBuf()
         }
-        await drainBuf()
+
+        const pumpPromise = pump()
+
+        try {
+          const terminalEvent = await waitForTerminalWithDeadline(
+            port,
+            jid,
+            abortSignal,
+            (event) => {
+              pushEvent(event)
+            },
+          )
+          if (!terminalEvent) {
+            return {
+              ...jobToToolResult(job),
+              ok: false,
+              status: 'failed' as const,
+              message: 'No terminal event',
+              error: 'No terminal event',
+            }
+          }
+          return jobToToolResult(applyTerminalEventToJob(job, terminalEvent))
+        } catch (e) {
+          // Only cancel on total deadline. Chat/observer abort stops observation only —
+          // explicit cancel-job / UI cancel terminates the agent.
+          const msg = e instanceof Error ? e.message : String(e)
+          const isDeadline = e instanceof WorkerJobWaitTimeoutError
+          if (isDeadline) {
+            await port.cancel(jid).catch(() => {})
+          }
+          return {
+            ok: false,
+            jobId: jid,
+            status: isDeadline ? ('timed_out' as const) : ('failed' as const),
+            workerName: job.workerName,
+            workerId: job.workerId,
+            role: job.role,
+            cwd: job.cwd,
+            task: job.task,
+            message: msg,
+            error: msg,
+          }
+        } finally {
+          pumpRunning = false
+          await pumpPromise
+        }
       }
 
-      const pumpPromise = pump()
-
-      const SAFETY_MULTIPLIER = 1.2
-      try {
-        const terminalJob = await raceWithTimeout(
-          scheduler.waitForJob(jid),
-          Math.floor(WORKER_JOB_TIMEOUT_MS * SAFETY_MULTIPLIER),
-          () => new Error(`Job ${jid} timed out waiting for terminal status`),
-        )
-        const ok = terminalJob.status === 'succeeded'
-        return {
-          ok,
-          jobId: terminalJob.id,
-          status: terminalJob.status,
-          workerName: terminalJob.workerName,
-          workerId: terminalJob.workerId,
-          role: terminalJob.role,
-          cwd: terminalJob.cwd,
-          task: terminalJob.task,
-          message: terminalJob.message ?? `Job ${terminalJob.status}`,
-          output: terminalJob.output,
-          error: terminalJob.error,
-        }
-      } catch (e) {
-        await scheduler.cancel(jid).catch(() => {})
-        return {
-          ok: false,
-          jobId: jid,
-          status: 'failed' as const,
-          workerName: job.workerName,
-          workerId: job.workerId,
-          role: job.role,
-          cwd: job.cwd,
-          task: job.task,
-          message: e instanceof Error ? e.message : 'Job watcher timed out',
-          error: e instanceof Error ? e.message : 'Job watcher timed out',
-        }
-      } finally {
-        pumpRunning = false
-        await pumpPromise
-      }
-      }
-
-      // Non-streaming path (sync without writer, or async)
+      // Non-streaming sync wait via port.events (Local or Remote)
       if (sync) {
-        const terminalJob = await scheduler.waitForJob(job.id)
-        return {
-          ok: terminalJob.status === 'succeeded',
-          jobId: terminalJob.id,
-          status: terminalJob.status,
-          workerName: terminalJob.workerName,
-          workerId: terminalJob.workerId,
-          role: terminalJob.role,
-          cwd: terminalJob.cwd,
-          task: terminalJob.task,
-          message: terminalJob.message ?? `Job ${terminalJob.status}`,
-          output: terminalJob.output,
-          error: terminalJob.error,
+        try {
+          const terminalEvent = await waitForTerminalWithDeadline(port, job.id, abortSignal)
+          if (!terminalEvent) {
+            return {
+              ...jobToToolResult(job),
+              ok: false,
+              status: 'failed' as const,
+              message: 'No terminal event',
+              error: 'No terminal event',
+            }
+          }
+          return jobToToolResult(applyTerminalEventToJob(job, terminalEvent))
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          const isDeadline = e instanceof WorkerJobWaitTimeoutError
+          if (isDeadline) await port.cancel(job.id).catch(() => {})
+          return {
+            ok: false,
+            jobId: job.id,
+            status: isDeadline ? ('timed_out' as const) : ('failed' as const),
+            workerName: job.workerName,
+            workerId: job.workerId,
+            role: job.role,
+            cwd: job.cwd,
+            task: job.task,
+            message: msg,
+            error: msg,
+          }
         }
       }
 
@@ -430,7 +667,8 @@ export const dispatchWorkerTool = createTool({
 
 export const getJobTool = createTool({
   id: 'get-job',
-  description: 'Get status and output of a worker job by id (from dispatch-worker).',
+  description:
+    'Get status and output of a worker job by id (from dispatch-worker) for the bound session.',
   inputSchema: z.object({
     jobId: z.string(),
   }),
@@ -454,9 +692,12 @@ export const getJobTool = createTool({
       })
       .optional(),
   }),
-  execute: async ({ jobId }) => {
-    const job = scheduler.getJob(jobId)
-    if (!job) return { found: false }
+  execute: async ({ jobId }, context) => {
+    const { routerSessionId } = resolveDispatchContext(context as any)
+    // Prefer RuntimeDispatchPort so remote-client (Studio) hits owner RPC, not local Scheduler.
+    const port = getRuntimeDispatchPort()
+    const job = port.getJob ? await port.getJob(jobId) : (scheduler().getJob(jobId) ?? null)
+    if (!job || job.sessionId !== routerSessionId) return { found: false }
     return {
       found: true,
       job: {
@@ -480,9 +721,8 @@ export const getJobTool = createTool({
 
 export const listJobsTool = createTool({
   id: 'list-jobs',
-  description: 'List recent worker jobs for the active session (or all if no session).',
+  description: 'List recent worker jobs for the bound Router session only.',
   inputSchema: z.object({
-    sessionId: z.string().optional(),
     limit: z.number().optional().default(20),
   }),
   outputSchema: z.object({
@@ -498,30 +738,31 @@ export const listJobsTool = createTool({
       }),
     ),
   }),
-  execute: async ({ sessionId, limit }) => {
-    const active = store.getActive()
-    const sid = sessionId ?? active.session?.id
-    const jobs = scheduler.listJobs({
-      sessionId: sid,
-      limit: limit ?? 20,
-    })
+  execute: async ({ limit }, context) => {
+    const { routerSessionId } = resolveDispatchContext(context as any)
+    const port = getRuntimeDispatchPort()
+    const jobs = port.listJobs
+      ? await port.listJobs({ sessionId: routerSessionId, limit: limit ?? 20 })
+      : scheduler().listJobs({ sessionId: routerSessionId, limit: limit ?? 20 })
     return {
-      jobs: jobs.map((j) => ({
-        id: j.id,
-        status: j.status,
-        workerName: j.workerName,
-        role: j.role,
-        task: j.task.slice(0, 200),
-        createdAt: j.createdAt,
-        finishedAt: j.finishedAt,
-      })),
+      jobs: jobs
+        .filter((j) => j.sessionId === routerSessionId)
+        .map((j) => ({
+          id: j.id,
+          status: j.status,
+          workerName: j.workerName,
+          role: j.role,
+          task: j.task.slice(0, 200),
+          createdAt: j.createdAt,
+          finishedAt: j.finishedAt,
+        })),
     }
   },
 })
 
 export const cancelJobTool = createTool({
   id: 'cancel-job',
-  description: 'Cancel a queued or running worker job.',
+  description: 'Cancel a queued or running worker job owned by the bound session.',
   inputSchema: z.object({
     jobId: z.string(),
   }),
@@ -531,14 +772,27 @@ export const cancelJobTool = createTool({
     status: jobStatusSchema,
     message: z.string(),
   }),
-  execute: async ({ jobId }) => {
+  execute: async ({ jobId }, context) => {
     try {
-      const job = await scheduler.cancel(jobId)
+      const { routerSessionId } = resolveDispatchContext(context as any)
+      const port = getRuntimeDispatchPort()
+      const existing = port.getJob ? await port.getJob(jobId) : (scheduler().getJob(jobId) ?? null)
+      if (!existing || existing.sessionId !== routerSessionId) {
+        return {
+          ok: false,
+          jobId,
+          status: 'failed' as const,
+          message: 'Job not found for this session',
+        }
+      }
+      await port.cancel(jobId)
+      const job = port.getJob ? await port.getJob(jobId) : (scheduler().getJob(jobId) ?? null)
+      const status = job?.status ?? 'cancelled'
       return {
         ok: true,
-        jobId: job.id,
-        status: job.status,
-        message: job.message ?? `Job ${job.status}`,
+        jobId,
+        status,
+        message: job?.message ?? `Job ${status}`,
       }
     } catch (e) {
       return {
@@ -551,5 +805,12 @@ export const cancelJobTool = createTool({
   },
 })
 
-export { store as appStore }
+export const appStore = {
+  get snapshot() {
+    return store().snapshot()
+  },
+  listProjects: () => store().listProjects(),
+  listWorkers: () => store().listWorkers(),
+  getActive: () => store().getActive(),
+}
 export { store }

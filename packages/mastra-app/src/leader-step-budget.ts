@@ -1,13 +1,13 @@
 import type { LeaderStepBudgetEvent } from '@router-agents/shared'
 
-export const LEADER_STEP_BUDGET_PART_TYPE = "data-leader-step-budget";
+export const LEADER_STEP_BUDGET_PART_TYPE = 'data-leader-step-budget'
 
 export function detectLeaderStepBudgetExhaustion(input: {
-  maxSteps: number;
-  steps: ReadonlyArray<unknown>;
-  finishReason: string;
-  runId: string;
-  occurredAt?: string;
+  maxSteps: number
+  steps: ReadonlyArray<unknown>
+  finishReason: string
+  runId: string
+  occurredAt?: string
 }): LeaderStepBudgetEvent | null {
   const { maxSteps, steps, finishReason, runId, occurredAt } = input
   if (steps.length >= maxSteps && finishReason === 'tool-calls') {
@@ -33,7 +33,7 @@ export function appendLeaderStepBudgetPart<T extends Record<string, unknown>>(
   const alreadyExists = parts.some(
     (p: unknown) =>
       (p as Record<string, unknown>)?.type === LEADER_STEP_BUDGET_PART_TYPE &&
-      ((p as Record<string, unknown>)?.data as Record<string, unknown>)?.runId === event.data.runId
+      ((p as Record<string, unknown>)?.data as Record<string, unknown>)?.runId === event.data.runId,
   )
   if (alreadyExists) return message
   return {
@@ -51,7 +51,7 @@ export function messageHasBudgetPart(message: Record<string, unknown>, runId: st
   return parts.some(
     (p: unknown) =>
       (p as Record<string, unknown>)?.type === LEADER_STEP_BUDGET_PART_TYPE &&
-      ((p as Record<string, unknown>)?.data as Record<string, unknown>)?.runId === runId
+      ((p as Record<string, unknown>)?.data as Record<string, unknown>)?.runId === runId,
   )
 }
 

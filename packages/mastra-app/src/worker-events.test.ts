@@ -16,6 +16,7 @@ import {
   emitWorkerEvent,
 } from './worker-events.js'
 import type { WorkerRunEvent, WorkerRole, WorkerKind } from '@router-agents/shared'
+import { resolveDispatchContext } from './dispatch-context.js'
 
 // ---------------------------------------------------------------------------
 // Helpers (mirror helpers from worker-events.ts since they are not exported)
@@ -74,6 +75,20 @@ describe('Spec §8.2.1 — Strict event order enforcement', () => {
 
   beforeEach(() => {
     emitter = new WorkerEventEmitter()
+  })
+
+  it('normalizes invalid retention limits without an unbounded journal', () => {
+    const bounded = new WorkerEventEmitter({
+      terminalTtlMs: Number.POSITIVE_INFINITY,
+      journalMax: -1,
+    })
+    bounded.emit(makeStarted({ jobId: 'normalized-limits' }))
+    for (let sequence = 1; sequence <= 600; sequence += 1) {
+      bounded.emit(makeDelta(sequence, 'x', 'normalized-limits'))
+    }
+    bounded.emit(makeCompleted({ jobId: 'normalized-limits' }))
+
+    assert.ok(bounded.getJournal('normalized-limits').length <= 512)
   })
 
   it('delta emitted before started is dropped (order violation)', () => {
@@ -271,20 +286,25 @@ describe('Spec §8.2.2 — Terminal dedup (exactly one terminal per jobId)', () 
     assert.equal(terminals[0]!.type, 'cancelled')
   })
 
-  it('after terminal, subscribing to the same jobId is a no-op', () => {
+  it('after terminal, late subscribe replays journal including terminal', () => {
     const before: WorkerRunEvent[] = []
     emitter.subscribe('job_1', collectHandler(before))
     emitter.emit(makeStarted())
     emitter.emit(makeCompleted())
 
-    // job is terminal now — late subscriber should not get a handler registered
+    // Late subscriber must receive journal replay (including terminal) — no hang.
     const after: WorkerRunEvent[] = []
     const unsub = emitter.subscribe('job_1', collectHandler(after))
+    assert.equal(after.length, 2)
+    assert.equal(after[0]!.type, 'started')
+    assert.equal(after[1]!.type, 'completed')
+
+    // New emissions still suppressed while terminal tombstone holds
+    const beforeLen = after.length
     emitter.emit(makeStarted({ jobId: 'job_1' }))
     emitter.emit(makeDelta(1, 'x', 'job_1'))
-
-    assert.equal(after.length, 0)
-    unsub() // no-op but safe
+    assert.equal(after.length, beforeLen)
+    unsub()
   })
 
   it('double-completed (duplicate terminal) is ignored', () => {
@@ -312,11 +332,13 @@ describe('Spec §8.2.2 — Terminal dedup (exactly one terminal per jobId)', () 
     assert.equal(a.length, 2)
     assert.equal(b.length, 2)
 
-    // After terminal, no subscribers should remain; emitting another event does nothing
-    // (handlers already auto-removed, so no delivery)
+    // After terminal, late subscribe replays journal (not live registration)
     const c: WorkerRunEvent[] = []
     const unsubC = emitter.subscribe('job_1', collectHandler(c))
-    assert.equal(c.length, 0)
+    assert.equal(c.length, 2, 'replay started+completed')
+    const before = c.length
+    emitter.emit(makeDelta(1, 'after-terminal'))
+    assert.equal(c.length, before, 'live handlers removed; no new live events')
     unsubC()
   })
 })
@@ -408,8 +430,7 @@ describe('Spec §8.2.3 — Delta merging preserves text order', () => {
     assert.equal(accumulatedDelta, fullOutput)
 
     const terminal = received.find((e) => e.type === 'completed') as
-      | (WorkerRunEvent & { type: 'completed' })
-      | undefined
+      (WorkerRunEvent & { type: 'completed' }) | undefined
     assert.equal(terminal!.output, fullOutput)
   })
 
@@ -476,20 +497,39 @@ describe('Spec §8.2.4 — Writer calls awaited; missing/misbehaving writer', ()
 
     emitter.subscribe('job_bridge', async (event) => {
       if (event.type === 'started') {
-        await writer.custom({ type: 'data-worker-run', data: event, transient: true }).catch(() => {})
+        await writer
+          .custom({ type: 'data-worker-run', data: event, transient: true })
+          .catch(() => {})
       } else if (event.type === 'delta') {
         const e = event as WorkerRunEvent & { delta: string; sequence: number }
-        if (e.sequence > lastSeq) { lastSeq = e.sequence; buf += e.delta }
+        if (e.sequence > lastSeq) {
+          lastSeq = e.sequence
+          buf += e.delta
+        }
         if (buf.length >= 8) {
-          await writer.custom({ type: 'data-worker-run', data: { type: 'delta', jobId: event.jobId, sequence: lastSeq, delta: buf }, transient: true }).catch(() => {})
+          await writer
+            .custom({
+              type: 'data-worker-run',
+              data: { type: 'delta', jobId: event.jobId, sequence: lastSeq, delta: buf },
+              transient: true,
+            })
+            .catch(() => {})
           buf = ''
         }
       } else {
         if (buf.length > 0) {
-          await writer.custom({ type: 'data-worker-run', data: { type: 'delta', jobId: event.jobId, sequence: lastSeq, delta: buf }, transient: true }).catch(() => {})
+          await writer
+            .custom({
+              type: 'data-worker-run',
+              data: { type: 'delta', jobId: event.jobId, sequence: lastSeq, delta: buf },
+              transient: true,
+            })
+            .catch(() => {})
           buf = ''
         }
-        await writer.custom({ type: 'data-worker-run', data: event, transient: false }).catch(() => {})
+        await writer
+          .custom({ type: 'data-worker-run', data: event, transient: false })
+          .catch(() => {})
       }
     })
 
@@ -529,7 +569,11 @@ describe('Spec §8.2.4 — Writer calls awaited; missing/misbehaving writer', ()
     const events = await promise
     assert.equal(events.length, 3)
     assert.equal(events[2]!.type, 'completed')
-    assert.equal(subscriptionRegistered, false, 'bridge should not subscribe when writer is missing')
+    assert.equal(
+      subscriptionRegistered,
+      false,
+      'bridge should not subscribe when writer is missing',
+    )
   })
 
   it('simulated bridge: writer returns rejected promise — events still collected', async () => {
@@ -640,7 +684,13 @@ describe('Spec §8.2.5 — Tool abort cancels Job and emits terminal cancelled',
     emitter.emit(makeCancelled('job_timeout'))
 
     // finish() might also emit (but should be blocked by terminal dedup)
-    emitter.emit({ type: 'failed', jobId: 'job_timeout', output: undefined, error: 'timeout', truncated: false })
+    emitter.emit({
+      type: 'failed',
+      jobId: 'job_timeout',
+      output: undefined,
+      error: 'timeout',
+      truncated: false,
+    })
 
     const terminals = received.filter(
       (e) => e.type === 'completed' || e.type === 'failed' || e.type === 'cancelled',
@@ -662,13 +712,13 @@ describe('Spec §8.2.5 — Tool abort cancels Job and emits terminal cancelled',
 
     assert.equal(received.length, 3)
 
-    // After eviction, re-emitting should not reach any handler
-    // (subscribers auto-cleaned on terminal)
+    // After terminal, late subscribe replays journal; further emits stay suppressed
     const later: WorkerRunEvent[] = []
     const unsub = emitter.subscribe('job_evict', collectHandler(later))
-    // Job is already terminal → subscribe returns no-op
+    assert.equal(later.length, 3, 'late subscribe replays journal')
+    assert.equal(later[2]!.type, 'cancelled')
     emitter.emit(makeStarted({ jobId: 'job_evict' }))
-    assert.equal(later.length, 0)
+    assert.equal(later.length, 3, 'new events still suppressed while terminal')
     unsub()
   })
 
@@ -731,17 +781,18 @@ describe('Spec §8.2.6 — wait=false does NOT register Chat writer subscription
     emitter.emit(makeDelta(1, 'background work', jobId))
     emitter.emit(makeCompleted({ jobId, output: 'result' }))
 
-    // Collector can still pick them up independently (e.g. Jobs panel)
+    // Late collector/subscribe must still receive journal (Jobs panel / wait=true race fix)
     const collector = new EventCollector(jobId, emitter)
-    // Simulate starting collector after events were emitted — it wouldn't get past ones
     collector.start()
+    assert.ok(collector.getEvents().some((e) => e.type === 'completed'))
 
-    // Since collector is started late, it won't have the events unless re-emitted
-    // But the point is: the Chat writer subscription wasn't registered
+    // Chat writer was never registered for wait=false; journal replay is independent
     const received: WorkerRunEvent[] = []
-    // Subscribe fresh → job is already terminal, no-op
     const unsub = emitter.subscribe(jobId, collectHandler(received))
-    assert.equal(received.length, 0)
+    assert.ok(
+      received.some((e) => e.type === 'completed'),
+      'late subscribe replays terminal',
+    )
     unsub()
   })
 
@@ -789,54 +840,29 @@ describe('Spec §8.2.7 — Tool uses request context Router Session', () => {
     emitter = new WorkerEventEmitter()
   })
 
-  it('context with routerSessionId takes priority over fallback (store.getActive)', () => {
-    // dispatchWorkerTool.execute reads:
-    //   const routerSessionId = ctx?.routerSessionId
-    // If present, uses those fields; if absent, falls back to store.getActive()
-    let usedActiveSession = false
-    let resolvedSessionId: string | undefined
+  it('reads the Router identity tuple from trusted RequestContext', () => {
+    const values = new Map<string, string>([
+      ['routerSessionId', 'sess-context-123'],
+      ['routerProjectId', 'proj-1'],
+      ['routerProjectRoot', '/tmp/test'],
+      ['memoryThreadId', 'thread-1'],
+    ])
 
-    const ctx = {
-      routerSessionId: 'sess-context-123',
-      routerProjectId: 'proj-1',
-      routerProjectRoot: '/tmp/test',
-      memoryThreadId: 'thread-1',
-    }
+    const resolved = resolveDispatchContext({
+      requestContext: { get: (key) => values.get(key) },
+      agent: { threadId: 'thread-1' },
+    })
 
-    const hasContextFields = Boolean(
-      ctx.routerSessionId || ctx.routerProjectId || ctx.routerProjectRoot || ctx.memoryThreadId,
-    )
-
-    if (hasContextFields) {
-      resolvedSessionId = ctx.routerSessionId
-    } else {
-      usedActiveSession = true
-      // would call store.getActive().session.id
-    }
-
-    assert.equal(usedActiveSession, false, 'should NOT fall back to active session')
-    assert.equal(resolvedSessionId, 'sess-context-123')
+    assert.equal(resolved.routerSessionId, 'sess-context-123')
+    assert.equal(resolved.routerProjectId, 'proj-1')
+    assert.equal(resolved.memoryThreadId, 'thread-1')
   })
 
-  it('context without router fields falls back to active session', () => {
-    // When RequestContext fields are missing (e.g. legacy code path),
-    // the tool falls back to store.getActive()
-    let usedActiveSession = false
-    let warned = false
-
-    const ctx: Record<string, unknown> = {} // No router fields
-
-    const hasContextFields = Boolean(
-      ctx['routerSessionId'] || ctx['routerProjectId'] || ctx['routerProjectRoot'] || ctx['memoryThreadId'],
+  it('fails closed instead of falling back to a mutable active session', () => {
+    assert.throws(
+      () => resolveDispatchContext({ requestContext: { get: () => undefined } }),
+      /ROUTER_SESSION_BINDING_REQUIRED/,
     )
-
-    if (!hasContextFields) {
-      warned = true
-      usedActiveSession = true
-    }
-
-    assert.equal(warned, true, 'should log a warning when context fields are missing')
-    assert.equal(usedActiveSession, true, 'should fall back to store.getActive')
   })
 
   it('context session isolates from global active session — different session IDs do not conflict', () => {
@@ -862,19 +888,20 @@ describe('Spec §8.2.7 — Tool uses request context Router Session', () => {
     // A's terminal being reached doesn't prevent B from receiving events
   })
 
-  it('context routerSessionId is NOT the same as Mastra activeSession for isolation', () => {
-    // The router session ID is the product-level session, distinct from
-    // whatever store.getActive().session.id might return.
-    // This test verifies the pattern that the tool prioritizes the
-    // request-context session ID.
-    const routerSessionFromContext = 'product-session-uuid'
-    // Simulating: the active session could be different
-    const mastraActiveSessionId = 'mastra-internal-session'
-
-    // The tool MUST use routerSessionFromContext, NOT mastraActiveSessionId
-    const isolated = routerSessionFromContext
-    assert.notEqual(isolated, mastraActiveSessionId)
-    assert.equal(isolated, 'product-session-uuid')
+  it('rejects Mastra agent metadata from a different memory thread', () => {
+    const values = new Map<string, string>([
+      ['routerSessionId', 'product-session-uuid'],
+      ['routerProjectId', 'proj-1'],
+      ['memoryThreadId', 'thread-product'],
+    ])
+    assert.throws(
+      () =>
+        resolveDispatchContext({
+          requestContext: { get: (key) => values.get(key) },
+          agent: { threadId: 'thread-other' },
+        }),
+      /Thread mismatch/,
+    )
   })
 })
 

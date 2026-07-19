@@ -143,13 +143,20 @@ describe('appendLeaderStepBudgetPart', () => {
 
     assert.ok(Array.isArray(updated.parts))
     assert.equal((updated.parts as unknown[]).length, 1)
-    assert.equal(((updated.parts as unknown[])[0] as Record<string, unknown>).type, LEADER_STEP_BUDGET_PART_TYPE)
+    assert.equal(
+      ((updated.parts as unknown[])[0] as Record<string, unknown>).type,
+      LEADER_STEP_BUDGET_PART_TYPE,
+    )
   })
 
   it('appends budget part to message with existing parts, preserving originals', () => {
     const event = makeEvent()
     const existingPart = { type: 'text' as const, text: 'hello' }
-    const message: Record<string, unknown> = { role: 'assistant', id: 'msg-2', parts: [existingPart] }
+    const message: Record<string, unknown> = {
+      role: 'assistant',
+      id: 'msg-2',
+      parts: [existingPart],
+    }
     const updated = appendLeaderStepBudgetPart(message, event)
 
     const parts = updated.parts as unknown[]
@@ -215,7 +222,12 @@ describe('appendLeaderStepBudgetPart', () => {
 
   it('preserves other message fields unchanged', () => {
     const event = makeEvent()
-    const message: Record<string, unknown> = { role: 'assistant', id: 'msg-8', createdAt: new Date('2025-01-01'), threadId: 't1' }
+    const message: Record<string, unknown> = {
+      role: 'assistant',
+      id: 'msg-8',
+      createdAt: new Date('2025-01-01'),
+      threadId: 't1',
+    }
     const updated = appendLeaderStepBudgetPart(message, event)
 
     assert.equal(updated.id, 'msg-8')
@@ -230,9 +242,14 @@ describe('durable budget marker message', () => {
     assert.equal(typeof createMarker, 'function')
     const event = makeEvent({ runId: 'run-concurrent' })
     const createdAt = new Date('2026-07-14T00:00:00.000Z')
-    const message = (createMarker as (
-      input: { threadId: string; resourceId: string; event: LeaderStepBudgetEvent; createdAt: Date },
-    ) => Record<string, unknown>)({
+    const message = (
+      createMarker as (input: {
+        threadId: string
+        resourceId: string
+        event: LeaderStepBudgetEvent
+        createdAt: Date
+      }) => Record<string, unknown>
+    )({
       threadId: 'thread-1',
       resourceId: 'resource-1',
       event,
