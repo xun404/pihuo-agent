@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-electron
+dist-runtime
+release
+coverage
+package-lock.json
+*.min.js
+packages/mastra-app/.mastra
+packages/adapters/src/bundled
+apps/desktop/dist-runtime
+**/*.map

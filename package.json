@@ -1,8 +1,9 @@
 {
   "name": "router-agents",
   "private": true,
+  "type": "module",
   "version": "0.1.0",
-  "description": "Mastra Leader coordinating CLI coding agents (Claude Code, Codex, OpenCode) — macOS desktop command center",
+  "description": "Desktop multi-agent command center powered by Mastra and ACP",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -14,16 +15,60 @@
     "dev:mastra": "npm run dev:api -w @router-agents/mastra-app",
     "dev:mastra:studio": "npm run dev -w @router-agents/mastra-app",
     "dev:all": "npm run desktop",
-    "test": "npm run test -w @router-agents/core && npm run test -w @router-agents/adapters",
+    "test": "node --import tsx --test \"packages/**/*.test.ts\" \"apps/**/*.test.ts\" \"apps/**/*.test.tsx\" \"scripts/**/*.test.ts\"",
     "build": "npm run build -w @router-agents/shared && npm run build -w @router-agents/core && npm run build -w @router-agents/adapters && npm run build -w @router-agents/mastra-app && npm run build -w @router-agents/desktop",
+    "build:runtime": "node apps/desktop/scripts/build-api-runtime.mjs",
+    "verify:runtime": "node apps/desktop/scripts/verify-api-runtime.mjs",
+    "package:prepare": "npm run build && npm run build:runtime && npm run verify:runtime",
+    "package:dir": "npm run package:prepare && electron-builder --dir --publish never",
+    "package:mac": "npm run package:prepare && electron-builder --mac --arm64 --publish never",
+    "package:win": "npm run package:prepare && electron-builder --win --x64 --publish never",
+    "package:linux": "npm run package:prepare && electron-builder --linux --x64 --publish never",
+    "smoke:packaged": "node apps/desktop/scripts/run-packaged-smoke.mjs",
+    "test:release-contract": "node --import tsx --test scripts/release-contract.test.ts scripts/workflow-contract.test.ts",
+    "verify:release-tag": "node scripts/verify-release-tag.mjs",
+    "verify:release-assets": "node scripts/verify-release-assets.mjs",
+    "verify:workflows": "node scripts/validate-workflows.mjs",
+    "sync:acp-registry": "npm run sync:acp-registry -w @router-agents/mastra-app --",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "gui": "open design/gui/index.html"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "rm -rf dist-electron release apps/desktop/dist apps/desktop/dist-electron apps/desktop/dist-runtime packages/shared/dist packages/mastra-app/dist packages/mastra-app/.mastra",
+    "test:acp-registry-contract": "node --import tsx --test scripts/acp-registry-contract.test.ts",
+    "smoke:acp-registry": "node scripts/acp-registry-smoke.mjs"
   },
   "engines": {
     "node": ">=22.13.0"
   },
+  "author": {
+    "name": "xun404",
+    "email": "xun404@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/xun404/router-agents#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xun404/router-agents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xun404/router-agents/issues"
+  },
   "license": "MIT",
   "devDependencies": {
-    "electron": "^36.3.1"
+    "@eslint/js": "^10.0.1",
+    "electron": "^43.1.1",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.1",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.5",
+    "typescript-eslint": "^8.64.0",
+    "yaml": "2.9.0"
+  },
+  "overrides": {
+    "@electron/get": "5.0.0"
   }
 }
