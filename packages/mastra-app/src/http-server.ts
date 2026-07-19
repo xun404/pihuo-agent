@@ -12,6 +12,10 @@ import {
   getWorkerModelCatalogStore,
   getGitStatus,
   listProjectFiles,
+  listLocalBranches,
+  switchBranch,
+  createBranchAndSwitch,
+  commitAndSwitch,
   getSharedStore,
   globalActivityLog,
   applySecretsToEnv,
@@ -1184,6 +1188,79 @@ const server = createServer(async (req, res) => {
         }
         const git = await getGitStatus(project.rootPath)
         send(res, 200, git)
+        return
+      }
+
+      // —— Git branches (list / switch / create / commit-and-switch) ——
+      const branchesListMatch = match(path, '/api/projects/:id/branches')
+      if (method === 'GET' && branchesListMatch) {
+        const project = store.listProjects().find((p) => p.id === branchesListMatch.id)
+        if (!project) {
+          send(res, 404, { error: 'project not found' })
+          return
+        }
+        const result = await listLocalBranches(project.rootPath)
+        send(res, 200, result)
+        return
+      }
+
+      const branchesSwitchMatch = match(path, '/api/projects/:id/branches/switch')
+      if (method === 'POST' && branchesSwitchMatch) {
+        const project = store.listProjects().find((p) => p.id === branchesSwitchMatch.id)
+        if (!project) {
+          send(res, 404, { error: 'project not found' })
+          return
+        }
+        const body = (await readJson(req)) as { targetBranchName?: string }
+        const target = String(body?.targetBranchName ?? '').trim()
+        if (!target) {
+          send(res, 400, { error: 'targetBranchName required' })
+          return
+        }
+        const result = await switchBranch(project.rootPath, target)
+        send(res, 200, result)
+        return
+      }
+
+      const branchesCreateMatch = match(path, '/api/projects/:id/branches/create')
+      if (method === 'POST' && branchesCreateMatch) {
+        const project = store.listProjects().find((p) => p.id === branchesCreateMatch.id)
+        if (!project) {
+          send(res, 404, { error: 'project not found' })
+          return
+        }
+        const body = (await readJson(req)) as { branchName?: string; startPoint?: string }
+        const name = String(body?.branchName ?? '').trim()
+        if (!name) {
+          send(res, 400, { error: 'branchName required' })
+          return
+        }
+        const startPoint = body?.startPoint ? String(body.startPoint).trim() : undefined
+        const result = await createBranchAndSwitch(project.rootPath, name, startPoint)
+        send(res, 200, result)
+        return
+      }
+
+      const branchesCommitMatch = match(path, '/api/projects/:id/branches/commit-and-switch')
+      if (method === 'POST' && branchesCommitMatch) {
+        const project = store.listProjects().find((p) => p.id === branchesCommitMatch.id)
+        if (!project) {
+          send(res, 404, { error: 'project not found' })
+          return
+        }
+        const body = (await readJson(req)) as { targetBranchName?: string; message?: string }
+        const target = String(body?.targetBranchName ?? '').trim()
+        const message = String(body?.message ?? '').trim()
+        if (!target) {
+          send(res, 400, { error: 'targetBranchName required' })
+          return
+        }
+        if (!message) {
+          send(res, 400, { error: 'message required' })
+          return
+        }
+        const result = await commitAndSwitch(project.rootPath, target, message)
+        send(res, 200, result)
         return
       }
 
