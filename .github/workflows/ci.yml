@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Test, typecheck, and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run verify:workflows
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+
+  package:
+    name: Package ${{ matrix.artifact }}
+    needs: quality
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            artifact: desktop-macos-arm64
+            builderArgs: --mac --arm64
+          - os: windows-2025
+            artifact: desktop-windows-x64
+            builderArgs: --win --x64
+          - os: ubuntu-24.04
+            artifact: desktop-linux-x64
+            builderArgs: --linux --x64
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb libopenjp2-tools
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:runtime
+      - run: npm run verify:runtime
+      - run: npx electron-builder --dir ${{ matrix.builderArgs }} --publish never
+      - run: npm run smoke:packaged
+      - run: npx electron-builder ${{ matrix.builderArgs }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/Router-Agents-*
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 7
