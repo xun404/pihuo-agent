@@ -56,6 +56,19 @@ export {
   type GitStatusResult,
 } from './git-status.js'
 export {
+  parseBranchForEachRef,
+  classifySwitchError,
+  listLocalBranches,
+  switchBranch,
+  createBranchAndSwitch,
+  commitAndSwitch,
+  type BranchInfo,
+  type BranchListResult,
+  type BranchSwitchIssue,
+  type BranchSwitchIssueCode,
+  type BranchSwitchResult,
+} from './git-branches.js'
+export {
   listProjectFiles,
   type FileEntry,
   type ListProjectFilesResult,
