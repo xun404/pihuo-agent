@@ -11,7 +11,7 @@
  */
 import { memo, type ReactNode, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { UIMessage } from '@ai-sdk/react'
-import type { WorkerRunEvent, WorkerRunState, ApprovalItem } from '@router-agents/shared'
+import type { WorkerRunEvent, WorkerRunState, ApprovalItem } from '@swarmdesk-agent/shared'
 import { MarkdownContent } from './MarkdownContent'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'

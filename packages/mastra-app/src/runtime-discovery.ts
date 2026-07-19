@@ -12,7 +12,7 @@ import {
 } from 'node:fs'
 import { dirname } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { defaultRuntimeDiscoveryPath as coreDefaultRuntimePath } from '@router-agents/core'
+import { defaultRuntimeDiscoveryPath as coreDefaultRuntimePath } from '@swarmdesk-agent/core'
 
 /**
  * version 3: split every caller surface into a distinct capability token.
@@ -53,7 +53,7 @@ export class RuntimeDiscoveryError extends Error {
 }
 
 export function defaultRuntimeDiscoveryPath(): string {
-  // Explicit ROUTER_RUNTIME_PATH / ROUTER_DATA_DIR > <root>/data/runtime.json
+  // Explicit SWARMDESK_AGENT_RUNTIME_PATH / SWARMDESK_AGENT_DATA_DIR > <root>/data/runtime.json
   return coreDefaultRuntimePath()
 }
 

@@ -286,7 +286,7 @@ export class AcpSessionDriver {
       protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: AcpSessionDriver.buildClientCapabilities(opts),
       clientInfo: {
-        name: opts.clientName ?? 'router-agents',
+        name: opts.clientName ?? 'swarmdesk-agent',
         version: opts.clientVersion ?? '0.1.0',
       },
     })

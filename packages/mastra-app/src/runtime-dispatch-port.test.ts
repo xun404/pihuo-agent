@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { LocalStore } from '@router-agents/core'
-import type { WorkerJob, WorkerRunEvent } from '@router-agents/shared'
-import { isTerminalWorkerEvent } from '@router-agents/shared'
+import { LocalStore } from '@swarmdesk-agent/core'
+import type { WorkerJob, WorkerRunEvent } from '@swarmdesk-agent/shared'
+import { isTerminalWorkerEvent } from '@swarmdesk-agent/shared'
 import {
   createLocalRuntimeDispatchPort,
   validateRuntimeApprovalResolveInput,
@@ -322,7 +322,7 @@ describe('LocalRuntimeDispatchPort contract', () => {
         const msg = err instanceof Error ? err.message : String(err)
         assert.ok(!msg.includes(secretToken), `token leaked in: ${msg}`)
         assert.ok(
-          msg.includes('ROUTER_RUNTIME_UNAVAILABLE') || msg.includes('unavailable'),
+          msg.includes('SWARMDESK_AGENT_RUNTIME_UNAVAILABLE') || msg.includes('unavailable'),
           `expected public error, got: ${msg}`,
         )
         return true

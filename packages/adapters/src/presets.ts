@@ -1,4 +1,4 @@
-import type { WorkerKind, WorkerRegistration } from '@router-agents/shared'
+import type { WorkerKind, WorkerRegistration } from '@swarmdesk-agent/shared'
 
 /** Built-in ACP worker presets (command may need local install). */
 export const WORKER_PRESETS: Record<

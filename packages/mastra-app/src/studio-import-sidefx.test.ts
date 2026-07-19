@@ -24,7 +24,7 @@ const studioEntry = join(packageRoot, 'src/mastra/index.ts')
 describe('Studio entry static import side effects', () => {
   it('client-only import does not create state.json or catalog lease', () => {
     const dir = mkdtempSync(join(tmpdir(), 'studio-sidefx-'))
-    // ROUTER_DATA_DIR pins the app root; the data layer lives under <root>/data.
+    // SWARMDESK_AGENT_DATA_DIR pins the app root; the data layer lives under <root>/data.
     const dataLayer = join(dir, 'data')
     mkdirSync(dataLayer, { recursive: true })
     const statePath = join(dataLayer, 'state.json')
@@ -48,8 +48,8 @@ describe('Studio entry static import side effects', () => {
     const script = `
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-const dataDir = process.env.ROUTER_DATA_DIR
-const statePath = process.env.ROUTER_AGENTS_STATE
+const dataDir = process.env.SWARMDESK_AGENT_DATA_DIR
+const statePath = process.env.SWARMDESK_AGENT_AGENTS_STATE
 try {
   await import(${JSON.stringify(studioEntry)})
 } catch (e) {
@@ -58,8 +58,8 @@ try {
 }
 const out = {
   stateExists: existsSync(statePath),
-  clientOnly: process.env.ROUTER_CLIENT_ONLY,
-  role: process.env.ROUTER_RUNTIME_ROLE,
+  clientOnly: process.env.SWARMDESK_AGENT_CLIENT_ONLY,
+  role: process.env.SWARMDESK_AGENT_RUNTIME_ROLE,
   dataEntries: existsSync(dataDir) ? readdirSync(dataDir) : [],
 }
 console.log('SIDEFX_JSON:' + JSON.stringify(out))
@@ -72,10 +72,10 @@ console.log('SIDEFX_JSON:' + JSON.stringify(out))
       env: {
         ...process.env,
         HOME: dir,
-        ROUTER_DATA_DIR: dir,
-        ROUTER_AGENTS_STATE: statePath,
+        SWARMDESK_AGENT_DATA_DIR: dir,
+        SWARMDESK_AGENT_AGENTS_STATE: statePath,
         ACP_CATALOG_PATH: catalogPath,
-        ROUTER_RUNTIME_ROLE: 'client-only',
+        SWARMDESK_AGENT_RUNTIME_ROLE: 'client-only',
       },
       encoding: 'utf8',
       timeout: 60_000,

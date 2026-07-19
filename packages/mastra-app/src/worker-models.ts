@@ -10,13 +10,13 @@ import {
   type ListAcpModelsResult,
   type ProviderEvidence,
   type ResolvedPinState,
-} from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
 import {
   getSharedStore,
   getWorkerModelCatalogStore,
   type LocalStore,
   type WorkerModelCatalogStore,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import type {
   ModelCatalogState,
   WorkerModelCatalog,
@@ -24,12 +24,12 @@ import type {
   WorkerRegistration,
   ProviderEvidenceState,
   WorkerModelPinState,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import {
   isModelCacheFresh,
   workerModelCatalogStorageKey,
   WORKER_MODELS_TTL_MS,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import { createHash } from 'node:crypto'
 import { existsSync, realpathSync } from 'node:fs'
 import { resolve as pathResolve } from 'node:path'

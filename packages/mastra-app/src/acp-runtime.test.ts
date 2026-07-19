@@ -111,7 +111,7 @@ describe('ACP runtime bootstrap', () => {
 
   it('owner role throws when lease is already held', async () => {
     const runtimeModule = await import('./acp-runtime.js')
-    const { acquireOwnerLease } = await import('@router-agents/core')
+    const { acquireOwnerLease } = await import('@swarmdesk-agent/core')
     const dir = mkdtempSync(join(tmpdir(), 'acp-runtime-owner-fail-'))
     const catalogPath = join(dir, 'sessions.json')
     const held = acquireOwnerLease(catalogPath, {
@@ -151,7 +151,7 @@ describe('ACP runtime bootstrap', () => {
 
   it('enters remote-client mode when owner lease is held', async () => {
     const runtimeModule = await import('./acp-runtime.js')
-    const { acquireOwnerLease } = await import('@router-agents/core')
+    const { acquireOwnerLease } = await import('@swarmdesk-agent/core')
     const dir = mkdtempSync(join(tmpdir(), 'acp-runtime-lease-'))
     const catalogPath = join(dir, 'sessions.json')
     const held = acquireOwnerLease(catalogPath, {

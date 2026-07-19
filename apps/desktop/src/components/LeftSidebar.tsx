@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { Project, Session } from '@router-agents/shared'
-import { isPlaceholderSessionTitle } from '@router-agents/shared'
+import type { Project, Session } from '@swarmdesk-agent/shared'
+import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
 import { IconFolder, IconOpen, IconPlus, IconSettings } from './Icons'

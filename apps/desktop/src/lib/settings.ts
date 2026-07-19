@@ -1,5 +1,5 @@
 import { api, clearDesktopToken, ensureDesktopToken } from './api'
-import type { AppSnapshot } from '@router-agents/shared'
+import type { AppSnapshot } from '@swarmdesk-agent/shared'
 
 export type ApiStyle = 'openai' | 'anthropic' | 'google' | 'custom'
 

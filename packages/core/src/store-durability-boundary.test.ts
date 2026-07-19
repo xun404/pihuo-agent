@@ -12,7 +12,7 @@ import {
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { LocalStore, WorkerStoreConflictError } from './store.js'
-import type { WorkerRegistration } from '@router-agents/shared'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 
 describe('LocalStore durability and ownership boundary', () => {
   let dir: string

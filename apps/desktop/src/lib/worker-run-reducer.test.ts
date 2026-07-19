@@ -13,7 +13,7 @@ import type {
   ApprovalItem,
   WorkerJob,
   WorkerRegistration,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 function makeStarted(
   overrides: Partial<WorkerRunEvent & { type: 'started' }> = {},

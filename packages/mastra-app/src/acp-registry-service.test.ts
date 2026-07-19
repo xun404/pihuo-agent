@@ -7,18 +7,18 @@ import { refreshRegistryCatalog, resolveLocalRegistryCatalog } from './acp-regis
 
 describe('acp-registry-service', () => {
   let dir: string
-  const prevData = process.env.ROUTER_DATA_DIR
+  const prevData = process.env.SWARMDESK_AGENT_DATA_DIR
   const prevCat = process.env.ACP_REGISTRY_CATALOG_PATH
 
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'acp-reg-svc-'))
-    process.env.ROUTER_DATA_DIR = dir
+    process.env.SWARMDESK_AGENT_DATA_DIR = dir
     process.env.ACP_REGISTRY_CATALOG_PATH = join(dir, 'acp-registry.json')
   })
 
   after(() => {
-    if (prevData === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = prevData
+    if (prevData === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = prevData
     if (prevCat === undefined) delete process.env.ACP_REGISTRY_CATALOG_PATH
     else process.env.ACP_REGISTRY_CATALOG_PATH = prevCat
     rmSync(dir, { recursive: true, force: true })

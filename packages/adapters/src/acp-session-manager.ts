@@ -4,7 +4,7 @@ import { realpathSync, rmSync } from 'node:fs'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { Writable, Readable } from 'node:stream'
 import { type SessionConfigOption, type AgentCapabilities } from '@agentclientprotocol/sdk'
-import type { WorkerKind, WorkerModelOption } from '@router-agents/shared'
+import type { WorkerKind, WorkerModelOption } from '@swarmdesk-agent/shared'
 import { extractModelOptions } from './acp-model-options.js'
 import { prepareOpenCodeAcpEnv, OPENCODE_ZEN_FREE_MODELS } from './opencode-acp-env.js'
 import { buildProviderEvidenceMap } from './model-eligibility.js'
@@ -412,7 +412,7 @@ export interface AcpSessionManagerConfig {
   poolMax?: number
   cancelGraceMs?: number
   onActivity?: (event: string, meta?: Record<string, unknown>) => void
-  /** Stable fingerprint provider (injected, typically from @router-agents/core). */
+  /** Stable fingerprint provider (injected, typically from @swarmdesk-agent/core). */
   fingerprintFn?: AcpFingerprintFn
   /** Session catalog port for cross-process session tracking (injected). */
   catalogPort?: AcpSessionCatalogPort

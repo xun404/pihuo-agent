@@ -1,4 +1,4 @@
-import type { WorkerModelOption } from '@router-agents/shared'
+import type { WorkerModelOption } from '@swarmdesk-agent/shared'
 
 export type ProviderEvidence = 'free' | 'authenticated' | 'disabled' | 'unknown'
 export type EligibilityPurpose = 'shortlist' | 'search' | 'pin' | 'execute'

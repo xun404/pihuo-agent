@@ -1,23 +1,23 @@
 # ACP codegen 与当前实现对比分析
 
 > 日期：2026-07-17  
-> 范围：Router Agents 当前 ACP 实现、Synara `effect-acp` codegen 与官方 ACP TypeScript SDK。  
+> 范围：SwarmDesk 当前 ACP 实现、Synara `effect-acp` codegen 与官方 ACP TypeScript SDK。  
 > 性质：仅分析，不包含实现变更。
 
 ## 1. 结论摘要
 
-当前 Router Agents 不建议用 Synara 的自建 codegen 替换现有 ACP 实现。
+当前 SwarmDesk 不建议用 Synara 的自建 codegen 替换现有 ACP 实现。
 
-最关键的事实是：Router Agents 当前并不是“手写 ACP 协议”。项目直接使用官方 `@agentclientprotocol/sdk@1.2.1`；这个 SDK 本身已经从官方 JSON Schema 生成 TypeScript 类型、方法常量、Zod 校验器和 extensible-union guards。
+最关键的事实是：SwarmDesk 当前并不是“手写 ACP 协议”。项目直接使用官方 `@agentclientprotocol/sdk@1.2.1`；这个 SDK 本身已经从官方 JSON Schema 生成 TypeScript 类型、方法常量、Zod 校验器和 extensible-union guards。
 
 因此真正需要比较的不是“手写协议 vs codegen”，而是：
 
 1. **上游 codegen**：消费官方维护的生成结果和 ACP 专用运行时；
 2. **下游自建 codegen**：自己固定官方 schema，生成本项目使用的运行时 Schema，并维护 RPC/transport 适配层。
 
-Synara 的主要增益是 schema 版本控制、Effect 原生运行时 codec，以及自定义协议观测和兼容处理；它解决的不是 Router Agents 当前并不存在的“手写 ACP 类型漂移”。
+Synara 的主要增益是 schema 版本控制、Effect 原生运行时 codec，以及自定义协议观测和兼容处理；它解决的不是 SwarmDesk 当前并不存在的“手写 ACP 类型漂移”。
 
-对 Router Agents 更合适的方向是保留官方 SDK，同时补充关键返回值校验、依赖升级契约测试和应用领域防腐层。
+对 SwarmDesk 更合适的方向是保留官方 SDK，同时补充关键返回值校验、依赖升级契约测试和应用领域防腐层。
 
 ## 2. 两条实现链路
 
@@ -68,11 +68,11 @@ flowchart LR
 
 当前项目手写的 `AcpPermissionRequest`、`NormalizedStopReason`、`PromptResult` 等不是对官方协议类型的复制，而是应用领域模型。它们承担协议到产品语义的防腐和收敛，应当继续由应用维护。
 
-例如 `mapPermissionRequest` 在 SDK 已解析协议形状后，进一步强制 approval options 非空、ID 唯一、kind 合法。这属于 Router Agents 的业务安全规则，不应交给协议 codegen。
+例如 `mapPermissionRequest` 在 SDK 已解析协议形状后，进一步强制 approval options 非空、ID 唯一、kind 合法。这属于 SwarmDesk 的业务安全规则，不应交给协议 codegen。
 
 ## 4. 核心差异
 
-| 维度 | Router Agents 当前方案 | Synara codegen 方案 |
+| 维度 | SwarmDesk 当前方案 | Synara codegen 方案 |
 |---|---|---|
 | 协议真相源 | 官方 npm SDK | 固定的官方 schema release |
 | 谁维护生成器 | ACP 官方项目 | Synara 自己维护 |
@@ -114,7 +114,7 @@ pendingResponse.resolve(response.result)
 
 除少数空对象归一化或 handle 包装外，没有针对每个方法的 response Zod parse。
 
-这意味着 Router Agents 作为 ACP client 时，以下返回值主要依赖 TypeScript 静态类型和少量应用层检查：
+这意味着 SwarmDesk 作为 ACP client 时，以下返回值主要依赖 TypeScript 静态类型和少量应用层检查：
 
 - `InitializeResponse`；
 - `NewSessionResponse`；
@@ -192,13 +192,13 @@ Synara 把 ACP 映射到通用 Effect RPC，因此需要在 `protocol.ts` 做额
 - 优点：Synara 获得了统一 Effect 生命周期、错误通道、日志和扩展机制；
 - 成本：必须持续维护 ACP 与通用 RPC 框架之间的阻抗层。
 
-如果 Router Agents 不准备整体迁移到 Effect RPC，这部分复杂度没有足够回报。
+如果 SwarmDesk 不准备整体迁移到 Effect RPC，这部分复杂度没有足够回报。
 
 ## 8. 当前版本快照
 
 截至 2026-07-17：
 
-- Router Agents 锁定的 `@agentclientprotocol/sdk@1.2.1` 是官方最新 TypeScript SDK；
+- SwarmDesk 锁定的 `@agentclientprotocol/sdk@1.2.1` 是官方最新 TypeScript SDK；
 - 官方协议仓库最新 schema artifact 是 `schema-v1.19.0`；
 - Synara 当前固定 `v0.11.3`；
 - 官方稳定 wire protocol version 仍为 `1`。
@@ -302,7 +302,7 @@ CI 记录并检查：
 @agentclientprotocol/sdk/schema/schema.json
 ```
 
-Router Agents 也已经依赖 Ajv。可以优先对以下返回值做针对性验证：
+SwarmDesk 也已经依赖 Ajv。可以优先对以下返回值做针对性验证：
 
 1. initialize；
 2. session new/resume/load；
@@ -333,7 +333,7 @@ Router Agents 也已经依赖 Ajv。可以优先对以下返回值做针对性�
 
 出现以下任一条件时，再评估自建生成层：
 
-- Router Agents 全面迁移 Effect Schema/RPC；
+- SwarmDesk 全面迁移 Effect Schema/RPC；
 - 需要 TypeScript 之外的跨语言统一契约；
 - 官方 SDK 长期缺少所需协议功能或兼容修复；
 - 必须对所有 request、response 和 notification 做统一运行时 codec；
@@ -344,9 +344,9 @@ Router Agents 也已经依赖 Ajv。可以优先对以下返回值做针对性�
 
 ## 参考
 
-- Router Agents：`packages/adapters/package.json`
-- Router Agents：`packages/adapters/src/acp-session-driver.ts`
-- Router Agents：`packages/adapters/src/acp-session.ts`
+- SwarmDesk：`packages/adapters/package.json`
+- SwarmDesk：`packages/adapters/src/acp-session-driver.ts`
+- SwarmDesk：`packages/adapters/src/acp-session.ts`
 - Synara：`packages/effect-acp/scripts/generate.ts`
 - Synara：`packages/effect-acp/src/rpc.ts`
 - Synara：`packages/effect-acp/src/protocol.ts`

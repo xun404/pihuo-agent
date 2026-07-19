@@ -26,7 +26,7 @@
 
 ## 3. 非目标
 
-- 第一阶段不跨 Router Agents 服务重启恢复 ACP session。
+- 第一阶段不跨 SwarmDesk 服务重启恢复 ACP session。
 - 第一阶段不使用 ACP `session/load` 或 `session/resume` 做跨进程恢复。
 - `wait=false` 的后台 Job 不在 Leader Chat 中持续流式展示；它继续由 Jobs 面板承载。
 - 不把本机 ACP Agent CLI 重构成 Mastra 原生 subagent。
@@ -46,7 +46,7 @@ routerSessionId + workerId + canonicalCwd + executionFingerprint
 
 其中：
 
-- `routerSessionId` 是 Router Agents 的产品 Session ID，不是全局 active session。
+- `routerSessionId` 是 SwarmDesk 的产品 Session ID，不是全局 active session。
 - `workerId` 使用稳定注册 ID，不能只使用 `kind`。
 - `canonicalCwd` 是规范化后的真实工作目录。
 - `executionFingerprint` 由 command、args、model 和有效执行环境组成。

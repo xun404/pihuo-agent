@@ -9,17 +9,17 @@ import { createHash, randomBytes } from 'node:crypto'
 import { execFile as nodeExecFile } from 'node:child_process'
 import { basename } from 'node:path'
 import * as nodePty from 'node-pty'
-import type { AcpAgentInstallationRecord } from '@router-agents/core'
+import type { AcpAgentInstallationRecord } from '@swarmdesk-agent/core'
 import {
   findInstallationById,
   getSharedStore,
   loadWorkerSecretsSnapshotForSpawn,
   type WorkerSecretsSpawnSnapshot,
-} from '@router-agents/core'
-import { buildEffectiveWorkerEnv, type SanitizedAuthMethod } from '@router-agents/adapters'
-import type { WorkerRegistration } from '@router-agents/shared'
+} from '@swarmdesk-agent/core'
+import { buildEffectiveWorkerEnv, type SanitizedAuthMethod } from '@swarmdesk-agent/adapters'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 
-export const TERMINAL_AUTH_FEATURE_ENV = 'ROUTER_ACP_TERMINAL_AUTH'
+export const TERMINAL_AUTH_FEATURE_ENV = 'SWARMDESK_AGENT_ACP_TERMINAL_AUTH'
 export const TERMINAL_AUTH_TTL_MS = 2 * 60 * 1000
 export const TERMINAL_AUTH_MAX_OUTPUT_BYTES = 512 * 1024
 export const TERMINAL_AUTH_MAX_OUTPUT_BYTES_PER_SECOND = 128 * 1024

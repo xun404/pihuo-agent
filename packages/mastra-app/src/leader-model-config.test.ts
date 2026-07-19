@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { saveSettings } from '@router-agents/core'
+import { saveSettings } from '@swarmdesk-agent/core'
 
 describe('resolveLeaderModelConfig', () => {
   let dir: string
@@ -12,9 +12,9 @@ describe('resolveLeaderModelConfig', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'leader-model-'))
-    prevData = process.env.ROUTER_DATA_DIR
+    prevData = process.env.SWARMDESK_AGENT_DATA_DIR
     prevModel = process.env.LEADER_MODEL
-    process.env.ROUTER_DATA_DIR = dir
+    process.env.SWARMDESK_AGENT_DATA_DIR = dir
     process.env.LEADER_MODEL = 'openai/gpt-4o'
     process.env.CUSTOM_A_API_KEY = 'key-a'
     process.env.CUSTOM_B_API_KEY = 'key-b'
@@ -22,8 +22,8 @@ describe('resolveLeaderModelConfig', () => {
   })
 
   afterEach(() => {
-    if (prevData !== undefined) process.env.ROUTER_DATA_DIR = prevData
-    else delete process.env.ROUTER_DATA_DIR
+    if (prevData !== undefined) process.env.SWARMDESK_AGENT_DATA_DIR = prevData
+    else delete process.env.SWARMDESK_AGENT_DATA_DIR
     if (prevModel !== undefined) process.env.LEADER_MODEL = prevModel
     else delete process.env.LEADER_MODEL
     delete process.env.CUSTOM_A_API_KEY

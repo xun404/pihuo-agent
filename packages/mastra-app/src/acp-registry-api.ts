@@ -19,7 +19,7 @@ import {
   type AcpAgentInstallationRecord,
   type LocalStore,
   WorkerStoreConflictError,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import {
   AcpInstallError,
   buildEffectiveWorkerEnv,
@@ -31,12 +31,12 @@ import {
   type SanitizedAuthMethod,
   type SpawnedAcpLogoutResult,
   type SpawnedAcpSetupInput,
-} from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
 import {
   type WorkerRegistration,
   type WorkerReadiness,
   type AcpRegistryDistributionKind,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import {
   prepareRegistryWorker,
   registerRegistryWorker,

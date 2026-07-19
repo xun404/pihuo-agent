@@ -15,7 +15,7 @@ import type {
   AcpRegistryPackageDistribution,
   AcpRegistryTarget,
   WorkerLaunchSpec,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import {
   binaryDistributionToLaunchSpec,
   materializeCommandArgs,
@@ -35,7 +35,7 @@ import {
 
 export const ACP_REGISTRY_URL = ACP_REGISTRY_CDN.registryJson
 
-export type { AcpRegistryTarget, AcpRegistryDistributionKind } from '@router-agents/shared'
+export type { AcpRegistryTarget, AcpRegistryDistributionKind } from '@swarmdesk-agent/shared'
 
 /** @deprecated Prefer AcpRegistryAgentMetadata; kept for Settings combobox */
 export interface AcpRegistryWorkerOption {

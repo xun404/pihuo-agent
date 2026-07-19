@@ -137,9 +137,9 @@ describe('runtime discovery', () => {
       pid: 1,
       startedAt: '2026-07-15T12:00:00.000Z',
     })
-    const err = new RuntimeDiscoveryError('ROUTER_RUNTIME_UNAVAILABLE', 'runtime unavailable')
+    const err = new RuntimeDiscoveryError('SWARMDESK_AGENT_RUNTIME_UNAVAILABLE', 'runtime unavailable')
     assert.equal(err.message, 'runtime unavailable')
-    assert.equal(err.code, 'ROUTER_RUNTIME_UNAVAILABLE')
+    assert.equal(err.code, 'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE')
     assert.ok(!err.message.includes(written.token))
     assert.ok(!String(err).includes(written.token))
     // read of invalid path must not throw token-bearing errors

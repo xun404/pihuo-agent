@@ -12,7 +12,7 @@ import {
   isTerminalWorkerEvent,
   type WorkerRunEvent,
   type ApprovalItem,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 describe('worker job timeout normalization', () => {
   it('falls back for missing, non-finite, zero, and negative values', () => {

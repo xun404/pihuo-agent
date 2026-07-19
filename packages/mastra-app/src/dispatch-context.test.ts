@@ -52,16 +52,16 @@ describe('resolveDispatchContext', () => {
         resolveDispatchContext({
           requestContext: requestContext({ ...values, routerProjectId: undefined }),
         }),
-      /ROUTER_SESSION_BINDING_REQUIRED/,
+      /SWARMDESK_AGENT_SESSION_BINDING_REQUIRED/,
     )
   })
 
-  it('throws stable ROUTER_SESSION_BINDING_REQUIRED when unbound', () => {
+  it('throws stable SWARMDESK_AGENT_SESSION_BINDING_REQUIRED when unbound', () => {
     assert.throws(
       () => resolveDispatchContext({ requestContext: requestContext({}) }),
       (err: unknown) => {
         assert.ok(err instanceof Error)
-        assert.match(err.message, /ROUTER_SESSION_BINDING_REQUIRED/)
+        assert.match(err.message, /SWARMDESK_AGENT_SESSION_BINDING_REQUIRED/)
         return true
       },
     )

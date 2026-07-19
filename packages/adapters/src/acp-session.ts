@@ -10,7 +10,7 @@ import {
   type ActiveSession,
   type SessionConfigOption,
 } from '@agentclientprotocol/sdk'
-import type { ApprovalOption, ApprovalOptionKind } from '@router-agents/shared'
+import type { ApprovalOption, ApprovalOptionKind } from '@swarmdesk-agent/shared'
 import type { AcpSpawnConfig } from './acp-config.js'
 import { extractModelOptions, type ModelOptionsResult } from './acp-model-options.js'
 import { readContainedText, writeContainedText } from './acp-filesystem.js'
@@ -305,7 +305,7 @@ export async function withAcpSession<T>(
     const output = Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>
     const stream = ndJsonStream(input, output)
 
-    const app = client({ name: `router-agents-${config.spawn.workerId}` })
+    const app = client({ name: `swarmdesk-agent-${config.spawn.workerId}` })
       .onRequest(methods.client.session.requestPermission, async (ctx) => {
         if (!callbacks.onPermissionRequest) {
           return { outcome: { outcome: 'cancelled' as const } }

@@ -9,7 +9,7 @@ import type {
   SessionApprovalPolicy,
   WorkerRegistration,
   WorkerRole,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import type { WorkerRegistryCatalog } from './worker-registry'
 
 // Prefer 127.0.0.1 over localhost: on macOS, localhost often resolves to ::1,
@@ -172,7 +172,7 @@ async function request<T>(
   const tok = await ensureDesktopToken()
   if (tok) {
     headers.Authorization = `Bearer ${tok}`
-    headers['X-Router-Desktop-Token'] = tok
+    headers['X-SwarmDesk-Agent-Desktop-Token'] = tok
   }
   const res = await fetch(`${BASE}${path}`, {
     ...init,
@@ -234,7 +234,7 @@ export const api = {
     ),
   setSessionStatus: (
     id: string,
-    status: import('@router-agents/shared').Session['status'],
+    status: import('@swarmdesk-agent/shared').Session['status'],
     opts?: { lastChatError?: string | null },
   ) =>
     request<{ session: Session; snapshot: AppSnapshot }>(
@@ -762,35 +762,35 @@ export const api = {
     if (opts?.limit) q.set('limit', String(opts.limit))
     const qs = q.toString()
     return request<{
-      jobs: import('@router-agents/shared').WorkerJob[]
+      jobs: import('@swarmdesk-agent/shared').WorkerJob[]
       busyWorkerIds: string[]
     }>(`/api/jobs${qs ? `?${qs}` : ''}`)
   },
   createJob: (body: {
     task: string
-    role?: import('@router-agents/shared').WorkerRole
+    role?: import('@swarmdesk-agent/shared').WorkerRole
     workerIdOrKind?: string
     cwd?: string
     sessionId?: string
     wait?: boolean
   }) =>
     request<{
-      job: import('@router-agents/shared').WorkerJob
+      job: import('@swarmdesk-agent/shared').WorkerJob
       output?: string
       snapshot?: AppSnapshot
     }>('/api/jobs', { method: 'POST', body: JSON.stringify(body) }, false, 600_000),
   getJob: (id: string) =>
-    request<{ job: import('@router-agents/shared').WorkerJob }>(
+    request<{ job: import('@swarmdesk-agent/shared').WorkerJob }>(
       `/api/jobs/${encodePathSegment(id)}`,
     ),
   cancelJob: (id: string) =>
-    request<{ job: import('@router-agents/shared').WorkerJob; snapshot?: AppSnapshot }>(
+    request<{ job: import('@swarmdesk-agent/shared').WorkerJob; snapshot?: AppSnapshot }>(
       `/api/jobs/${encodePathSegment(id)}/cancel`,
       { method: 'POST' },
     ),
   retryJob: (id: string, wait?: boolean) =>
     request<{
-      job: import('@router-agents/shared').WorkerJob
+      job: import('@swarmdesk-agent/shared').WorkerJob
       output?: string
       snapshot?: AppSnapshot
     }>(
@@ -820,6 +820,6 @@ export const api = {
   },
 }
 
-export function chatUrl(agentId = 'router-leader'): string {
+export function chatUrl(agentId = 'swarmdesk-leader'): string {
   return `${BASE}/chat/${encodePathSegment(agentId)}`
 }

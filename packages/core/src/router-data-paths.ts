@@ -1,5 +1,5 @@
 /**
- * Single source of truth for Router Agents on-disk data locations.
+ * Single source of truth for SwarmDesk on-disk data locations.
  *
  * Layout (unified root with data/ and cache/ subdirs):
  *   <root>/                 ← config layer (settings.json, secrets.enc)
@@ -7,13 +7,13 @@
  *   <root>/cache/           ← cache layer (rebuildable caches)
  *
  * Root resolution (per-platform, XDG-style):
- *   - macOS / Linux: $XDG_CONFIG_HOME ?? $HOME/.config  →  /router-agents
- *   - Windows:       %APPDATA%                          →  /router-agents
+ *   - macOS / Linux: $XDG_CONFIG_HOME ?? $HOME/.config  →  /swarmdesk-agent
+ *   - Windows:       %APPDATA%                          →  /swarmdesk-agent
  *                   (%LOCALAPPDATA% used for the cache layer)
  *
  * Env overrides:
- *   - ROUTER_DATA_DIR / ROUTER_AGENTS_DIR → pin the entire <root>
- *   - Per-file overrides (ROUTER_AGENTS_STATE, ROUTER_RUNTIME_PATH,
+ *   - SWARMDESK_AGENT_DATA_DIR / SWARMDESK_AGENT_AGENTS_DIR → pin the entire <root>
+ *   - Per-file overrides (SWARMDESK_AGENT_AGENTS_STATE, SWARMDESK_AGENT_RUNTIME_PATH,
  *     ACP_CATALOG_PATH, MASTRA_MEMORY_URL, ACP_REGISTRY_CATALOG_PATH,
  *     ACP_AGENT_INSTALLATIONS_PATH) still win for individual files.
  */
@@ -22,7 +22,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 export interface RouterDataPaths {
-  /** Unified root (e.g. ~/.config/router-agents). Also the config layer. */
+  /** Unified root (e.g. ~/.config/swarmdesk-agent). Also the config layer. */
   rootDir: string
   /** Config layer (settings/secrets) — equals rootDir. */
   configDir: string
@@ -81,20 +81,20 @@ function resolveCacheBase(): string {
 
 /**
  * Resolve the unified root directory.
- * - ROUTER_DATA_DIR / ROUTER_AGENTS_DIR pin the entire root
+ * - SWARMDESK_AGENT_DATA_DIR / SWARMDESK_AGENT_AGENTS_DIR pin the entire root
  *   (config + data + cache all live beneath it).
- * - else <configBase>/router-agents
+ * - else <configBase>/swarmdesk-agent
  */
 export function resolveRouterDataDir(): string {
-  const explicit = process.env.ROUTER_DATA_DIR?.trim() || process.env.ROUTER_AGENTS_DIR?.trim()
+  const explicit = process.env.SWARMDESK_AGENT_DATA_DIR?.trim() || process.env.SWARMDESK_AGENT_AGENTS_DIR?.trim()
   if (explicit) return resolve(explicit)
-  return resolve(join(resolveConfigBase(), 'router-agents'))
+  return resolve(join(resolveConfigBase(), 'swarmdesk-agent'))
 }
 
 /**
  * Resolve all standard paths. Individual env overrides still win per-file:
- * - ROUTER_AGENTS_STATE → state.json
- * - ROUTER_RUNTIME_PATH → runtime.json
+ * - SWARMDESK_AGENT_AGENTS_STATE → state.json
+ * - SWARMDESK_AGENT_RUNTIME_PATH → runtime.json
  * - ACP_CATALOG_PATH → acp-sessions.json
  * - MASTRA_MEMORY_URL → memory (file: URL or path)
  */
@@ -104,11 +104,11 @@ export function resolveRouterDataPaths(): RouterDataPaths {
   const dataDir = join(rootDir, 'data')
   const cacheDir = join(rootDir, 'cache')
 
-  const statePath = process.env.ROUTER_AGENTS_STATE?.trim()
-    ? resolve(process.env.ROUTER_AGENTS_STATE.trim())
+  const statePath = process.env.SWARMDESK_AGENT_AGENTS_STATE?.trim()
+    ? resolve(process.env.SWARMDESK_AGENT_AGENTS_STATE.trim())
     : join(dataDir, 'state.json')
-  const runtimePath = process.env.ROUTER_RUNTIME_PATH?.trim()
-    ? resolve(process.env.ROUTER_RUNTIME_PATH.trim())
+  const runtimePath = process.env.SWARMDESK_AGENT_RUNTIME_PATH?.trim()
+    ? resolve(process.env.SWARMDESK_AGENT_RUNTIME_PATH.trim())
     : join(dataDir, 'runtime.json')
   const catalogPath = process.env.ACP_CATALOG_PATH?.trim()
     ? resolve(process.env.ACP_CATALOG_PATH.trim())

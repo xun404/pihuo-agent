@@ -14,7 +14,7 @@ import type {
   WorkerKind,
   WorkerRegistration,
   WorkerRole,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import { WORKER_PRESETS } from './presets.js'
 
 function rolesToCapabilities(roles: WorkerRole[]): WorkerCapability[] {

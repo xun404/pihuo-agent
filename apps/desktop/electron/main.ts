@@ -61,14 +61,14 @@ import {
   isConfigurableSecretEnvKey,
   type CustomProviderSettings,
   type ThinkingIntensity,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Optional Chrome DevTools Protocol for headless inspection/debugging.
-// Enable via ROUTER_CDP_PORT=<port> env (loopback only). Off by default.
-if (process.env.ROUTER_CDP_PORT) {
-  app.commandLine.appendSwitch('remote-debugging-port', process.env.ROUTER_CDP_PORT)
+// Enable via SWARMDESK_AGENT_CDP_PORT=<port> env (loopback only). Off by default.
+if (process.env.SWARMDESK_AGENT_CDP_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.SWARMDESK_AGENT_CDP_PORT)
   app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1')
 }
 
@@ -80,7 +80,7 @@ const PACKAGED_SMOKE_USER_DATA = resolvePackagedSmokeUserDataPath({
 })
 if (PACKAGED_SMOKE_USER_DATA) {
   app.setPath('userData', PACKAGED_SMOKE_USER_DATA)
-  process.env.ROUTER_DATA_DIR = path.join(PACKAGED_SMOKE_USER_DATA, 'router-data')
+  process.env.SWARMDESK_AGENT_DATA_DIR = path.join(PACKAGED_SMOKE_USER_DATA, 'router-data')
 }
 const runtimeLayout = resolveDesktopRuntimeLayout({
   isPackaged: app.isPackaged,
@@ -93,10 +93,10 @@ const API_URL = `http://127.0.0.1:${API_PORT}`
 
 // This marker is minted only for the trusted API child. Never let an inherited
 // shell value suppress safeStorage decryption in the Electron owner process.
-delete process.env.ROUTER_SECRETS_PARENT_INJECTED
+delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
 // Preload must never trust VITE_MASTRA_URL: the renderer attaches a bearer token
 // to this base URL. Mint the loopback URL in the owner process instead.
-process.env.ROUTER_DESKTOP_API_URL = API_URL
+process.env.SWARMDESK_AGENT_DESKTOP_API_URL = API_URL
 
 process.env.DIST = runtimeLayout.rendererDist
 const DEV_SERVER_URL = resolveTrustedDevServerUrl(process.env.VITE_DEV_SERVER_URL)
@@ -118,12 +118,12 @@ function secretsEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     MASTRA_PORT: API_PORT,
-    ROUTER_WORKSPACE_ROOT: runtimeLayout.identityRoot,
+    SWARMDESK_AGENT_WORKSPACE_ROOT: runtimeLayout.identityRoot,
   }
   // Drop shell-ambient provider keys before inject — otherwise fill-if-empty /
   // dual OPENCODE_* names keep a stale CLI key after the user saved a new one.
   for (const k of Object.keys(env)) {
-    if (/_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) && !k.startsWith('ROUTER_')) {
+    if (/_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) && !k.startsWith('SWARMDESK_AGENT_')) {
       delete env[k]
     }
   }
@@ -131,20 +131,20 @@ function secretsEnv(): NodeJS.ProcessEnv {
   // These capabilities are minted by the child and persisted mode 0600. Never
   // accept stored values or an auth bypass inherited from the shell. Scrub
   // after secret injection as a defense against legacy encrypted payloads.
-  delete env.ROUTER_INTERNAL_TOKEN
-  delete env.ROUTER_DESKTOP_TOKEN
-  delete env.ROUTER_STUDIO_TOKEN
-  delete env.ROUTER_DESKTOP_ORIGINS
-  delete env.ROUTER_ACP_FINGERPRINT_KEY
-  delete env.ROUTER_WORKER_SECRETS_KEY
-  delete env.ROUTER_SECRETS_PARENT_INJECTED
-  env.ROUTER_SECRETS_PARENT_INJECTED = '1'
-  env.ROUTER_DESKTOP_AUTH = '1'
+  delete env.SWARMDESK_AGENT_INTERNAL_TOKEN
+  delete env.SWARMDESK_AGENT_DESKTOP_TOKEN
+  delete env.SWARMDESK_AGENT_STUDIO_TOKEN
+  delete env.SWARMDESK_AGENT_DESKTOP_ORIGINS
+  delete env.SWARMDESK_AGENT_ACP_FINGERPRINT_KEY
+  delete env.SWARMDESK_AGENT_WORKER_SECRETS_KEY
+  delete env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
+  env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED = '1'
+  env.SWARMDESK_AGENT_DESKTOP_AUTH = '1'
   if (DEV_SERVER_URL) {
-    env.ROUTER_DESKTOP_ORIGINS = new URL(DEV_SERVER_URL).origin
+    env.SWARMDESK_AGENT_DESKTOP_ORIGINS = new URL(DEV_SERVER_URL).origin
   }
-  env.ROUTER_ACP_FINGERPRINT_KEY = getAcpFingerprintKeyForChild()
-  env.ROUTER_WORKER_SECRETS_KEY = getWorkerSecretsKeyForChild()
+  env.SWARMDESK_AGENT_ACP_FINGERPRINT_KEY = getAcpFingerprintKeyForChild()
+  env.SWARMDESK_AGENT_WORKER_SECRETS_KEY = getWorkerSecretsKeyForChild()
   return env
 }
 
@@ -199,7 +199,7 @@ async function verifiedDesktopApiToken(expectedChild?: ExpectedApiChild): Promis
       signal: AbortSignal.timeout(2000),
       headers: {
         Authorization: `Bearer ${desktopTok}`,
-        'X-Router-Desktop-Token': desktopTok,
+        'X-SwarmDesk-Agent-Desktop-Token': desktopTok,
       },
     })
     if (res.status === 401 || res.status === 403) return null
@@ -302,7 +302,7 @@ async function retireOwnedLegacyApi(): Promise<boolean> {
       continue
     }
 
-    console.warn('[electron] retiring incompatible Router Agents API process', pid)
+    console.warn('[electron] retiring incompatible SwarmDesk API process', pid)
     try {
       process.kill(pid, 'SIGTERM')
     } catch {
@@ -353,7 +353,7 @@ async function startApiServer(): Promise<ExpectedApiChild | null> {
           cwd: runtimeLayout.apiCwd,
           env: secretsEnv(),
           stdio: 'pipe',
-          serviceName: 'Router Agents API',
+          serviceName: 'SwarmDesk API',
         }),
       )
     } else {

@@ -15,7 +15,7 @@ import {
   getWorkerEventEmitter,
   emitWorkerEvent,
 } from './worker-events.js'
-import type { WorkerRunEvent, WorkerRole, WorkerKind } from '@router-agents/shared'
+import type { WorkerRunEvent, WorkerRole, WorkerKind } from '@swarmdesk-agent/shared'
 import { resolveDispatchContext } from './dispatch-context.js'
 
 // ---------------------------------------------------------------------------
@@ -861,7 +861,7 @@ describe('Spec §8.2.7 — Tool uses request context Router Session', () => {
   it('fails closed instead of falling back to a mutable active session', () => {
     assert.throws(
       () => resolveDispatchContext({ requestContext: { get: () => undefined } }),
-      /ROUTER_SESSION_BINDING_REQUIRED/,
+      /SWARMDESK_AGENT_SESSION_BINDING_REQUIRED/,
     )
   })
 

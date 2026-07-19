@@ -177,7 +177,7 @@
 | **暖色** | `mode=light` + `palette=warm`（Claude-like 淡橙） |
 
 实现：`ThemeProvider` + `theme-bootstrap.ts`（挂载前写 `data-theme` / `data-palette`，防闪）。  
-存储键：`router-agents.theme` · `router-agents.palette`。
+存储键：`swarmdesk-agent.theme` · `swarmdesk-agent.palette`。
 
 ### 3.2 CSS 切换
 

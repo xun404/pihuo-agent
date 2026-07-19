@@ -8,7 +8,7 @@
 
 ## 1. 背景与目标
 
-Router Agents 当前以 Mastra 作为 Leader SDK，并通过项目自有的
+SwarmDesk 当前以 Mastra 作为 Leader SDK，并通过项目自有的
 `@agentclientprotocol/sdk@1.2.1` 客户端运行 Claude Code、Codex、OpenCode
 等 Worker。ACP Registry 的推进使客户端可以通过统一清单发现、安装并配置更多
 ACP Agent。
@@ -58,7 +58,7 @@ Registry 本地分发接入。
 
 官方 Registry 是经过维护的 Agent 目录，清单包含自动安装所需的分发元数据。Registry
 CI 会验证清单、分发 URL 和 `initialize.authMethods`，但 Registry 收录不等于每个版本
-在 Router Agents 的每个平台、认证状态和能力组合下都可运行。
+在 SwarmDesk 的每个平台、认证状态和能力组合下都可运行。
 
 调研时（2026-07-17）远端清单为 schema `1.0.0`，共有 38 个 Agent：
 
@@ -249,7 +249,7 @@ interface WorkerLaunchSpec {
 
 ### 7.3 安装状态
 
-安装事实单独保存在 `~/.router-agents/acp-agent-installations.json`，包含：
+安装事实单独保存在 `~/.swarmdesk-agent/acp-agent-installations.json`，包含：
 
 - registry ID、版本、target、distribution；
 - manifest digest、archive URL、声明与实测摘要；
@@ -266,7 +266,7 @@ Worker/state 只持有 installation 引用与非敏感 readiness/auth revision�
 安装目录：
 
 ```text
-~/.router-agents/agents/<registryId>/<version>/<target>/
+~/.swarmdesk-agent/agents/<registryId>/<version>/<target>/
 ```
 
 流程：

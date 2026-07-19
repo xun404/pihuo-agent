@@ -7,8 +7,8 @@ import type {
   WorkerHealthStatus,
   WorkerKind,
   WorkerRegistration,
-} from '@router-agents/shared'
-import { projectLegacyHealth } from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
+import { projectLegacyHealth } from '@swarmdesk-agent/shared'
 
 export type ProbeDepth = 'presence' | 'version' | 'acp'
 

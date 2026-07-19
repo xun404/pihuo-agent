@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import type { LeaderStepBudgetEvent } from '@router-agents/shared'
+import type { LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
 
 interface LeaderStepBudgetNoticeProps {
   event: LeaderStepBudgetEvent

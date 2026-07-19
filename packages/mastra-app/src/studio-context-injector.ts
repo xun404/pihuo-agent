@@ -1,11 +1,11 @@
 import { RequestContext } from '@mastra/core/request-context'
 import type { RouterSessionContext } from './runtime-dispatch-port.js'
 
-const ROUTER_HEADERS = {
-  sessionId: 'x-router-session-id',
-  projectId: 'x-router-project-id',
-  projectRoot: 'x-router-project-root',
-  memoryThreadId: 'x-router-memory-thread-id',
+const SWARMDESK_AGENT_HEADERS = {
+  sessionId: 'x-swarmdesk-agent-session-id',
+  projectId: 'x-swarmdesk-agent-project-id',
+  projectRoot: 'x-swarmdesk-agent-project-root',
+  memoryThreadId: 'x-swarmdesk-agent-memory-thread-id',
 } as const
 
 export interface RouterHeaders {
@@ -38,10 +38,10 @@ function nonEmpty(value: unknown): string | undefined {
 export function extractRouterHeadersFromRequest(req: {
   headers: Record<string, string | string[] | undefined>
 }): RouterHeaders | undefined {
-  const sessionId = getHeader(req.headers, ROUTER_HEADERS.sessionId)
-  const projectId = getHeader(req.headers, ROUTER_HEADERS.projectId)
-  const projectRoot = getHeader(req.headers, ROUTER_HEADERS.projectRoot)
-  const memoryThreadId = getHeader(req.headers, ROUTER_HEADERS.memoryThreadId)
+  const sessionId = getHeader(req.headers, SWARMDESK_AGENT_HEADERS.sessionId)
+  const projectId = getHeader(req.headers, SWARMDESK_AGENT_HEADERS.projectId)
+  const projectRoot = getHeader(req.headers, SWARMDESK_AGENT_HEADERS.projectRoot)
+  const memoryThreadId = getHeader(req.headers, SWARMDESK_AGENT_HEADERS.memoryThreadId)
 
   if (!sessionId || !projectId || !memoryThreadId) return undefined
 
@@ -56,7 +56,7 @@ export function extractMemoryThreadIdOnly(req: {
   headers: Record<string, string | string[] | undefined>
   body?: unknown
 }): string | undefined {
-  const fromHeader = nonEmpty(getHeader(req.headers, ROUTER_HEADERS.memoryThreadId))
+  const fromHeader = nonEmpty(getHeader(req.headers, SWARMDESK_AGENT_HEADERS.memoryThreadId))
   if (fromHeader) return fromHeader
 
   const body = req.body

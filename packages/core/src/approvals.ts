@@ -5,7 +5,7 @@ import type {
   ApprovalLocation,
   ApprovalStatus,
   AcpToolKind,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import { createId } from './id.js'
 
 export interface EnqueueApprovalInput {

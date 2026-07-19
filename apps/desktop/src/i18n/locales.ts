@@ -1,4 +1,4 @@
-import type { WorkerRole } from '@router-agents/shared'
+import type { WorkerRole } from '@swarmdesk-agent/shared'
 
 export type Locale = 'zh' | 'en'
 
@@ -364,7 +364,7 @@ const zh: Dict = {
   'app.bannerCmd': 'npm run dev',
   'app.bannerOffline': '无法连接服务（{error}）。另开终端运行：',
   'app.loading': '加载中…',
-  'app.title': 'Router Agents',
+  'app.title': 'SwarmDesk',
   'approvals.cancel': '取消',
   'approvals.empty': '暂无待批权限。ACP 权限请求会进入此队列。',
   'approvals.noOptions': 'Agent 未提供可选项',
@@ -467,7 +467,7 @@ const zh: Dict = {
   'role.review': '审查',
   'role.test': '测试',
   'settings.aboutBody':
-    'Router Agents 是 macOS 桌面多智能体指挥台：Leader 编排，本机 CLI Workers 经 ACP 执行。',
+    'SwarmDesk 是 macOS 桌面多智能体指挥台：Leader 编排，本机 CLI Workers 经 ACP 执行。',
   'settings.addProvider': '添加供应商',
   'settings.addModel': '添加模型',
   'settings.addModelBtn': '+ 添加',
@@ -571,7 +571,7 @@ const zh: Dict = {
   'settings.updateCustom': '更新',
   'settings.updateKey': '更换 Key',
   'settings.version': '版本',
-  'sidebar.brand': 'Router',
+  'sidebar.brand': 'SwarmDesk',
   'sidebar.confirmDeleteProject': '删除项目「{name}」及其全部 Session？此操作不可撤销。',
   'sidebar.confirmDeleteSession': '删除 Session「{title}」？此操作不可撤销。',
   'sidebar.deleteProject': '删除项目',
@@ -728,7 +728,7 @@ const en: Dict = {
   'app.bannerCmd': 'npm run dev',
   'app.bannerOffline': 'Cannot reach service ({error}). In another terminal run:',
   'app.loading': 'loading…',
-  'app.title': 'Router Agents',
+  'app.title': 'SwarmDesk',
   'approvals.cancel': 'Cancel',
   'approvals.empty': 'No pending permissions. ACP permission requests enqueue here.',
   'approvals.noOptions': 'Agent provided no options',
@@ -833,7 +833,7 @@ const en: Dict = {
   'role.review': 'Review',
   'role.test': 'Test',
   'settings.aboutBody':
-    'Router Agents is a macOS multi-agent console: the Leader orchestrates, local CLI workers run via ACP.',
+    'SwarmDesk is a macOS multi-agent console: the Leader orchestrates, local CLI workers run via ACP.',
   'settings.addProvider': 'Add provider',
   'settings.addModel': 'Add model',
   'settings.addModelBtn': '+ Add',
@@ -942,7 +942,7 @@ const en: Dict = {
   'settings.updateCustom': 'Update',
   'settings.updateKey': 'Replace key',
   'settings.version': 'Version',
-  'sidebar.brand': 'Router',
+  'sidebar.brand': 'SwarmDesk',
   'sidebar.confirmDeleteProject':
     'Delete project “{name}” and all its sessions? This cannot be undone.',
   'sidebar.confirmDeleteSession': 'Delete session “{title}”? This cannot be undone.',

@@ -26,7 +26,7 @@ import type {
   WorkerRunState,
   WorkerKind,
   ApprovalItem,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 // ---------------------------------------------------------------------------
 // Helpers

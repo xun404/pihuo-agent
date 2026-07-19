@@ -81,7 +81,7 @@ export {
   verifyBundledAcpRegistryArtifacts,
   type BundledAcpRegistryVerification,
 } from './acp-registry-bundled.js'
-export type { AcpRegistryTarget, AcpRegistryDistributionKind } from '@router-agents/shared'
+export type { AcpRegistryTarget, AcpRegistryDistributionKind } from '@swarmdesk-agent/shared'
 export {
   resolveAcpRunner,
   resolveRunnerAbsolutePath,

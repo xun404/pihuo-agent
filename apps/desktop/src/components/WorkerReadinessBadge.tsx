@@ -1,4 +1,4 @@
-import type { WorkerReadinessStatus } from '@router-agents/shared'
+import type { WorkerReadinessStatus } from '@swarmdesk-agent/shared'
 import { readinessToUiStatus } from '../lib/worker-registry'
 
 export function WorkerReadinessBadge(props: {

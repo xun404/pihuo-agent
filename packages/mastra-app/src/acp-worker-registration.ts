@@ -13,7 +13,7 @@ import {
   resolveRouterDataPaths,
   upsertInstallation,
   type AcpAgentInstallationRecord,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import {
   AcpInstallError,
   AcpRunnerError,
@@ -23,15 +23,15 @@ import {
   resolveAcpRegistryTarget,
   type PrepareResult,
   type PrepareTrustDecision,
-} from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
 import type {
   AcpRegistryAgentMetadata,
   AcpRegistryDistributionKind,
   WorkerRegistration,
   WorkerRole,
   WorkerSource,
-} from '@router-agents/shared'
-import { defaultRegistryWorkerRoles, WORKER_ROLES } from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
+import { defaultRegistryWorkerRoles, WORKER_ROLES } from '@swarmdesk-agent/shared'
 import { existsSync, lstatSync, renameSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { resolveLocalRegistryCatalog } from './acp-registry-service.js'

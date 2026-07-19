@@ -1,6 +1,6 @@
-# Router Agents
+# SwarmDesk
 
-**EN** · [中文](#router-agents-中文)
+**EN** · [中文](#swarmdesk-中文)
 
 Desktop multi-agent command center: a **Mastra Supervisor** Leader coordinates local **ACP** coding agents (Claude Code, Codex, OpenCode, and agents from the ACP Registry) against your project.
 
@@ -10,7 +10,7 @@ Desktop multi-agent command center: a **Mastra Supervisor** Leader coordinates l
 
 ### What it is
 
-Router Agents is a local desktop app (macOS / Windows / Linux) that lets you:
+SwarmDesk is a local desktop app (macOS / Windows / Linux) that lets you:
 
 - Chat with a **Leader** model that plans and delegates work
 - Run real coding agents on your machine over **ACP** (Agent Client Protocol)
@@ -21,7 +21,7 @@ Agents run as **your OS user** (not a hard sandbox). Installers ship the UI + lo
 
 ### Download
 
-Get prebuilt binaries from **[GitHub Releases](https://github.com/xun404/router-agents/releases)**. Prefer the latest `v*` release and verify `SHA256SUMS` when present.
+Get prebuilt binaries from **[GitHub Releases](https://github.com/xun404/swarmdesk-agent/releases)**. Prefer the latest `v*` release and verify `SHA256SUMS` when present.
 
 | Platform | Architecture          | Packages      |
 | -------- | --------------------- | ------------- |
@@ -36,7 +36,7 @@ Installers are currently **unsigned** (no macOS notarization / Windows code sign
 shasum -a 256 -c SHA256SUMS
 
 # Windows PowerShell
-Get-FileHash .\Router-Agents-0.1.0-win-x64.exe -Algorithm SHA256
+Get-FileHash .\SwarmDesk-Agent-0.1.0-win-x64.exe -Algorithm SHA256
 ```
 
 After install: open the app → configure Leader API keys in **Settings** → open a project → register workers (built-in presets or Registry) → chat.
@@ -89,15 +89,15 @@ Mastra may also resolve additional registry providers (e.g. aliases for OpenCode
 ### Platform notes
 
 - **UI language**: Chinese / English in the title bar
-- **Data**: local under `~/.config/router-agents/` (settings, encrypted secrets, sessions)
+- **Data**: local under `~/.config/swarmdesk-agent/` (settings, encrypted secrets, sessions)
 - **License**: [MIT](./LICENSE)
 - **Contributing / maintainers**: see [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/HANDOVER.md](./docs/HANDOVER.md)
 
 ---
 
-## Router Agents (中文)
+## SwarmDesk (中文)
 
-**[EN](#router-agents)** · **中文**
+**[EN](#swarmdesk-agent)** · **中文**
 
 桌面端多智能体指挥台：由 **Mastra Supervisor（Leader）** 规划与委派，通过 **ACP** 调度本机编码 Agent（Claude Code / Codex / OpenCode 及 ACP Registry 中的 Agent）在本地项目上执行任务。
 
@@ -105,7 +105,7 @@ Mastra may also resolve additional registry providers (e.g. aliases for OpenCode
 
 ### 它是什么
 
-Router Agents 是 macOS / Windows / Linux 本地桌面应用，可以：
+SwarmDesk 是 macOS / Windows / Linux 本地桌面应用，可以：
 
 - 与 **Leader** 模型对话，由它规划并委派任务
 - 通过 **ACP（Agent Client Protocol）** 调用本机真实编码 Agent
@@ -116,7 +116,7 @@ Agent 以**当前系统用户权限**运行（非强沙箱）。安装包包含 
 
 ### 下载
 
-请从 **[GitHub Releases](https://github.com/xun404/router-agents/releases)** 下载预编译安装包。建议使用最新 `v*` 版本，并核对同目录 `SHA256SUMS`。
+请从 **[GitHub Releases](https://github.com/xun404/swarmdesk-agent/releases)** 下载预编译安装包。建议使用最新 `v*` 版本，并核对同目录 `SHA256SUMS`。
 
 | 系统    | 架构                   | 安装包        |
 | ------- | ---------------------- | ------------- |
@@ -131,7 +131,7 @@ Agent 以**当前系统用户权限**运行（非强沙箱）。安装包包含 
 shasum -a 256 -c SHA256SUMS
 
 # Windows PowerShell
-Get-FileHash .\Router-Agents-0.1.0-win-x64.exe -Algorithm SHA256
+Get-FileHash .\SwarmDesk-Agent-0.1.0-win-x64.exe -Algorithm SHA256
 ```
 
 安装后：打开应用 → **设置**中配置 Leader 的 API Key → 打开项目 → 注册 Worker（内置预设或 Registry）→ 开始对话。
@@ -184,6 +184,6 @@ Leader 使用 Mastra 模型路由（`provider/model`）。在 **设置** 中配�
 ### 其他说明
 
 - **界面语言**：标题栏可切换中文 / English
-- **本地数据**：`~/.config/router-agents/`（配置、加密密钥、会话等）
+- **本地数据**：`~/.config/swarmdesk-agent/`（配置、加密密钥、会话等）
 - **许可证**：[MIT](./LICENSE)
 - **贡献与交接**：[CONTRIBUTING.md](./CONTRIBUTING.md)、[docs/HANDOVER.md](./docs/HANDOVER.md)

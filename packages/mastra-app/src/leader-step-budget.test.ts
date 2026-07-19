@@ -6,7 +6,7 @@ import {
   LEADER_STEP_BUDGET_PART_TYPE,
 } from './leader-step-budget.js'
 import * as budgetModule from './leader-step-budget.js'
-import type { LeaderStepBudgetEvent } from '@router-agents/shared'
+import type { LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
 
 function makeEvent(overrides?: Partial<LeaderStepBudgetEvent['data']>): LeaderStepBudgetEvent {
   return {

@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { getSharedStore, resetSharedStoreForTests } from '@router-agents/core'
+import { getSharedStore, resetSharedStoreForTests } from '@swarmdesk-agent/core'
 import { WorkerScheduler } from './scheduler.js'
 import { getWorkerEventEmitter } from './worker-events.js'
-import type { WorkerJob } from '@router-agents/shared'
+import type { WorkerJob } from '@swarmdesk-agent/shared'
 
 describe('WorkerScheduler terminal persistence and shutdown admission', () => {
   let dir: string
@@ -14,14 +14,14 @@ describe('WorkerScheduler terminal persistence and shutdown admission', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'scheduler-lifecycle-'))
-    previousState = process.env.ROUTER_AGENTS_STATE
-    process.env.ROUTER_AGENTS_STATE = join(dir, 'state.json')
+    previousState = process.env.SWARMDESK_AGENT_AGENTS_STATE
+    process.env.SWARMDESK_AGENT_AGENTS_STATE = join(dir, 'state.json')
     resetSharedStoreForTests()
   })
 
   afterEach(() => {
-    if (previousState === undefined) delete process.env.ROUTER_AGENTS_STATE
-    else process.env.ROUTER_AGENTS_STATE = previousState
+    if (previousState === undefined) delete process.env.SWARMDESK_AGENT_AGENTS_STATE
+    else process.env.SWARMDESK_AGENT_AGENTS_STATE = previousState
     resetSharedStoreForTests()
     rmSync(dir, { recursive: true, force: true })
   })

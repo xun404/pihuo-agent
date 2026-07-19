@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { after, beforeEach, describe, it } from 'node:test'
-import type { AcpAgentInstallationRecord } from '@router-agents/core'
-import type { SanitizedAuthMethod } from '@router-agents/adapters'
-import type { WorkerRegistration } from '@router-agents/shared'
+import type { AcpAgentInstallationRecord } from '@swarmdesk-agent/core'
+import type { SanitizedAuthMethod } from '@swarmdesk-agent/adapters'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 import {
   cancelAllTerminalAuthAttempts,
   cancelTerminalAuthAttempt,
@@ -107,7 +107,7 @@ function deps(
     ambientEnv: {
       PATH: '/usr/bin',
       HOME: '/Users/private',
-      ROUTER_DESKTOP_TOKEN: 'must-not-forward',
+      SWARMDESK_AGENT_DESKTOP_TOKEN: 'must-not-forward',
     },
   }
 }
@@ -224,7 +224,7 @@ describe('acp-auth-terminal', () => {
     assert.equal(attempt.env.INSTALLATION_FLAG, 'yes')
     assert.equal(attempt.env.TERM, 'xterm-256color')
     assert.equal(attempt.env.AGENT_SESSION_SECRET, 'worker-only-secret')
-    assert.equal(attempt.env.ROUTER_DESKTOP_TOKEN, undefined)
+    assert.equal(attempt.env.SWARMDESK_AGENT_DESKTOP_TOKEN, undefined)
     assert.equal(created.commandPreview.command, 'npx')
     assert.deepEqual(created.commandPreview.args, [])
   })

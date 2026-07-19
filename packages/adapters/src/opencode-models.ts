@@ -10,7 +10,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import type { WorkerModelOption } from '@router-agents/shared'
+import type { WorkerModelOption } from '@swarmdesk-agent/shared'
 import { OPENCODE_ZEN_FREE_MODELS } from './opencode-acp-env.js'
 import {
   resolveOpenCodeEvidencePaths,

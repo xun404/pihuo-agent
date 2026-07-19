@@ -7,7 +7,7 @@ import type {
   AcpRegistryPackageDistribution,
   AcpRegistryTarget,
   WorkerLaunchSpec,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 export function packageDistributionToLaunchSpec(
   dist: AcpRegistryPackageDistribution,

@@ -74,7 +74,7 @@ Leader 模型目录分为：
 
 - 普通应用启动和设置页只读取快照，不在请求路径在线同步。
 - release/CI 的 `sync:model-registry` 维护命令使用当前安装的 Mastra registry 生成随应用发布的 versioned bundled snapshot；需要动态 `syncGateways()` 时也只在该维护进程运行，不能由打包后的应用写 `node_modules`。
-- 可选的显式管理员刷新把成功结果原子写入 `~/.router-agents/mastra-model-registry.json`；失败继续使用上一个持久快照。
+- 可选的显式管理员刷新把成功结果原子写入 `~/.swarmdesk-agent/mastra-model-registry.json`；失败继续使用上一个持久快照。
 - 运行时来源优先级为：持久 last-known-good → bundled snapshot → 当前安装包的静态 registry。三者都不可用时设置页返回明确的 catalog error，不伪造空目录。
 - 全量 registry 只用于搜索、模型 ID 校验和 env 元数据解析；Leader prompt 只接收当前模型和精选摘要。
 
@@ -139,7 +139,7 @@ interface WorkerModelCatalog {
 }
 ```
 
-该结构不包含凭据，也不进入每次 app snapshot。所有 Worker catalog 统一保存到 versioned、原子替换的 `~/.router-agents/worker-model-catalogs.json`；单条 Worker 刷新必须以 workerId 为事务边界。API 语义为：
+该结构不包含凭据，也不进入每次 app snapshot。所有 Worker catalog 统一保存到 versioned、原子替换的 `~/.swarmdesk-agent/worker-model-catalogs.json`；单条 Worker 刷新必须以 workerId 为事务边界。API 语义为：
 
 - `GET /api/workers/:id/models`：返回短名单与 freshness；
 - `GET /api/workers/:id/models?q=...&limit=50`：搜索本地完整索引；
@@ -219,9 +219,9 @@ Local/Remote 两个实现必须通过同一套 contract tests，保证 started/d
 2. 通过 RemoteRuntimeDispatchPort 向主运行时解析 thread；
 3. 主运行时只在 threadId 精确匹配持久化 Router Session 的 `memoryThreadId` 时返回 trusted tuple；
 4. middleware 写入 `routerSessionId/routerProjectId/memoryThreadId/routerProjectRoot`；
-5. 无映射时普通聊天可继续，但 dispatch 返回 `ROUTER_SESSION_BINDING_REQUIRED`；不读取 global active Session，也不自动新建 Session。
+5. 无映射时普通聊天可继续，但 dispatch 返回 `SWARMDESK_AGENT_SESSION_BINDING_REQUIRED`；不读取 global active Session，也不自动新建 Session。
 
-主运行时只监听 `127.0.0.1`。每次启动生成随机 bearer token，并将 port、pid、startedAt 和 token 原子写入 mode 0600 的 `~/.router-agents/runtime.json`；重启轮换。日志、Activity 和 HTTP error 不得包含 token。
+主运行时只监听 `127.0.0.1`。每次启动生成随机 bearer token，并将 port、pid、startedAt 和 token 原子写入 mode 0600 的 `~/.swarmdesk-agent/runtime.json`；重启轮换。日志、Activity 和 HTTP error 不得包含 token。
 
 ## 10. Catalog 生命周期所有权
 
@@ -258,8 +258,8 @@ lease 解决的是“谁拥有整个 runtime”，不是把 catalog 变成多写
 运行时侧公开错误：
 
 - `RUNTIME_OWNER_EXISTS`：已有主运行时，本进程应使用 client；
-- `ROUTER_RUNTIME_UNAVAILABLE`：主运行时不可达；
-- `ROUTER_SESSION_BINDING_REQUIRED`：Studio thread 未绑定；
+- `SWARMDESK_AGENT_RUNTIME_UNAVAILABLE`：主运行时不可达；
+- `SWARMDESK_AGENT_SESSION_BINDING_REQUIRED`：Studio thread 未绑定；
 - `RUNTIME_AUTH_FAILED`：内部 token 无效。
 
 UI、Leader 和 Activity 只消费稳定 code 与公开文案。内部日志允许记录阶段和 provider/worker ID，但不得记录 secret、token、agentSessionId、原始 ACP payload 或完整 env。

@@ -2,7 +2,7 @@ import {
   WORKER_ROLES,
   type AcpRegistryDistributionKind,
   type WorkerRole,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u
 const SAFE_VERSION = /^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/u

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * One-shot cleanup of legacy macOS Keychain entries left by the old safeStorage
- * integration. Router Agents no longer uses safeStorage (the master key is now
+ * integration. SwarmDesk no longer uses safeStorage (the master key is now
  * derived from the machine identity), so these entries are dead weight and the
  * reason the OS used to prompt for keychain access on every launch.
  *
@@ -14,7 +14,7 @@
 
 import { execSync } from 'node:child_process'
 
-const SERVICE_NAMES = ['@router-agents/desktop Safe Storage', 'router-agents Safe Storage']
+const SERVICE_NAMES = ['@swarmdesk-agent/desktop Safe Storage', 'swarmdesk-agent Safe Storage']
 
 function isMacos() {
   return process.platform === 'darwin'

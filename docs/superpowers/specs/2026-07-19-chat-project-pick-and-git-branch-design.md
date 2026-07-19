@@ -194,7 +194,7 @@ commitAndSwitch: (projectId: string, targetBranchName: string, message: string) 
     method: 'POST', body: JSON.stringify({ targetBranchName, message }),
   }),
 ```
-类型从 `@router-agents/core` 重新导出。
+类型从 `@swarmdesk-agent/core` 重新导出。
 
 ### 3.4 前端 Hook
 

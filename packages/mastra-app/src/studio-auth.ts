@@ -26,8 +26,8 @@ export function createStudioAuth(token: string): SimpleAuth<RouterStudioUser> {
   return new SimpleAuth<RouterStudioUser>({
     tokens: {
       [normalized]: {
-        id: 'router-agents-studio',
-        name: 'Router Agents Studio',
+        id: 'swarmdesk-agent-studio',
+        name: 'SwarmDesk Studio',
         role: 'admin',
       },
     },
@@ -39,10 +39,10 @@ export function resolveStudioPort(explicitPort: string | undefined, ownerPort: n
     ownerPort === DEFAULT_STUDIO_PORT ? DEFAULT_STUDIO_PORT + 1 : DEFAULT_STUDIO_PORT
   const port = explicitPort?.trim() ? Number(explicitPort) : defaultPort
   if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
-    throw new Error('ROUTER_STUDIO_PORT must be a valid TCP port')
+    throw new Error('SWARMDESK_AGENT_STUDIO_PORT must be a valid TCP port')
   }
   if (port === ownerPort) {
-    throw new Error('ROUTER_STUDIO_PORT must differ from the owner API port')
+    throw new Error('SWARMDESK_AGENT_STUDIO_PORT must differ from the owner API port')
   }
   return port
 }

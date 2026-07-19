@@ -17,7 +17,7 @@ function req(partial: {
   const headers: Record<string, string | string[] | undefined> = {}
   if (partial.origin !== undefined) headers.origin = partial.origin
   if (partial.authorization) headers.authorization = partial.authorization
-  if (partial.desktopToken) headers['x-router-desktop-token'] = partial.desktopToken
+  if (partial.desktopToken) headers['x-swarmdesk-agent-desktop-token'] = partial.desktopToken
   return {
     method: partial.method ?? 'GET',
     headers,
@@ -25,11 +25,11 @@ function req(partial: {
 }
 
 describe('desktop-auth', () => {
-  const prev = process.env.ROUTER_DESKTOP_AUTH
+  const prev = process.env.SWARMDESK_AGENT_DESKTOP_AUTH
 
   afterEach(() => {
-    if (prev === undefined) delete process.env.ROUTER_DESKTOP_AUTH
-    else process.env.ROUTER_DESKTOP_AUTH = prev
+    if (prev === undefined) delete process.env.SWARMDESK_AGENT_DESKTOP_AUTH
+    else process.env.SWARMDESK_AGENT_DESKTOP_AUTH = prev
   })
 
   it('allows configured vite origins and file; rejects null string and evil', () => {
@@ -45,7 +45,7 @@ describe('desktop-auth', () => {
   })
 
   it('enforced: rejects evil origin', () => {
-    process.env.ROUTER_DESKTOP_AUTH = '1'
+    process.env.SWARMDESK_AGENT_DESKTOP_AUTH = '1'
     assert.equal(desktopAuthMode(), 'enforced')
     const r = authorizeDesktopRequest(
       req({ method: 'GET', origin: 'https://evil.example' }),
@@ -57,7 +57,7 @@ describe('desktop-auth', () => {
   })
 
   it('enforced: GET /api requires token; /health does not', () => {
-    process.env.ROUTER_DESKTOP_AUTH = '1'
+    process.env.SWARMDESK_AGENT_DESKTOP_AUTH = '1'
     const snap = authorizeDesktopRequest(
       req({ method: 'GET', origin: 'http://127.0.0.1:5173' }),
       'secret-token-value',
@@ -83,7 +83,7 @@ describe('desktop-auth', () => {
   })
 
   it('disabled: allows without token', () => {
-    process.env.ROUTER_DESKTOP_AUTH = '0'
+    process.env.SWARMDESK_AGENT_DESKTOP_AUTH = '0'
     const r = authorizeDesktopRequest(req({ method: 'POST' }), null)
     assert.equal(r.ok, true)
   })

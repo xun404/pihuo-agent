@@ -83,7 +83,7 @@ ACP 返回的 sessionId 只存在 `LiveEntry.session`，没有持久记录。以
 - 15 分钟 idle TTL 回收；
 - LRU/pool 回收；
 - ACP 进程或 transport 断开；
-- Router Agents 服务或桌面应用重启。
+- SwarmDesk 服务或桌面应用重启。
 
 现有 `acp-session-manager.test.ts` 主要向 Map 注入 fake idle entry，证明的是 Map/FIFO 行为，没有覆盖真实 `session/new -> 保存 ID -> 重连 -> resume/load -> 保留上下文`。
 
@@ -555,7 +555,7 @@ flowchart TD
 
 恢复顺序固定为 resume 优先、load fallback：
 
-- `resume` 不回放历史，最适合 Router Agents 已经有自己 Chat history 的场景。
+- `resume` 不回放历史，最适合 SwarmDesk 已经有自己 Chat history 的场景。
 - `load` 会把历史作为 session updates 回放；Manager 在 restore phase 消费这些 update，但不路由到当前 Job 的 delta/approval。load request 完成后才安装当前 prompt binding。
 
 ### 10.3 Update 路由与串行边界

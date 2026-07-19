@@ -1,6 +1,6 @@
-# Contributing to Router Agents
+# Contributing to SwarmDesk
 
-Thanks for helping improve Router Agents.
+Thanks for helping improve SwarmDesk.
 
 ## Development setup
 

@@ -8,12 +8,12 @@ import {
   createInstallationId,
   findInstallationById,
   addWorkerReference,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import {
   detachWorkerFromInstallation,
   listInstallationCleanupCandidates,
 } from './acp-worker-detach.js'
-import type { WorkerRegistration } from '@router-agents/shared'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 
 describe('detachWorkerFromInstallation', () => {
   let dir: string

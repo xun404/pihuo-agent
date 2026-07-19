@@ -1,9 +1,9 @@
 const PRIMARY_ASSET_PATTERNS = {
-  macDmg: /^Router-Agents-.+-mac-arm64\.dmg$/,
-  macZip: /^Router-Agents-.+-mac-arm64\.zip$/,
-  windowsNsis: /^Router-Agents-.+-win-x64\.exe$/,
-  linuxAppImage: /^Router-Agents-.+-linux-x64\.AppImage$/,
-  linuxDeb: /^Router-Agents-.+-linux-x64\.deb$/,
+  macDmg: /^SwarmDesk-Agent-.+-mac-arm64\.dmg$/,
+  macZip: /^SwarmDesk-Agent-.+-mac-arm64\.zip$/,
+  windowsNsis: /^SwarmDesk-Agent-.+-win-x64\.exe$/,
+  linuxAppImage: /^SwarmDesk-Agent-.+-linux-x64\.AppImage$/,
+  linuxDeb: /^SwarmDesk-Agent-.+-linux-x64\.deb$/,
 }
 
 const PRIMARY_EXTENSION = /\.(?:dmg|zip|exe|AppImage|deb)$/

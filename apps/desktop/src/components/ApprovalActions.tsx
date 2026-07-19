@@ -1,4 +1,4 @@
-import type { ApprovalItem } from '@router-agents/shared'
+import type { ApprovalItem } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 
 interface ApprovalActionsProps {

@@ -16,7 +16,7 @@ import {
   workerModelCatalogStorageKey,
   type WorkerModelCatalog,
   type WorkerModelOption,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 import { resolveRouterDataDir } from './router-data-paths.js'
 import { tryAcquireProcessFileLock } from './process-file-lock.js'
 

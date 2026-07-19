@@ -14,12 +14,12 @@ const releaseDir = resolve(repoRoot, 'release')
 const executable = resolvePackagedExecutable({
   platform: process.platform,
   releaseDir,
-  productName: 'Router Agents',
+  productName: 'SwarmDesk',
 })
 const runtimeDir = resolvePackagedRuntimeDir({
   platform: process.platform,
   releaseDir,
-  productName: 'Router Agents',
+  productName: 'SwarmDesk',
 })
 
 async function findFreePort() {

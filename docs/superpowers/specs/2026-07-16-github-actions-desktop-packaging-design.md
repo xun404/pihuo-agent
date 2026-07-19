@@ -2,11 +2,11 @@
 
 **状态：** 已批准  
 **日期：** 2026-07-16  
-**范围：** `router-agents` 正式项目；不包含实验验证 Demo `agents-router`
+**范围：** `swarmdesk-agent` 正式项目；不包含实验验证 Demo `agents-router`
 
 ## 1. 目标
 
-为 Router Agents 建立可公开发布的桌面应用交付基础：
+为 SwarmDesk 建立可公开发布的桌面应用交付基础：
 
 1. Electron 安装包脱离源码仓库和系统 Node.js 后仍可启动内置 Mastra API。
 2. GitHub Actions 在 Pull Request、`main` 和 `v*` 标签上完成一致的测试、构建与打包。
@@ -18,7 +18,7 @@
 
 | 项目         | 决策                                                     |
 | ------------ | -------------------------------------------------------- |
-| 产品名       | `Router Agents`                                          |
+| 产品名       | `SwarmDesk`                                          |
 | 应用 ID      | `net.rmbz.open-dev.agent-desktop`                        |
 | 作者/维护者  | `xun404 <xun404@users.noreply.github.com>`               |
 | 许可证       | MIT，Copyright 2026 xun404                               |
@@ -104,7 +104,7 @@ utilityProcess.fork(
 打包态不得再推导 `REPO_ROOT`。Electron 主进程向 API 传入稳定的应用身份根，来源为 `app.getPath('userData')`，用于：
 
 - 计算 API workspace identity；
-- 防止复用其他 Router Agents 实例的 runtime discovery；
+- 防止复用其他 SwarmDesk 实例的 runtime discovery；
 - 在版本升级后保持相同应用身份。
 
 它不替代用户项目路径。用户打开的代码项目仍以其真实绝对路径存入 LocalStore，并作为 ACP Worker cwd。
@@ -117,7 +117,7 @@ utilityProcess.fork(
 
 ```yaml
 appId: net.rmbz.open-dev.agent-desktop
-productName: Router Agents
+productName: SwarmDesk
 ```
 
 构建配置只包含运行必需内容：
@@ -228,7 +228,7 @@ permissions:
 
 Actions 从 electron-builder 的 unpacked 应用目录执行该 smoke：
 
-- macOS：`.app/Contents/MacOS/Router Agents --packaged-smoke`
+- macOS：`.app/Contents/MacOS/SwarmDesk --packaged-smoke`
 - Windows：unpacked `.exe --packaged-smoke`
 - Linux：`xvfb-run` 下执行 unpacked AppRun 或主二进制
 
@@ -253,7 +253,7 @@ Actions 从 electron-builder 的 unpacked 应用目录执行该 smoke：
 
 - `http-server.mjs` 存在；
 - 生产入口没有 `.ts` import；
-- 生产入口没有 `@router-agents/*` 源码 workspace import；
+- 生产入口没有 `@swarmdesk-agent/*` 源码 workspace import；
 - runtime 原生依赖目录完整；
 - package version、Electron metadata 与 Release tag 一致；
 - `git diff --check` 通过。

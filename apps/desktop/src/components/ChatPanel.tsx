@@ -9,8 +9,8 @@ import type {
   SessionApprovalPolicy,
   WorkerJob,
   WorkerRegistration,
-} from '@router-agents/shared'
-import { isPlaceholderSessionTitle } from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
+import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
 import { api, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import {
@@ -75,7 +75,7 @@ import type {
   WorkerRunState,
   LeaderStepBudgetEvent,
   ApprovalItem,
-} from '@router-agents/shared'
+} from '@swarmdesk-agent/shared'
 
 type ModelOption = {
   id: string
@@ -333,7 +333,7 @@ export function ChatPanel({
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-        api: chatUrl('router-leader'),
+        api: chatUrl('swarmdesk-leader'),
         // Mastra Memory already stores history — send only the latest user turn
         // @see https://mastra.ai/docs/memory/message-history
         // @see https://mastra.ai/guides/build-your-ui/ai-sdk-ui
@@ -356,7 +356,7 @@ export function ChatPanel({
           const headers: Record<string, string> = {}
           if (tok) {
             headers.Authorization = `Bearer ${tok}`
-            headers['X-Router-Desktop-Token'] = tok
+            headers['X-SwarmDesk-Agent-Desktop-Token'] = tok
           }
           return {
             headers,
@@ -382,7 +382,7 @@ export function ChatPanel({
           if (!again) return res
           const headers = new Headers(init?.headers)
           headers.set('Authorization', `Bearer ${again}`)
-          headers.set('X-Router-Desktop-Token', again)
+          headers.set('X-SwarmDesk-Agent-Desktop-Token', again)
           res = await doFetch(headers)
           return res
         },
@@ -1353,7 +1353,7 @@ export function ChatPanel({
                         setModelSideOpen(false)
                         setThinkMenuOpen(false)
                         window.dispatchEvent(
-                          new CustomEvent('router-agents:open-settings', {
+                          new CustomEvent('swarmdesk-agent:open-settings', {
                             detail: { tab: 'model' },
                           }),
                         )

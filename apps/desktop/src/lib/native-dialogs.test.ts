@@ -20,8 +20,8 @@ describe('pathFromOpenDirectoryResult', () => {
 
   it('accepts structured { ok: true, path } from main process', () => {
     assert.equal(
-      pathFromOpenDirectoryResult({ ok: true, path: '/Users/me/router-agents' }),
-      '/Users/me/router-agents',
+      pathFromOpenDirectoryResult({ ok: true, path: '/Users/me/swarmdesk-agent' }),
+      '/Users/me/swarmdesk-agent',
     )
   })
 

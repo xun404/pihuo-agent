@@ -4,20 +4,20 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import type { WorkerRegistration } from '@router-agents/shared'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 import {
   computeExecutionFingerprint,
   getAcpSessionManager,
   resetAcpSessionManager,
   type SessionEntryConfig,
-} from '@router-agents/adapters'
+} from '@swarmdesk-agent/adapters'
 import {
   getSharedStore,
   globalActivityLog,
   resetSharedStoreForTests,
   setTestMasterKey,
   setWorkerSecret,
-} from '@router-agents/core'
+} from '@swarmdesk-agent/core'
 import * as schedulerModule from './scheduler.js'
 
 test('scheduler boundary builder carries every Registry reuse discriminator without secrets', () => {
@@ -100,14 +100,14 @@ test('scheduler boundary builder preserves legacy workers with absent Registry f
 
 test('runJob passes only the selected Worker secret through the singleton Manager spawn field', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'scheduler-worker-secret-'))
-  const previousState = process.env.ROUTER_AGENTS_STATE
-  const previousData = process.env.ROUTER_DATA_DIR
+  const previousState = process.env.SWARMDESK_AGENT_AGENTS_STATE
+  const previousData = process.env.SWARMDESK_AGENT_DATA_DIR
   const previousReuse = process.env.ACP_SESSION_REUSE
   const secretA = 'scheduler-secret-worker-a'
   const secretB = 'scheduler-secret-worker-b'
   try {
-    process.env.ROUTER_AGENTS_STATE = join(dir, 'state.json')
-    process.env.ROUTER_DATA_DIR = join(dir, 'data')
+    process.env.SWARMDESK_AGENT_AGENTS_STATE = join(dir, 'state.json')
+    process.env.SWARMDESK_AGENT_DATA_DIR = join(dir, 'data')
     process.env.ACP_SESSION_REUSE = '1'
     setTestMasterKey(randomBytes(32))
     resetSharedStoreForTests()
@@ -234,10 +234,10 @@ test('runJob passes only the selected Worker secret through the singleton Manage
     resetSharedStoreForTests()
     globalActivityLog.clear()
     setTestMasterKey(null)
-    if (previousState === undefined) delete process.env.ROUTER_AGENTS_STATE
-    else process.env.ROUTER_AGENTS_STATE = previousState
-    if (previousData === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = previousData
+    if (previousState === undefined) delete process.env.SWARMDESK_AGENT_AGENTS_STATE
+    else process.env.SWARMDESK_AGENT_AGENTS_STATE = previousState
+    if (previousData === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = previousData
     if (previousReuse === undefined) delete process.env.ACP_SESSION_REUSE
     else process.env.ACP_SESSION_REUSE = previousReuse
     rmSync(dir, { recursive: true, force: true })

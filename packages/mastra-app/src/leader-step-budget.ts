@@ -1,4 +1,4 @@
-import type { LeaderStepBudgetEvent } from '@router-agents/shared'
+import type { LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
 
 export const LEADER_STEP_BUDGET_PART_TYPE = 'data-leader-step-budget'
 

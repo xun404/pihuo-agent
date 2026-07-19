@@ -9,18 +9,18 @@ import {
   loadAcpAgentInstallationIndex,
   saveAcpRegistryCatalogStore,
   saveAcpAgentInstallationIndex,
-} from '@router-agents/core'
-import type { AcpRegistryCatalogSnapshot } from '@router-agents/shared'
+} from '@swarmdesk-agent/core'
+import type { AcpRegistryCatalogSnapshot } from '@swarmdesk-agent/shared'
 import {
   prepareRegistryWorker,
   registerRegistryWorker,
   RegistryRegistrationError,
 } from './acp-worker-registration.js'
-import { digestOfAgentEntry } from '@router-agents/adapters'
+import { digestOfAgentEntry } from '@swarmdesk-agent/adapters'
 
 describe('acp-worker-registration', () => {
   let dir: string
-  const prevData = process.env.ROUTER_DATA_DIR
+  const prevData = process.env.SWARMDESK_AGENT_DATA_DIR
   const prevCat = process.env.ACP_REGISTRY_CATALOG_PATH
   const prevInst = process.env.ACP_AGENT_INSTALLATIONS_PATH
 
@@ -63,7 +63,7 @@ describe('acp-worker-registration', () => {
 
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'acp-reg-worker-'))
-    process.env.ROUTER_DATA_DIR = dir
+    process.env.SWARMDESK_AGENT_DATA_DIR = dir
     process.env.ACP_REGISTRY_CATALOG_PATH = join(dir, 'acp-registry.json')
     process.env.ACP_AGENT_INSTALLATIONS_PATH = join(dir, 'installs.json')
     saveAcpRegistryCatalogStore({
@@ -74,8 +74,8 @@ describe('acp-worker-registration', () => {
   })
 
   after(() => {
-    if (prevData === undefined) delete process.env.ROUTER_DATA_DIR
-    else process.env.ROUTER_DATA_DIR = prevData
+    if (prevData === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+    else process.env.SWARMDESK_AGENT_DATA_DIR = prevData
     if (prevCat === undefined) delete process.env.ACP_REGISTRY_CATALOG_PATH
     else process.env.ACP_REGISTRY_CATALOG_PATH = prevCat
     if (prevInst === undefined) delete process.env.ACP_AGENT_INSTALLATIONS_PATH
@@ -305,11 +305,11 @@ describe('acp-worker-registration', () => {
   it('reference-safely retires a zero-reference legacy artifact and re-prepares it', async () => {
     const isolated = join(dir, 'legacy-reprepare')
     const previous = {
-      data: process.env.ROUTER_DATA_DIR,
+      data: process.env.SWARMDESK_AGENT_DATA_DIR,
       catalog: process.env.ACP_REGISTRY_CATALOG_PATH,
       installs: process.env.ACP_AGENT_INSTALLATIONS_PATH,
     }
-    process.env.ROUTER_DATA_DIR = isolated
+    process.env.SWARMDESK_AGENT_DATA_DIR = isolated
     process.env.ACP_REGISTRY_CATALOG_PATH = join(isolated, 'catalog.json')
     process.env.ACP_AGENT_INSTALLATIONS_PATH = join(isolated, 'installs.json')
     try {
@@ -363,7 +363,7 @@ describe('acp-worker-registration', () => {
       )
       assert.equal(existsSync(join(installDir, 'legacy-marker')), false)
     } finally {
-      process.env.ROUTER_DATA_DIR = previous.data
+      process.env.SWARMDESK_AGENT_DATA_DIR = previous.data
       process.env.ACP_REGISTRY_CATALOG_PATH = previous.catalog
       process.env.ACP_AGENT_INSTALLATIONS_PATH = previous.installs
     }
@@ -372,11 +372,11 @@ describe('acp-worker-registration', () => {
   it('preserves ACP_RUNNER_MISSING through the public registration boundary', async () => {
     const isolated = join(dir, 'runner-missing')
     const previous = {
-      data: process.env.ROUTER_DATA_DIR,
+      data: process.env.SWARMDESK_AGENT_DATA_DIR,
       catalog: process.env.ACP_REGISTRY_CATALOG_PATH,
       installs: process.env.ACP_AGENT_INSTALLATIONS_PATH,
     }
-    process.env.ROUTER_DATA_DIR = isolated
+    process.env.SWARMDESK_AGENT_DATA_DIR = isolated
     process.env.ACP_REGISTRY_CATALOG_PATH = join(isolated, 'catalog.json')
     process.env.ACP_AGENT_INSTALLATIONS_PATH = join(isolated, 'installs.json')
     try {
@@ -400,7 +400,7 @@ describe('acp-worker-registration', () => {
           error instanceof RegistryRegistrationError && error.code === 'ACP_RUNNER_MISSING',
       )
     } finally {
-      process.env.ROUTER_DATA_DIR = previous.data
+      process.env.SWARMDESK_AGENT_DATA_DIR = previous.data
       process.env.ACP_REGISTRY_CATALOG_PATH = previous.catalog
       process.env.ACP_AGENT_INSTALLATIONS_PATH = previous.installs
     }

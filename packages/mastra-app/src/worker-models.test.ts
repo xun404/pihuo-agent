@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { LocalStore } from '@router-agents/core'
-import { WorkerModelCatalogStore } from '@router-agents/core'
-import type { WorkerModelCatalog, WorkerRegistration } from '@router-agents/shared'
-import { WORKER_MODELS_TTL_MS } from '@router-agents/shared'
+import { LocalStore } from '@swarmdesk-agent/core'
+import { WorkerModelCatalogStore } from '@swarmdesk-agent/core'
+import type { WorkerModelCatalog, WorkerRegistration } from '@swarmdesk-agent/shared'
+import { WORKER_MODELS_TTL_MS } from '@swarmdesk-agent/shared'
 import {
   getWorkerModels,
   resetWorkerModelsCacheControllerForTests,

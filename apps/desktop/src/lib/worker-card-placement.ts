@@ -1,4 +1,4 @@
-import type { WorkerRunState } from '@router-agents/shared'
+import type { WorkerRunState } from '@swarmdesk-agent/shared'
 import { isActiveWorkerStatus } from './worker-run-reducer'
 
 export interface WorkerCardPlacement {

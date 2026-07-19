@@ -1,8 +1,8 @@
-# Router Agents — 交接文档（Plan & Status）
+# SwarmDesk — 交接文档（Plan & Status）
 
-> **仓库**：https://github.com/xun404/router-agents
+> **仓库**：https://github.com/xun404/swarmdesk-agent
 > **默认分支**：`main`
-> **本地数据**：`~/.config/router-agents/`（根=配置 settings/secrets.enc；`data/`=state/runtime/sessions/mastra-memory.db；`cache/`=可重建缓存）
+> **本地数据**：`~/.config/swarmdesk-agent/`（根=配置 settings/secrets.enc；`data/`=state/runtime/sessions/mastra-memory.db；`cache/`=可重建缓存）
 > **文档日期**：2026-07-17（含 ACP Registry 全量 Agent 接入地基 + Session 复用/审批）
 
 本文档描述：**产品定位、架构、已完成、进行中、待办、风险与本地运维**，供接手同学快速对齐。
@@ -11,11 +11,11 @@
 
 ## 1. 产品是什么
 
-**Router Agents** 是 macOS 桌面「多智能体指挥台」：
+**SwarmDesk** 是 macOS 桌面「多智能体指挥台」：
 
 | 角色 | 实现 |
 |------|------|
-| **Leader** | Mastra Agent（`router-leader`），聊天编排、记忆、目标 |
+| **Leader** | Mastra Agent（`swarmdesk-leader`），聊天编排、记忆、目标 |
 | **Workers** | 本机 CLI / Registry ACP Agent，经 **ACP**（`@agentclientprotocol/sdk@1.2.1`）执行；builtin 与 custom 仍支持 |
 | **桌面** | Electron + React（Vite），双栏默认（全高侧栏 + 主列）+ 按需 Inspector；设置全页四项；UI as-built 规范见 `docs/superpowers/specs/2026-07-16-desktop-as-built-design-system.md`（本地 `design/` 不入库） |
 
@@ -33,7 +33,7 @@
 | Installation / LKG / secrets | `packages/core` | installations.json、acp-registry.json、worker-secrets.enc |
 | Owner API | `packages/mastra-app/src/acp-registry-api.ts` | prepare/register/upgrade/secrets/probe 与可取消认证 operation |
 | Terminal auth | `acp-auth-terminal*.ts` + Desktop `WorkerAuthTerminalModal.tsx` | `node-pty`、typed WebSocket、xterm 有界输出与退出后 re-probe |
-| Feature flag | `ROUTER_ACP_TERMINAL_AUTH=0` | 关闭 terminal auth；无 shell 回退 |
+| Feature flag | `SWARMDESK_AGENT_ACP_TERMINAL_AUTH=0` | 关闭 terminal auth；无 shell 回退 |
 | Contract | `npm run test:acp-registry-contract` | 不 spawn；smoke 需显式 confirm |
 
 **新增 on-disk**：`acp-registry.json`、`acp-agent-installations.json`、`agents/<id>/<ver>/<target>/`、`secrets/worker-secrets.enc`
@@ -47,7 +47,7 @@
 ## 2. 仓库与架构
 
 ```
-router-agents/
+swarmdesk-agent/
   apps/desktop/               # Electron + React UI
   packages/
     shared/                   # 领域类型（Worker/Job/Session…）
@@ -119,7 +119,7 @@ catalog hit?
 
 ### Catalog
 
-- 文件：`~/.config/router-agents/data/acp-sessions.json`（mode 0600，进程锁 + 单写者 lease，原子写入 tmp+fsync+rename）
+- 文件：`~/.config/swarmdesk-agent/data/acp-sessions.json`（mode 0600，进程锁 + 单写者 lease，原子写入 tmp+fsync+rename）
 - 存储：versioned records with keyDigest, agentSessionId, capabilities, state (ready/stale)
 - 损坏行为：隔离文件 → unavailable → 全局 fail closed。禁止单 Job reset 或自动重建空 catalog。
 - 唯一例外：`ACP_SESSION_REUSE=0` 时完全绕过 catalog read/write
@@ -224,7 +224,7 @@ catalog hit?
 
 - [x] Monorepo：`shared` / `core` / `adapters` / `mastra-app` / `apps/desktop`
 - [x] Electron 桌面 + Vite 热更新；safeStorage 包装主密钥
-- [x] 本地状态：`LocalStore` → `~/.config/router-agents/data/state.json`
+- [x] 本地状态：`LocalStore` → `~/.config/swarmdesk-agent/data/state.json`
 - [x] i18n（zh/en）+ 主题（system/light/dark）
 - [x] Activity 日志 + 右侧动态面板
 - [x] Desktop API base 固定 **`127.0.0.1:4111`**（避免 IPv6 404）
@@ -391,7 +391,7 @@ catalog hit?
     - `RegistrySnapshot` 优先级 + `getLeaderModelCatalog` / `getLeaderFeaturedCatalog`
     - `GET /api/models/catalog?featured=1` 返回 featured ∩ registry + `currentSelection`（`featured` / `not_featured` / `registry_unknown`）
     - Settings 当前模型 chip 标记非精选 / 未登记
-    - maintenance：`npm run sync:model-registry -w @router-agents/mastra-app`
+    - maintenance：`npm run sync:model-registry -w @swarmdesk-agent/mastra-app`
     - **风险**：真实 models.dev 网络同步与离线 fallback 路径需手工点一次 Settings 确认
 10. [x] Worker 模型缓存 TTL；双状态「命令可用 / ACP 会话可用」
     - `modelCatalogState` empty/fresh/stale + catalog store TTL/backoff + SWR（含 `q=`）
@@ -453,7 +453,7 @@ catalog hit?
 
 | Method | Path | 说明 |
 |--------|------|------|
-| POST | `/chat/router-leader` | AI SDK UI 聊天流 |
+| POST | `/chat/swarmdesk-leader` | AI SDK UI 聊天流 |
 | GET | `/api/snapshot` | 全量状态 |
 | GET/POST | `/api/settings` | 模型 / secrets / thinking / custom providers |
 | GET | `/api/memory/messages?threadId=&resourceId=` | 会话历史 |
@@ -548,7 +548,7 @@ ACP_LIVE_TESTS=1 node --import tsx --test packages/adapters/src/acp-live.test.ts
 
 ```bash
 # Worker 行只保存全局兼容视图；实际 UI 以项目级 worker-model catalog 为准
-python3 -c "import json;d=json.load(open('$HOME/.config/router-agents/data/state.json'));
+python3 -c "import json;d=json.load(open('$HOME/.config/swarmdesk-agent/data/state.json'));
 print([(w['name'], w.get('model'), w.get('modelCatalogState')) for w in d['workers']])"
 ```
 
@@ -611,7 +611,7 @@ print([(w['name'], w.get('model'), w.get('modelCatalogState')) for w in d['worke
 
 ## 13. 联系与资源
 
-- 远程：`git@github.com:xun404/router-agents.git`
+- 远程：`git@github.com:xun404/swarmdesk-agent.git`
 - Mastra Memory：https://mastra.ai/docs/memory/message-history
 - Background tasks：https://mastra.ai/docs/long-running-agents/background-tasks
 - OpenCode ACP：https://opencode.ai/docs/acp/

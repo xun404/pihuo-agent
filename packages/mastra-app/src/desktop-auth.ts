@@ -5,7 +5,7 @@
  * - desktopApiToken: Electron/renderer only (via preload IPC); never the internal runtime token
  * - internalRuntimeToken: RemoteRuntimeDispatchPort only (runtime.json internal field)
  *
- * Disable with ROUTER_DESKTOP_AUTH=0 for unit tests.
+ * Disable with SWARMDESK_AGENT_DESKTOP_AUTH=0 for unit tests.
  */
 import type { IncomingMessage } from 'node:http'
 import { timingSafeEqual } from 'node:crypto'
@@ -13,18 +13,18 @@ import { timingSafeEqual } from 'node:crypto'
 export type DesktopAuthMode = 'enforced' | 'disabled'
 
 export function desktopAuthMode(): DesktopAuthMode {
-  const v = process.env.ROUTER_DESKTOP_AUTH
+  const v = process.env.SWARMDESK_AGENT_DESKTOP_AUTH
   if (v === '0' || v === 'false' || v === 'off') return 'disabled'
   return 'enforced'
 }
 
 /**
- * Explicit allowlist. Override with ROUTER_DESKTOP_ORIGINS (comma-separated).
+ * Explicit allowlist. Override with SWARMDESK_AGENT_DESKTOP_ORIGINS (comma-separated).
  * Default: vite dev + empty/missing Origin (Electron file:// often omits Origin).
  * Does NOT accept arbitrary chrome-extension or Origin: null strings.
  */
 export function allowedDesktopOrigins(): string[] {
-  const fromEnv = process.env.ROUTER_DESKTOP_ORIGINS?.split(',')
+  const fromEnv = process.env.SWARMDESK_AGENT_DESKTOP_ORIGINS?.split(',')
     .map((s) => s.trim())
     .filter(Boolean)
   if (fromEnv?.length) return fromEnv
@@ -54,7 +54,7 @@ export function extractBearerToken(req: IncomingMessage): string | null {
     const m = /^Bearer\s+(.+)$/i.exec(header.trim())
     if (m?.[1]?.trim()) return m[1].trim()
   }
-  const alt = req.headers['x-router-desktop-token']
+  const alt = req.headers['x-swarmdesk-agent-desktop-token']
   if (typeof alt === 'string' && alt.trim()) return alt.trim()
   if (Array.isArray(alt) && alt[0]?.trim()) return alt[0].trim()
   return null
@@ -133,7 +133,7 @@ export function desktopCorsHeaders(req: IncomingMessage): Record<string, string>
   const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS,PUT,PATCH',
     'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, X-Router-Desktop-Token, Last-Event-ID',
+      'Content-Type, Authorization, X-SwarmDesk-Agent-Desktop-Token, Last-Event-ID',
     Vary: 'Origin',
   }
   if (origin && isAllowedDesktopOrigin(origin)) {

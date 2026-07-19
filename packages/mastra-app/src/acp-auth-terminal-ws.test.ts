@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { beforeEach, describe, it } from 'node:test'
 import type { IncomingMessage } from 'node:http'
-import type { AcpAgentInstallationRecord } from '@router-agents/core'
-import type { SanitizedAuthMethod } from '@router-agents/adapters'
-import type { WorkerRegistration } from '@router-agents/shared'
+import type { AcpAgentInstallationRecord } from '@swarmdesk-agent/core'
+import type { SanitizedAuthMethod } from '@swarmdesk-agent/adapters'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 import {
   cancelAllTerminalAuthAttempts,
   createTerminalAuthAttempt,
