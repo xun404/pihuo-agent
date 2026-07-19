@@ -62,7 +62,7 @@ const THINK_LABEL_KEY: Record<
  * (THINKING_INTENSITY_OPTIONS is ordered low→high). Empty supported → 'off'.
  * Pure; matches ChatPanel's original clampThink exactly.
  */
-function clampThink(
+export function clampThink(
   _preferred: ThinkingIntensity | undefined,
   supported: ThinkingIntensity[],
 ): ThinkingIntensity {
