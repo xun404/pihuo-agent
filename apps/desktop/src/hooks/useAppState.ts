@@ -79,8 +79,12 @@ export function useAppState() {
     return project
   }
 
-  const createSession = async (title: string | undefined, mode: LeaderMode = 'build') => {
-    const projectId = snapshot.activeProjectId ?? snapshot.projects[0]?.id
+  const createSession = async (
+    title: string | undefined,
+    mode: LeaderMode = 'build',
+    explicitProjectId?: string,
+  ) => {
+    const projectId = explicitProjectId ?? snapshot.activeProjectId ?? snapshot.projects[0]?.id
     if (!projectId) throw new Error('No project — open a project first')
     const { session, snapshot: snap } = await api.createSession({ projectId, title, mode })
     if (snap) applySnapshot(snap, ++applyGenRef.current)

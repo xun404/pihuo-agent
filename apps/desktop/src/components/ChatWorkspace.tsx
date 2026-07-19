@@ -11,7 +11,7 @@ import type {
 import { ChatPanel } from './ChatPanel'
 import { BrandLogo } from './BrandLogo'
 import { useI18n } from '../i18n/I18nProvider'
-import { IconFolder } from './Icons'
+import { IconArrowUp } from './Icons'
 
 interface Props {
   project: Project | null
@@ -46,8 +46,14 @@ interface Props {
   onToggleInspector?: () => void
   /** Fired after a git branch switch so parents can refresh git panels. */
   onRefreshGit?: () => void
-  /** Open the native folder picker directly from the empty-state button. */
-  onOpenProjectDirect?: () => void
+  /** Empty-state composer: fired with the user's first message text. */
+  onComposeFirstMessage?: (text: string) => void
+  /** Pre-fill text to inject into the active session's composer (once). */
+  initialInput?: string
+  /** Fired when the active ChatPanel has consumed initialInput. */
+  onInitialInputConsumed?: () => void
+  /** True while the empty-state composer is creating a session (disables the input). */
+  creatingFromComposer?: boolean
 }
 
 /**
@@ -76,11 +82,15 @@ export function ChatWorkspace({
   inspectorOpen,
   onToggleInspector,
   onRefreshGit,
-  onOpenProjectDirect,
+  onComposeFirstMessage,
+  initialInput,
+  onInitialInputConsumed,
+  creatingFromComposer,
 }: Props) {
   const { t } = useI18n()
   const [aliveIds, setAliveIds] = useState<string[]>([])
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({})
+  const [firstMessage, setFirstMessage] = useState('')
 
   useEffect(() => {
     if (!session?.id) return
@@ -148,15 +158,44 @@ export function ChatWorkspace({
             )}
           </h1>
           <p className="home-hint">{t('chat.openSession')}</p>
-          {!project && onOpenProjectDirect && (
-            <button
-              type="button"
-              className="btn btn-primary home-open-btn"
-              onClick={onOpenProjectDirect}
+          {onComposeFirstMessage && (
+            <form
+              className="composer-card home-composer"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const text = firstMessage.trim()
+                if (!text || creatingFromComposer || !serverUp) return
+                onComposeFirstMessage(text)
+              }}
             >
-              <IconFolder size={14} />
-              {t('chat.openProject')}
-            </button>
+              <textarea
+                className="composer-input"
+                value={firstMessage}
+                onChange={(e) => setFirstMessage(e.target.value)}
+                placeholder={t('chat.placeholderHome')}
+                rows={3}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    const text = firstMessage.trim()
+                    if (text && !creatingFromComposer && serverUp) onComposeFirstMessage(text)
+                  }
+                }}
+                disabled={!serverUp || creatingFromComposer}
+              />
+              <div className="composer-tools">
+                <span className="spacer" />
+                <button
+                  type="submit"
+                  className={`send${creatingFromComposer ? ' sending' : ''}`}
+                  disabled={!firstMessage.trim() || !serverUp || creatingFromComposer}
+                  title={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
+                  aria-label={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
+                >
+                  {creatingFromComposer ? <span className="send-spinner" /> : <IconArrowUp />}
+                </button>
+              </div>
+            </form>
           )}
           {!serverUp && (
             <p className="home-hint" style={{ color: 'var(--danger)' }}>
@@ -184,6 +223,8 @@ export function ChatWorkspace({
               session={s}
               serverUp={serverUp}
               isActive={isActive}
+              initialInput={isActive ? initialInput : undefined}
+              onInitialInputConsumed={isActive ? onInitialInputConsumed : undefined}
               onModeChange={isActive ? onModeChange : undefined}
               onRenameSession={
                 isActive && onRenameSession ? (title) => onRenameSession(s.id, title) : undefined

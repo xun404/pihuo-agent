@@ -51,6 +51,15 @@ function AppShell({
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
   const [openProjectOpen, setOpenProjectOpen] = useState(false)
+  /**
+   * First-message composer on the empty Chat state: when the user types a
+   * message before any session exists, we create a session and pre-fill its
+   * composer with the typed text (the user then hits send once). Cleared by
+   * ChatPanel via onInitialInputConsumed once consumed.
+   */
+  const [pendingComposerText, setPendingComposerText] = useState<string>('')
+  /** True while the empty-state composer is creating a session (disables the input). */
+  const [creatingFromComposer, setCreatingFromComposer] = useState(false)
 
   useEffect(() => {
     const onOpen = (ev: Event) => {
@@ -76,14 +85,39 @@ function AppShell({
     setOpenProjectOpen(true)
   }
 
-  const onOpenProjectDirect = () => {
+  /**
+   * Empty-state composer: create a session, then pre-fill the new session's
+   * composer with the user's text.
+   *
+   * - If a project is already active → createSession directly.
+   * - If no project → first open the native folder picker; once a project is
+   *   opened, create a session under it. The pending text is cleared once
+   *   ChatPanel consumes it.
+   */
+  const onComposeFirstMessage = (text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
     void (async () => {
-      const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
-      if (!path) return
+      setCreatingFromComposer(true)
       try {
-        await openProject(path)
+        setPendingComposerText(trimmed)
+        let projectId = activeProject?.id ?? snapshot.activeProjectId ?? undefined
+        if (!projectId) {
+          const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
+          if (!path) {
+            // user canceled the picker — keep the typed text, abort session creation
+            setPendingComposerText('')
+            return
+          }
+          const project = await openProject(path)
+          projectId = project.id
+        }
+        await createSession(undefined, 'build', projectId)
       } catch (e) {
-        toastError(String(e))
+        setPendingComposerText('')
+        toastError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setCreatingFromComposer(false)
       }
     })()
   }
@@ -230,7 +264,10 @@ function AppShell({
                 inspectorOpen={inspectorOpen}
                 onToggleInspector={() => setInspectorOpen((v) => !v)}
                 onRefreshGit={() => void refresh()}
-                onOpenProjectDirect={onOpenProjectDirect}
+                onComposeFirstMessage={onComposeFirstMessage}
+                initialInput={pendingComposerText}
+                onInitialInputConsumed={() => setPendingComposerText('')}
+                creatingFromComposer={creatingFromComposer}
               />
             </div>
 

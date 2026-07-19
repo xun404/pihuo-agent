@@ -4517,6 +4517,22 @@ button {
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* Spinner shown inside the send button while the empty-state composer is
+   creating a session. Reuses the dark send-bg so it reads as the same button. */
+.send-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--text-inv);
+  border-top-color: transparent;
+  opacity: 0.85;
+  animation: send-spin 0.7s linear infinite;
+}
+@keyframes send-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 /* Settings full page — wireframe settings-shell (replaces project shell) */
 .settings-shell {
@@ -6237,6 +6253,12 @@ button {
 .home .composer-stack {
   width: min(var(--messages-max), 100%);
   margin-top: var(--sp-2);
+}
+/* Empty-state composer: same width as a real composer, consistent with the
+   "open project" button alignment. */
+.home .home-composer {
+  width: min(var(--messages-max), 100%);
+  margin-top: var(--sp-1);
 }
 
 /* —— Layout fixes: force wireframe visual proportions —— */

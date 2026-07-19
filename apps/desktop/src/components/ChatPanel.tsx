@@ -149,6 +149,10 @@ interface Props {
   onToggleInspector?: () => void
   /** Fired after a successful git branch switch so parents can refresh git panels. */
   onRefreshGit?: () => void
+  /** Pre-fill the composer once (e.g. text typed on the empty-state composer). */
+  initialInput?: string
+  /** Fired when initialInput has been applied so the parent can clear it. */
+  onInitialInputConsumed?: () => void
   /** Persist session status + sticky chat error for sidebar / reload */
   onSessionStatusChange?: (
     status: Session['status'],
@@ -194,10 +198,21 @@ export function ChatPanel({
   inspectorOpen,
   onToggleInspector,
   onRefreshGit,
+  initialInput,
+  onInitialInputConsumed,
   onSessionStatusChange,
 }: Props) {
   const { t, locale } = useI18n()
   const [input, setInput] = useState('')
+  /** Tracks the initialInput value already consumed, so we apply each text once. */
+  const consumedInitialInputRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (initialInput && initialInput !== consumedInitialInputRef.current) {
+      consumedInitialInputRef.current = initialInput
+      setInput(initialInput)
+      onInitialInputConsumed?.()
+    }
+  }, [initialInput, onInitialInputConsumed])
   const [mode, setMode] = useState<LeaderMode>(session?.mode ?? 'build')
   const [accessMenuOpen, setAccessMenuOpen] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
