@@ -43,6 +43,8 @@ interface Props {
   onResetContext?: (jobId: string) => void
   inspectorOpen?: boolean
   onToggleInspector?: () => void
+  /** Fired after a git branch switch so parents can refresh git panels. */
+  onRefreshGit?: () => void
 }
 
 /**
@@ -70,6 +72,7 @@ export function ChatWorkspace({
   onResetContext,
   inspectorOpen,
   onToggleInspector,
+  onRefreshGit,
 }: Props) {
   const { t } = useI18n()
   const [aliveIds, setAliveIds] = useState<string[]>([])
@@ -193,6 +196,7 @@ export function ChatWorkspace({
               onResetContext={onResetContext}
               inspectorOpen={inspectorOpen}
               onToggleInspector={onToggleInspector}
+              onRefreshGit={onRefreshGit}
             />
           </div>
         )

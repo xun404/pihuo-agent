@@ -217,6 +217,7 @@ function AppShell({
                 }
                 inspectorOpen={inspectorOpen}
                 onToggleInspector={() => setInspectorOpen((v) => !v)}
+                onRefreshGit={() => void refresh()}
               />
             </div>
 
