@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ApprovalItem,
   LeaderMode,
@@ -8,11 +8,17 @@ import type {
   WorkerJob,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
+import { api } from '../lib/api'
 import { ChatPanel } from './ChatPanel'
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
+import { ComposerToolbar, type ModelOption } from './ComposerToolbar'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
+import {
+  THINKING_INTENSITY_OPTIONS,
+  type ThinkingIntensity,
+} from '../lib/settings'
 import { IconArrowUp, IconFolder } from './Icons'
 
 /**
@@ -60,8 +66,12 @@ interface Props {
   onToggleInspector?: () => void
   /** Fired after a git branch switch so parents can refresh git panels. */
   onRefreshGit?: () => void
-  /** Empty-state composer: fired with the user's first message text. */
-  onComposeFirstMessage?: (text: string) => void
+  /** Empty-state composer: fired with the user's first message text + the
+   *  preselected mode / approval policy from the toolbar. */
+  onComposeFirstMessage?: (
+    text: string,
+    preset: { mode: LeaderMode; approvalPolicy: SessionApprovalPolicy },
+  ) => void
   /** Click handler for the "open folder" chip on the empty-state composer (scene 1, no project). */
   onPickFolder?: () => void
   /** Pre-fill text to inject into the active session's composer (once). */
@@ -104,10 +114,68 @@ export function ChatWorkspace({
   onInitialInputConsumed,
   creatingFromComposer,
 }: Props) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [aliveIds, setAliveIds] = useState<string[]>([])
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({})
   const [firstMessage, setFirstMessage] = useState('')
+  // —— Empty-state ComposerToolbar presets (mode / approval / model / thinking) ——
+  // Loaded from settings once; selections here are passed to onComposeFirstMessage
+  // so the new session inherits them.
+  const [presetMode, setPresetMode] = useState<LeaderMode>('build')
+  const [presetPolicy, setPresetPolicy] = useState<SessionApprovalPolicy>('manual')
+  const [presetModel, setPresetModel] = useState('')
+  const [presetThinking, setPresetThinking] = useState<ThinkingIntensity>('medium')
+  const [presetModels, setPresetModels] = useState<ModelOption[]>([])
+  const [presetModelsLoading, setPresetModelsLoading] = useState(false)
+
+  const loadPresetModels = useCallback(async () => {
+    setPresetModelsLoading(true)
+    try {
+      const s = await api.getSettings()
+      const list: ModelOption[] = []
+      for (const p of s.providers) {
+        if (!p.configured) continue
+        if (p.custom && (p as { enabled?: boolean }).enabled === false) continue
+        for (const m of p.models) {
+          const modelThink = (m as { thinkingIntensities?: ThinkingIntensity[] })
+            .thinkingIntensities
+          const supported = (modelThink ?? []).filter((x) =>
+            THINKING_INTENSITY_OPTIONS.includes(x),
+          ) as ThinkingIntensity[]
+          list.push({
+            id: m.id,
+            label: m.label,
+            providerId: p.id,
+            providerName: p.name,
+            configured: true,
+            contextWindow: (m as { contextWindow?: number }).contextWindow,
+            thinkingIntensities:
+              supported.length > 0 ? supported : (['off'] as ThinkingIntensity[]),
+          })
+        }
+      }
+      setPresetModels(list)
+      const current = s.settings.leaderModel
+      setPresetModel((prev) => {
+        if (prev && list.some((m) => m.id === prev)) return prev
+        if (current && list.some((m) => m.id === current)) return current
+        return list[0]?.id ?? current ?? ''
+      })
+      const preferred = s.settings.thinkingIntensity
+      setPresetThinking(
+        preferred && THINKING_INTENSITY_OPTIONS.includes(preferred) ? preferred : 'medium',
+      )
+    } catch (e) {
+      console.warn('[ChatWorkspace] load preset models failed', e)
+    } finally {
+      setPresetModelsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadPresetModels()
+  }, [loadPresetModels])
+
   const [hintKey, setHintKey] = useState<MessageKey>(() => EMPTY_HINT_KEYS[0]!)
   // remember the last hint so we don't pick it twice in a row
   const lastHintIdxRef = useRef(0)
@@ -205,7 +273,10 @@ export function ChatWorkspace({
                 e.preventDefault()
                 const text = firstMessage.trim()
                 if (!text || creatingFromComposer || !serverUp) return
-                onComposeFirstMessage(text)
+                onComposeFirstMessage(text, {
+                  mode: presetMode,
+                  approvalPolicy: presetPolicy,
+                })
               }}
             >
               <div className="context-bar">
@@ -247,13 +318,32 @@ export function ChatWorkspace({
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault()
                     const text = firstMessage.trim()
-                    if (text && !creatingFromComposer && serverUp) onComposeFirstMessage(text)
+                    if (text && !creatingFromComposer && serverUp)
+                      onComposeFirstMessage(text, {
+                        mode: presetMode,
+                        approvalPolicy: presetPolicy,
+                      })
                   }
                 }}
                 disabled={!serverUp || creatingFromComposer}
               />
               <div className="composer-tools">
-                <span className="spacer" />
+                <ComposerToolbar
+                  mode={presetMode}
+                  approvalPolicy={presetPolicy}
+                  selectedModel={presetModel}
+                  thinkingIntensity={presetThinking}
+                  models={presetModels}
+                  modelsLoading={presetModelsLoading}
+                  tokenCount={0}
+                  locale={locale}
+                  persistThinking={false}
+                  onModeChange={setPresetMode}
+                  onApprovalPolicyChange={setPresetPolicy}
+                  onModelChange={setPresetModel}
+                  onThinkingChange={setPresetThinking}
+                  onOpenSettings={onOpenSettings}
+                />
                 <button
                   type="submit"
                   className={`send${creatingFromComposer ? ' sending' : ''}`}

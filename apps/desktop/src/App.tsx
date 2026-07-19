@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { LeaderMode, Project, Session, WorkerJob } from '@swarmdesk-agent/shared'
+import type { LeaderMode, Project, Session, SessionApprovalPolicy, WorkerJob } from '@swarmdesk-agent/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { RightPanel } from './components/RightPanel'
@@ -94,7 +94,10 @@ function AppShell({
    *   opened, create a session under it. The pending text is cleared once
    *   ChatPanel consumes it.
    */
-  const onComposeFirstMessage = (text: string) => {
+  const onComposeFirstMessage = (
+    text: string,
+    preset?: { mode: LeaderMode; approvalPolicy: SessionApprovalPolicy },
+  ) => {
     const trimmed = text.trim()
     if (!trimmed) return
     void (async () => {
@@ -112,7 +115,12 @@ function AppShell({
           const project = await openProject(path)
           projectId = project.id
         }
-        await createSession(undefined, 'build', projectId)
+        const mode = preset?.mode ?? 'build'
+        const session = await createSession(undefined, mode, projectId)
+        // Apply the preset access policy (createSession defaults to 'manual').
+        if (preset && preset.approvalPolicy !== 'manual') {
+          await setSessionApprovalPolicy(session.id, preset.approvalPolicy)
+        }
       } catch (e) {
         setPendingComposerText('')
         toastError(e instanceof Error ? e.message : String(e))
