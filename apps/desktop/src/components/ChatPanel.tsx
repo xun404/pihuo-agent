@@ -38,7 +38,6 @@ import {
   ContextRing,
   IconArrowUp,
   IconBolt,
-  IconBranch,
   IconCheck,
   IconClock,
   IconEdit,
@@ -47,6 +46,7 @@ import {
   IconSupervisor,
 } from './Icons'
 import { BrandLogo } from './BrandLogo'
+import { BranchSwitcher } from './BranchSwitcher'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
 import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
@@ -147,6 +147,8 @@ interface Props {
   snapshotWorkers: WorkerRegistration[]
   inspectorOpen?: boolean
   onToggleInspector?: () => void
+  /** Fired after a successful git branch switch so parents can refresh git panels. */
+  onRefreshGit?: () => void
   /** Persist session status + sticky chat error for sidebar / reload */
   onSessionStatusChange?: (
     status: Session['status'],
@@ -191,6 +193,7 @@ export function ChatPanel({
   snapshotWorkers,
   inspectorOpen,
   onToggleInspector,
+  onRefreshGit,
   onSessionStatusChange,
 }: Props) {
   const { t, locale } = useI18n()
@@ -1130,11 +1133,13 @@ export function ChatPanel({
               {project.name}
             </span>
           )}
-          {project?.defaultBranch && (
-            <span className="ctx">
-              <IconBranch size={13} />
-              {project.defaultBranch}
-            </span>
+          {project && (
+            <BranchSwitcher
+              project={project}
+              snapshotWorkers={snapshotWorkers}
+              snapshotJobs={snapshotJobs}
+              onAfterSwitch={onRefreshGit}
+            />
           )}
         </div>
         <textarea
