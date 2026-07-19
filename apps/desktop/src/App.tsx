@@ -10,7 +10,7 @@ import { I18nProvider, useI18n } from './i18n/I18nProvider'
 import type { Locale } from './i18n/locales'
 import { ThemeProvider } from './theme/ThemeProvider'
 import { ToastProvider, useToast } from './components/Toast'
-import { confirmAction } from './lib/native-dialogs'
+import { confirmAction, pickProjectDirectory } from './lib/native-dialogs'
 
 const EMPTY_JOBS: WorkerJob[] = []
 
@@ -74,6 +74,18 @@ function AppShell({
 
   const onOpenProject = () => {
     setOpenProjectOpen(true)
+  }
+
+  const onOpenProjectDirect = () => {
+    void (async () => {
+      const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
+      if (!path) return
+      try {
+        await openProject(path)
+      } catch (e) {
+        toastError(String(e))
+      }
+    })()
   }
 
   const onNewSession = () => {
@@ -218,6 +230,7 @@ function AppShell({
                 inspectorOpen={inspectorOpen}
                 onToggleInspector={() => setInspectorOpen((v) => !v)}
                 onRefreshGit={() => void refresh()}
+                onOpenProjectDirect={onOpenProjectDirect}
               />
             </div>
 

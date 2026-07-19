@@ -11,6 +11,7 @@ import type {
 import { ChatPanel } from './ChatPanel'
 import { BrandLogo } from './BrandLogo'
 import { useI18n } from '../i18n/I18nProvider'
+import { IconFolder } from './Icons'
 
 interface Props {
   project: Project | null
@@ -45,6 +46,8 @@ interface Props {
   onToggleInspector?: () => void
   /** Fired after a git branch switch so parents can refresh git panels. */
   onRefreshGit?: () => void
+  /** Open the native folder picker directly from the empty-state button. */
+  onOpenProjectDirect?: () => void
 }
 
 /**
@@ -73,6 +76,7 @@ export function ChatWorkspace({
   inspectorOpen,
   onToggleInspector,
   onRefreshGit,
+  onOpenProjectDirect,
 }: Props) {
   const { t } = useI18n()
   const [aliveIds, setAliveIds] = useState<string[]>([])
@@ -144,6 +148,16 @@ export function ChatWorkspace({
             )}
           </h1>
           <p className="home-hint">{t('chat.openSession')}</p>
+          {!project && onOpenProjectDirect && (
+            <button
+              type="button"
+              className="btn btn-primary home-open-btn"
+              onClick={onOpenProjectDirect}
+            >
+              <IconFolder size={14} />
+              {t('chat.openProject')}
+            </button>
+          )}
           {!serverUp && (
             <p className="home-hint" style={{ color: 'var(--danger)' }}>
               {t('chat.serverDown')}
