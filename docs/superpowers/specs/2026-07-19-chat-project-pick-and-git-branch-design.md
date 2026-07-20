@@ -8,6 +8,7 @@
 ## 1. 背景与问题
 
 ### 1.1 项目选择使用"上传"对话框
+
 - `apps/desktop/src/components/OpenProjectModal.tsx:203-216` 用 HTML `<input type=file webkitdirectory>` 选择文件夹，触发的系统面板确认按钮是 macOS/Chrome 的"上传"（在 `OpenProjectModal.tsx:26, 262-266` 已注释承认这点）。
 - **后端原生文件夹选择器已完整实现但未被调用**：
   - IPC 通道 `dialog:openDirectory`（`apps/desktop/electron/main.ts:682-712`）
@@ -16,6 +17,7 @@
 - 初始 Chat 空状态（`apps/desktop/src/components/ChatWorkspace.tsx:125-151`）只有问候语，**没有打开项目的入口**，用户必须去左侧栏点"打开项目…"。
 
 ### 1.2 Git 分支切换完全缺失
+
 - 唯一的 git 集成是只读 `getGitStatus`（`packages/core/src/git-status.ts`，仅 `status --porcelain` / `rev-parse --abbrev-ref HEAD` / numstat）。
 - 全代码库**无任何** `git switch` / `git checkout` / `git branch` / `git for-each-ref` 调用。
 - `Project.defaultBranch` 字段（`packages/shared/src/index.ts:297-305`）只在两处起作用：
@@ -25,17 +27,18 @@
 - Session 数据模型（`packages/shared/src/index.ts:307-322`）无 branch 字段。
 
 ### 1.3 ZCode 参考模式（来自 app.asar 分析）
+
 - **项目选择**：`window.zcode.selectDirectory()` → `dialog.showOpenDialog({properties:["openDirectory","createDirectory"]})`，返回 `string | null`。空状态菜单项"打开文件夹"。
 - **分支切换**：Popover + cmdk 列表，仅当 `isGitAvailable && isRepository` 时显示。Host 进程用 `git for-each-ref refs/heads --format=...` 列分支，`git switch --no-guess` 切换，带脏文件检测和"提交后切换"辅助流程。会话进行中也可切换。
 
 ## 2. 设计决策（已与用户确认）
 
-| 决策 | 选择 | 理由 |
-|---|---|---|
-| 分支功能范围 | **完整 zcode 风格** | 切换 + 新建 + 脏目录"先提交再切换" + 冲突/worktree 占用等错误处理 |
-| 分支选择器位置 | **Composer 上下文栏**（复用 `ChatPanel.tsx:1133-1138` 位置） | 改动最小，会话中可见 |
-| 项目选择改造程度 | **原生选择器 + 初始页加入口**（保留 modal 作为"粘贴路径"备用） | 依现状，去除"上传"文案 |
-| 分支切换语义 | **真正 `git switch`，运行中 worker 警告** | 贴合 zcode 语义，worker 看到的代码随分支变 |
+| 决策             | 选择                                                           | 理由                                                              |
+| ---------------- | -------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 分支功能范围     | **完整 zcode 风格**                                            | 切换 + 新建 + 脏目录"先提交再切换" + 冲突/worktree 占用等错误处理 |
+| 分支选择器位置   | **Composer 上下文栏**（复用 `ChatPanel.tsx:1133-1138` 位置）   | 改动最小，会话中可见                                              |
+| 项目选择改造程度 | **原生选择器 + 初始页加入口**（保留 modal 作为"粘贴路径"备用） | 依现状，去除"上传"文案                                            |
+| 分支切换语义     | **真正 `git switch`，运行中 worker 警告**                      | 贴合 zcode 语义，worker 看到的代码随分支变                        |
 
 ### 2.1 附加架构决策
 
@@ -50,6 +53,7 @@
 ### 3.1 项目选择改造（去除"上传"）
 
 #### 3.1.1 `OpenProjectModal.tsx` — 主按钮改用原生选择器
+
 - `browse()`（`:89-99`）改为调用 `pickProjectDirectory()` from `native-dialogs.ts`：
   ```ts
   const result = await pickProjectDirectory({ title, buttonLabel: '选择此文件夹' })
@@ -63,13 +67,16 @@
 - 保留文本输入 + "确定"，作为粘贴路径的备用入口。
 
 #### 3.1.2 `ChatWorkspace.tsx` 初始空状态加入口
+
 - 在 `:143` 的 `<p className="home-hint">` 后增加一个"打开项目…"按钮：
   ```tsx
-  {!project && (
-    <button className="btn btn-primary home-open-btn" onClick={onOpenProjectDirect}>
-      <IconFolder size={14} /> {t('chat.openProject')}
-    </button>
-  )}
+  {
+    !project && (
+      <button className="btn btn-primary home-open-btn" onClick={onOpenProjectDirect}>
+        <IconFolder size={14} /> {t('chat.openProject')}
+      </button>
+    )
+  }
   ```
 - 新增 prop `onOpenProjectDirect: () => void`，由 `App.tsx` 注入：先调原生 `pickProjectDirectory()`，成功则 `openProject(path)`（复用 `useAppState.openProject`，`:73-80`）。**不再走 `OpenProjectModal`**。
 - 仅在 `!project`（确实无项目）时显示；已有项目时保持现状问候语。
@@ -80,6 +87,7 @@
 #### 3.2.1 `packages/core/src/git-branches.ts`（新文件）
 
 类型定义：
+
 ```ts
 export interface BranchInfo {
   name: string
@@ -125,6 +133,7 @@ export interface BranchSwitchResult {
 ```
 
 函数（实现参考 zcode host）：
+
 - `listLocalBranches(rootPath): Promise<BranchListResult>`
   - 先 `rev-parse --is-inside-work-tree` + `rev-parse --abbrev-ref HEAD` + `status --porcelain`（复用 `getGitStatus` 中的逻辑或独立实现）
   - `git for-each-ref refs/heads --format=%(refname:short)%00%(upstream:short)%00%(objectname)%00%(committerdate:unix)`
@@ -177,7 +186,9 @@ registerApiRoute('/api/projects/:id/branches/commit-and-switch', { method: 'POST
 ### 3.3 前端类型与 API 客户端
 
 #### 3.3.1 `apps/desktop/src/lib/api.ts`
+
 新增方法（紧邻 `gitStatus` `:579-582`）：
+
 ```ts
 listBranches: (projectId: string) =>
   request<BranchListResult>(`/api/projects/${encodePathSegment(projectId)}/branches`),
@@ -194,6 +205,7 @@ commitAndSwitch: (projectId: string, targetBranchName: string, message: string) 
     method: 'POST', body: JSON.stringify({ targetBranchName, message }),
   }),
 ```
+
 类型从 `@swarmdesk-agent/core` 重新导出。
 
 ### 3.4 前端 Hook
@@ -204,7 +216,7 @@ commitAndSwitch: (projectId: string, targetBranchName: string, message: string) 
 interface UseGitBranchesArgs {
   projectId: string | undefined
   rootPath: string | undefined
-  enabled?: boolean  // 默认 true；可在非 git 项目时关闭
+  enabled?: boolean // 默认 true；可在非 git 项目时关闭
 }
 interface UseGitBranchesResult {
   loading: boolean
@@ -222,6 +234,7 @@ interface UseGitBranchesResult {
 ```
 
 行为：
+
 - mount/projectId 变化时 `listBranches(projectId)`
 - 暴露 `refresh`，UI 可在切换成功后调用
 - 内部 `isRepo` 由首次 list 结果判定；非 repo 时后续不轮询
@@ -236,6 +249,7 @@ interface UseGitBranchesResult {
 渲染条件：`project && git.isRepo`（isRepo 来自 `useGitBranches`）。
 
 结构（仿 zcode，使用 framer-motion 与项目现有 pop-menu 风格）：
+
 ```
 <button className="ctx branch-trigger" onClick={toggle}>
   <IconBranch size={13} />
@@ -278,19 +292,20 @@ interface UseGitBranchesResult {
 ```
 
 #### 3.5.2 运行中 worker 警告
+
 `switchTo` 实现前置 check。**不调 `api.listWorkers`**（它是全局接口，不接受 projectId）；改用 ChatPanel 已经持有的 `snapshotWorkers` prop 过滤本项目运行中 worker：
 
 ```ts
 const switchTo = async (target: string) => {
   // snapshotWorkers 由 ChatPanel 传入，已属本项目（worker.projectId === project.id）
-  const running = snapshotWorkers?.filter(
-    (w) => w.projectId === project?.id && w.status === 'running'
-  ) ?? []
+  const running =
+    snapshotWorkers?.filter((w) => w.projectId === project?.id && w.status === 'running') ?? []
   if (running.length > 0) {
     const ok = await window.routerAgents.dialog.confirm(
-      t('git.branchSwitcher.workerWarning', { count: running.length })
+      t('git.branchSwitcher.workerWarning', { count: running.length }),
     )
-    if (!ok) return { ok: false, action: 'switch', branchName: target, didChange: false, issues: [] }
+    if (!ok)
+      return { ok: false, action: 'switch', branchName: target, didChange: false, issues: [] }
   }
   const result = await api.switchBranch(projectId, target)
   if (!result.ok) {
@@ -306,6 +321,7 @@ const switchTo = async (target: string) => {
 `WorkerRegistration` 类型中 `projectId` 与 `status` 字段需在实现时核对（若 `status` 不存在，回退判定条件改为「worker 有进行中的 job」—— `snapshotJobs` 里 `workerId` 匹配且未完成）。
 
 #### 3.5.3 子对话框
+
 - `CreateBranchDialog`：分支名输入 + startPoint（可选）+ 确定/取消
 - `CommitAndSwitchDialog`：当切换被 tracked 改动阻塞时显示，列出影响文件（来自 issue.paths），输入 commit message → `commitAndSwitch`
 
@@ -316,11 +332,14 @@ const switchTo = async (target: string) => {
 - 切换成功后调用 `onAfterSwitch`，触发 RightPanel 的 git 区刷新（通过 snapshot.revision bump 或自定义事件）
 
 ### 3.7 `RightPanel.tsx` 改动
+
 - `:640` 的分支名显示：优先取 `useGitBranches().currentBranchName`，回退到 `gitStatus.branch`
 - 保持只读展示风格不变
 
 ### 3.8 i18n
+
 新增键（zh-CN/en），命名仿 zcode，写入现有 locale 文件：
+
 - `chat.openProject`：打开项目…
 - `git.branchSwitcher.label`、`searchPlaceholder`、`empty`、`currentDirty`、`createAction`
 - `git.branchSwitcher.createDialog.*`
@@ -331,21 +350,22 @@ const switchTo = async (target: string) => {
 
 ## 4. 错误处理
 
-| 场景 | 行为 |
-|---|---|
-| 非 git 项目 | `BranchSwitcher` 不渲染；ChatPanel context-bar 不显示分支 chip |
-| `git` 未安装 | listBranches 返回 `isRepo=false`；同上 |
-| 切换被 tracked 改动阻塞 | 弹 `CommitAndSwitchDialog`，引导提交后切换 |
-| 切换被 untracked 改动阻塞 | toast 提示具体文件（来自 issue.paths） |
-| 冲突中 | toast 错误，不切换 |
-| 分支被其它 worktree 占用 | toast 错误，列出 worktree 路径 |
-| 目标分支不存在 | toast 错误 |
-| 运行中 worker 存在 | `dialog.confirm` 警告，确认后才切换 |
-| 网络错误 | toast 失败，UI 回退到上一次状态 |
+| 场景                      | 行为                                                           |
+| ------------------------- | -------------------------------------------------------------- |
+| 非 git 项目               | `BranchSwitcher` 不渲染；ChatPanel context-bar 不显示分支 chip |
+| `git` 未安装              | listBranches 返回 `isRepo=false`；同上                         |
+| 切换被 tracked 改动阻塞   | 弹 `CommitAndSwitchDialog`，引导提交后切换                     |
+| 切换被 untracked 改动阻塞 | toast 提示具体文件（来自 issue.paths）                         |
+| 冲突中                    | toast 错误，不切换                                             |
+| 分支被其它 worktree 占用  | toast 错误，列出 worktree 路径                                 |
+| 目标分支不存在            | toast 错误                                                     |
+| 运行中 worker 存在        | `dialog.confirm` 警告，确认后才切换                            |
+| 网络错误                  | toast 失败，UI 回退到上一次状态                                |
 
 ## 5. 测试
 
 ### 5.1 单元测试
+
 - `packages/core/src/git-branches.test.ts`：
   - `for-each-ref` 输出解析（含 upstream、commitTimestampMs）
   - current 分支标记
@@ -363,6 +383,7 @@ const switchTo = async (target: string) => {
   - switchTo 成功后 refresh
 
 ### 5.2 集成 / 手测脚本
+
 1. 打开非 git 项目 → composer 不显示分支 chip
 2. 打开 git 项目 → 显示当前分支名
 3. 点击触发器 → popover 列出本地分支，当前带 ✓

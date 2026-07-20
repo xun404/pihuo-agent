@@ -86,7 +86,8 @@ function resolveCacheBase(): string {
  * - else <configBase>/swarmdesk-agent
  */
 export function resolveRouterDataDir(): string {
-  const explicit = process.env.SWARMDESK_AGENT_DATA_DIR?.trim() || process.env.SWARMDESK_AGENT_AGENTS_DIR?.trim()
+  const explicit =
+    process.env.SWARMDESK_AGENT_DATA_DIR?.trim() || process.env.SWARMDESK_AGENT_AGENTS_DIR?.trim()
   if (explicit) return resolve(explicit)
   return resolve(join(resolveConfigBase(), 'swarmdesk-agent'))
 }

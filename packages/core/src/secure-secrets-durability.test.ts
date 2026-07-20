@@ -38,7 +38,8 @@ test('a corrupt encrypted payload is never overwritten by a later mutation', () 
     else process.env.SWARMDESK_AGENT_DATA_DIR = previousDir
     if (previousSecret === undefined) delete process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET
     else process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET = previousSecret
-    if (previousParentInjection === undefined) delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
+    if (previousParentInjection === undefined)
+      delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
     else process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED = previousParentInjection
     rmSync(dir, { recursive: true, force: true })
   }

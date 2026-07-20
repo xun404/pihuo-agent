@@ -110,9 +110,9 @@ Open a local project path, keep multiple chat sessions, rename from the header, 
 
 **Also in the box:**
 
-- **i18n** — Chinese / English in the title bar  
-- **Git &amp; files** — real `git status` and bounded project tree in the UI  
-- **Step budget** — configurable Leader max steps with continue-on-same-thread  
+- **i18n** — Chinese / English in the title bar
+- **Git &amp; files** — real `git status` and bounded project tree in the UI
+- **Step budget** — configurable Leader max steps with continue-on-same-thread
 - **Local-first** — data under `~/.config/swarmdesk-agent/` (no cloud account required)
 
 ---
@@ -129,11 +129,11 @@ Built-in presets plus **ACP Registry** agents. Registry availability depends on 
   <kbd><img src="https://www.google.com/s2/favicons?domain=opencode.ai&sz=64" alt="" width="16" valign="middle" /> OpenCode</kbd>
 </p>
 
-| Agent | Primary role | Also |
-| ----- | ------------ | ---- |
-| **Claude Code** | coder | plan, research, general |
-| **Codex CLI** | review | coder, test, general |
-| **OpenCode** | general | coder, plan, test |
+| Agent           | Primary role | Also                    |
+| --------------- | ------------ | ----------------------- |
+| **Claude Code** | coder        | plan, research, general |
+| **Codex CLI**   | review       | coder, test, general    |
+| **OpenCode**    | general      | coder, plan, test       |
 
 ### ACP Registry (bundled catalog)
 
@@ -158,22 +158,22 @@ Configure in **Settings** (encrypted on disk). Leader uses Mastra’s model rout
 
 ### Built-in providers
 
-| Provider | API style | Key |
-| -------- | --------- | --- |
-| OpenAI | OpenAI | `OPENAI_API_KEY` |
-| Anthropic | Anthropic Messages | `ANTHROPIC_API_KEY` |
+| Provider        | API style            | Key                                               |
+| --------------- | -------------------- | ------------------------------------------------- |
+| OpenAI          | OpenAI               | `OPENAI_API_KEY`                                  |
+| Anthropic       | Anthropic Messages   | `ANTHROPIC_API_KEY`                               |
 | Google (Gemini) | Google Generative AI | `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_API_KEY` |
-| xAI (Grok) | OpenAI-compatible | `XAI_API_KEY` |
-| DeepSeek | OpenAI-compatible | `DEEPSEEK_API_KEY` |
+| xAI (Grok)      | OpenAI-compatible    | `XAI_API_KEY`                                     |
+| DeepSeek        | OpenAI-compatible    | `DEEPSEEK_API_KEY`                                |
 
 ### Custom / gateway APIs
 
-| Style | Typical use |
-| ----- | ----------- |
-| **OpenAI-compatible** | OpenRouter, Ollama, SiliconFlow, Azure-compatible gateways, local proxies |
-| **Anthropic-compatible** | Anthropic-protocol proxies |
-| **Google-compatible** | Gemini-style endpoints |
-| **Custom** | Other gateways (id + base URL + key env in Settings) |
+| Style                    | Typical use                                                               |
+| ------------------------ | ------------------------------------------------------------------------- |
+| **OpenAI-compatible**    | OpenRouter, Ollama, SiliconFlow, Azure-compatible gateways, local proxies |
+| **Anthropic-compatible** | Anthropic-protocol proxies                                                |
+| **Google-compatible**    | Gemini-style endpoints                                                    |
+| **Custom**               | Other gateways (id + base URL + key env in Settings)                      |
 
 ---
 
@@ -184,11 +184,11 @@ Configure in **Settings** (encrypted on disk). Leader uses Mastra’s model rout
 - **[Download the latest release](https://github.com/xun404/swarmdesk-agent/releases/latest)**
 - Builds (names match `SwarmDesk-Agent-${version}-…`):
 
-  | Platform | Arch | Package |
-  | -------- | ---- | ------- |
-  | macOS | Apple Silicon (arm64) | DMG, ZIP |
-  | Windows | x64 | NSIS EXE |
-  | Linux | x64 | AppImage, DEB |
+  | Platform | Arch                  | Package       |
+  | -------- | --------------------- | ------------- |
+  | macOS    | Apple Silicon (arm64) | DMG, ZIP      |
+  | Windows  | x64                   | NSIS EXE      |
+  | Linux    | x64                   | AppImage, DEB |
 
 - Prefer verifying `SHA256SUMS` in the same release.
 

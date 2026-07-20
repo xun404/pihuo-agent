@@ -27,7 +27,13 @@ type Props = {
 function ChevronIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-      <path d="M6 3.5L10.5 8L6 12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M6 3.5L10.5 8L6 12.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
@@ -36,7 +42,13 @@ function ToolIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
       <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M4 6.5L6.2 8.2L4 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M4 6.5L6.2 8.2L4 10"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <path d="M7.5 10.2H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   )
@@ -104,7 +116,13 @@ export const ToolCallRow = memo(function ToolCallRow({
         </span>
         <span className="tool-row-name">
           {name}
-          {running && <span className="busy-dots" aria-hidden><span className="d" /><span className="d" /><span className="d" /></span>}
+          {running && (
+            <span className="busy-dots" aria-hidden>
+              <span className="d" />
+              <span className="d" />
+              <span className="d" />
+            </span>
+          )}
         </span>
         {durationSec != null && (
           <span className={`tool-row-duration${running ? ' live' : ''}`}>
@@ -133,25 +151,41 @@ export const ToolCallRow = memo(function ToolCallRow({
                 command=$ 行，stdout=▸ 行（每行一条），stderr=✗ 行，完成=✓ 行。*/}
             {view.command && (
               <div className="line">
-                <span className="mk" aria-hidden>$</span>
+                <span className="mk" aria-hidden>
+                  $
+                </span>
                 <span className="tx">{view.command}</span>
               </div>
             )}
-            {view.stdout && view.stdout.split('\n').filter(Boolean).map((line, idx) => (
-              <div className="line" key={`o${idx}`}>
-                <span className="mk" aria-hidden>▸</span>
-                <span className="tx">{line}</span>
-              </div>
-            ))}
-            {view.stderr && view.stderr.split('\n').filter(Boolean).map((line, idx) => (
-              <div className="line" key={`e${idx}`}>
-                <span className="mk err" aria-hidden>✗</span>
-                <span className="tx">{line}</span>
-              </div>
-            ))}
+            {view.stdout &&
+              view.stdout
+                .split('\n')
+                .filter(Boolean)
+                .map((line, idx) => (
+                  <div className="line" key={`o${idx}`}>
+                    <span className="mk" aria-hidden>
+                      ▸
+                    </span>
+                    <span className="tx">{line}</span>
+                  </div>
+                ))}
+            {view.stderr &&
+              view.stderr
+                .split('\n')
+                .filter(Boolean)
+                .map((line, idx) => (
+                  <div className="line" key={`e${idx}`}>
+                    <span className="mk err" aria-hidden>
+                      ✗
+                    </span>
+                    <span className="tx">{line}</span>
+                  </div>
+                ))}
             {!running && !errorText && view.stdout && (
               <div className="line ok">
-                <span className="mk" aria-hidden>✓</span>
+                <span className="mk" aria-hidden>
+                  ✓
+                </span>
                 <span className="tx">done</span>
               </div>
             )}

@@ -33,8 +33,7 @@ describe('desktop runtime layout', () => {
       {
         mode: 'packaged',
         identityRoot: '/Users/me/Library/Application Support/SwarmDesk',
-        rendererDist:
-          '/Applications/SwarmDesk.app/Contents/Resources/app.asar/apps/desktop/dist',
+        rendererDist: '/Applications/SwarmDesk.app/Contents/Resources/app.asar/apps/desktop/dist',
         apiEntry: '/Applications/SwarmDesk.app/Contents/Resources/runtime/http-server.mjs',
         apiCwd: '/Applications/SwarmDesk.app/Contents/Resources/runtime',
       },

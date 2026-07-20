@@ -14,8 +14,16 @@ describe('deriveMasterKey', () => {
   })
 
   it('SWARMDESK_AGENT_CREDENTIAL_SECRET override wins and is deterministic', () => {
-    const a = deriveMasterKey({ SWARMDESK_AGENT_CREDENTIAL_SECRET: 'my-secret' }, 'darwin', '/tmp/h1')
-    const b = deriveMasterKey({ SWARMDESK_AGENT_CREDENTIAL_SECRET: 'my-secret' }, 'linux', '/tmp/h2')
+    const a = deriveMasterKey(
+      { SWARMDESK_AGENT_CREDENTIAL_SECRET: 'my-secret' },
+      'darwin',
+      '/tmp/h1',
+    )
+    const b = deriveMasterKey(
+      { SWARMDESK_AGENT_CREDENTIAL_SECRET: 'my-secret' },
+      'linux',
+      '/tmp/h2',
+    )
     assert.deepEqual(a, b)
     assert.deepEqual(a, sha256('my-secret'))
   })

@@ -142,7 +142,8 @@ const runtimeWorkspaceRoot = pathResolve(
       : process.cwd()),
 )
 const runtimeWorkspaceId = createHash('sha256').update(runtimeWorkspaceRoot).digest('hex')
-const studioApiToken = process.env.SWARMDESK_AGENT_STUDIO_TOKEN?.trim() || randomBytes(32).toString('hex')
+const studioApiToken =
+  process.env.SWARMDESK_AGENT_STUDIO_TOKEN?.trim() || randomBytes(32).toString('hex')
 /** Request-scoped so every send()/CORS path echoes the correct Origin. */
 const requestAls = new AsyncLocalStorage<IncomingMessage>()
 
@@ -177,7 +178,8 @@ const sessionMgr = acpRuntime.manager
 let internalRuntimeToken: string | null = null
 /** Desktop Electron API token — only via preload IPC from runtime.json desktopToken. */
 let desktopApiToken: string | null = null
-const runtimeDiscoveryPath = process.env.SWARMDESK_AGENT_RUNTIME_PATH ?? defaultRuntimeDiscoveryPath()
+const runtimeDiscoveryPath =
+  process.env.SWARMDESK_AGENT_RUNTIME_PATH ?? defaultRuntimeDiscoveryPath()
 const runtimeStartedAt = new Date().toISOString()
 
 function currentReq(): IncomingMessage | undefined {

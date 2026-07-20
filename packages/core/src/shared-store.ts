@@ -10,7 +10,8 @@ let instanceMode: LocalStoreMode | null = null
 export function getSharedStore(opts?: { mode?: LocalStoreMode }): LocalStore {
   // Studio/client-only processes must never create a writable Store via accidental import
   const envClientOnly =
-    process.env.SWARMDESK_AGENT_CLIENT_ONLY === '1' || process.env.SWARMDESK_AGENT_RUNTIME_ROLE === 'client-only'
+    process.env.SWARMDESK_AGENT_CLIENT_ONLY === '1' ||
+    process.env.SWARMDESK_AGENT_RUNTIME_ROLE === 'client-only'
   const mode: LocalStoreMode = opts?.mode ?? (envClientOnly ? 'readOnly' : 'owner')
   if (!instance) {
     instance = new LocalStore(undefined, { mode })

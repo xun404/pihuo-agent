@@ -16,21 +16,21 @@
 
 ## 2. 已确认的发布决策
 
-| 项目         | 决策                                                     |
-| ------------ | -------------------------------------------------------- |
-| 产品名       | `SwarmDesk`                                          |
-| 应用 ID      | `net.rmbz.open-dev.agent-desktop`                        |
-| 作者/维护者  | `xun404 <xun404@users.noreply.github.com>`               |
-| 许可证       | MIT，Copyright 2026 xun404                               |
-| macOS        | Apple Silicon arm64；DMG + ZIP                           |
-| Windows      | x64；NSIS `.exe`                                         |
-| Linux        | x64；AppImage + deb                                      |
-| PR / main    | 测试、构建、打包、短期 Artifact                          |
-| 正式发布     | `v*` 标签，标签必须与根 `package.json` 版本一致          |
-| 签名         | 首版无签名，预留 Secrets 和配置入口                      |
-| 应用内更新   | 首版不启用；保留 electron-builder 发布元数据             |
+| 项目         | 决策                                                                            |
+| ------------ | ------------------------------------------------------------------------------- |
+| 产品名       | `SwarmDesk`                                                                     |
+| 应用 ID      | `net.rmbz.open-dev.agent-desktop`                                               |
+| 作者/维护者  | `xun404 <xun404@users.noreply.github.com>`                                      |
+| 许可证       | MIT，Copyright 2026 xun404                                                      |
+| macOS        | Apple Silicon arm64；DMG + ZIP                                                  |
+| Windows      | x64；NSIS `.exe`                                                                |
+| Linux        | x64；AppImage + deb                                                             |
+| PR / main    | 测试、构建、打包、短期 Artifact                                                 |
+| 正式发布     | `v*` 标签，标签必须与根 `package.json` 版本一致                                 |
+| 签名         | 首版无签名，预留 Secrets 和配置入口                                             |
+| 应用内更新   | 首版不启用；保留 electron-builder 发布元数据                                    |
 | 应用图标     | 品牌蜂后/蜂巢标：`docs/assets/icon*.svg` → `build/icon.png`（electron-builder） |
-| 外部运行条件 | 应用自带 API runtime；ACP Agent CLI 由用户安装或配置     |
+| 外部运行条件 | 应用自带 API runtime；ACP Agent CLI 由用户安装或配置                            |
 
 ## 3. 当前阻塞
 

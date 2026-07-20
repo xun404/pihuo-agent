@@ -14,7 +14,10 @@ export default defineConfig({
               vite: {
                 resolve: {
                   alias: {
-                    '@swarmdesk-agent/core': path.join(__dirname, '../../packages/core/src/index.ts'),
+                    '@swarmdesk-agent/core': path.join(
+                      __dirname,
+                      '../../packages/core/src/index.ts',
+                    ),
                     '@swarmdesk-agent/shared': path.join(
                       __dirname,
                       '../../packages/shared/src/index.ts',

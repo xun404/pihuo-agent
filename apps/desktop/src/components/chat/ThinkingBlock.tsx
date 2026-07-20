@@ -27,7 +27,13 @@ function previewLine(text: string): string {
 function ChevronIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-      <path d="M6 3.5L10.5 8L6 12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M6 3.5L10.5 8L6 12.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
@@ -36,7 +42,13 @@ function BrainIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
       <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M8 5v3.2l2.2 1.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M8 5v3.2l2.2 1.4"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
@@ -89,9 +101,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
             <ChevronIcon />
           </span>
         </span>
-        <span className="thinking-block-label">
-          {streaming ? streamingLabel : label}
-        </span>
+        <span className="thinking-block-label">{streaming ? streamingLabel : label}</span>
         {preview ? (
           <span className="thinking-block-preview" title={text}>
             {preview}
@@ -109,9 +119,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
               transition: 'opacity 180ms ease-out, transform 180ms ease-out',
             }}
           >
-            <div className={`thinking-block-body${streaming ? ' live' : ''}`}>
-              {text || '…'}
-            </div>
+            <div className={`thinking-block-body${streaming ? ' live' : ''}`}>{text || '…'}</div>
           </div>
         </div>
       )}
