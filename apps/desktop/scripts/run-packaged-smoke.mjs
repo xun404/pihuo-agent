@@ -64,9 +64,12 @@ await verifyNodePtyRoundTrip({
   nodeExecutable: process.execPath,
 })
 const port = process.env.MASTRA_PORT || String(await findFreePort())
+// Linux CI runners cannot configure chrome-sandbox setuid (mode 4755 / root-owned).
+// Without --no-sandbox Electron aborts with FATAL setuid_sandbox_host (exit 133).
+const smokeArgs = ['--packaged-smoke']
+if (process.platform === 'linux') smokeArgs.push('--no-sandbox')
 const command = process.platform === 'linux' ? 'xvfb-run' : executable
-const args =
-  process.platform === 'linux' ? ['-a', executable, '--packaged-smoke'] : ['--packaged-smoke']
+const args = process.platform === 'linux' ? ['-a', executable, ...smokeArgs] : smokeArgs
 const result = spawnSync(command, args, {
   cwd: repoRoot,
   env: {
