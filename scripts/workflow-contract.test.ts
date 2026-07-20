@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { validateCiWorkflow, validateReleaseWorkflow } from './workflow-contract.mjs'
 
 describe('GitHub Actions workflow contract', () => {
-  it('requires read-only CI with quality and three-platform package jobs', () => {
+  it('requires read-only CI with quality and macOS/Linux package jobs', () => {
     assert.doesNotThrow(() =>
       validateCiWorkflow({
         on: { pull_request: null, push: { branches: ['main'] } },
@@ -15,11 +15,6 @@ describe('GitHub Actions workflow contract', () => {
               matrix: {
                 include: [
                   { os: 'macos-15', artifact: 'desktop-macos-arm64', builderArgs: '--mac --arm64' },
-                  {
-                    os: 'windows-2025',
-                    artifact: 'desktop-windows-x64',
-                    builderArgs: '--win --x64',
-                  },
                   {
                     os: 'ubuntu-24.04',
                     artifact: 'desktop-linux-x64',
