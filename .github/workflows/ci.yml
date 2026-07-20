@@ -25,6 +25,10 @@ jobs:
           node-version: 22.13.0
           cache: npm
       - run: npm ci
+      # libsql optional native bindings must resolve for the runner platform
+      # (lockfile must list each @libsql/* package — not only the host that generated it).
+      - name: Verify libsql native binding
+        run: node -e "require('libsql'); console.log('libsql ok', process.platform, process.arch)"
       - run: npm test
       - run: npm run verify:workflows
       - run: npm run typecheck
@@ -63,6 +67,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y xvfb libopenjp2-tools
       - run: npm ci
+      - name: Verify libsql native binding
+        run: node -e "require('libsql'); console.log('libsql ok', process.platform, process.arch)"
       - run: npm run build
       - run: npm run build:runtime
       - run: npm run verify:runtime
