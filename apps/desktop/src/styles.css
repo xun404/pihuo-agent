@@ -6283,9 +6283,13 @@ button {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
-/* Settings main: the container padding region drags (left settings-nav already
-   has sidebar-top drag). All form content is no-drag. */
-.settings-main {
+/* Settings main: the container + its non-interactive text (page title/desc)
+   drag; -webkit-app-region doesn't inherit so each is set explicitly.
+   Left settings-nav already has sidebar-top drag. Form cards stay no-drag. */
+.settings-main,
+.settings-main .settings-body,
+.settings-main .settings-page-title,
+.settings-main .settings-page-desc {
   -webkit-app-region: drag;
   app-region: drag;
 }
