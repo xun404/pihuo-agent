@@ -82,28 +82,47 @@ export function isLoadedNodePtyModule(value) {
   return Boolean(value && typeof value === 'object' && typeof value.spawn === 'function')
 }
 
-/** Native PTY load + spawn/write/resize/exit smoke used by runtime verification. */
+/**
+ * Native PTY load + spawn/write/resize/exit smoke used by runtime verification.
+ *
+ * On POSIX, ConPTY-style resize is reflected in process.stdout.columns/rows.
+ * On Windows ConPTY, Node often never updates those dimensions after a parent
+ * resize, so we only require spawn + write + echo + clean exit (still call
+ * resize() to exercise the API).
+ */
 export async function verifyNodePtyRoundTrip(input) {
   const ptyModule = input.ptyModule
   if (!isLoadedNodePtyModule(ptyModule)) {
     throw new Error('Staged node-pty package did not expose spawn')
   }
-  const marker = 'SWARMDESK_AGENT_PTY_100x30'
-  const script = [
-    "process.stdin.setEncoding('utf8')",
-    "process.stdout.write('SWARMDESK_AGENT_PTY_READY\\n')",
-    "process.stdin.once('data', () => {",
-    '  let polls = 0',
-    '  const timer = setInterval(() => {',
-    '    if (process.stdout.columns === 100 && process.stdout.rows === 30) {',
-    '      clearInterval(timer)',
-    `      process.stdout.write('${marker}\\n')`,
-    '      process.exit(0)',
-    '    }',
-    '    if (++polls >= 100) { clearInterval(timer); process.exit(2) }',
-    '  }, 10)',
-    '})',
-  ].join(';')
+  const platform = input.platform ?? process.platform
+  const isWin = platform === 'win32'
+  const readyMarker = 'SWARMDESK_AGENT_PTY_READY'
+  const successMarker = isWin ? 'SWARMDESK_AGENT_PTY_OK' : 'SWARMDESK_AGENT_PTY_100x30'
+  const script = isWin
+    ? [
+        "process.stdin.setEncoding('utf8')",
+        `process.stdout.write('${readyMarker}\\n')`,
+        "process.stdin.once('data', () => {",
+        `  process.stdout.write('${successMarker}\\n')`,
+        '  process.exit(0)',
+        '})',
+      ].join(';')
+    : [
+        "process.stdin.setEncoding('utf8')",
+        `process.stdout.write('${readyMarker}\\n')`,
+        "process.stdin.once('data', () => {",
+        '  let polls = 0',
+        '  const timer = setInterval(() => {',
+        '    if (process.stdout.columns === 100 && process.stdout.rows === 30) {',
+        '      clearInterval(timer)',
+        `      process.stdout.write('${successMarker}\\n')`,
+        '      process.exit(0)',
+        '    }',
+        '    if (++polls >= 100) { clearInterval(timer); process.exit(2) }',
+        '  }, 10)',
+        '})',
+      ].join(';')
   const env = Object.fromEntries(
     Object.entries(input.env ?? process.env).filter((entry) => typeof entry[1] === 'string'),
   )
@@ -133,12 +152,16 @@ export async function verifyNodePtyRoundTrip(input) {
     }
     const timeout = setTimeout(() => {
       try {
-        if ((input.platform ?? process.platform) === 'win32') terminal?.kill()
+        if (isWin) terminal?.kill()
         else terminal?.kill('SIGKILL')
       } catch {
         /* */
       }
-      settle(new Error('Staged node-pty round-trip timed out'))
+      settle(
+        new Error(
+          `Staged node-pty round-trip timed out (output=${JSON.stringify(output.slice(-400))})`,
+        ),
+      )
     }, input.timeoutMs ?? 10_000)
     let dataDisposable
     let exitDisposable
@@ -153,21 +176,26 @@ export async function verifyNodePtyRoundTrip(input) {
       })
       dataDisposable = terminal.onData((chunk) => {
         output += chunk
-        if (!wrote && output.includes('SWARMDESK_AGENT_PTY_READY')) {
+        if (!wrote && output.includes(readyMarker)) {
           wrote = true
+          // Exercise resize even on Windows (API smoke); do not require columns/rows.
           terminal.resize(100, 30)
           terminal.write('continue\r')
         }
-        if (observedExitCode === 0 && output.includes(marker)) settle()
+        if (observedExitCode === 0 && output.includes(successMarker)) settle()
       })
       exitDisposable = terminal.onExit(({ exitCode }) => {
         observedExitCode = exitCode
         if (exitCode !== 0) {
-          settle(new Error(`Staged node-pty child exited ${exitCode}`))
+          settle(
+            new Error(
+              `Staged node-pty child exited ${exitCode} (output=${JSON.stringify(output.slice(-400))})`,
+            ),
+          )
           return
         }
         // node-pty may deliver the final data event immediately after onExit.
-        if (output.includes(marker)) settle()
+        if (output.includes(successMarker)) settle()
       })
     } catch (error) {
       settle(error)
