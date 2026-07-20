@@ -147,16 +147,19 @@ export async function verifyNodePtyRoundTrip(input) {
       } catch {
         /* */
       }
-      if (error) reject(error)
-      else resolveSmoke()
-    }
-    const timeout = setTimeout(() => {
+      // Always reap the PTY host. On Windows ConPTY, open pipes keep the Node
+      // event loop alive after a successful child exit — CI then hangs until
+      // the job timeout (seen as "verified" then ~1h cancel).
       try {
         if (isWin) terminal?.kill()
         else terminal?.kill('SIGKILL')
       } catch {
-        /* */
+        /* already exited */
       }
+      if (error) reject(error)
+      else resolveSmoke()
+    }
+    const timeout = setTimeout(() => {
       settle(
         new Error(
           `Staged node-pty round-trip timed out (output=${JSON.stringify(output.slice(-400))})`,

@@ -93,10 +93,16 @@ jobs:
       - run: npm run build
         timeout-minutes: 20
       - run: npm run build:runtime
+        timeout-minutes: 10
       - run: npm run verify:runtime
+        # Must exit promptly; Windows ConPTY handle leaks previously hung until job timeout.
+        timeout-minutes: 5
       - run: npx electron-builder --dir ${{ matrix.builderArgs }} --publish never
+        timeout-minutes: 20
       - run: npm run smoke:packaged
+        timeout-minutes: 10
       - run: npx electron-builder ${{ matrix.builderArgs }} --publish never
+        timeout-minutes: 25
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}

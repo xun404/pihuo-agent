@@ -132,3 +132,5 @@ await verifyNodePtyRoundTrip({
 console.log(
   `Desktop API runtime verified for ${target.platform}-${target.arch} (${expectedNativePackage})`,
 )
+// Fail closed if a native handle keeps the event loop alive (Windows ConPTY).
+process.exit(0)
