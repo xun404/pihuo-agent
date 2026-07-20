@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const desktopRoot = dirname(dirname(fileURLToPath(import.meta.url)))
-const viteBin = require.resolve('vite/bin/vite.js')
+// vite's package "exports" omit bin/vite.js — resolve via package root.
+const viteBin = join(dirname(require.resolve('vite/package.json')), 'bin', 'vite.js')
 const args = process.argv.slice(2)
 
 const result = spawnSync(process.execPath, [viteBin, ...args], {
