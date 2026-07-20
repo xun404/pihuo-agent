@@ -29,6 +29,7 @@ import {
 } from '../lib/custom-provider-form'
 import { ProviderLogo, getProviderIconMeta } from '../lib/provider-icons'
 import { useTheme, type ColorPalette, type ThemeMode } from '../theme/ThemeProvider'
+import { BrandLogo } from './BrandLogo'
 
 /**
  * 外观四选一：
@@ -2271,6 +2272,7 @@ export function SettingsPanel({
           <h2 className="settings-page-title">{t('settings.navAbout')}</h2>
           <p className="settings-page-desc">{t('settings.descAbout')}</p>
           <div className="settings-form-card about-card">
+            <BrandLogo className="about-logo" size={56} title={t('app.title')} />
             <div className="app-name">{t('app.title')}</div>
             <div className="ver">Desktop · 0.1.0</div>
             <p>{t('settings.aboutBody')}</p>

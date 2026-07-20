@@ -9,8 +9,8 @@ import type {
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
 import { ChatPanel } from './ChatPanel'
+import { BrandLogo } from './BrandLogo'
 import { useI18n } from '../i18n/I18nProvider'
-import { IconTerminal } from './Icons'
 
 interface Props {
   project: Project | null
@@ -127,7 +127,7 @@ export function ChatWorkspace({
       <main className="main home-main">
         <div className="home">
           <div className="logo-cloud" aria-hidden>
-            <IconTerminal />
+            <BrandLogo size={88} />
           </div>
           <h1 className="greeting">
             {project ? (

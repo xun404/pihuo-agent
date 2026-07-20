@@ -45,8 +45,8 @@ import {
   IconFolder,
   IconPanel,
   IconSupervisor,
-  IconTerminal,
 } from './Icons'
+import { BrandLogo } from './BrandLogo'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
 import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
@@ -1050,7 +1050,7 @@ export function ChatPanel({
             <div className="sup-card">
               <div className="sup-header">
                 <span className="sup-avatar" aria-hidden>
-                  <IconSupervisor size={11} />
+                  <IconSupervisor size={14} />
                 </span>
                 <span className="sup-name">{t('chat.leader')}</span>
               </div>
@@ -1547,9 +1547,9 @@ export function ChatPanel({
 
       {!hasMessages || (!historyLoading && messages.length === 0) ? (
         <div className="home" style={{ flex: 1 }}>
-          {/* 线稿 home：logo-cloud（终端图标）→ 问候 → Composer */}
+          {/* 线稿 home：logo-cloud（品牌标）→ 问候 → Composer */}
           <div className="logo-cloud" aria-hidden>
-            <IconTerminal />
+            <BrandLogo size={88} />
           </div>
           <h1 className="greeting">
             {project ? (
