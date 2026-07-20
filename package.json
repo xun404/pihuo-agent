@@ -70,5 +70,19 @@
   },
   "overrides": {
     "@electron/get": "5.0.0"
+  },
+  "optionalDependencies": {
+    "@libsql/darwin-arm64": "0.5.29",
+    "@libsql/darwin-x64": "0.5.29",
+    "@libsql/linux-arm64-gnu": "0.5.29",
+    "@libsql/linux-arm64-musl": "0.5.29",
+    "@libsql/linux-x64-gnu": "0.5.29",
+    "@libsql/linux-x64-musl": "0.5.29",
+    "@libsql/win32-x64-msvc": "0.5.29",
+    "@rollup/rollup-darwin-arm64": "4.62.2",
+    "@rollup/rollup-darwin-x64": "4.62.2",
+    "@rollup/rollup-linux-x64-gnu": "4.62.2",
+    "@rollup/rollup-linux-x64-musl": "4.62.2",
+    "@rollup/rollup-win32-x64-msvc": "4.62.2"
   }
 }
