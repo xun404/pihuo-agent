@@ -29,6 +29,16 @@ jobs:
       # (lockfile must list each @libsql/* package — not only the host that generated it).
       - name: Verify libsql native binding
         run: node -e "require('libsql'); console.log('libsql ok', process.platform, process.arch)"
+      # electron@43 has no postinstall binary fetch — cache + ensure before vite build.
+      - name: Cache Electron binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - name: Ensure Electron binary
+        run: node apps/desktop/scripts/ensure-electron.mjs
+        timeout-minutes: 15
       - run: npm test
       - run: npm run verify:workflows
       - run: npm run typecheck
@@ -62,6 +72,13 @@ jobs:
         with:
           node-version: 22.13.0
           cache: npm
+      - name: Cache Electron binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/AppData/Local/electron/Cache
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -69,7 +86,12 @@ jobs:
       - run: npm ci
       - name: Verify libsql native binding
         run: node -e "require('libsql'); console.log('libsql ok', process.platform, process.arch)"
+      # Isolate hung Electron downloads from the longer vite/electron-builder steps.
+      - name: Ensure Electron binary
+        run: node apps/desktop/scripts/ensure-electron.mjs
+        timeout-minutes: 15
       - run: npm run build
+        timeout-minutes: 20
       - run: npm run build:runtime
       - run: npm run verify:runtime
       - run: npx electron-builder --dir ${{ matrix.builderArgs }} --publish never
