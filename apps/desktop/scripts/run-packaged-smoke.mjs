@@ -86,3 +86,5 @@ if (result.status !== 0) {
   throw new Error(`Packaged smoke failed with exit code ${result.status}`)
 }
 console.log(`Packaged desktop smoke passed on port ${port}`)
+// Packaged Electron can leave open handles on Windows; exit explicitly.
+process.exit(0)
