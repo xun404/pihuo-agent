@@ -115,4 +115,53 @@ describe('desktop runtime native packages', () => {
     )
     assert.deepEqual(kills, [undefined])
   })
+
+  it('Windows smoke does not require stdout columns/rows after resize', async () => {
+    // ConPTY often never updates process.stdout.columns after parent resize.
+    let wrote = ''
+    let resized = false
+    await verifyNodePtyRoundTrip({
+      platform: 'win32',
+      cwd: process.cwd(),
+      timeoutMs: 2_000,
+      nodeExecutable: process.execPath,
+      ptyModule: {
+        spawn: (_file: string, args: string[]) => {
+          // Execute the real child script via the same node, but drive PTY IO with a fake.
+          // Here we only assert the Windows success marker contract via a mock that
+          // mirrors parent protocol (READY → resize+write → OK + exit 0).
+          assert.match(args.join(' '), /SWARMDESK_AGENT_PTY_OK/)
+          assert.doesNotMatch(args.join(' '), /stdout\.columns/)
+          const handlers: {
+            data?: (chunk: string) => void
+            exit?: (info: { exitCode: number }) => void
+          } = {}
+          queueMicrotask(() => handlers.data?.('SWARMDESK_AGENT_PTY_READY\n'))
+          return {
+            kill() {},
+            resize() {
+              resized = true
+            },
+            write(chunk: string) {
+              wrote += chunk
+              queueMicrotask(() => {
+                handlers.data?.('SWARMDESK_AGENT_PTY_OK\n')
+                handlers.exit?.({ exitCode: 0 })
+              })
+            },
+            onData: (cb: (chunk: string) => void) => {
+              handlers.data = cb
+              return { dispose() {} }
+            },
+            onExit: (cb: (info: { exitCode: number }) => void) => {
+              handlers.exit = cb
+              return { dispose() {} }
+            },
+          }
+        },
+      },
+    })
+    assert.equal(resized, true)
+    assert.match(wrote, /continue/)
+  })
 })
