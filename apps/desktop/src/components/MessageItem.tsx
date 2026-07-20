@@ -184,7 +184,7 @@ function MessageItemImpl({
           {/* header：头像 + Supervisor + 模型 badge + 运行态 */}
           <div className="sup-header">
             <span className="sup-avatar" aria-hidden>
-              <IconSupervisor size={11} />
+              <IconSupervisor size={14} />
             </span>
             <span className="sup-name">{t('chat.leader')}</span>
             {leaderMeta.modelLabel && (

@@ -743,7 +743,19 @@ const MAC_TRAFFIC_LIGHT = {
   y: 19,
 } as const
 
+function resolveAppIconPath(): string | undefined {
+  // Vite copies apps/desktop/public → dist; electron-builder also uses build/icon.png.
+  const candidates = [
+    process.env.DIST ? path.join(process.env.DIST, 'icon.png') : '',
+    path.join(__dirname, '../dist/icon.png'),
+    path.join(__dirname, '../public/icon.png'),
+    path.join(__dirname, '../../../build/icon.png'),
+  ].filter(Boolean)
+  return candidates.find((p) => existsSync(p))
+}
+
 function createWindow() {
+  const icon = resolveAppIconPath()
   win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -754,6 +766,7 @@ function createWindow() {
     ...(process.platform === 'darwin'
       ? { trafficLightPosition: { x: MAC_TRAFFIC_LIGHT.x, y: MAC_TRAFFIC_LIGHT.y } }
       : {}),
+    ...(icon ? { icon } : {}),
     backgroundColor: '#f7f4ef',
     show: false,
     webPreferences: {

@@ -3,7 +3,7 @@ import type { Project, Session } from '@swarmdesk-agent/shared'
 import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
-import { IconFolder, IconOpen, IconPlus, IconSettings } from './Icons'
+import { IconFolder, IconOpen, IconPlus, IconQueenBee, IconSettings } from './Icons'
 
 /**
  * 任务状态灯（优先级从高到低，与 Session 持久化字段对齐）：
@@ -116,7 +116,7 @@ export function LeftSidebar({
 
       <div className="brand">
         <span className="mark" aria-hidden>
-          RA
+          <IconQueenBee size={22} />
         </span>
         <span className="brand-name">{t('sidebar.brand')}</span>
       </div>

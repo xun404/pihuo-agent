@@ -29,7 +29,7 @@
 | 正式发布     | `v*` 标签，标签必须与根 `package.json` 版本一致          |
 | 签名         | 首版无签名，预留 Secrets 和配置入口                      |
 | 应用内更新   | 首版不启用；保留 electron-builder 发布元数据             |
-| 应用图标     | 首版允许使用 Electron 默认图标；正式品牌图标后续单独设计 |
+| 应用图标     | 品牌蜂后/蜂巢标：`docs/assets/icon*.svg` → `build/icon.png`（electron-builder） |
 | 外部运行条件 | 应用自带 API runtime；ACP Agent CLI 由用户安装或配置     |
 
 ## 3. 当前阻塞
