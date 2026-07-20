@@ -2,16 +2,13 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+// Windows packaging is temporarily disabled in CI/Release workflows (2026-07-20)
+// due to GHA packaged-smoke hangs. Re-add when re-enabling the matrix entry.
 const NATIVE_PACKAGE_TARGETS = [
   {
     os: 'macos-15',
     artifact: 'desktop-macos-arm64',
     builderArgs: '--mac --arm64',
-  },
-  {
-    os: 'windows-2025',
-    artifact: 'desktop-windows-x64',
-    builderArgs: '--win --x64',
   },
   {
     os: 'ubuntu-24.04',

@@ -50,9 +50,10 @@ jobs:
           - os: macos-15
             artifact: desktop-macos-arm64
             builderArgs: --mac --arm64
-          - os: windows-2025
-            artifact: desktop-windows-x64
-            builderArgs: --win --x64
+          # Temporarily disabled with CI (2026-07-20): Windows packaged-smoke hang on GHA.
+          # - os: windows-2025
+          #   artifact: desktop-windows-x64
+          #   builderArgs: --win --x64
           - os: ubuntu-24.04
             artifact: desktop-linux-x64
             builderArgs: --linux --x64

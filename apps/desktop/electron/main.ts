@@ -123,10 +123,7 @@ function secretsEnv(): NodeJS.ProcessEnv {
   // Drop shell-ambient provider keys before inject — otherwise fill-if-empty /
   // dual OPENCODE_* names keep a stale CLI key after the user saved a new one.
   for (const k of Object.keys(env)) {
-    if (
-      /_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) &&
-      !k.startsWith('SWARMDESK_AGENT_')
-    ) {
+    if (/_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) && !k.startsWith('SWARMDESK_AGENT_')) {
       delete env[k]
     }
   }
@@ -822,27 +819,41 @@ app.whenReady().then(async () => {
   if (!PACKAGED_SMOKE) registerIpc()
 
   if (PACKAGED_SMOKE) {
-    const code = await runPackagedSmoke({
-      startApi: async () => {
-        const expectedChild = await startApiServer()
-        return Boolean(expectedChild && (await waitForApi(20_000, expectedChild)))
-      },
-      stopApi: async () => {
-        const ownedMeta = stopApiServer()
-        const exited = await waitForChildExit(ownedMeta, 24_000)
-        if (ownedMeta && apiChild === ownedMeta.child) apiChild = null
-        if (ownedMeta && lastApiChildMeta?.child === ownedMeta.child) {
-          lastApiChildMeta = null
-        }
-        if (ownedMeta) apiStartedByUs = false
-        return exited
-      },
-      log: (message) => console.log(`[packaged-smoke] ${message}`),
-    })
-    if (PACKAGED_SMOKE_USER_DATA) {
-      rmSync(PACKAGED_SMOKE_USER_DATA, { recursive: true, force: true })
+    let code = 1
+    try {
+      code = await runPackagedSmoke({
+        startApi: async () => {
+          const expectedChild = await startApiServer()
+          return Boolean(expectedChild && (await waitForApi(20_000, expectedChild)))
+        },
+        stopApi: async () => {
+          const ownedMeta = stopApiServer()
+          const exited = await waitForChildExit(ownedMeta, 24_000)
+          if (ownedMeta && apiChild === ownedMeta.child) apiChild = null
+          if (ownedMeta && lastApiChildMeta?.child === ownedMeta.child) {
+            lastApiChildMeta = null
+          }
+          if (ownedMeta) apiStartedByUs = false
+          return exited
+        },
+        log: (message) => console.log(`[packaged-smoke] ${message}`),
+      })
+    } catch (error) {
+      console.error('[packaged-smoke] failed', error)
+      code = 1
     }
+    if (PACKAGED_SMOKE_USER_DATA) {
+      try {
+        // Windows may still hold files under userData (EPERM); never fail the smoke on cleanup.
+        rmSync(PACKAGED_SMOKE_USER_DATA, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      } catch (error) {
+        console.warn('[packaged-smoke] userData cleanup skipped', String(error))
+      }
+    }
+    // app.exit alone can leave Chromium/ConPTY handles open on Windows CI so the
+    // parent spawnSync never returns. Force a hard process exit after a short grace.
     app.exit(code)
+    setTimeout(() => process.exit(code), 250)
     return
   }
 
