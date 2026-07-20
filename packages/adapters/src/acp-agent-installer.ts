@@ -501,7 +501,7 @@ async function downloadToFile(
       () => headerController.abort(new Error('Download header timeout')),
       headerTimeoutMs,
     )
-    headerTimer.unref?.()
+    // headerTimer must stay ref'd so AbortSignal.timeout races keep the event loop alive on Node 22
     let res: Response
     try {
       res = await fetchImpl(current, {

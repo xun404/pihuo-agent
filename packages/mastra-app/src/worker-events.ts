@@ -87,8 +87,11 @@ export async function raceWithTimeout<T>(
     return await Promise.race([
       promise,
       new Promise<never>((_, reject) => {
+        // Keep the timer ref'd: a never-settling promise + unref'd timeout lets the
+        // Node event loop drain (Node 22 test runner: cancelledByParent /
+        // "Promise resolution is still pending but the event loop has already resolved").
+        // finally { clearTimeout } prevents production timer leaks after the race.
         timer = setTimeout(() => reject(errorFactory()), timeoutMs)
-        timer.unref?.()
       }),
     ])
   } finally {
