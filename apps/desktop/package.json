@@ -12,10 +12,11 @@
   "license": "MIT",
   "scripts": {
     "predesktop": "node scripts/ensure-electron.mjs",
+    "prebuild": "node scripts/ensure-electron.mjs",
     "dev": "vite",
-    "dev:electron": "ELECTRON=1 vite",
-    "desktop": "ELECTRON=1 vite",
-    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && ELECTRON=1 vite build && node scripts/verify-electron-build.mjs",
+    "dev:electron": "node scripts/ensure-electron.mjs && node scripts/vite-electron.mjs",
+    "desktop": "node scripts/ensure-electron.mjs && node scripts/vite-electron.mjs",
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && node scripts/vite-electron.mjs build && node scripts/verify-electron-build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\" \"src/**/*.test.tsx\" \"electron/**/*.test.ts\"",
     "preview": "vite preview"
