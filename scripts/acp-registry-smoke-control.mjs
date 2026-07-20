@@ -317,12 +317,13 @@ export async function runSmokeController(input) {
     try {
       child.send?.({ type: 'shutdown', reason })
     } catch {}
+    // Keep force/total timers ref'd: FakeChild fixtures are pure EventEmitters with no
+    // process handle, and unref'd timeouts drain the event loop on Node 22 before fire
+    // (test runner cancelledByParent / "event loop has already resolved").
     forceTimer = setTimeout(() => forceKillTree(child), gracefulShutdownMs)
-    forceTimer.unref?.()
   }
 
   totalTimer = setTimeout(() => requestShutdown('total_timeout', 124), options.timeoutMs)
-  totalTimer.unref?.()
   if (signal) {
     const onAbort = () => requestShutdown('interrupted', 130)
     signal.addEventListener('abort', onAbort, { once: true })
