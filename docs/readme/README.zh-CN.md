@@ -109,9 +109,9 @@ ACP 权限请求出现在 Chat 与侧栏。Session 策略：手动 / 允许一�
 
 **此外还包括：**
 
-- **i18n** — 标题栏中文 / English  
-- **Git 与文件** — 真实 `git status` 与有界目录树  
-- **步骤预算** — 可配置 Leader 最大步数，耗尽后可在同 thread 继续  
+- **i18n** — 标题栏中文 / English
+- **Git 与文件** — 真实 `git status` 与有界目录树
+- **步骤预算** — 可配置 Leader 最大步数，耗尽后可在同 thread 继续
 - **本地优先** — 数据在 `~/.config/swarmdesk-agent/`
 
 ---
@@ -122,11 +122,11 @@ ACP 权限请求出现在 Chat 与侧栏。Session 策略：手动 / 允许一�
 
 ### 内置预设
 
-| Agent | 主角色 | 兼角色 |
-| ----- | ------ | ------ |
-| **Claude Code** | coder | plan, research, general |
-| **Codex CLI** | review | coder, test, general |
-| **OpenCode** | general | coder, plan, test |
+| Agent           | 主角色  | 兼角色                  |
+| --------------- | ------- | ----------------------- |
+| **Claude Code** | coder   | plan, research, general |
+| **Codex CLI**   | review  | coder, test, general    |
+| **OpenCode**    | general | coder, plan, test       |
 
 ### ACP Registry（安装包内目录）
 
@@ -138,13 +138,13 @@ Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Co
 
 在 **设置** 中配置（本地加密）。Leader 使用 Mastra 模型路由（`provider/model`）。
 
-| 服务商 | 接口类型 | 密钥 |
-| ------ | -------- | ---- |
-| OpenAI | OpenAI | `OPENAI_API_KEY` |
-| Anthropic | Anthropic Messages | `ANTHROPIC_API_KEY` |
+| 服务商           | 接口类型             | 密钥                                              |
+| ---------------- | -------------------- | ------------------------------------------------- |
+| OpenAI           | OpenAI               | `OPENAI_API_KEY`                                  |
+| Anthropic        | Anthropic Messages   | `ANTHROPIC_API_KEY`                               |
 | Google（Gemini） | Google Generative AI | `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_API_KEY` |
-| xAI（Grok） | OpenAI 兼容 | `XAI_API_KEY` |
-| DeepSeek | OpenAI 兼容 | `DEEPSEEK_API_KEY` |
+| xAI（Grok）      | OpenAI 兼容          | `XAI_API_KEY`                                     |
+| DeepSeek         | OpenAI 兼容          | `DEEPSEEK_API_KEY`                                |
 
 自定义网关：OpenAI / Anthropic / Google 兼容端点，或 Settings 中的 Custom（id + baseURL + key）。
 
@@ -157,11 +157,11 @@ Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Co
 - **[下载最新 Release](https://github.com/xun404/swarmdesk-agent/releases/latest)**
 - 安装包命名：`SwarmDesk-Agent-${version}-…`
 
-| 系统 | 架构 | 格式 |
-| ---- | ---- | ---- |
-| macOS | Apple Silicon（arm64） | DMG、ZIP |
-| Windows | x64 | NSIS EXE |
-| Linux | x64 | AppImage、DEB |
+| 系统    | 架构                   | 格式          |
+| ------- | ---------------------- | ------------- |
+| macOS   | Apple Silicon（arm64） | DMG、ZIP      |
+| Windows | x64                    | NSIS EXE      |
+| Linux   | x64                    | AppImage、DEB |
 
 ```bash
 # macOS / Linux

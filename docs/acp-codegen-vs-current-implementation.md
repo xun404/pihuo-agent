@@ -72,20 +72,20 @@ flowchart LR
 
 ## 4. 核心差异
 
-| 维度 | SwarmDesk 当前方案 | Synara codegen 方案 |
-|---|---|---|
-| 协议真相源 | 官方 npm SDK | 固定的官方 schema release |
-| 谁维护生成器 | ACP 官方项目 | Synara 自己维护 |
-| 生成产物 | TS 类型、方法常量、Zod、guards | Effect Schema、方法常量 |
-| RPC 方法绑定 | 官方 SDK 已封装 | `rpc.ts` 手工逐方法 `Rpc.make` |
-| 入站 request/notification 校验 | 官方生成 Zod | Effect Schema/RPC codec |
-| agent response 校验 | 高层 API 基本只取 `response.result` | success/error schema 进入 Effect RPC codec |
-| JSON-RPC transport | ACP 专用实现 | 通用 Effect RPC 加 ACP patched bridge |
-| JSON-RPC error | 原生转换为 `RequestError` | 需改写成 Effect Cause envelope |
-| 扩展与观测 | SDK 约定范围内 | 更易加入自定义 request、日志 stage、错误模型 |
-| 升级控制 | 升 npm SDK | 修改 schema pin 并重新生成 |
-| 框架耦合 | 普通 TS、SDK/Zod | Effect Schema、Effect unstable RPC |
-| 维护成本 | 低 | 高 |
+| 维度                           | SwarmDesk 当前方案                  | Synara codegen 方案                          |
+| ------------------------------ | ----------------------------------- | -------------------------------------------- |
+| 协议真相源                     | 官方 npm SDK                        | 固定的官方 schema release                    |
+| 谁维护生成器                   | ACP 官方项目                        | Synara 自己维护                              |
+| 生成产物                       | TS 类型、方法常量、Zod、guards      | Effect Schema、方法常量                      |
+| RPC 方法绑定                   | 官方 SDK 已封装                     | `rpc.ts` 手工逐方法 `Rpc.make`               |
+| 入站 request/notification 校验 | 官方生成 Zod                        | Effect Schema/RPC codec                      |
+| agent response 校验            | 高层 API 基本只取 `response.result` | success/error schema 进入 Effect RPC codec   |
+| JSON-RPC transport             | ACP 专用实现                        | 通用 Effect RPC 加 ACP patched bridge        |
+| JSON-RPC error                 | 原生转换为 `RequestError`           | 需改写成 Effect Cause envelope               |
+| 扩展与观测                     | SDK 约定范围内                      | 更易加入自定义 request、日志 stage、错误模型 |
+| 升级控制                       | 升 npm SDK                          | 修改 schema pin 并重新生成                   |
+| 框架耦合                       | 普通 TS、SDK/Zod                    | Effect Schema、Effect unstable RPC           |
+| 维护成本                       | 低                                  | 高                                           |
 
 ## 5. 运行时校验差异
 
@@ -207,10 +207,10 @@ schema artifact 版本和 wire protocol version 不是同一概念。两个 sche
 
 按当前两个 checkout 的方法常量比较：
 
-| 方法集合 | Synara | 官方 SDK 1.2.1 |
-|---|---:|---:|
-| Agent methods | 14 | 28 |
-| Client methods | 11 | 14 |
+| 方法集合       | Synara | 官方 SDK 1.2.1 |
+| -------------- | -----: | -------------: |
+| Agent methods  |     14 |             28 |
+| Client methods |     11 |             14 |
 
 Synara 当前生成结果缺少：
 

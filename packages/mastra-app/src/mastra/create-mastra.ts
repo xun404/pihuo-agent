@@ -94,7 +94,9 @@ export function createMastra(options: CreateMastraOptions): Mastra {
                   'x-swarmdesk-agent-session-id': c.req.header('x-swarmdesk-agent-session-id'),
                   'x-swarmdesk-agent-project-id': c.req.header('x-swarmdesk-agent-project-id'),
                   'x-swarmdesk-agent-project-root': c.req.header('x-swarmdesk-agent-project-root'),
-                  'x-swarmdesk-agent-memory-thread-id': c.req.header('x-swarmdesk-agent-memory-thread-id'),
+                  'x-swarmdesk-agent-memory-thread-id': c.req.header(
+                    'x-swarmdesk-agent-memory-thread-id',
+                  ),
                 },
                 body,
                 resolveSessionContext: (memoryThreadId) =>

@@ -89,10 +89,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const value = useMemo(
-    () => ({ toast, success, error, info }),
-    [toast, success, error, info],
-  )
+  const value = useMemo(() => ({ toast, success, error, info }), [toast, success, error, info])
 
   return (
     <ToastContext.Provider value={value}>

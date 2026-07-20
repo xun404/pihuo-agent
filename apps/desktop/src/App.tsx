@@ -45,7 +45,9 @@ function AppShell({
   const { t } = useI18n()
   const { error: toastError } = useToast()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsTab, setSettingsTab] = useState<'general' | 'model' | 'workers' | 'about' | undefined>()
+  const [settingsTab, setSettingsTab] = useState<
+    'general' | 'model' | 'workers' | 'about' | undefined
+  >()
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
   const [openProjectOpen, setOpenProjectOpen] = useState(false)
@@ -53,7 +55,12 @@ function AppShell({
   useEffect(() => {
     const onOpen = (ev: Event) => {
       const detail = (ev as CustomEvent<{ tab?: string }>).detail
-      if (detail?.tab === 'workers' || detail?.tab === 'model' || detail?.tab === 'general' || detail?.tab === 'about') {
+      if (
+        detail?.tab === 'workers' ||
+        detail?.tab === 'model' ||
+        detail?.tab === 'general' ||
+        detail?.tab === 'about'
+      ) {
         setSettingsTab(detail.tab)
       } else {
         setSettingsTab('workers')
@@ -84,9 +91,7 @@ function AppShell({
 
   const onDeleteProject = (project: Project) => {
     void (async () => {
-      const ok = await confirmAction(
-        t('sidebar.confirmDeleteProject', { name: project.name }),
-      )
+      const ok = await confirmAction(t('sidebar.confirmDeleteProject', { name: project.name }))
       if (!ok) return
       try {
         await deleteProject(project.id)
@@ -98,9 +103,7 @@ function AppShell({
 
   const onDeleteSession = (session: Session) => {
     void (async () => {
-      const ok = await confirmAction(
-        t('sidebar.confirmDeleteSession', { title: session.title }),
-      )
+      const ok = await confirmAction(t('sidebar.confirmDeleteSession', { title: session.title }))
       if (!ok) return
       try {
         await deleteSession(session.id)
@@ -229,13 +232,11 @@ function AppShell({
                     onHealth={(id, depth) => void healthWorker(id, depth)}
                     onHealthAll={() => healthAllWorkers()}
                     onSetRoles={(id, body) => void setWorkerRoles(id, body)}
-                    onSetModel={(id, model, projectId) =>
-                      void setWorkerModel(id, model, projectId)
-                    }
+                    onSetModel={(id, model, projectId) => void setWorkerModel(id, model, projectId)}
                     onFetchModels={(id, opts) => fetchWorkerModels(id, opts)}
                     onResolveApproval={(id, optionId, decision, surface) =>
-                      void resolveApproval(id, decision, optionId, surface).catch(
-                        (e) => toastError(String(e)),
+                      void resolveApproval(id, decision, optionId, surface).catch((e) =>
+                        toastError(String(e)),
                       )
                     }
                     resolving={resolvingState}

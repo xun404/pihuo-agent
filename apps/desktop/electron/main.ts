@@ -123,7 +123,10 @@ function secretsEnv(): NodeJS.ProcessEnv {
   // Drop shell-ambient provider keys before inject — otherwise fill-if-empty /
   // dual OPENCODE_* names keep a stale CLI key after the user saved a new one.
   for (const k of Object.keys(env)) {
-    if (/_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) && !k.startsWith('SWARMDESK_AGENT_')) {
+    if (
+      /_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) &&
+      !k.startsWith('SWARMDESK_AGENT_')
+    ) {
       delete env[k]
     }
   }

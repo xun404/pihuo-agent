@@ -641,7 +641,13 @@ export function IconBolt(p: IconProps) {
 /** clock — Supervisor footer duration meta（对齐线稿 i-clock）*/
 export function IconClock(p: IconProps) {
   return (
-    <svg {...baseProps({ ...p, size: p.size ?? 14 })} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3}>
+    <svg
+      {...baseProps({ ...p, size: p.size ?? 14 })}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.3}
+    >
       <circle cx="8" cy="8" r="6" />
       <path d="M8 4.5V8l2.2 1.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -687,13 +693,32 @@ export function getToolIcon(toolName: string): IconComponent {
   // 外部 CLI 工具（lowercase，对齐 AcpToolKind）
   if (name.includes('delete') || name.includes('remove') || name.includes('rm')) return IconTrash
   if (name.includes('move') || name.includes('rename')) return IconMove
-  if (name.includes('edit') || name.includes('str_replace') || name.includes('patch')) return IconPencil
+  if (name.includes('edit') || name.includes('str_replace') || name.includes('patch'))
+    return IconPencil
   if (name.includes('write') || name.includes('create')) return IconFileEdit
   if (name.includes('read') || name.includes('view') || name.includes('cat')) return IconFileText
-  if (name.includes('bash') || name.includes('shell') || name.includes('terminal') || name.includes('exec')) return IconTerminalBox
-  if (name.includes('grep') || name.includes('glob') || name.includes('search') || name.includes('find')) return IconSearch
+  if (
+    name.includes('bash') ||
+    name.includes('shell') ||
+    name.includes('terminal') ||
+    name.includes('exec')
+  )
+    return IconTerminalBox
+  if (
+    name.includes('grep') ||
+    name.includes('glob') ||
+    name.includes('search') ||
+    name.includes('find')
+  )
+    return IconSearch
   if (name.includes('task') || name.includes('agent')) return IconAIAgent
-  if (name.includes('fetch') || name.includes('web') || name.includes('curl') || name.includes('http')) return IconGlobe
+  if (
+    name.includes('fetch') ||
+    name.includes('web') ||
+    name.includes('curl') ||
+    name.includes('http')
+  )
+    return IconGlobe
   if (name.startsWith('git')) return IconBranch
   return IconWrench
 }
