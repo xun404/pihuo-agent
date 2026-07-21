@@ -3,7 +3,14 @@ import type { Project, Session } from '@swarmdesk-agent/shared'
 import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
-import { IconFolder, IconOpen, IconPlus, IconQueenBee, IconSettings } from './Icons'
+import {
+  IconFolder,
+  IconOpen,
+  IconPlus,
+  IconQueenBee,
+  IconSettings,
+  IconWorkers,
+} from './Icons'
 
 /**
  * 任务状态灯（优先级从高到低，与 Session 持久化字段对齐）：
@@ -122,17 +129,27 @@ export function LeftSidebar({
       </div>
 
       <div className="nav-actions">
+        <button type="button" className="nav-item" onClick={onOpenProject}>
+          <span className="glyph" aria-hidden>
+            <IconOpen />
+          </span>
+          <span className="nav-label">{t('sidebar.openProject')}</span>
+        </button>
         <button type="button" className="nav-item" onClick={onNewSession}>
           <span className="glyph" aria-hidden>
             <IconPlus />
           </span>
           <span className="nav-label">{t('sidebar.newTask')}</span>
         </button>
-        <button type="button" className="nav-item" onClick={onOpenProject}>
+        <button
+          type="button"
+          className="nav-item"
+          onClick={() => onOpenSettings('workers')}
+        >
           <span className="glyph" aria-hidden>
-            <IconOpen />
+            <IconWorkers />
           </span>
-          <span className="nav-label">{t('sidebar.openProject')}</span>
+          <span className="nav-label">{t('settings.navWorkers')}</span>
         </button>
       </div>
 

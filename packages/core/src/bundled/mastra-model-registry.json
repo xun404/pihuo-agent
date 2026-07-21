@@ -1,8 +1,8 @@
 {
   "version": 1,
   "source": "bundled",
-  "mastraPackageVersion": "bundled-from-featured-hardcode",
-  "generatedAt": "2026-07-15T06:18:04.049Z",
+  "mastraPackageVersion": "1.51.0",
+  "generatedAt": "2026-07-21T05:33:44.829Z",
   "providers": [
     {
       "id": "openai",
@@ -10,28 +10,228 @@
       "apiKeyEnvVar": "OPENAI_API_KEY",
       "models": [
         {
-          "id": "openai/gpt-5.5",
-          "label": "GPT-5.5"
+          "id": "openai/chatgpt-image-latest",
+          "label": "chatgpt-image-latest"
         },
         {
-          "id": "openai/gpt-5.5-pro",
-          "label": "GPT-5.5 Pro"
+          "id": "openai/gpt-3.5-turbo",
+          "label": "gpt-3.5-turbo"
         },
         {
-          "id": "openai/gpt-5.4",
-          "label": "GPT-5.4"
+          "id": "openai/gpt-4",
+          "label": "gpt-4"
         },
         {
-          "id": "openai/gpt-5.4-mini",
-          "label": "GPT-5.4 mini"
+          "id": "openai/gpt-4-turbo",
+          "label": "gpt-4-turbo"
+        },
+        {
+          "id": "openai/gpt-4.1",
+          "label": "gpt-4.1"
+        },
+        {
+          "id": "openai/gpt-4.1-mini",
+          "label": "gpt-4.1-mini"
+        },
+        {
+          "id": "openai/gpt-4.1-nano",
+          "label": "gpt-4.1-nano"
+        },
+        {
+          "id": "openai/gpt-4o",
+          "label": "gpt-4o"
+        },
+        {
+          "id": "openai/gpt-4o-2024-05-13",
+          "label": "gpt-4o-2024-05-13"
+        },
+        {
+          "id": "openai/gpt-4o-2024-08-06",
+          "label": "gpt-4o-2024-08-06"
+        },
+        {
+          "id": "openai/gpt-4o-2024-11-20",
+          "label": "gpt-4o-2024-11-20"
+        },
+        {
+          "id": "openai/gpt-4o-mini",
+          "label": "gpt-4o-mini"
+        },
+        {
+          "id": "openai/gpt-5",
+          "label": "gpt-5"
+        },
+        {
+          "id": "openai/gpt-5-chat-latest",
+          "label": "gpt-5-chat-latest"
+        },
+        {
+          "id": "openai/gpt-5-codex",
+          "label": "gpt-5-codex"
+        },
+        {
+          "id": "openai/gpt-5-mini",
+          "label": "gpt-5-mini"
+        },
+        {
+          "id": "openai/gpt-5-nano",
+          "label": "gpt-5-nano"
+        },
+        {
+          "id": "openai/gpt-5-pro",
+          "label": "gpt-5-pro"
+        },
+        {
+          "id": "openai/gpt-5.1",
+          "label": "gpt-5.1"
+        },
+        {
+          "id": "openai/gpt-5.1-chat-latest",
+          "label": "gpt-5.1-chat-latest"
+        },
+        {
+          "id": "openai/gpt-5.1-codex",
+          "label": "gpt-5.1-codex"
+        },
+        {
+          "id": "openai/gpt-5.1-codex-max",
+          "label": "gpt-5.1-codex-max"
+        },
+        {
+          "id": "openai/gpt-5.1-codex-mini",
+          "label": "gpt-5.1-codex-mini"
+        },
+        {
+          "id": "openai/gpt-5.2",
+          "label": "gpt-5.2"
+        },
+        {
+          "id": "openai/gpt-5.2-chat-latest",
+          "label": "gpt-5.2-chat-latest"
+        },
+        {
+          "id": "openai/gpt-5.2-codex",
+          "label": "gpt-5.2-codex"
+        },
+        {
+          "id": "openai/gpt-5.2-pro",
+          "label": "gpt-5.2-pro"
+        },
+        {
+          "id": "openai/gpt-5.3-chat-latest",
+          "label": "gpt-5.3-chat-latest"
         },
         {
           "id": "openai/gpt-5.3-codex",
-          "label": "GPT-5.3 Codex"
+          "label": "gpt-5.3-codex"
+        },
+        {
+          "id": "openai/gpt-5.3-codex-spark",
+          "label": "gpt-5.3-codex-spark"
+        },
+        {
+          "id": "openai/gpt-5.4",
+          "label": "gpt-5.4"
+        },
+        {
+          "id": "openai/gpt-5.4-mini",
+          "label": "gpt-5.4-mini"
+        },
+        {
+          "id": "openai/gpt-5.4-nano",
+          "label": "gpt-5.4-nano"
+        },
+        {
+          "id": "openai/gpt-5.4-pro",
+          "label": "gpt-5.4-pro"
+        },
+        {
+          "id": "openai/gpt-5.5",
+          "label": "gpt-5.5"
+        },
+        {
+          "id": "openai/gpt-5.5-pro",
+          "label": "gpt-5.5-pro"
+        },
+        {
+          "id": "openai/gpt-5.6",
+          "label": "gpt-5.6"
+        },
+        {
+          "id": "openai/gpt-5.6-luna",
+          "label": "gpt-5.6-luna"
+        },
+        {
+          "id": "openai/gpt-5.6-sol",
+          "label": "gpt-5.6-sol"
+        },
+        {
+          "id": "openai/gpt-5.6-terra",
+          "label": "gpt-5.6-terra"
+        },
+        {
+          "id": "openai/gpt-image-1",
+          "label": "gpt-image-1"
+        },
+        {
+          "id": "openai/gpt-image-1-mini",
+          "label": "gpt-image-1-mini"
+        },
+        {
+          "id": "openai/gpt-image-1.5",
+          "label": "gpt-image-1.5"
+        },
+        {
+          "id": "openai/gpt-image-2",
+          "label": "gpt-image-2"
+        },
+        {
+          "id": "openai/gpt-realtime-2.1",
+          "label": "gpt-realtime-2.1"
+        },
+        {
+          "id": "openai/o1",
+          "label": "o1"
+        },
+        {
+          "id": "openai/o1-pro",
+          "label": "o1-pro"
+        },
+        {
+          "id": "openai/o3",
+          "label": "o3"
+        },
+        {
+          "id": "openai/o3-deep-research",
+          "label": "o3-deep-research"
         },
         {
           "id": "openai/o3-mini",
           "label": "o3-mini"
+        },
+        {
+          "id": "openai/o3-pro",
+          "label": "o3-pro"
+        },
+        {
+          "id": "openai/o4-mini",
+          "label": "o4-mini"
+        },
+        {
+          "id": "openai/o4-mini-deep-research",
+          "label": "o4-mini-deep-research"
+        },
+        {
+          "id": "openai/text-embedding-3-large",
+          "label": "text-embedding-3-large"
+        },
+        {
+          "id": "openai/text-embedding-3-small",
+          "label": "text-embedding-3-small"
+        },
+        {
+          "id": "openai/text-embedding-ada-002",
+          "label": "text-embedding-ada-002"
         }
       ]
     },
@@ -41,43 +241,138 @@
       "apiKeyEnvVar": "ANTHROPIC_API_KEY",
       "models": [
         {
-          "id": "anthropic/claude-opus-4-8",
-          "label": "Claude Opus 4.8"
-        },
-        {
-          "id": "anthropic/claude-opus-4-6",
-          "label": "Claude Opus 4.6"
-        },
-        {
-          "id": "anthropic/claude-sonnet-4-6",
-          "label": "Claude Sonnet 4.6"
+          "id": "anthropic/claude-fable-5",
+          "label": "claude-fable-5"
         },
         {
           "id": "anthropic/claude-haiku-4-5",
-          "label": "Claude Haiku 4.5"
+          "label": "claude-haiku-4-5"
+        },
+        {
+          "id": "anthropic/claude-haiku-4-5-20251001",
+          "label": "claude-haiku-4-5-20251001"
+        },
+        {
+          "id": "anthropic/claude-opus-4-5",
+          "label": "claude-opus-4-5"
+        },
+        {
+          "id": "anthropic/claude-opus-4-5-20251101",
+          "label": "claude-opus-4-5-20251101"
+        },
+        {
+          "id": "anthropic/claude-opus-4-6",
+          "label": "claude-opus-4-6"
+        },
+        {
+          "id": "anthropic/claude-opus-4-7",
+          "label": "claude-opus-4-7"
+        },
+        {
+          "id": "anthropic/claude-opus-4-8",
+          "label": "claude-opus-4-8"
+        },
+        {
+          "id": "anthropic/claude-sonnet-4-5",
+          "label": "claude-sonnet-4-5"
+        },
+        {
+          "id": "anthropic/claude-sonnet-4-5-20250929",
+          "label": "claude-sonnet-4-5-20250929"
+        },
+        {
+          "id": "anthropic/claude-sonnet-4-6",
+          "label": "claude-sonnet-4-6"
+        },
+        {
+          "id": "anthropic/claude-sonnet-5",
+          "label": "claude-sonnet-5"
         }
       ]
     },
     {
       "id": "google",
       "name": "Google",
-      "apiKeyEnvVar": ["GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY"],
+      "apiKeyEnvVar": [
+        "GOOGLE_API_KEY",
+        "GOOGLE_GENERATIVE_AI_API_KEY"
+      ],
       "models": [
         {
-          "id": "google/gemini-3.1-pro-preview",
-          "label": "Gemini 3.1 Pro"
+          "id": "google/gemini-2.5-flash",
+          "label": "gemini-2.5-flash"
         },
         {
-          "id": "google/gemini-3.5-flash",
-          "label": "Gemini 3.5 Flash"
+          "id": "google/gemini-2.5-flash-image",
+          "label": "gemini-2.5-flash-image"
+        },
+        {
+          "id": "google/gemini-2.5-flash-lite",
+          "label": "gemini-2.5-flash-lite"
+        },
+        {
+          "id": "google/gemini-2.5-flash-preview-tts",
+          "label": "gemini-2.5-flash-preview-tts"
         },
         {
           "id": "google/gemini-2.5-pro",
-          "label": "Gemini 2.5 Pro"
+          "label": "gemini-2.5-pro"
         },
         {
-          "id": "google/gemini-2.5-flash",
-          "label": "Gemini 2.5 Flash"
+          "id": "google/gemini-2.5-pro-preview-tts",
+          "label": "gemini-2.5-pro-preview-tts"
+        },
+        {
+          "id": "google/gemini-3-flash-preview",
+          "label": "gemini-3-flash-preview"
+        },
+        {
+          "id": "google/gemini-3-pro-image-preview",
+          "label": "gemini-3-pro-image-preview"
+        },
+        {
+          "id": "google/gemini-3.1-flash-image-preview",
+          "label": "gemini-3.1-flash-image-preview"
+        },
+        {
+          "id": "google/gemini-3.1-flash-lite",
+          "label": "gemini-3.1-flash-lite"
+        },
+        {
+          "id": "google/gemini-3.1-pro-preview",
+          "label": "gemini-3.1-pro-preview"
+        },
+        {
+          "id": "google/gemini-3.1-pro-preview-customtools",
+          "label": "gemini-3.1-pro-preview-customtools"
+        },
+        {
+          "id": "google/gemini-3.5-flash",
+          "label": "gemini-3.5-flash"
+        },
+        {
+          "id": "google/gemini-embedding-001",
+          "label": "gemini-embedding-001"
+        },
+        {
+          "id": "google/gemini-flash-latest",
+          "label": "gemini-flash-latest"
+        },
+        {
+          "id": "google/gemini-flash-lite-latest",
+          "label": "gemini-flash-lite-latest"
+        },
+        {
+          "id": "google/gemini-omni-flash-preview",
+          "label": "gemini-omni-flash-preview"
+        },
+        {
+          "id": "google/gemma-4-26b-a4b-it",
+          "label": "gemma-4-26b-a4b-it"
+        },
+        {
+          "id": "google/gemma-4-31b-it",
+          "label": "gemma-4-31b-it"
         }
       ]
     },
@@ -87,20 +382,40 @@
       "apiKeyEnvVar": "XAI_API_KEY",
       "models": [
         {
+          "id": "xai/grok-4.20-0309-non-reasoning",
+          "label": "grok-4.20-0309-non-reasoning"
+        },
+        {
+          "id": "xai/grok-4.20-0309-reasoning",
+          "label": "grok-4.20-0309-reasoning"
+        },
+        {
+          "id": "xai/grok-4.20-multi-agent-0309",
+          "label": "grok-4.20-multi-agent-0309"
+        },
+        {
           "id": "xai/grok-4.3",
-          "label": "Grok 4.3"
+          "label": "grok-4.3"
         },
         {
-          "id": "xai/grok-4-fast",
-          "label": "Grok 4 Fast"
+          "id": "xai/grok-4.5",
+          "label": "grok-4.5"
         },
         {
-          "id": "xai/grok-4.20-reasoning",
-          "label": "Grok 4.20 Reasoning"
+          "id": "xai/grok-build-0.1",
+          "label": "grok-build-0.1"
         },
         {
-          "id": "xai/grok-3-mini",
-          "label": "Grok 3 Mini"
+          "id": "xai/grok-imagine-image",
+          "label": "grok-imagine-image"
+        },
+        {
+          "id": "xai/grok-imagine-image-quality",
+          "label": "grok-imagine-image-quality"
+        },
+        {
+          "id": "xai/grok-imagine-video",
+          "label": "grok-imagine-video"
         }
       ]
     },
@@ -110,20 +425,20 @@
       "apiKeyEnvVar": "DEEPSEEK_API_KEY",
       "models": [
         {
-          "id": "deepseek/deepseek-v4-pro",
-          "label": "DeepSeek V4 Pro"
-        },
-        {
-          "id": "deepseek/deepseek-v4-flash",
-          "label": "DeepSeek V4 Flash"
-        },
-        {
           "id": "deepseek/deepseek-chat",
-          "label": "DeepSeek Chat"
+          "label": "deepseek-chat"
         },
         {
           "id": "deepseek/deepseek-reasoner",
-          "label": "DeepSeek Reasoner"
+          "label": "deepseek-reasoner"
+        },
+        {
+          "id": "deepseek/deepseek-v4-flash",
+          "label": "deepseek-v4-flash"
+        },
+        {
+          "id": "deepseek/deepseek-v4-pro",
+          "label": "deepseek-v4-pro"
         }
       ]
     }

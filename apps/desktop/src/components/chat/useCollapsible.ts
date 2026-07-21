@@ -5,10 +5,15 @@ import { animate, type AnimationPlaybackControls } from 'framer-motion'
  * 展开动画配置。
  * 显式像素值动画（0 ↔ scrollHeight），不依赖 height:auto 插值。
  */
-const TRANSITION = { duration: 0.2, ease: 'easeOut' as const }
+const TRANSITION = { duration: 0.22, ease: [0.4, 0, 0.2, 1] as const }
 
 /** 折叠后延迟卸载内容的等待时间（等退场动画结束）。 */
-const UNMOUNT_DELAY_MS = 200
+const UNMOUNT_DELAY_MS = 220
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
 
 interface CollapsibleOptions {
   /** 受控展开态。 */
@@ -68,6 +73,11 @@ export function useCollapsible({ open, keepMounted = false }: CollapsibleOptions
   }, [open, keepMounted, shouldRender])
 
   const runExpand = useCallback((el: HTMLElement) => {
+    if (prefersReducedMotion()) {
+      el.style.height = 'auto'
+      el.style.overflow = 'visible'
+      return
+    }
     el.style.height = '0px'
     el.style.overflow = 'hidden'
     void el.offsetHeight // 强制 reflow 让起点 0px 生效
@@ -85,6 +95,11 @@ export function useCollapsible({ open, keepMounted = false }: CollapsibleOptions
   }, [])
 
   const runCollapse = useCallback((el: HTMLElement) => {
+    if (prefersReducedMotion()) {
+      el.style.height = '0px'
+      el.style.overflow = 'hidden'
+      return
+    }
     el.style.height = `${el.scrollHeight}px`
     el.style.overflow = 'hidden'
     void el.offsetHeight

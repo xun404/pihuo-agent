@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { LeaderMode, Project, Session, SessionApprovalPolicy, WorkerJob } from '@swarmdesk-agent/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
@@ -10,6 +11,9 @@ import type { Locale } from './i18n/locales'
 import { ThemeProvider } from './theme/ThemeProvider'
 import { ToastProvider, useToast } from './components/Toast'
 import { confirmAction, pickProjectDirectory } from './lib/native-dialogs'
+
+/** Settings ↔ workspace view transition (aligned with Modal timing). */
+const VIEW_EASE = [0.4, 0, 0.2, 1] as const
 
 const EMPTY_JOBS: WorkerJob[] = []
 
@@ -42,7 +46,12 @@ function AppShell({
   setSessionApprovalPolicy,
 }: ReturnType<typeof useAppState>) {
   const { t } = useI18n()
-  const { error: toastError } = useToast()
+  const { error: toastError, info: toastInfo } = useToast()
+  const reduceMotion = useReducedMotion()
+  const viewTransition = {
+    duration: reduceMotion ? 0.01 : 0.22,
+    ease: VIEW_EASE,
+  }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<
     'general' | 'model' | 'workers' | 'about' | undefined
@@ -145,7 +154,27 @@ function AppShell({
     // Delayed naming: no title prompt at creation time.
     // The Leader auto-names the session after the first task; the user can
     // rename any time via the inline edit affordance in the chat header.
-    void createSession(undefined).catch((e) => toastError(String(e)))
+    void (async () => {
+      try {
+        let projectId =
+          activeProject?.id ?? snapshot.activeProjectId ?? snapshot.projects[0]?.id ?? undefined
+        if (!projectId) {
+          // Friendly copy + auto-open folder after a short delay (no raw Error: toast).
+          toastInfo(t('sidebar.needProjectOpenFolder'), 3200)
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 3000)
+          })
+          const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
+          if (!path) return
+          const project = await openProject(path)
+          projectId = project.id
+        }
+        await createSession(undefined, 'build', projectId)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        toastError(msg === 'NO_PROJECT' ? t('sidebar.needProjectOpenFolder') : msg)
+      }
+    })()
   }
 
   const onRenameSession = (sessionId: string, title: string) => {
@@ -192,118 +221,140 @@ function AppShell({
   return (
     <div className="app-root">
       <div className="window app-window">
-        {/* 设置全页：按线稿替换整个 shell（无项目侧栏） */}
-        {settingsOpen ? (
-          <SettingsPanel
-            onClose={leaveSettings}
-            initialTab={settingsTab}
-            workers={snapshot.workers}
-            onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
-            onHealthWorker={(id, depth) => void healthWorker(id, depth)}
-            onHealthAllWorkers={() => healthAllWorkers()}
-            onRegisterWorker={(body) => registerWorker(body)}
-            onDetectWorkers={() => detectWorkers({ apply: true })}
-            onRefreshSnapshot={() => void refresh()}
-          />
-        ) : (
-          <div className={`shell${inspectorOpen ? ' with-inspector' : ''}`}>
-            <LeftSidebar
-              projects={snapshot.projects}
-              sessions={snapshot.sessions}
-              activeProjectId={snapshot.activeProjectId}
-              activeSessionId={snapshot.activeSessionId}
-              busySessionIds={busySessionIds}
-              onSelectSession={(s) => void activateSession(s)}
-              onSelectProject={(p) =>
-                void activateProject(p.id).catch((e) => toastError(String(e)))
-              }
-              onNewSession={onNewSession}
-              onOpenProject={onOpenProject}
-              onDeleteProject={onDeleteProject}
-              onDeleteSession={onDeleteSession}
-              onOpenSettings={(tab) => {
-                if (tab) setSettingsTab(tab)
-                setSettingsOpen(true)
-                setInspectorOpen(false)
-              }}
-            />
-
-            <div className="main-column">
-              <ChatWorkspace
-                project={activeProject}
-                session={activeSession}
-                sessions={snapshot.sessions}
-                projects={snapshot.projects}
-                serverUp={serverUp}
-                onModeChange={onModeChange}
-                onRenameSession={onRenameSession}
-                onOpenSettings={(tab) => {
-                  if (tab) setSettingsTab(tab)
-                  setSettingsOpen(true)
-                  setInspectorOpen(false)
-                }}
-                settingsOpen={false}
-                onBusySessionsChange={setBusySessionIds}
-                onSetApprovalPolicy={(sessionId, policy) =>
-                  void setSessionApprovalPolicy(sessionId, policy).catch((e) =>
-                    toastError(String(e)),
-                  )
-                }
-                onSessionStatusChange={(sessionId, status, opts) =>
-                  setSessionStatus(sessionId, status, opts)
-                }
-                resolving={resolvingState}
-                snapshotApprovals={snapshot.approvals}
-                snapshotJobs={snapshot.jobs ?? EMPTY_JOBS}
-                snapshotWorkers={snapshot.workers}
-                onResolveApproval={(id, optionId, decision, surface) =>
-                  void resolveApproval(id, decision, optionId, surface).catch((e) =>
-                    toastError(String(e)),
-                  )
-                }
-                onResetContext={(jobId) =>
-                  void resetAcpContext(jobId).catch((e) => toastError(String(e)))
-                }
-                inspectorOpen={inspectorOpen}
-                onToggleInspector={() => setInspectorOpen((v) => !v)}
-                onRefreshGit={() => void refresh()}
-                onComposeFirstMessage={onComposeFirstMessage}
-                onPickFolder={onOpenProject}
-                initialInput={pendingComposerText}
-                onInitialInputConsumed={() => setPendingComposerText('')}
-                creatingFromComposer={creatingFromComposer}
+        {/* 设置全页 ↔ 工作区：AnimatePresence 延迟卸载以播放退场 */}
+        <AnimatePresence mode="wait" initial={false}>
+          {settingsOpen ? (
+            <motion.div
+              key="settings"
+              className="view-layer"
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28 }}
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28 }}
+              transition={viewTransition}
+            >
+              <SettingsPanel
+                onClose={leaveSettings}
+                initialTab={settingsTab}
+                workers={snapshot.workers}
+                onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
+                onHealthWorker={(id, depth) => void healthWorker(id, depth)}
+                onHealthAllWorkers={() => healthAllWorkers()}
+                onRegisterWorker={(body) => registerWorker(body)}
+                onDetectWorkers={() => detectWorkers({ apply: true })}
+                onRefreshSnapshot={() => void refresh()}
               />
-            </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="workspace"
+              className="view-layer"
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
+              transition={viewTransition}
+            >
+              <div className={`shell${inspectorOpen ? ' with-inspector' : ''}`}>
+                <LeftSidebar
+                  projects={snapshot.projects}
+                  sessions={snapshot.sessions}
+                  activeProjectId={snapshot.activeProjectId}
+                  activeSessionId={snapshot.activeSessionId}
+                  busySessionIds={busySessionIds}
+                  onSelectSession={(s) => void activateSession(s)}
+                  onSelectProject={(p) =>
+                    void activateProject(p.id).catch((e) => toastError(String(e)))
+                  }
+                  onNewSession={onNewSession}
+                  onOpenProject={onOpenProject}
+                  onDeleteProject={onDeleteProject}
+                  onDeleteSession={onDeleteSession}
+                  onOpenSettings={(tab) => {
+                    if (tab) setSettingsTab(tab)
+                    setSettingsOpen(true)
+                    setInspectorOpen(false)
+                  }}
+                />
 
-            {inspectorOpen && (
-              <div className="inspector-host drawer">
-                <div className="drawer-panel">
-                  <RightPanel
-                    workers={snapshot.workers}
-                    approvals={snapshot.approvals ?? []}
-                    projectId={activeProject?.id ?? null}
-                    sessionId={activeSession?.id ?? null}
-                    onToggle={(id, enabled) => void toggleWorker(id, enabled)}
-                    onHealth={(id, depth) => void healthWorker(id, depth)}
-                    onHealthAll={() => healthAllWorkers()}
-                    onSetRoles={(id, body) => void setWorkerRoles(id, body)}
-                    onSetModel={(id, model, projectId) => void setWorkerModel(id, model, projectId)}
-                    onFetchModels={(id, opts) => fetchWorkerModels(id, opts)}
+                <div className="main-column">
+                  <ChatWorkspace
+                    project={activeProject}
+                    session={activeSession}
+                    sessions={snapshot.sessions}
+                    projects={snapshot.projects}
+                    serverUp={serverUp}
+                    onModeChange={onModeChange}
+                    onRenameSession={onRenameSession}
+                    onOpenSettings={(tab) => {
+                      if (tab) setSettingsTab(tab)
+                      setSettingsOpen(true)
+                      setInspectorOpen(false)
+                    }}
+                    settingsOpen={false}
+                    onBusySessionsChange={setBusySessionIds}
+                    onSetApprovalPolicy={(sessionId, policy) =>
+                      void setSessionApprovalPolicy(sessionId, policy).catch((e) =>
+                        toastError(String(e)),
+                      )
+                    }
+                    onSessionStatusChange={(sessionId, status, opts) =>
+                      setSessionStatus(sessionId, status, opts)
+                    }
+                    resolving={resolvingState}
+                    snapshotApprovals={snapshot.approvals}
+                    snapshotJobs={snapshot.jobs ?? EMPTY_JOBS}
+                    snapshotWorkers={snapshot.workers}
                     onResolveApproval={(id, optionId, decision, surface) =>
                       void resolveApproval(id, decision, optionId, surface).catch((e) =>
                         toastError(String(e)),
                       )
                     }
-                    resolving={resolvingState}
-                    onRegisterWorker={(body) => registerWorker(body)}
-                    onDetectWorkers={() => detectWorkers({ apply: true })}
-                    onRefreshSnapshot={() => void refresh()}
+                    onResetContext={(jobId) =>
+                      void resetAcpContext(jobId).catch((e) => toastError(String(e)))
+                    }
+                    inspectorOpen={inspectorOpen}
+                    onToggleInspector={() => setInspectorOpen((v) => !v)}
+                    onRefreshGit={() => void refresh()}
+                    onComposeFirstMessage={onComposeFirstMessage}
+                    onPickFolder={onOpenProject}
+                    initialInput={pendingComposerText}
+                    onInitialInputConsumed={() => setPendingComposerText('')}
+                    creatingFromComposer={creatingFromComposer}
                   />
                 </div>
+
+                {inspectorOpen && (
+                  <div className="inspector-host drawer">
+                    <div className="drawer-panel">
+                      <RightPanel
+                        workers={snapshot.workers}
+                        approvals={snapshot.approvals ?? []}
+                        projectId={activeProject?.id ?? null}
+                        sessionId={activeSession?.id ?? null}
+                        onToggle={(id, enabled) => void toggleWorker(id, enabled)}
+                        onHealth={(id, depth) => void healthWorker(id, depth)}
+                        onHealthAll={() => healthAllWorkers()}
+                        onSetRoles={(id, body) => void setWorkerRoles(id, body)}
+                        onSetModel={(id, model, projectId) =>
+                          void setWorkerModel(id, model, projectId)
+                        }
+                        onFetchModels={(id, opts) => fetchWorkerModels(id, opts)}
+                        onResolveApproval={(id, optionId, decision, surface) =>
+                          void resolveApproval(id, decision, optionId, surface).catch((e) =>
+                            toastError(String(e)),
+                          )
+                        }
+                        resolving={resolvingState}
+                        onRegisterWorker={(body) => registerWorker(body)}
+                        onDetectWorkers={() => detectWorkers({ apply: true })}
+                        onRefreshSnapshot={() => void refresh()}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

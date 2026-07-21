@@ -1,0 +1,1358 @@
+/* —— Chat —— */
+.chat-head {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-4) 0 var(--sp-3);
+  flex-shrink: 0;
+  /* 会话标题条可拖拽窗口 */
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.chat-head button,
+.chat-head .icon-btn,
+.chat-head a,
+.chat-head input,
+.chat-head .title-input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* Title group: the visible <span> + hover-revealed edit affordance */
+.chat-head .title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(60%, 420px);
+}
+.chat-head .title {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-head .title.untitled {
+  color: var(--text-3);
+  font-weight: var(--fw-medium);
+  font-style: italic;
+}
+.chat-head .title-edit-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  opacity: 0;
+  transition:
+    opacity var(--dur-instant) ease,
+    color var(--dur-instant) ease,
+    background var(--dur-instant) ease;
+  cursor: pointer;
+}
+.chat-head:hover .title-edit-btn,
+.chat-head .title-edit-btn:focus-visible {
+  opacity: 1;
+}
+.chat-head .title-edit-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  opacity: 1;
+}
+/* Inline rename input — replaces the title span when editing.
+   Mirrors .settings-input focus treatment so it adapts to every palette
+   (classic / warm / dark) via the same --blue / --blue-soft tokens. */
+.chat-head .title-input {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  flex: 0 1 min(60%, 420px);
+  min-width: 80px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  outline: none;
+}
+.chat-head .title-input:focus {
+  border-color: color-mix(in srgb, var(--blue) 50%, var(--border));
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+.chat-head .spacer {
+  flex: 1;
+  min-width: 8px;
+}
+.chat-head .badge {
+  flex-shrink: 0;
+}
+.chat-head .icon-btn {
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.badge {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+.badge.mode {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.badge.run {
+  background: var(--green-soft);
+  color: var(--green);
+  /* 后端服务在线 */
+  letter-spacing: 0.01em;
+}
+.badge.offline {
+  background: var(--danger-soft);
+  color: var(--danger);
+  letter-spacing: 0.01em;
+}
+.icon-btn {
+  width: var(--h-sm);
+  height: var(--h-sm);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  border: none;
+  background: transparent;
+}
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+/* =========================================================
+   对话 + Worker（线稿 wireframe-v2 §Chat 1:1）
+   消息列与 composer 同宽、底部重叠衔接
+   ========================================================= */
+
+/* 滚动容器铺满主栏，滚动条贴最右侧 */
+.messages-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: 100%;
+  /* 底部让出与 composer 重叠的可视区，避免末条被挡住 */
+  padding-bottom: 0;
+}
+.messages {
+  flex: 1;
+  /* 底 padding 加大：内容可滚进 composer 叠层下，视觉「连在一起」 */
+  padding: var(--sp-4) var(--sp-6) calc(var(--sp-8) + 36px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5); /* 消息与消息：拉开视觉分段 */
+  max-width: var(--messages-max);
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* 同列对齐：用户/Leader 共用列宽；用户气泡右缘 = Leader 内容右缘 */
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0; /* 允许内部错误卡等收缩，避免撑破右缘 */
+  position: relative;
+}
+/* 轮次分隔：Leader 轮与下一轮之间用轻线（不打断首轮） */
+.msg.user + .msg.leader,
+.msg.leader + .msg.user {
+  margin-top: 2px;
+}
+.msg.user {
+  align-items: flex-end;
+}
+/* Leader：过程块等距；整段消息块用内边距形成阅读岛 */
+/* ============================================================
+   ★ Supervisor 卡片（sup-card / sup-header / sup-body / sup-footer）
+   取代旧的 .msg.leader 容器 + msg-role-row + msg-run-meta。
+   ============================================================ */
+.sup-card {
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-xl);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  box-sizing: border-box;
+}
+.sup-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 22px;
+}
+.sup-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--bg-surface) 82%, #e6c873 18%),
+    var(--bg-hover)
+  );
+  display: grid;
+  place-items: center;
+  color: var(--text-1);
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, #c69a2d 26%, var(--border-soft));
+  overflow: hidden;
+}
+.sup-avatar svg,
+.sup-avatar .queen-bee {
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.sup-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+.sup-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-3);
+  background: var(--bg-hover);
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+}
+.sup-model .i {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+}
+.sup-status .pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.sup-status {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.sup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sup-text {
+  font-size: var(--fs-md);
+  line-height: 1.65;
+  color: var(--text-1);
+  padding: 2px 0;
+}
+.sup-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-top: var(--sp-1);
+  border-top: 1px solid var(--border-soft);
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+}
+.sup-footer-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sup-footer-meta.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.sup-footer-sep {
+  opacity: 0.5;
+  user-select: none;
+}
+
+/* leader 旧规则清理后的消息间距 */
+.msg.leader {
+  /* 仅保留 flex 基础——卡片样式移至 .sup-card */
+  align-items: stretch;
+  gap: 5px;
+  box-sizing: border-box;
+}
+.msg.leader + .msg.leader {
+  margin-top: 2px;
+}
+.msg.user + .msg.leader,
+.msg.leader + .msg.user {
+  margin-top: 2px;
+}
+.msg.user {
+  padding: 0 2px;
+}
+
+/* Leader / 默认气泡（用户见下） */
+.msg .bubble {
+  padding: var(--sp-3) 14px;
+  border-radius: var(--r-xl);
+  font-size: var(--fs-base);
+  line-height: var(--lh-relaxed);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-md);
+  max-width: min(520px, 85%);
+  color: var(--text-1);
+  box-sizing: border-box;
+}
+/* 用户：浅蓝、无描边阴影，右缘贴消息列 */
+.msg.user .bubble {
+  background: var(--blue-soft);
+  border-color: transparent;
+  box-shadow: none;
+  margin-right: 0;
+  margin-left: auto;
+  max-width: min(520px, 85%);
+  width: fit-content;
+  align-self: flex-end;
+}
+/* Leader：无气泡壳；正文层级高于过程层（思考/工具） */
+.msg.leader .bubble {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 4px 0 2px;
+  font-size: var(--fs-md);
+  line-height: 1.65;
+  width: auto;
+  max-width: none;
+  color: var(--text-1);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  box-sizing: border-box;
+}
+
+/* —— Markdown 正文：主阅读层，对比过程旁注更清晰 —— */
+.msg.leader .md-content {
+  font-size: var(--fs-md);
+  line-height: 1.65;
+  color: var(--text-1);
+  font-weight: var(--fw-regular);
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.msg.leader .md-content p {
+  margin: 0 0 0.65em;
+}
+.msg.leader .md-content p:last-child {
+  margin-bottom: 0;
+}
+.msg.leader .md-content strong {
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+/* 标题：em 相对尺寸 + accent 色阶 */
+.sup-text h1,
+.sup-text.md-content h1 {
+  font-size: 1.125em;
+  font-weight: var(--fw-semibold);
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  margin: 0.8em 0 0.35em;
+  line-height: 1.3;
+}
+.sup-text h2,
+.sup-text.md-content h2 {
+  font-size: 1.0625em;
+  font-weight: var(--fw-semibold);
+  color: color-mix(in srgb, var(--accent) 90%, var(--text-1));
+  letter-spacing: -0.015em;
+  margin: 0.7em 0 0.3em;
+  line-height: 1.3;
+}
+.sup-text h3,
+.sup-text.md-content h3 {
+  font-size: 1em;
+  font-weight: var(--fw-semibold);
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-1));
+  margin: 0.6em 0 0.25em;
+}
+.sup-text h4,
+.sup-text h5,
+.sup-text h6,
+.sup-text.md-content h4,
+.sup-text.md-content h5,
+.sup-text.md-content h6 {
+  font-size: 1em;
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  margin: 0.5em 0 0.2em;
+}
+.msg.leader .md-content h1:first-child,
+.msg.leader .md-content h2:first-child,
+.msg.leader .md-content h3:first-child,
+.msg.leader .md-content h4:first-child {
+  margin-top: 0.15em;
+}
+.msg.leader .md-content pre,
+.sup-text pre,
+.sup-text.md-content .md-pre {
+  background: var(--bg-input);
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  border: 1px solid var(--border-soft);
+  margin: 0.4em 0;
+}
+.msg.leader .md-content code,
+.sup-text code,
+.sup-text.md-content code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  font-weight: var(--fw-medium);
+}
+/* blockquote：左竖线 + 次级色（对齐线稿）*/
+.sup-text blockquote,
+.sup-text.md-content blockquote {
+  margin: 0.5em 0;
+  padding: 0.3em 0 0.3em 0.9em;
+  border-left: 2px solid var(--border);
+  color: var(--text-3);
+}
+.sup-text blockquote p,
+.sup-text.md-content blockquote p {
+  margin: 0;
+}
+/* 链接：蓝（对齐线稿）*/
+.sup-text a,
+.sup-text.md-content a {
+  color: var(--blue);
+  text-decoration: none;
+}
+.sup-text a:hover,
+.sup-text.md-content a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* inline code：弱化底色（从 accent-soft 改为 bg-input）*/
+.sup-text .md-code-inline,
+.sup-text.md-content .md-code-inline {
+  color: var(--text-1);
+  background: var(--bg-input);
+  padding: 0.08em 0.35em;
+  border-radius: var(--r-xs);
+}
+.sup-text .md-code-block,
+.sup-text.md-content .md-code-block {
+  color: var(--text-2);
+}
+.sup-text strong code,
+.sup-text.md-content strong code {
+  color: inherit;
+}
+/* 列表：en-dash 标记替代原生 disc */
+.sup-text ul,
+.sup-text.md-content ul {
+  list-style: none;
+  padding-left: 1.4em;
+  margin: 0.3em 0 0.55em;
+}
+.sup-text ul > li,
+.sup-text.md-content ul > li {
+  position: relative;
+  margin: 0.1em 0;
+}
+.sup-text ul > li::before,
+.sup-text.md-content ul > li::before {
+  content: '\2013'; /* en-dash – */
+  position: absolute;
+  left: -1.1em;
+  color: var(--text-3);
+}
+.sup-text ol,
+.sup-text.md-content ol {
+  list-style: decimal;
+  list-style-position: outside;
+  padding-left: 1.6em;
+  margin: 0.3em 0 0.55em;
+}
+.sup-text ol > li,
+.sup-text.md-content ol > li {
+  margin: 0.1em 0;
+}
+
+/* —— 表格：明显的边框 + 表头底色 —— */
+.msg.leader .md-content .md-table-wrap {
+  overflow-x: auto;
+  margin: 0.5em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.msg.leader .md-content table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.msg.leader .md-content th,
+.msg.leader .md-content td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.msg.leader .md-content th {
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.msg.leader .md-content tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-input) 40%, transparent);
+}
+.msg.user .md-content {
+  font-size: inherit;
+  line-height: inherit;
+}
+.msg.user .bubble {
+  line-height: var(--lh-relaxed);
+}
+
+/*
+ * 过程层：思考 / 工具 —— 旁注芯片 + 左边线思考体；块与块等距
+ * 参考：折叠「思考」、工具行「图标 名称 0.1s 命令预览」、正文主阅读层
+ */
+/* 过程块竖向间距只靠 gap；勿用 margin:0 冲掉左右内缩 */
+.msg.leader > .chat-tool-worker-stack {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* ============ 过程层：思考块 / 工具行（含展开动画） ============ */
+
+.tool-row,
+.thinking-block {
+  border: none;
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+  line-height: 1.25;
+}
+
+/* —— 共用 summary 行（线稿 .node-row 1:1）——
+   padding 4px 8px 4px 1px + radius r-md + hover bg-hover。
+   不是 card（无 border/shadow），但比纯文本行多一点"可点击行"质感。*/
+.tool-row-summary,
+.thinking-block-summary,
+.worker-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 1px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.tool-row-summary:hover,
+.thinking-block-summary:hover,
+.worker-card-head:hover {
+  background: var(--bg-hover);
+}
+/* 状态图标槽：折叠=类型图标，hover=›，展开=⌄ */
+/* 图标槽：relative 固定尺寸容器，内部 type 图标 + chevron 都 absolute 叠放，
+   用 opacity 交叉淡入。chevron 用 transform: rotate(90deg) 过渡。*/
+.tb-icon-slot,
+.tr-icon-slot {
+  position: relative;
+  flex-shrink: 0;
+}
+.tb-icon-slot,
+.tr-icon-slot {
+  width: 14px;
+  height: 14px;
+}
+
+.tb-icon,
+.tr-icon {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  transition:
+    opacity var(--dur-fast) ease,
+    transform var(--dur-base) var(--ease-out),
+    color var(--dur-fast) ease;
+}
+
+/* 折叠态：类型图标可见，chevron 隐藏；hover 反过来 */
+.thinking-block:not(.is-open) .tb-icon-type,
+.tool-row:not(.is-open) .tr-icon-type {
+  opacity: 0.85;
+}
+.thinking-block:not(.is-open) .tb-icon-chevron,
+.tool-row:not(.is-open) .tr-icon-chevron {
+  opacity: 0;
+}
+.thinking-block:not(.is-open):hover .tb-icon-type,
+.tool-row:not(.is-open):hover .tr-icon-type {
+  opacity: 0;
+}
+.thinking-block:not(.is-open):hover .tb-icon-chevron,
+.tool-row:not(.is-open):hover .tr-icon-chevron {
+  opacity: 1;
+}
+
+/* 展开态：chevron 可见并旋转 90°，类型图标隐藏 */
+.thinking-block.is-open .tb-icon-type,
+.tool-row.is-open .tr-icon-type {
+  opacity: 0;
+}
+.thinking-block.is-open .tb-icon-chevron,
+.tool-row.is-open .tr-icon-chevron {
+  opacity: 1;
+  transform: rotate(90deg);
+}
+
+/* hover 高亮 */
+.thinking-block-summary:hover .tb-icon,
+.tool-row-summary:hover .tr-icon {
+  color: var(--text-2);
+}
+/* 流式中：展开态 chevron 用 accent 脉冲提示活跃 */
+.thinking-block.live .tb-icon-chevron {
+  color: var(--accent);
+  opacity: 1;
+  animation: thinking-pulse 1.6s ease-in-out infinite;
+}
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ============ 流式光标（leader 回复流式时的尾部闪烁竖条）============ */
+@keyframes stream-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.2;
+  }
+}
+.stream-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  border-radius: 1px;
+  animation: stream-blink 1s steps(2) infinite;
+}
+
+/* ============ 等待占位（busy 且尾部 assistant 无内容时的三点脉冲）============
+   来源：design/gui-v4 animation-impl demo ⑤（BusyDots，复用 thinking-pulse）*/
+.msg-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--sp-2) 0;
+  color: var(--text-3);
+}
+.msg-pending .pdot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-2);
+  animation: thinking-pulse 1.6s ease-in-out infinite;
+}
+.msg-pending .pdot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.msg-pending .pdot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ============ running 态指示（Tool / Worker 运行中）============
+   图标始终静态不 spin。运行态靠 BusyDots + opacity + 计时。*/
+.tool-row.is-running .tr-icon-type {
+  color: var(--accent);
+}
+.tool-row.is-running .tool-row-name {
+  opacity: 0.7;
+  transition: opacity var(--dur-base) ease;
+}
+/* BusyDots（运行中标签后三点脉冲）*/
+.busy-dots {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.busy-dots .d {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: busy-pulse 1.2s ease-in-out infinite;
+}
+.busy-dots .d:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.busy-dots .d:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes busy-pulse {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* tool duration 数字微脉冲（运行中）*/
+@keyframes tool-duration-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.tool-row-duration.live {
+  color: var(--accent);
+  animation: tool-duration-pulse 1.6s ease-in-out infinite;
+}
+
+/* WorkerRunCard：running 态 status 绿色呼吸（复用 sess-dot-pulse 模式）*/
+@keyframes worker-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.worker-card-running .worker-card-head .status:not(.pending):not(.done) {
+  animation: worker-status-pulse 1.6s ease-in-out infinite;
+}
+/* worker-card-pending-dots 已移除：Worker 展开体改用 .line 流，运行态靠 head 的 busy-dots。*/
+
+/* ============ 新消息入场（@starting-style，只首次渲染触发，不重播）============
+   旧实现用 animation 常驻 .msg，流式中 assistant id 变化导致 React 重挂载时会
+   重播动画 = 闪烁；且 58 个 finished animation 增加样式重算负担。
+   @starting-style 只在元素首次插入 DOM 时触发一次 transition，
+   后续重渲染（React 复用节点）不会重播。Chromium 148+ (Electron 42) 支持。*/
+.msg {
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+.thinking-block-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  line-height: 1.25;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.thinking-block.live .thinking-block-label {
+  opacity: 0.7;
+  transition: opacity var(--dur-base) ease;
+}
+.thinking-block-preview {
+  font-size: 12px;
+  color: var(--text-3);
+  opacity: 0.72;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* 内层容器：配合外层 height 动画做 opacity + translateY。
+   注意：不要在内层/body 设 max-height 或 margin——会钳制外层 scrollHeight 测量，
+   导致展开动画末尾跳变。用 padding 代替 margin。*/
+.thinking-block-collapse,
+.tool-row-collapse {
+  /* 外层：height 由 useCollapsible 的 JS 动画控制（0 ↔ scrollHeight → auto）*/
+}
+.thinking-block-inner {
+  padding-top: 2px;
+  padding-bottom: 4px;
+}
+.tool-row-inner {
+  /* 仅作位移层 */
+}
+.thinking-block-body {
+  padding: 2px 0 4px 12px;
+  border-left: 2px solid color-mix(in srgb, var(--border) 70%, var(--text-3));
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: pre-wrap;
+  line-height: 1.45;
+  opacity: 0.92;
+  /* 流式时内联增长（不锁 max-height），结束后才滚动框 */
+}
+.thinking-block-body.live {
+  color: var(--text-2);
+  opacity: 0.95;
+}
+/* 结束态（非 live）：内容过长时滚动框，避免撑爆消息列 */
+.thinking-block:not(.live) .thinking-block-body {
+  max-height: 240px;
+  overflow: auto;
+}
+
+/* ============ 工具行 ============
+   .node-row 共用样式见上方（padding/radius/hover-bg）。
+   tool-row 专属：运行态 label 变暗、错误态染色。*/
+.tool-row.is-running .tool-row-name {
+  opacity: 0.7;
+  transition: opacity var(--dur-base) ease;
+}
+.tool-row.is-error .tool-row-name {
+  color: var(--danger);
+}
+.tool-row-name {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tool-row-duration {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tool-row-duration.live {
+  color: var(--text-2);
+}
+.tool-row-error {
+  font-size: var(--fs-2xs);
+  color: color-mix(in srgb, var(--danger) 78%, var(--text-3));
+  font-weight: var(--fw-medium);
+  flex-shrink: 0;
+}
+.tool-row-cmd {
+  font-size: var(--fs-2xs);
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: min(520px, 58vw);
+}
+/* 工具展开体：改用线稿 .node-body-inner .line 流（见上方共用规则）。
+   旧的 .tool-row-body / .tool-row-terminal* 已移除。*/
+/* 工具行与 Worker 卡同栈时间距 */
+.chat-tool-worker-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  margin: 0;
+}
+
+/* —— Worker 行（线稿 node-row 1:1，与 tool-row-summary 同款）——
+   关键：head 是纯排版行，无 padding/bg/radius。与 thinking/tool 视觉统一。*/
+.worker-card {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+  width: 100%;
+  max-width: 100%;
+}
+/* Worker head：.node-row 共用样式见上方。这里只补 worker 专属字段。 */
+/* Worker 图标槽：worker-logo ↔ chevron 交叉淡入（对齐 .tr-icon-slot 模式）。
+   槽位 16px（容纳品牌 logo），logo 和 chevron 都 absolute inset:0 叠放。*/
+.worker-icon-slot {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.worker-icon-slot .worker-logo,
+.worker-icon-slot .worker-chevron {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity var(--dur-fast) ease,
+    transform var(--dur-base) var(--ease-out),
+    color var(--dur-fast) ease;
+}
+/* Worker logo（16px 品牌色方块）*/
+.worker-logo {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.worker-logo svg {
+  width: 10px;
+  height: 10px;
+}
+/* 品牌色：Worker logo 圆角方块的底色/前景（经典/暖色/深色 三主题 token 已覆盖） */
+.worker-logo.claude {
+  background: var(--claude-bg);
+  color: var(--claude-fg);
+}
+.worker-logo.codex {
+  background: var(--codex-bg);
+  color: var(--codex-fg);
+}
+.worker-logo.opencode {
+  background: var(--opencode-bg);
+  color: var(--opencode-fg);
+}
+.worker-logo.custom {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.worker-logo.cc {
+  background: var(--claude-bg);
+  color: var(--claude-fg);
+}
+.worker-logo.cx {
+  background: var(--codex-bg);
+  color: var(--codex-fg);
+}
+.worker-logo.oc {
+  background: #2f6fed;
+  color: #fff;
+}
+/* name：与 .tool-row-name / .thinking-block-label 同款 */
+.worker-card-head .name {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.worker-card-head .role {
+  font-size: 10px;
+  color: var(--text-4);
+  font-weight: var(--fw-regular);
+  flex-shrink: 0;
+}
+.worker-card-head .model {
+  font-size: var(--fs-2xs);
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+.worker-card-head .status {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.worker-card-head .status.done {
+  color: var(--text-4);
+}
+.worker-card-head .status.pending {
+  color: var(--accent);
+}
+/* Worker 角色 pill（node-cap 样式）——持久化在 WorkerJob.role，不随 session 设置变化。
+   克制配色：plan 紫、coder 蓝、review 橙、test/research 绿、general 灰。*/
+.worker-card-head .node-cap {
+  font-size: 9.5px;
+  font-weight: var(--fw-semibold);
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  line-height: 16px;
+  flex-shrink: 0;
+  color: var(--text-3);
+  background: var(--bg-hover);
+}
+.worker-card-head .node-cap.role-cap[data-role='plan'] {
+  color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 12%, transparent);
+}
+.worker-card-head .node-cap.role-cap[data-role='coder'] {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.worker-card-head .node-cap.role-cap[data-role='review'] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.worker-card-head .node-cap.role-cap[data-role='test'],
+.worker-card-head .node-cap.role-cap[data-role='research'] {
+  color: var(--green);
+  background: var(--green-soft);
+}
+/* Worker head chevron（行末独立元素，受约束尺寸，旋转过渡。
+/* Worker chevron（图标槽内的第二层，与 logo 交叉淡入）*/
+.worker-card-head .worker-chevron {
+  color: var(--text-4);
+  opacity: 0;
+}
+.worker-card-head .worker-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+/* 折叠态：logo 可见，chevron 隐藏；hover 时 logo 淡出，chevron 淡入 */
+.worker-card:not(.is-open) .worker-card-head .worker-logo {
+  opacity: 1;
+}
+.worker-card:not(.is-open) .worker-card-head .worker-chevron {
+  opacity: 0;
+}
+.worker-card:not(.is-open):hover .worker-card-head .worker-logo {
+  opacity: 0;
+}
+.worker-card:not(.is-open):hover .worker-card-head .worker-chevron {
+  opacity: 1;
+}
+/* 展开态：logo 隐藏，chevron 显示并旋转 90° */
+.worker-card.is-open .worker-card-head .worker-logo {
+  opacity: 0;
+}
+.worker-card.is-open .worker-card-head .worker-chevron {
+  opacity: 1;
+  transform: rotate(90deg);
+  color: var(--text-3);
+}
+/* Worker 展开体：折叠动画容器（内容用 .node-body-inner，见上方共用规则）*/
+.worker-card-collapse {
+  overflow: hidden;
+}
+/* —— 节点展开体（线稿 node-body-inner 1:1）——
+   思考 / 工具 / Worker 三者共用：缩进 + 1px 竖线 guide + .line 事件流。*/
+.node-body-inner {
+  position: relative;
+  margin-left: 8px;
+  padding: 4px 0 6px 14px;
+}
+.node-body-inner::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 50%, transparent);
+}
+.node-body-inner .line {
+  display: flex;
+  gap: var(--sp-2);
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  line-height: 1.7;
+}
+.node-body-inner .line .mk {
+  color: var(--text-4);
+  flex-shrink: 0;
+  user-select: none;
+}
+.node-body-inner .line.ok .mk {
+  color: var(--green);
+}
+.node-body-inner .line .mk.err {
+  color: var(--danger);
+}
+.node-body-inner .line .tx {
+  min-width: 0;
+}
+.node-body-inner .line .tx code {
+  font-family: var(--mono);
+  background: var(--bg-input);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  color: var(--text-2);
+}
+/* Worker 回复行：内嵌 markdown（块级内容），放宽 line 的 inline-flex 约束 */
+.node-body-inner .line.worker-reply {
+  align-items: flex-start;
+}
+.node-body-inner .line.worker-reply .tx {
+  flex: 1 1 auto;
+  font-family: var(--font);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: var(--lh-body);
+}
+.node-body-inner .line.worker-reply .tx .md-content {
+  font-size: inherit;
+  line-height: inherit;
+}
+/* 认证/重置按钮（嵌在 error 行 tx 内）*/
+.worker-card-auth-hint {
+  display: block;
+  margin-bottom: 2px;
+}
+.worker-card-auth-btn {
+  font: inherit;
+  font-size: var(--fs-2xs);
+  color: var(--blue);
+  background: none;
+  border: none;
+  padding: 0 4px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Registry readiness chip in Settings worker list */
+.worker-readiness-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  line-height: 1.2;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--bg-muted, var(--bg-surface)) 70%, transparent);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.worker-readiness-badge--ready {
+  color: color-mix(in srgb, var(--success, #2a9d5c) 85%, var(--text-2));
+  border-color: color-mix(in srgb, var(--success, #2a9d5c) 30%, var(--border-soft));
+}
+.worker-readiness-badge--auth_required,
+.worker-readiness-badge--failed,
+.worker-readiness-badge--incompatible {
+  color: color-mix(in srgb, var(--danger) 75%, var(--text-2));
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border-soft));
+}
+.worker-readiness-badge--preparing,
+.worker-readiness-badge--prepared {
+  color: var(--text-2);
+}
+.registry-prepare-panel {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-muted, var(--bg-surface)) 50%, transparent);
+}
+/* 旧 worker-card-perm/pre/md/pending/error/truncated 已移除——
+   Worker 展开体改用线稿 .node-body-inner .line 流（见上方共用规则）。
+   保留 worker-card-pending-dots 动画（busy-dots 复用）。*/
+
+/* 审批条（线稿 approval-row） */
+.approval-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 10px var(--sp-3);
+  border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-surface));
+}
+.approval-row .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: var(--h-sm);
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  line-height: 1;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.approval-row .btn:hover {
+  background: var(--bg-hover);
+}
+.approval-row .btn.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--text-inv);
+}
+.approval-row .btn.primary:hover {
+  filter: brightness(1.05);
+}
+.approval-row .btn.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: var(--bg-surface);
+}
+.approval-row .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chat-history-loading {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  padding: var(--sp-4);
+  text-align: center;
+}
+.chat-error-block {
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  background: var(--danger-soft);
+  border-radius: var(--r-lg);
+  padding: var(--sp-3);
+  margin: 0 0 var(--sp-2);
+  /* 防止长 URL 把卡撑破右缘（再被 messages-scroll overflow-x 裁掉） */
+  max-width: 100%;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+/* 嵌在 Supervisor 卡内：与正文同内缩；不用 margin+width:100% 以免右缘溢出 */
+.msg.leader > .chat-error-block.chat-error-in-bubble {
+  margin-left: var(--leader-content-indent-l, 12px);
+  margin-right: var(--leader-content-indent-r, 16px);
+  margin-top: 4px;
+  margin-bottom: 0;
+  /* flex 列里 stretch 会扣掉水平 margin；禁止 max-width:100% 顶满父级 */
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+.chat-error-label {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--danger);
+  margin-bottom: 4px;
+}
+.chat-error-body {
+  font-size: var(--fs-sm);
+  color: color-mix(in srgb, var(--danger) 75%, var(--text-1));
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+.chat-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.chat-error-action {
+  margin-top: 0;
+  max-width: 100%;
+}
+
+/* 有消息时：composer 与消息列同宽、上移叠在对话底部，渐变衔接 */
+.composer-dock {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* 与 .messages 水平边距一致 */
+  padding: 0 var(--sp-6) var(--sp-4);
+  /* 上移叠入对话区 */
+  margin-top: -40px;
+  position: relative;
+  z-index: 4;
+  /* 顶部透明 → 主底色，盖住滚动内容形成「连在一起」 */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--bg-main) 55%, transparent) 36%,
+    var(--bg-main) 72%
+  );
+  padding-top: 28px;
+  box-sizing: border-box;
+}
+.composer-dock .composer-stack {
+  /* 与消息列同一 max 宽 */
+  width: min(var(--messages-max), 100%);
+  margin-top: 0;
+}
+.composer-dock .composer-card {
+  /* 叠在对话上时略加强 elevation，仍像同一面板延续 */
+  box-shadow: var(--shadow-composer);
+}
+.composer-dock .composer-card .ph {
+  min-height: 22px;
+  font-size: var(--fs-md);
+}
+

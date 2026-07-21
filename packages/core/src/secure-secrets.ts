@@ -36,6 +36,7 @@ import {
 } from './provider-ids.js'
 import { resolveLeaderMaxSteps, parseLeaderMaxStepsInput } from './leader-max-steps.js'
 import { resolveProviderEnv, PROVIDER_ENV_OVERRIDES } from './provider-env-resolver.js'
+import { DEFAULT_LEADER_MODEL } from './models-catalog.js'
 
 export type SecretsMap = Record<string, string>
 
@@ -327,7 +328,7 @@ export function clearAllSecrets(): void {
 
 function defaultAppSettings(): AppSettings {
   return {
-    leaderModel: process.env.LEADER_MODEL ?? 'openai/gpt-5.5',
+    leaderModel: process.env.LEADER_MODEL ?? DEFAULT_LEADER_MODEL,
     thinkingIntensity: DEFAULT_THINKING_INTENSITY,
     customProviders: [],
     leaderMaxSteps: 500,
@@ -354,7 +355,7 @@ function loadSettingsStrict(): AppSettings {
   const leaderRaw =
     typeof raw.leaderModel === 'string' && raw.leaderModel.trim()
       ? raw.leaderModel
-      : process.env.LEADER_MODEL || 'openai/gpt-5.5'
+      : process.env.LEADER_MODEL || DEFAULT_LEADER_MODEL
   return {
     leaderModel: normalizeLeaderModelForMastra(leaderRaw, customProviders),
     thinkingIntensity: normalizeThinkingIntensity(

@@ -74,6 +74,8 @@ jobs:
           sudo apt-get install --no-install-recommends -y xvfb libopenjp2-tools
       - run: npm ci
       - run: npm run verify:release-tag
+      # Pull latest @mastra/core provider models into bundled catalog before package.
+      - run: npm run sync:model-registry
       - run: npm run build
       - run: npm run build:runtime
       - run: npm run verify:runtime

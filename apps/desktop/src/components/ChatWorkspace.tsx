@@ -19,6 +19,8 @@ import {
   THINKING_INTENSITY_OPTIONS,
   type ThinkingIntensity,
 } from '../lib/settings'
+import { useSendShortcut } from '../hooks/useSendShortcut'
+import { isComposerSendKey } from '../lib/send-shortcut'
 import { IconArrowUp, IconFolder } from './Icons'
 
 /**
@@ -115,6 +117,7 @@ export function ChatWorkspace({
   creatingFromComposer,
 }: Props) {
   const { t, locale } = useI18n()
+  const { sendShortcut } = useSendShortcut()
   const [aliveIds, setAliveIds] = useState<string[]>([])
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({})
   const [firstMessage, setFirstMessage] = useState('')
@@ -250,6 +253,8 @@ export function ChatWorkspace({
   if (!session) {
     return (
       <main className="main home-main">
+        {/* Titleband only — content must not be window-drag */}
+        <div className="window-drag-top" aria-hidden />
         <div className="home">
           <div className="logo-cloud" aria-hidden>
             <BrandLogo size={88} />
@@ -315,7 +320,7 @@ export function ChatWorkspace({
                 placeholder={t('chat.placeholderHome')}
                 rows={3}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  if (isComposerSendKey(e, sendShortcut)) {
                     e.preventDefault()
                     const text = firstMessage.trim()
                     if (text && !creatingFromComposer && serverUp)

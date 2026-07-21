@@ -1,0 +1,717 @@
+/* —— Product shell (maps React structure to wireframe layout) —— */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  line-height: var(--lh-body);
+  color: var(--text-1);
+  background: var(--bg-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+.app-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+  color: var(--text-1);
+  font-family: var(--font);
+  font-size: var(--fs-base);
+}
+
+.app-window {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-main);
+}
+
+/* Full-view layer for settings ↔ workspace AnimatePresence transitions */
+.view-layer {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.view-layer > .shell,
+.view-layer > .settings-shell {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+/* body-row equivalent */
+.shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  background: var(--bg-main);
+}
+.shell.with-inspector {
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--drawer-w);
+  gap: 0 var(--sp-2);
+  padding: 0 var(--sp-2) var(--sp-2) 0;
+  align-items: stretch;
+}
+/* 右侧栏：顶/右/下同距；左侧栏仍全高贴边 */
+.shell.with-inspector > .inspector-host.drawer,
+.shell.with-inspector > .drawer {
+  margin-top: var(--sp-2);
+  height: calc(100% - var(--sp-2));
+  max-height: calc(100% - var(--sp-2));
+  min-height: 0;
+  box-sizing: border-box;
+  align-self: stretch;
+}
+
+.main-column {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+  position: relative;
+}
+
+/* Sidebar fills its grid column (width from --sidebar-w) */
+.sidebar {
+  width: var(--sidebar-w);
+  max-width: var(--sidebar-w);
+  min-height: 0;
+  height: 100%;
+}
+
+.chat-workspace,
+.chat-workspace-pane,
+.chat-panel,
+.main,
+.home-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+/* Composer textarea */
+.composer-card textarea,
+.composer-card .composer-input {
+  width: 100%;
+  min-height: 28px;
+  max-height: 160px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--fs-md);
+  color: var(--text-1);
+  line-height: var(--lh-body);
+  padding: var(--sp-1) 2px 0;
+  font-family: var(--font);
+}
+.composer-card textarea::placeholder {
+  color: var(--text-3);
+}
+.send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* Spinner shown inside the send button while the empty-state composer is
+   creating a session. Reuses the dark send-bg so it reads as the same button. */
+.send-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--text-inv);
+  border-top-color: transparent;
+  opacity: 0.85;
+  animation: send-spin 0.7s linear infinite;
+}
+@keyframes send-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Settings full page — wireframe settings-shell (replaces project shell) */
+.settings-shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--settings-nav-w) minmax(0, 1fr);
+  background: var(--bg-main);
+  width: 100%;
+  height: 100%;
+}
+.settings-nav {
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: var(--settings-nav-w);
+  max-width: var(--settings-nav-w);
+  padding: 0 var(--sp-2) var(--sp-3);
+  box-shadow: inset -1px 0 0 var(--border-soft);
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+}
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px var(--sp-2);
+  margin: var(--sp-1) 0 var(--sp-2);
+  min-height: var(--h-md);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.settings-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.settings-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 9px var(--sp-3);
+  min-height: var(--h-md);
+  border-radius: var(--r-md);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--text-1);
+  text-align: left;
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.settings-nav-item .glyph {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+}
+.settings-nav-item.on .glyph {
+  color: var(--text-1);
+}
+.settings-nav-item:hover {
+  background: var(--bg-hover);
+}
+.settings-nav-item.on {
+  background: var(--bg-active);
+  font-weight: var(--fw-semibold);
+}
+.settings-main {
+  position: relative;
+  overflow: hidden;
+  /* Match left: 52px titleband + settings-back margin-top */
+  padding: calc(52px + var(--sp-1)) var(--sp-6) var(--sp-6);
+  background: var(--bg-main);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.settings-page-title,
+.settings-title {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-tight);
+  /* Same row height as .settings-back so title bottom == back bottom */
+  min-height: var(--h-md);
+  line-height: var(--h-md);
+  margin: 0 0 var(--sp-2);
+  color: var(--text-1);
+  flex-shrink: 0;
+}
+.settings-desc,
+.settings-page-desc {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  margin: 0 0 var(--sp-4);
+  line-height: var(--lh-body);
+  flex-shrink: 0;
+}
+.settings-body.settings-page-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* 常规 / Worker / 关于：整页内容区可滚，标题在内部顶部固定观感 */
+.settings-general,
+.settings-workers,
+.settings-about {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* 模型设置：标题+描述不滚；下方 model-layout 可滚 */
+.settings-model-page {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.settings-model-page .settings-model-layout {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.settings-model-page .settings-provider-rail {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+.settings-model-page .settings-model-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+/* Provider detail header (wireframe) */
+.settings-provider-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: var(--h-lg);
+  margin-bottom: var(--sp-4);
+}
+.settings-provider-head .pname {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.settings-provider-head .logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.settings-provider-head .spacer {
+  flex: 1;
+}
+.tag-on {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: var(--green-soft);
+  color: var(--green);
+}
+.tag-off {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.enable-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px 8px 4px 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-input);
+}
+.ctx-chip {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  font-family: var(--mono);
+}
+.think-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.think-tags span {
+  font-size: 10px;
+  font-family: var(--mono);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: var(--fw-medium);
+}
+
+/* Settings form helpers used by SettingsPanel */
+.settings-body {
+  min-height: 0;
+}
+.settings-page-desc {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  margin: 0 0 var(--sp-4);
+  line-height: var(--lh-body);
+  max-width: 640px;
+}
+.settings-muted {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+.settings-error {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  margin: 8px 0;
+}
+.settings-ok {
+  color: var(--green);
+  font-size: var(--fs-sm);
+  margin: 8px 0;
+}
+
+/* —— Window drag: titleband only ——
+   Only the top chrome may drag/double-click-maximize the Electron window.
+   Content (home empty, settings body, chat stream) must stay no-drag so
+   clicks, text selection, and scrolling work normally.
+   -webkit-app-region does NOT inherit — set drag only on strip elements. */
+.window-drag-top {
+  height: 52px;
+  min-height: 52px;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Overlay strip: drag without consuming layout (settings title stays put). */
+.window-drag-top--overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  /* Leave title/controls clickable below the strip — only empty chrome drags.
+     pointer-events none would disable drag; keep events on the strip only where
+     content does not sit. Settings title sits under padding; strip covers top
+     margin band + left/right chrome of the main pane. */
+}
+/* Title/desc/form always receive clicks (no-drag wins over overlay when hit-tested
+   as children; keep explicit so text selection works if strip is over them). */
+.settings-main .settings-page-title,
+.settings-main .settings-page-desc,
+.settings-main .settings-body,
+.settings-main .settings-form-card,
+.settings-main button,
+.settings-main a,
+.settings-main input,
+.settings-main textarea,
+.settings-main select,
+.settings-main label {
+  position: relative;
+  z-index: 3;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* Content regions: never drag (overrides any accidental parent drag). */
+.home-main .home,
+.home-main .composer-card,
+.home-main .home-composer,
+.chat-panel .messages,
+.chat-panel .composer-stack,
+.settings-main .settings-body,
+.settings-main .settings-form-card {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* —— Layout fixes: force wireframe visual proportions —— */
+
+.shell > .sidebar {
+  width: var(--sidebar-w);
+  max-width: var(--sidebar-w);
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 0 var(--sp-2) var(--sp-3);
+  box-shadow: inset -1px 0 0 var(--border-soft);
+}
+
+.home-hint {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  text-align: center;
+  max-width: 420px;
+  line-height: var(--lh-snug);
+  margin: 0;
+}
+
+/* Composer 默认宽 = 消息列（空态 / dock 共用） */
+.composer-stack {
+  width: min(var(--messages-max), 100%);
+}
+
+/* Nav items clickable */
+.nav-item,
+.sidebar-settings,
+.proj-head {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+.sess {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  /* 覆盖：两端圆弧，宽度避开裁切 */
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 1px 6px 1px 12px;
+  padding: 7px var(--sp-2) 7px var(--sp-3);
+  min-height: var(--h-sm);
+  width: calc(100% - 18px);
+  max-width: calc(100% - 18px);
+  box-sizing: border-box;
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.sess.active {
+  color: var(--text-1);
+  font-weight: var(--fw-medium);
+  background: var(--bg-active);
+  border-radius: var(--r-md);
+}
+/* Inspector Git / Files / Approvals（与线稿 drawer-body + w-row 体系一致） */
+.inspector-stats {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: 4px;
+}
+.inspector-stat {
+  flex: 1;
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: var(--bg-hover);
+  border: 1px solid transparent;
+  text-align: center;
+}
+.inspector-stat-n {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-tight);
+  color: var(--text-1);
+}
+.inspector-stat-n.is-green {
+  color: var(--green);
+}
+.inspector-stat-n.is-danger {
+  color: var(--danger);
+}
+.inspector-stat-l {
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.section-hint.is-warn {
+  color: var(--accent);
+}
+.inspector-list-row .git-status-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  font-family: var(--mono);
+  flex-shrink: 0;
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.inspector-list-row .git-status-badge.M {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.inspector-list-row .git-status-badge.A {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.inspector-list-row .git-status-badge.D {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.inspector-list-row .n.mono {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  word-break: break-all;
+}
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  margin: 0;
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: var(--lh-snug);
+}
+.tree-item.folder {
+  color: var(--text-1);
+  font-weight: var(--fw-medium);
+}
+.tree-item:hover {
+  background: var(--bg-hover);
+}
+.inspector-approval-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.inspector-approval-title {
+  padding: 10px var(--sp-3) 4px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+}
+.inspector-approval-meta {
+  padding: 0 var(--sp-3) 4px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
+.inspector-approval-meta.mono {
+  font-family: var(--mono);
+}
+.inspector-approval-actions {
+  margin-top: 6px;
+}
+.inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+/* Git / 文件 / 审批：标题左 + 刷新右，同一行 */
+.inspector-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--h-sm);
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.inspector-panel-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inspector-panel-head .settings-btn-soft {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Kill any leftover IDE density from older classes */
+.titlebar,
+.statusbar {
+  display: none !important;
+}
+
+/* Final product overrides (win cascade) */
+html,
+body,
+#root {
+  background: var(--bg-main) !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+body {
+  color: var(--text-1);
+}
+
+/* =========================================================
+   Motion · reduced-motion 全局兜底（v4 对齐）
+   覆盖现有 4 个分散块的缺口：thinking-pulse / toast-in / 全部 transition。
+   关键：用 0.01ms 而非 none —— 避免破坏依赖 animationend/transitionend 的逻辑。
+   与上方 4 个逐块覆盖共存（不删，避免回归）。
+   ========================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

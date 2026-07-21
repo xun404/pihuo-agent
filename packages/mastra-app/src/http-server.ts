@@ -27,6 +27,7 @@ import {
   resolveLeaderMaxSteps,
   mergeProvidersWithCustom,
   MASTRA_PROVIDERS,
+  DEFAULT_LEADER_MODEL,
   SECRET_ENV_KEYS,
   normalizeThinkingIntensity,
   thinkingIntensityToProviderOptions,
@@ -646,7 +647,7 @@ const server = createServer(async (req, res) => {
                 ? (params as { leaderModel: string }).leaderModel.trim()
                 : undefined
           const leaderModelRaw =
-            clientModel || settings.leaderModel || process.env.LEADER_MODEL || 'openai/gpt-5.5'
+            clientModel || settings.leaderModel || process.env.LEADER_MODEL || DEFAULT_LEADER_MODEL
           // Map slug typos (opencodego → opencode-go) so Mastra models.dev can resolve
           const leaderModel = normalizeLeaderModelForMastra(
             normalizeMastraModelId(leaderModelRaw),

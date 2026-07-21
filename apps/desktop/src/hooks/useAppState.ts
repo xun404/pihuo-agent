@@ -85,7 +85,8 @@ export function useAppState() {
     explicitProjectId?: string,
   ) => {
     const projectId = explicitProjectId ?? snapshot.activeProjectId ?? snapshot.projects[0]?.id
-    if (!projectId) throw new Error('No project — open a project first')
+    // Surface a stable code for UI handling; user-facing copy lives in i18n.
+    if (!projectId) throw new Error('NO_PROJECT')
     const { session, snapshot: snap } = await api.createSession({ projectId, title, mode })
     if (snap) applySnapshot(snap, ++applyGenRef.current)
     else await refresh()

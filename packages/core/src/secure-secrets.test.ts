@@ -111,7 +111,7 @@ describe('secure-secrets', () => {
     const next = saveSettings({ leaderModel: 'anthropic/claude-sonnet-4-6' })
     assert.equal(next.leaderModel, 'anthropic/claude-sonnet-4-6')
     assert.equal(loadSettings().leaderModel, 'anthropic/claude-sonnet-4-6')
-    saveSettings({ leaderModel: prev.leaderModel || 'openai/gpt-5.5' })
+    saveSettings({ leaderModel: prev.leaderModel || 'openai/gpt-5.6' })
   })
 
   it('persists thinkingIntensity', () => {

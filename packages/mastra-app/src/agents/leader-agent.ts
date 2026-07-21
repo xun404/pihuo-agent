@@ -4,7 +4,12 @@ import { LibSQLStore } from '@mastra/libsql'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { summarizeWorkerModels } from '@swarmdesk-agent/adapters'
-import { getSharedStore, loadSettings, resolveRouterDataPaths } from '@swarmdesk-agent/core'
+import {
+  DEFAULT_LEADER_MODEL,
+  getSharedStore,
+  loadSettings,
+  resolveRouterDataPaths,
+} from '@swarmdesk-agent/core'
 import { resolveGoalMaxRuns, resolveMemoryLastMessages } from '../runtime-config.js'
 import {
   cancelJobTool,
@@ -111,7 +116,7 @@ function resolveLeaderModelId(requestContext?: { get?: (key: string) => unknown 
   } catch {
     /* ignore */
   }
-  return process.env.LEADER_MODEL?.trim() || 'openai/gpt-5.5'
+  return process.env.LEADER_MODEL?.trim() || DEFAULT_LEADER_MODEL
 }
 
 /**

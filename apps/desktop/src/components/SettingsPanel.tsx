@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { WorkerKind, WorkerRegistration, WorkerRole } from '@swarmdesk-agent/shared'
 import { WORKER_ROLES } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   fetchSettings,
   saveSettings,
-  deleteSecret,
   THINKING_INTENSITY_OPTIONS,
   DEFAULT_CUSTOM_THINKING_SUPPORT,
   type SettingsPayload,
@@ -29,7 +29,12 @@ import {
 } from '../lib/custom-provider-form'
 import { ProviderLogo, getProviderIconMeta } from '../lib/provider-icons'
 import { useTheme, type ColorPalette, type ThemeMode } from '../theme/ThemeProvider'
+import { useSendShortcut } from '../hooks/useSendShortcut'
+import type { SendShortcut } from '../lib/send-shortcut'
 import { BrandLogo } from './BrandLogo'
+import { Expandable } from './ui/Expandable'
+
+const SETTINGS_TAB_EASE = [0.4, 0, 0.2, 1] as const
 
 /**
  * 外观四选一：
@@ -188,6 +193,12 @@ export function SettingsPanel({
 }: Props) {
   const { t, locale, setLocale } = useI18n()
   const { mode: themeMode, setMode: setThemeMode, palette, setPalette } = useTheme()
+  const { sendShortcut, setSendShortcut } = useSendShortcut()
+  const reduceMotion = useReducedMotion()
+  const tabMotion = {
+    duration: reduceMotion ? 0.01 : 0.18,
+    ease: SETTINGS_TAB_EASE,
+  }
   const { success: toastSuccess, error: toastError, info: toastInfo } = useToast()
   const [tab, setTab] = useState<TabId>(initialTab ?? 'general')
   // Sync external tab changes (e.g. "管理模型" entry pinning 'model') even
@@ -239,7 +250,7 @@ export function SettingsPanel({
   const [data, setData] = useState<SettingsPayload | null>(null)
   const [leaderModel, setLeaderModel] = useState('')
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({})
-  const [showKey, setShowKey] = useState(false)
+
   const [customModel, setCustomModel] = useState(false)
   const [customProviders, setCustomProviders] = useState<CustomProvider[]>([])
   const [form, setForm] = useState<SimpleCustomForm>(emptySimpleForm())
@@ -309,7 +320,6 @@ export function SettingsPanel({
     setTab(initialTab ?? 'general')
     setForm(emptySimpleForm())
     setEditingId(null)
-    setShowKey(false)
     setLeaderMaxStepsError(null)
     setRegOpen(false)
     void load()
@@ -360,7 +370,6 @@ export function SettingsPanel({
 
   const needsKey = selectedProvider && !selectedProvider.configured
   const keyDraft = selectedProvider ? (draftKeys[selectedProvider.apiKeyEnv] ?? '') : ''
-  const keyDirty = Boolean(keyDraft && !keyDraft.includes('••••'))
 
   const modelLabel = useMemo(() => {
     if (!data || !leaderModel) return leaderModel || '—'
@@ -397,32 +406,10 @@ export function SettingsPanel({
       if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
       toastSuccess(secretsPayload ? t('settings.keySaved') : t('settings.saved'))
       setDraftKeys({})
-      setShowKey(false)
       await load()
       if (secretsPayload) {
         await afterSecretsSaved()
       }
-    } catch (e) {
-      toastError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const onClearKey = async (envKey: string) => {
-    setSaving(true)
-    try {
-      const deleted = await deleteSecret(envKey)
-      if (deleted.ok === false) throw new Error(deleted.error || t('settings.apiRestartFailed'))
-      setDraftKeys((d) => {
-        const n = { ...d }
-        delete n[envKey]
-        return n
-      })
-      setForm((f) => ({ ...f, apiKey: '' }))
-      await load()
-      await afterSecretsSaved()
-      toastSuccess(t('settings.keyCleared'))
     } catch (e) {
       toastError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -784,7 +771,6 @@ export function SettingsPanel({
       setForm((f) => ({ ...f, apiKey: '' }))
       toastSuccess(secretsPayload ? t('settings.keySaved') : t('settings.saved'))
       setDraftKeys({})
-      setShowKey(false)
       await load()
       if (secretsPayload) {
         await afterSecretsSaved()
@@ -839,7 +825,6 @@ export function SettingsPanel({
       setLeaderMaxSteps(parsed)
       toastSuccess(secretsPayload ? t('settings.keySaved') : t('settings.runtime.saveSuccess'))
       setDraftKeys({})
-      setShowKey(false)
       await load()
       if (secretsPayload) {
         await afterSecretsSaved()
@@ -1130,6 +1115,22 @@ export function SettingsPanel({
             </div>
             <div className="settings-row card-row">
               <div className="lbl-block">
+                <div className="lbl">{t('settings.sendShortcut')}</div>
+                <div className="sub">{t('settings.sendShortcutDesc')}</div>
+              </div>
+              <select
+                className="field-select settings-select"
+                style={{ minWidth: 140, width: 'auto' }}
+                value={sendShortcut}
+                onChange={(e) => setSendShortcut(e.target.value as SendShortcut)}
+                aria-label={t('settings.sendShortcut')}
+              >
+                <option value="enter">{t('settings.sendShortcutEnter')}</option>
+                <option value="mod-enter">{t('settings.sendShortcutModEnter')}</option>
+              </select>
+            </div>
+            <div className="settings-row card-row">
+              <div className="lbl-block">
                 <div className="lbl">{t('settings.runtime.leaderMaxSteps')}</div>
                 <div className="sub">{t('settings.runtime.leaderMaxStepsDesc')}</div>
               </div>
@@ -1332,9 +1333,7 @@ export function SettingsPanel({
                       value={form.apiKey}
                       onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
                       placeholder={
-                        selectedProvider?.configured
-                          ? t('settings.keyOptionalUpdate')
-                          : t('settings.customApiKeyPh')
+                        selectedProvider?.configured ? '***********' : t('settings.customApiKeyPh')
                       }
                     />
                     {selectedProvider?.configured && !form.apiKey.trim() && (
@@ -1378,7 +1377,10 @@ export function SettingsPanel({
                             (m as { thinkingIntensities?: ThinkingIntensity[] })
                               .thinkingIntensities ?? []
                           return (
-                            <div key={m.id} className={`model-card${active ? ' active' : ''}`}>
+                            <div
+                              key={m.id}
+                              className={`model-card${active ? ' active' : ''}${isEditing ? ' editing' : ''}`}
+                            >
                               <div
                                 className="model-card-head"
                                 onClick={() => {
@@ -1445,168 +1447,165 @@ export function SettingsPanel({
                                   </button>
                                 )}
                               </div>
-                              {isEditing && (
-                                <div className="model-card-body">
-                                  <div>
-                                    <div className="field-label">{t('settings.ctxWindow')}</div>
-                                    <input
-                                      className="settings-input mono"
-                                      value={editModelForm.contextWindow}
-                                      onChange={(e) =>
-                                        setEditModelForm((f) => ({
-                                          ...f,
-                                          contextWindow: e.target.value,
-                                        }))
-                                      }
-                                      placeholder={t('settings.ctxWindowPh')}
-                                    />
+                              <Expandable open={isEditing} contentClassName="model-card-body">
+                                <div>
+                                  <div className="field-label">{t('settings.ctxWindow')}</div>
+                                  <input
+                                    className="settings-input mono"
+                                    value={editModelForm.contextWindow}
+                                    onChange={(e) =>
+                                      setEditModelForm((f) => ({
+                                        ...f,
+                                        contextWindow: e.target.value,
+                                      }))
+                                    }
+                                    placeholder={t('settings.ctxWindowPh')}
+                                  />
+                                </div>
+                                <div>
+                                  <div className="field-label">
+                                    {t('settings.perModelThinking')}
                                   </div>
-                                  <div>
-                                    <div className="field-label">
-                                      {t('settings.perModelThinking')}
-                                    </div>
-                                    <div className="think-support-grid" role="group">
-                                      {THINKING_INTENSITY_OPTIONS.map((level) => {
-                                        const checked =
-                                          editModelForm.thinkingIntensities.includes(level)
-                                        return (
-                                          <button
-                                            key={level}
-                                            type="button"
-                                            className={`think-support-chip${checked ? ' on' : ''}`}
-                                            aria-pressed={checked}
-                                            onClick={() => {
-                                              setEditModelForm((f) => {
-                                                const set = new Set(f.thinkingIntensities)
-                                                if (set.has(level)) set.delete(level)
-                                                else set.add(level)
-                                                const next = THINKING_INTENSITY_OPTIONS.filter(
-                                                  (l) => set.has(l),
-                                                )
-                                                return {
-                                                  ...f,
-                                                  thinkingIntensities:
-                                                    next.length > 0
-                                                      ? next
-                                                      : (['off'] as ThinkingIntensity[]),
-                                                }
-                                              })
-                                            }}
-                                          >
-                                            {level}
-                                          </button>
-                                        )
-                                      })}
-                                    </div>
+                                  <div className="think-support-grid" role="group">
+                                    {THINKING_INTENSITY_OPTIONS.map((level) => {
+                                      const checked =
+                                        editModelForm.thinkingIntensities.includes(level)
+                                      return (
+                                        <button
+                                          key={level}
+                                          type="button"
+                                          className={`think-support-chip${checked ? ' on' : ''}`}
+                                          aria-pressed={checked}
+                                          onClick={() => {
+                                            setEditModelForm((f) => {
+                                              const set = new Set(f.thinkingIntensities)
+                                              if (set.has(level)) set.delete(level)
+                                              else set.add(level)
+                                              const next = THINKING_INTENSITY_OPTIONS.filter((l) =>
+                                                set.has(l),
+                                              )
+                                              return {
+                                                ...f,
+                                                thinkingIntensities:
+                                                  next.length > 0
+                                                    ? next
+                                                    : (['off'] as ThinkingIntensity[]),
+                                              }
+                                            })
+                                          }}
+                                        >
+                                          {level}
+                                        </button>
+                                      )
+                                    })}
                                   </div>
                                 </div>
-                              )}
+                              </Expandable>
                             </div>
                           )
                         })
                       })()}
 
-                      {/* 行内添加模型表单（展开态）*/}
-                      {showAddModel ? (
-                        <div className="add-model-inline">
-                          <div className="inline-title">
-                            <span className="dot" aria-hidden />
-                            {t('settings.addModelInline')}
-                          </div>
+                      {/* 行内添加模型：高度展开动画 */}
+                      <Expandable open={showAddModel} contentClassName="add-model-inline">
+                        <div className="inline-title">
+                          <span className="dot" aria-hidden />
+                          {t('settings.addModelInline')}
+                        </div>
+                        <div className="settings-field">
+                          <label>{t('settings.modelId')}</label>
+                          <input
+                            className="settings-input mono"
+                            value={addModelForm.id}
+                            onChange={(e) =>
+                              setAddModelForm((f) => ({ ...f, id: e.target.value }))
+                            }
+                            placeholder={t('settings.customModelPh')}
+                          />
+                          <span className="settings-field-hint">
+                            {t('settings.customModelHint')}
+                          </span>
+                        </div>
+                        <div className="add-model-inline-body">
                           <div className="settings-field">
-                            <label>{t('settings.modelId')}</label>
+                            <label>{t('settings.ctxWindow')}</label>
                             <input
                               className="settings-input mono"
-                              value={addModelForm.id}
+                              value={addModelForm.contextWindow}
                               onChange={(e) =>
-                                setAddModelForm((f) => ({ ...f, id: e.target.value }))
+                                setAddModelForm((f) => ({
+                                  ...f,
+                                  contextWindow: e.target.value,
+                                }))
                               }
-                              placeholder={t('settings.customModelPh')}
+                              placeholder={t('settings.ctxWindowPh')}
                             />
                             <span className="settings-field-hint">
-                              {t('settings.customModelHint')}
+                              {t('settings.ctxWindowHint')}
                             </span>
                           </div>
-                          <div className="add-model-inline-body">
-                            <div className="settings-field">
-                              <label>{t('settings.ctxWindow')}</label>
-                              <input
-                                className="settings-input mono"
-                                value={addModelForm.contextWindow}
-                                onChange={(e) =>
-                                  setAddModelForm((f) => ({
-                                    ...f,
-                                    contextWindow: e.target.value,
-                                  }))
-                                }
-                                placeholder={t('settings.ctxWindowPh')}
-                              />
-                              <span className="settings-field-hint">
-                                {t('settings.ctxWindowHint')}
-                              </span>
+                          <div className="settings-field">
+                            <label>{t('settings.perModelThinking')}</label>
+                            <div className="think-support-grid" role="group">
+                              {THINKING_INTENSITY_OPTIONS.map((level) => {
+                                const checked = addModelForm.thinkingIntensities.includes(level)
+                                return (
+                                  <button
+                                    key={level}
+                                    type="button"
+                                    className={`think-support-chip${checked ? ' on' : ''}`}
+                                    aria-pressed={checked}
+                                    onClick={() => {
+                                      setAddModelForm((f) => {
+                                        const set = new Set(f.thinkingIntensities)
+                                        if (set.has(level)) set.delete(level)
+                                        else set.add(level)
+                                        const next = THINKING_INTENSITY_OPTIONS.filter((l) =>
+                                          set.has(l),
+                                        )
+                                        return {
+                                          ...f,
+                                          thinkingIntensities:
+                                            next.length > 0
+                                              ? next
+                                              : (['off'] as ThinkingIntensity[]),
+                                        }
+                                      })
+                                    }}
+                                  >
+                                    <span className="box" aria-hidden />
+                                    {level}
+                                  </button>
+                                )
+                              })}
                             </div>
-                            <div className="settings-field">
-                              <label>{t('settings.perModelThinking')}</label>
-                              <div className="think-support-grid" role="group">
-                                {THINKING_INTENSITY_OPTIONS.map((level) => {
-                                  const checked = addModelForm.thinkingIntensities.includes(level)
-                                  return (
-                                    <button
-                                      key={level}
-                                      type="button"
-                                      className={`think-support-chip${checked ? ' on' : ''}`}
-                                      aria-pressed={checked}
-                                      onClick={() => {
-                                        setAddModelForm((f) => {
-                                          const set = new Set(f.thinkingIntensities)
-                                          if (set.has(level)) set.delete(level)
-                                          else set.add(level)
-                                          const next = THINKING_INTENSITY_OPTIONS.filter((l) =>
-                                            set.has(l),
-                                          )
-                                          return {
-                                            ...f,
-                                            thinkingIntensities:
-                                              next.length > 0
-                                                ? next
-                                                : (['off'] as ThinkingIntensity[]),
-                                          }
-                                        })
-                                      }}
-                                    >
-                                      <span className="box" aria-hidden />
-                                      {level}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                              <span className="settings-field-hint">
-                                {t('settings.perModelThinkingHint')}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="add-model-inline-actions">
-                            <button
-                              type="button"
-                              className="btn-ghost"
-                              onClick={() => {
-                                setAddModelForm(emptyAddModelForm())
-                                setShowAddModel(false)
-                              }}
-                            >
-                              {t('settings.cancelEdit')}
-                            </button>
-                            <button
-                              type="button"
-                              className="settings-save-btn"
-                              disabled={saving}
-                              onClick={() => void addModelToActiveProvider()}
-                            >
-                              {saving ? t('app.loading') : t('settings.addModelBtn')}
-                            </button>
+                            <span className="settings-field-hint">
+                              {t('settings.perModelThinkingHint')}
+                            </span>
                           </div>
                         </div>
-                      ) : (
+                        <div className="add-model-inline-actions">
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => {
+                              setAddModelForm(emptyAddModelForm())
+                              setShowAddModel(false)
+                            }}
+                          >
+                            {t('settings.cancelEdit')}
+                          </button>
+                          <button
+                            type="button"
+                            className="settings-save-btn"
+                            disabled={saving}
+                            onClick={() => void addModelToActiveProvider()}
+                          >
+                            {saving ? t('app.loading') : t('settings.addModelBtn')}
+                          </button>
+                        </div>
+                      </Expandable>
+                      {!showAddModel && (
                         <button
                           type="button"
                           className="add-model-toggle"
@@ -1688,79 +1687,34 @@ export function SettingsPanel({
                     </button>
                   </div>
 
-                  <section className="settings-section">
-                    <div className="settings-section-head">
-                      <h3>{t('settings.customApiKey')}</h3>
-                    </div>
-                    {selectedProvider?.configured && !keyDirty && !showKey ? (
-                      <div className="key-status-row">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            setShowKey(true)
-                            if (selectedProvider) {
-                              setDraftKeys((d) => ({
-                                ...d,
-                                [selectedProvider.apiKeyEnv]: '',
-                              }))
-                            }
-                          }}
-                        >
-                          {t('settings.updateKey')}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() =>
-                            selectedProvider && void onClearKey(selectedProvider.apiKeyEnv)
-                          }
-                        >
-                          {t('settings.clear')}
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="settings-muted">
-                          {needsKey ? t('settings.keyRequired') : t('settings.keyOptionalUpdate')}
-                        </p>
-                        <div className="key-input-row">
-                          <input
-                            type={showKey ? 'text' : 'password'}
-                            className="settings-input"
-                            autoComplete="off"
-                            placeholder={
-                              selectedProvider?.configured ? '••••••••••••' : t('settings.enterKey')
-                            }
-                            value={keyDraft}
-                            onChange={(e) =>
-                              selectedProvider &&
-                              setDraftKeys((d) => ({
-                                ...d,
-                                [selectedProvider.apiKeyEnv]: e.target.value,
-                              }))
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => setShowKey((v) => !v)}
-                          >
-                            {showKey ? t('settings.hide') : t('settings.show')}
-                          </button>
-                          {selectedProvider?.configured && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => void onClearKey(selectedProvider.apiKeyEnv)}
-                            >
-                              {t('settings.clear')}
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </section>
+                  <div className="settings-field">
+                    <label htmlFor="settings-builtin-api-key">{t('settings.customApiKey')}</label>
+                    <input
+                      id="settings-builtin-api-key"
+                      type="password"
+                      className="settings-input"
+                      autoComplete="off"
+                      placeholder={
+                        selectedProvider?.configured ? '***********' : t('settings.enterKey')
+                      }
+                      value={keyDraft}
+                      onChange={(e) =>
+                        selectedProvider &&
+                        setDraftKeys((d) => ({
+                          ...d,
+                          [selectedProvider.apiKeyEnv]: e.target.value,
+                        }))
+                      }
+                      aria-label={t('settings.customApiKey')}
+                    />
+                    <span className="settings-field-hint">
+                      {needsKey
+                        ? t('settings.keyRequired')
+                        : selectedProvider?.configured
+                          ? t('settings.keyReplaceHint')
+                          : t('settings.keyOptionalUpdate')}
+                    </span>
+                  </div>
 
                   <section className="settings-section">
                     <div className="settings-section-head">
@@ -2335,7 +2289,22 @@ export function SettingsPanel({
           ))}
         </nav>
       </aside>
-      <div className="settings-main">{body}</div>
+      <div className="settings-main">
+        {/* Absolute titleband — does not push page title/desc down */}
+        <div className="window-drag-top window-drag-top--overlay" aria-hidden />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={tab}
+            className="settings-tab-pane"
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+            transition={tabMotion}
+          >
+            {body}
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   )
 }

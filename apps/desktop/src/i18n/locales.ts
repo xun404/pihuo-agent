@@ -209,6 +209,10 @@ export type MessageKey =
   | 'settings.keyRequired'
   | 'settings.language'
   | 'settings.languageDesc'
+  | 'settings.sendShortcut'
+  | 'settings.sendShortcutDesc'
+  | 'settings.sendShortcutEnter'
+  | 'settings.sendShortcutModEnter'
   | 'settings.modelDocs'
   | 'settings.modelId'
   | 'settings.modelNotFeatured'
@@ -258,6 +262,7 @@ export type MessageKey =
   | 'sidebar.deleteProject'
   | 'sidebar.deleteSession'
   | 'sidebar.empty'
+  | 'sidebar.needProjectOpenFolder'
   | 'sidebar.newTask'
   | 'sidebar.noSessions'
   | 'sidebar.now'
@@ -608,6 +613,10 @@ const zh: Dict = {
   'settings.keyRequired': '保存前请粘贴 API Key，否则无法调用此提供方。',
   'settings.language': '语言',
   'settings.languageDesc': '界面显示语言',
+  'settings.sendShortcut': '发送快捷键',
+  'settings.sendShortcutDesc': '输入框中发送消息的快捷键',
+  'settings.sendShortcutEnter': 'Enter',
+  'settings.sendShortcutModEnter': '⌘/Ctrl+Enter',
   'settings.modelDocs': '文档',
   'settings.modelId': '模型 id',
   'settings.modelNotFeatured': '非精选',
@@ -615,7 +624,7 @@ const zh: Dict = {
   'settings.navAbout': '关于',
   'settings.navGeneral': '常规',
   'settings.navModel': '模型设置',
-  'settings.navWorkers': 'AgentWorker',
+  'settings.navWorkers': 'Agent Worker',
   'settings.needKey': '未配置 Key',
   'settings.perModelThinking': '支持的思考强度',
   'settings.perModelThinkingHint': '仅本模型：勾选可选档位；聊天栏选中该模型时只显示已勾选档位。',
@@ -654,6 +663,7 @@ const zh: Dict = {
   'sidebar.deleteProject': '删除项目',
   'sidebar.deleteSession': '删除 Session',
   'sidebar.empty': '还没有项目。请「打开项目」并输入本地目录路径。',
+  'sidebar.needProjectOpenFolder': '请先打开项目。3 秒后将自动打开文件夹…',
   'sidebar.newTask': '新建任务',
   'sidebar.noSessions': '暂无 Session',
   'sidebar.now': '现在',
@@ -671,7 +681,7 @@ const zh: Dict = {
   'sidebar.statusError': '响应报错',
   'sidebar.statusIdle': '空闲',
   'sidebar.statusRun': '正在执行',
-  'sidebar.untitledSession': '未命名会话',
+  'sidebar.untitledSession': '新会话',
   'theme.dark': '深色',
   'theme.light': '浅色',
   'theme.system': '系统',
@@ -1020,6 +1030,10 @@ const en: Dict = {
   'settings.keyRequired': 'Paste an API key before this provider will work.',
   'settings.language': 'Language',
   'settings.languageDesc': 'UI language',
+  'settings.sendShortcut': 'Send shortcut',
+  'settings.sendShortcutDesc': 'Keyboard shortcut to send from the composer',
+  'settings.sendShortcutEnter': 'Enter',
+  'settings.sendShortcutModEnter': '⌘/Ctrl+Enter',
   'settings.modelDocs': 'Docs',
   'settings.modelId': 'Model id',
   'settings.modelNotFeatured': 'Not featured',
@@ -1027,7 +1041,7 @@ const en: Dict = {
   'settings.navAbout': 'About',
   'settings.navGeneral': 'General',
   'settings.navModel': 'Models',
-  'settings.navWorkers': 'AgentWorker',
+  'settings.navWorkers': 'Agent Worker',
   'settings.needKey': 'No key',
   'settings.perModelThinking': 'Supported thinking levels',
   'settings.perModelThinkingHint':
@@ -1069,6 +1083,7 @@ const en: Dict = {
   'sidebar.deleteProject': 'Delete project',
   'sidebar.deleteSession': 'Delete session',
   'sidebar.empty': 'No projects yet. Use “Open project…” with a local path.',
+  'sidebar.needProjectOpenFolder': 'Open a project first. Opening the folder picker in 3 seconds…',
   'sidebar.newTask': 'New task',
   'sidebar.noSessions': 'No sessions',
   'sidebar.now': 'now',
@@ -1086,7 +1101,7 @@ const en: Dict = {
   'sidebar.statusError': 'Response error',
   'sidebar.statusIdle': 'Idle',
   'sidebar.statusRun': 'Running',
-  'sidebar.untitledSession': 'Untitled session',
+  'sidebar.untitledSession': 'New session',
   'theme.dark': 'Dark',
   'theme.light': 'Light',
   'theme.system': 'System',

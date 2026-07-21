@@ -36,6 +36,8 @@ import {
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
+import { useSendShortcut } from '../hooks/useSendShortcut'
+import { isComposerSendKey } from '../lib/send-shortcut'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
 import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
@@ -192,6 +194,7 @@ export function ChatPanel({
   onSessionStatusChange,
 }: Props) {
   const { t, locale } = useI18n()
+  const { sendShortcut } = useSendShortcut()
   const [input, setInput] = useState('')
   /** Tracks the initialInput value already consumed, so we apply each text once. */
   const consumedInitialInputRef = useRef<string | undefined>(undefined)
@@ -1077,7 +1080,7 @@ export function ChatPanel({
           placeholder={hasMessages ? t('chat.placeholder') : t('chat.placeholderHome')}
           rows={hasMessages ? 2 : 3}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            if (isComposerSendKey(e, sendShortcut)) {
               e.preventDefault()
               onSubmit(e)
             }

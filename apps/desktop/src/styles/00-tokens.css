@@ -1,0 +1,198 @@
+/* =========================================================
+   SwarmDesk Desktop — pure Design System v3
+   Source: design/gui/wireframe-v2.html
+   ========================================================= */
+
+/* =========================================================
+   SwarmDesk Wireframe Design System v3
+   Tokens → type / color / radius / space / elevation
+   ========================================================= */
+
+:root {
+  /*
+   * Default light palette = warm（Claude-like 淡橙）
+   * Switch via html[data-palette="classic"] for cool gray.
+   */
+  /* —— Color: text —— */
+  --text-1: #2c2522;
+  --text-2: #5c534c;
+  --text-3: #8a8178;
+  --text-inv: #ffffff;
+
+  /* —— Color: surface —— */
+  --bg-page: #e8e2d9;
+  --bg-sidebar: #f3efe9;
+  --bg-main: #f7f4ef;
+  --bg-surface: #fffcf8;
+  --bg-hover: rgba(80, 50, 20, 0.05);
+  --bg-active: rgba(80, 50, 20, 0.09);
+  --bg-input: #f3efe8;
+
+  /* —— Color: border —— */
+  --border: rgba(60, 40, 20, 0.1);
+  --border-soft: rgba(60, 40, 20, 0.06);
+
+  /* —— Color: brand / status —— */
+  --accent: #e8890c;
+  --blue: #3b6ff5;
+  --blue-soft: rgba(59, 111, 245, 0.1);
+  --green: #1a9e5c;
+  --green-soft: rgba(26, 158, 92, 0.12);
+  --purple: #7c5cfc;
+  --danger: #e04b4b;
+  --danger-soft: rgba(224, 75, 75, 0.1);
+  --send-bg: #2a2d34;
+
+  /* Brand chips */
+  --claude-bg: #f0e6dc;
+  --claude-fg: #c96442;
+  --codex-bg: #10a37f;
+  --codex-fg: #ffffff;
+  --opencode-bg: #211e1e;
+  --opencode-fg: #f1ecec;
+  --openai-bg: #10a37f;
+  --anthropic-bg: #f0e6dc;
+  --anthropic-fg: #c96442;
+
+  /* —— Typography —— */
+  --font:
+    'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --mono: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+
+  /* 字号阶梯：在 v3 基准上整体 +1px，聊天/设置更易读 */
+  --fs-2xs: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 22px;
+  --fs-display: 26px;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --lh-tight: 1.3;
+  --lh-snug: 1.4;
+  --lh-body: 1.5;
+  --lh-relaxed: 1.55;
+
+  --ls-tight: -0.02em;
+  --ls-display: -0.03em;
+  --ls-label: 0.02em;
+
+  /* —— Radius (4-step + pill) —— */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 16px;
+  --r-2xl: 20px;
+  --r-pill: 999px;
+
+  /* —— Spacing (4px grid) —— */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* —— Control sizes —— */
+  --h-xs: 24px;
+  --h-sm: 28px;
+  --h-md: 32px;
+  --h-lg: 36px;
+  --icon: 16px;
+  --icon-sm: 14px;
+  --icon-lg: 20px;
+
+  /* —— Layout —— */
+  /* 侧栏略宽于 200，仍与设置导航同宽（线稿项目栏 256，桌面取中） */
+  --sidebar-w: 232px;
+  --drawer-w: 300px;
+  --settings-nav-w: 232px;
+  --provider-rail-w: 176px;
+  --content-max: 720px;
+  --messages-max: 800px;
+
+  /* —— Scrollbar (global) —— */
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: rgba(20, 30, 50, 0.14);
+  --scrollbar-thumb-hover: rgba(20, 30, 50, 0.24);
+
+  /* —— Motion（v4 对齐 · 收敛时值/缓动到几档）
+     规则：所有 animation/transition 的时值/缓动只引用本族 token，禁止散落字面量 */
+  /* 时值阶梯 */
+  --dur-instant: 80ms; /* hover/focus 色变 */
+  --dur-fast: 140ms; /* 面板/消息入场 */
+  --dur-base: 200ms; /* 模态开合、抽屉滑入 */
+  --dur-slow: 320ms; /* 启动屏、空态 */
+
+  /* 通用缓动 */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1); /* 入场默认 */
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1); /* 弹簧（过冲） */
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1); /* Material 标准 */
+
+  /* 项目专属缓动 */
+  --ease-ra-logo: cubic-bezier(0.22, 1, 0.36, 1); /* logo/greeting 入场 */
+  --ease-toast-in: cubic-bezier(0.175, 0.885, 0.32, 1);
+  --ease-toast-out: cubic-bezier(0.4, 0, 1, 1);
+  --ease-stream: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* —— Elevation —— */
+  --shadow-xs: 0 1px 2px rgba(20, 30, 50, 0.05);
+  --shadow-sm: 0 1px 3px rgba(20, 30, 50, 0.06);
+  --shadow-md: 0 1px 2px rgba(20, 30, 50, 0.04), 0 8px 24px rgba(20, 30, 50, 0.06);
+  --shadow-lg: 0 0 0 1px rgba(20, 30, 50, 0.06), 0 20px 48px rgba(20, 30, 50, 0.12);
+  --shadow-composer: 0 4px 8px rgba(20, 30, 50, 0.03), 0 16px 40px rgba(20, 30, 50, 0.08);
+
+  /* legacy aliases used in older rules (mapped) */
+  --ink: var(--text-1);
+  --muted: var(--text-3);
+  --muted-2: var(--text-2);
+  --line: var(--border);
+  --line-soft: var(--border-soft);
+  --sidebar: var(--bg-sidebar);
+  --main: var(--bg-main);
+  --surface: var(--bg-surface);
+  --hover: var(--bg-hover);
+  --active: var(--bg-active);
+  --r: var(--r-md);
+  --r-control: var(--r-md);
+  --shadow-card: var(--shadow-md);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-body);
+  letter-spacing: 0;
+  color: var(--text-1);
+  background: var(--bg-page);
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+

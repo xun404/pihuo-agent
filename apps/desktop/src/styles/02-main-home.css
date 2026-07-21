@@ -1,0 +1,122 @@
+/* —— Main —— */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  position: relative;
+}
+.body-row.with-drawer .drawer {
+  align-self: stretch;
+  min-height: 0;
+  /* 与右、下同距（sp-2） */
+  margin: var(--sp-2) 0 0 0;
+  height: calc(100% - var(--sp-2));
+  max-height: calc(100% - var(--sp-2));
+  box-sizing: border-box;
+}
+.body-row.with-drawer .main-column {
+  padding-bottom: 0;
+}
+
+.home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6) var(--sp-6) var(--sp-8);
+  gap: var(--sp-6);
+}
+/* 空态品牌标：SVG 自带圆角卡片与内建动画；外层只负责入场/浮动 */
+.logo-cloud {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  animation:
+    logo-cloud-in 0.7s var(--ease-ra-logo) both,
+    logo-cloud-float 4.5s ease-in-out 0.7s infinite;
+  z-index: 0;
+}
+.logo-cloud .brand-logo {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  border-radius: 21%;
+  filter: drop-shadow(0 10px 28px color-mix(in srgb, var(--text-1) 12%, transparent));
+  user-select: none;
+  -webkit-user-drag: none;
+}
+@keyframes logo-cloud-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes logo-cloud-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-cloud {
+    animation: none !important;
+  }
+}
+.greeting {
+  font-size: var(--fs-display);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-display);
+  text-align: center;
+  color: var(--text-1);
+  line-height: var(--lh-tight);
+  max-width: 520px;
+  animation: greeting-in 0.65s var(--ease-ra-logo) 0.12s both;
+}
+.greeting em {
+  font-style: normal;
+  border-bottom: 1.5px solid var(--text-1);
+  padding-bottom: 1px;
+}
+/* 副标题：紧跟 greeting，说明 Leader/Worker 协同定位（线稿 .subhead）*/
+.subhead {
+  font-size: var(--fs-base);
+  color: var(--text-3);
+  text-align: center;
+  max-width: 440px;
+  line-height: var(--lh-relaxed);
+  animation: greeting-in 0.65s var(--ease-ra-logo) 0.18s both;
+}
+@keyframes greeting-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .greeting {
+    animation: none !important;
+  }
+}
+

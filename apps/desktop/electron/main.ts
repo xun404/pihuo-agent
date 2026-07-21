@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { createManagedApiProcess, type ManagedApiProcess } from './api-process.js'
+import { ignoreBrokenHostPipe, writeHostLog } from './host-log.js'
 import {
   isPackagedSmoke,
   resolvePackagedSmokeUserDataPath,
@@ -100,6 +101,10 @@ process.env.SWARMDESK_AGENT_DESKTOP_API_URL = API_URL
 
 process.env.DIST = runtimeLayout.rendererDist
 const DEV_SERVER_URL = resolveTrustedDevServerUrl(process.env.VITE_DEV_SERVER_URL)
+
+// Electron GUI often has no stable stdout/stderr pipe; unhandled EPIPE kills the app.
+ignoreBrokenHostPipe(process.stdout)
+ignoreBrokenHostPipe(process.stderr)
 
 let win: BrowserWindow | null = null
 let apiChild: ManagedApiProcess | null = null
@@ -375,8 +380,12 @@ async function startApiServer(): Promise<ExpectedApiChild | null> {
   apiStartedByUs = true
   const spawnedAt = Date.now()
 
-  child.stdout?.on('data', (d) => process.stdout.write(`[api] ${d}`))
-  child.stderr?.on('data', (d) => process.stderr.write(`[api] ${d}`))
+  child.stdout?.on('data', (d) => {
+    writeHostLog(process.stdout, '[api] ', d)
+  })
+  child.stderr?.on('data', (d) => {
+    writeHostLog(process.stderr, '[api] ', d)
+  })
   child.onError((error) => {
     console.error('[electron] API process failed to spawn', error)
     if (lastApiChildMeta?.child === child) lastApiChildMeta = null
