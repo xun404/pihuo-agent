@@ -1688,6 +1688,19 @@ export function SettingsPanel({
                   </div>
 
                   <div className="settings-field">
+                    <label htmlFor="settings-builtin-base-url">
+                      {t('settings.customBaseUrl')}
+                    </label>
+                    <input
+                      id="settings-builtin-base-url"
+                      className="settings-input mono"
+                      value={selectedProvider?.baseURL ?? ''}
+                      disabled
+                      aria-label={t('settings.customBaseUrl')}
+                    />
+                  </div>
+
+                  <div className="settings-field">
                     <label htmlFor="settings-builtin-api-key">{t('settings.customApiKey')}</label>
                     <input
                       id="settings-builtin-api-key"

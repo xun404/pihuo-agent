@@ -39,6 +39,7 @@ export type ProviderPolicy = {
   apiKeyEnvAliases?: string[]
   docsUrl: string
   apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+  baseURL?: string
   maxModels: number
   includePrefixes: string[]
   excludeSubstrings: string[]
@@ -132,6 +133,7 @@ export function curateProvider(
     ...(policy.apiKeyEnvAliases?.length ? { apiKeyEnvAliases: policy.apiKeyEnvAliases } : {}),
     docsUrl: policy.docsUrl,
     apiStyle: policy.apiStyle,
+    ...(policy.baseURL ? { baseURL: policy.baseURL } : {}),
     models: picked.map((raw) => {
       const fullId = raw.includes('/') ? raw : `${policy.id}/${raw}`
       const bare = fullId.split('/').slice(1).join('/')

@@ -38,10 +38,12 @@ export function saveSendShortcut(mode: SendShortcut): void {
 
 /** True when this keyboard event should submit the composer. */
 export function isComposerSendKey(
-  event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'metaKey' | 'ctrlKey'>,
+  event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'metaKey' | 'ctrlKey'> & { isComposing?: boolean },
   mode: SendShortcut = loadSendShortcut(),
 ): boolean {
   if (event.key !== 'Enter') return false
+  // Ignore Enter during IME composition (e.g. Chinese input method)
+  if (event.isComposing) return false
   if (mode === 'enter') {
     // Shift+Enter keeps newline; bare Enter sends.
     return !event.shiftKey

@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { LeaderMode, Project, Session, SessionApprovalPolicy, WorkerJob } from '@swarmdesk-agent/shared'
+import {
+  SESSION_LAMP_ACTIVE_TTL_MS,
+  sessionHasUnreadLamp,
+  sessionLampTimes,
+} from '@swarmdesk-agent/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { RightPanel } from './components/RightPanel'
@@ -22,12 +27,16 @@ function AppShell({
   serverUp,
   activeProject,
   activeSession,
+  pendingNewSession,
   openProject,
   createSession,
+  createPendingSession,
+  clearPendingSession,
   activateSession,
   activateProject,
   setSessionMode,
   setSessionStatus,
+  markSessionRead,
   deleteProject,
   deleteSession,
   renameSession,
@@ -59,14 +68,61 @@ function AppShell({
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
   /**
-   * First-message composer on the empty Chat state: when the user types a
-   * message before any session exists, we create a session and pre-fill its
-   * composer with the typed text (the user then hits send once). Cleared by
-   * ChatPanel via onInitialInputConsumed once consumed.
+   * First-message composer on the empty Chat state: store the text and
+   * preset, then deselect active session so the empty-state composer shows.
+   * The session is created on the server only when the first message is sent.
+   *
+   * `pendingComposerForSession` binds the text to the *newly created* session
+   * id so only that session's ChatPanel consumes it. Without the binding, the
+   * previously-active ChatPanel races ahead while createSession() is in flight
+   * and swallows the text before the new panel mounts.
    */
-  const [pendingComposerText, setPendingComposerText] = useState<string>('')
-  /** True while the empty-state composer is creating a session (disables the input). */
+  const [pendingComposerForSession, setPendingComposerForSession] = useState<{
+    sessionId: string
+    text: string
+    autoSend: boolean
+  } | null>(null)
   const [creatingFromComposer, setCreatingFromComposer] = useState(false)
+
+  /**
+   * Sidebar notification lamps (error/done) are read-watermark driven:
+   *  - Opening a session marks it read (error lamp lingers 3s, done goes out).
+   *  - While the session stays active, each lamp event auto-expires 60s after
+   *    it happened (`upTo` per event so a later event keeps its own 60s).
+   */
+  const markReadRef = useRef(markSessionRead)
+  markReadRef.current = markSessionRead
+  const sessionsRef = useRef(snapshot.sessions)
+  sessionsRef.current = snapshot.sessions
+  const activeSessionId = activeSession?.id ?? null
+  const activeErrAt = activeSession?.lastErrorAt ?? activeSession?.lastChatErrorAt ?? null
+  const activeReplyAt = activeSession?.lastReplyAt ?? null
+  const activeFinishedAt = activeSession?.lastFinishedAt ?? null
+  const activeReadAt = activeSession?.lastReadAt ?? null
+
+  useEffect(() => {
+    if (!activeSessionId) return
+    const s = sessionsRef.current.find((x) => x.id === activeSessionId)
+    if (s && sessionHasUnreadLamp(s)) void markReadRef.current(activeSessionId)
+  }, [activeSessionId])
+
+  useEffect(() => {
+    if (!activeSessionId || !activeSession) return
+    const { errAt, doneAt, readAt } = sessionLampTimes(activeSession)
+    const pending = [errAt, doneAt].filter((ts) => ts > readAt)
+    if (pending.length === 0) return
+    const oldest = Math.min(...pending)
+    const fire = () =>
+      void markReadRef.current(activeSessionId, new Date(oldest).toISOString())
+    const delay = oldest + SESSION_LAMP_ACTIVE_TTL_MS - Date.now()
+    if (delay <= 0) {
+      fire()
+      return
+    }
+    const t = setTimeout(fire, delay)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- timestamps are the real deps
+  }, [activeSessionId, activeErrAt, activeReplyAt, activeFinishedAt, activeReadAt])
 
   useEffect(() => {
     const onOpen = (ev: Event) => {
@@ -106,13 +162,12 @@ function AppShell({
   }
 
   /**
-   * Empty-state composer: create a session, then pre-fill the new session's
-   * composer with the user's text.
+   * Empty-state composer: create a session on the server, then pre-fill the
+   * new session's composer with the user's text.
    *
    * - If a project is already active → createSession directly.
    * - If no project → first open the native folder picker; once a project is
-   *   opened, create a session under it. The pending text is cleared once
-   *   ChatPanel consumes it.
+   *   opened, create a session under it.
    */
   const onComposeFirstMessage = (
     text: string,
@@ -123,26 +178,24 @@ function AppShell({
     void (async () => {
       setCreatingFromComposer(true)
       try {
-        setPendingComposerText(trimmed)
         let projectId = activeProject?.id ?? snapshot.activeProjectId ?? undefined
         if (!projectId) {
           const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
-          if (!path) {
-            // user canceled the picker — keep the typed text, abort session creation
-            setPendingComposerText('')
-            return
-          }
+          if (!path) return
           const project = await openProject(path)
           projectId = project.id
         }
+        // Clear any pending local-only session (sidebar button flow)
+        clearPendingSession()
         const mode = preset?.mode ?? 'build'
         const session = await createSession(undefined, mode, projectId)
-        // Apply the preset access policy (createSession defaults to 'manual').
         if (preset && preset.approvalPolicy !== 'manual') {
           await setSessionApprovalPolicy(session.id, preset.approvalPolicy)
         }
+        // Bind the text to the newly-created session id so ONLY its ChatPanel
+        // consumes it — the previously-active panel must not race in first.
+        setPendingComposerForSession({ sessionId: session.id, text: trimmed, autoSend: true })
       } catch (e) {
-        setPendingComposerText('')
         toastError(e instanceof Error ? e.message : String(e))
       } finally {
         setCreatingFromComposer(false)
@@ -151,15 +204,11 @@ function AppShell({
   }
 
   const onNewSession = () => {
-    // Delayed naming: no title prompt at creation time.
-    // The Leader auto-names the session after the first task; the user can
-    // rename any time via the inline edit affordance in the chat header.
     void (async () => {
       try {
         let projectId =
           activeProject?.id ?? snapshot.activeProjectId ?? snapshot.projects[0]?.id ?? undefined
         if (!projectId) {
-          // Friendly copy + auto-open folder after a short delay (no raw Error: toast).
           toastInfo(t('sidebar.needProjectOpenFolder'), 3200)
           await new Promise<void>((resolve) => {
             window.setTimeout(resolve, 3000)
@@ -169,12 +218,16 @@ function AppShell({
           const project = await openProject(path)
           projectId = project.id
         }
-        await createSession(undefined, 'build', projectId)
+        createPendingSession(projectId, 'build')
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         toastError(msg === 'NO_PROJECT' ? t('sidebar.needProjectOpenFolder') : msg)
       }
     })()
+  }
+
+  const onNewSessionForProject = (project: Project) => {
+    createPendingSession(project.id, 'build')
   }
 
   const onRenameSession = (sessionId: string, title: string) => {
@@ -265,6 +318,7 @@ function AppShell({
                     void activateProject(p.id).catch((e) => toastError(String(e)))
                   }
                   onNewSession={onNewSession}
+                  onNewSessionForProject={onNewSessionForProject}
                   onOpenProject={onOpenProject}
                   onDeleteProject={onDeleteProject}
                   onDeleteSession={onDeleteSession}
@@ -316,9 +370,12 @@ function AppShell({
                     onRefreshGit={() => void refresh()}
                     onComposeFirstMessage={onComposeFirstMessage}
                     onPickFolder={onOpenProject}
-                    initialInput={pendingComposerText}
-                    onInitialInputConsumed={() => setPendingComposerText('')}
+                    pendingComposerForSession={pendingComposerForSession}
+                    onInitialInputConsumed={() => setPendingComposerForSession(null)}
                     creatingFromComposer={creatingFromComposer}
+                    pendingNewSession={pendingNewSession}
+                    clearPendingSession={clearPendingSession}
+                    createSession={createSession}
                   />
                 </div>
 

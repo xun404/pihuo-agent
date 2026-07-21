@@ -67,7 +67,8 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Optional Chrome DevTools Protocol for headless inspection/debugging.
-// Enable via SWARMDESK_AGENT_CDP_PORT=<port> env (loopback only). Off by default.
+// The development launcher defaults this to 8315; packaged apps remain off by default.
+// SWARMDESK_AGENT_CDP_PORT can override the port (loopback only).
 if (process.env.SWARMDESK_AGENT_CDP_PORT) {
   app.commandLine.appendSwitch('remote-debugging-port', process.env.SWARMDESK_AGENT_CDP_PORT)
   app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1')

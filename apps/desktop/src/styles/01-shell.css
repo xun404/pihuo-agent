@@ -314,6 +314,29 @@ html[data-theme='dark'] {
 .proj-head:hover .row-del {
   opacity: 0.7;
 }
+.proj-head:hover .proj-add {
+  opacity: 0.7;
+}
+.proj-head .proj-add {
+  opacity: 0;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.proj-head .proj-add:hover {
+  opacity: 1 !important;
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
 .proj-head .row-del:hover {
   opacity: 1 !important;
   background: var(--bg-hover);
@@ -439,12 +462,12 @@ html[data-theme='dark'] {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  /* 左右都留边，避免 width:100% 裁切右侧圆角 */
-  margin: 1px 6px 1px 12px;
-  padding: 7px var(--sp-2) 7px var(--sp-3);
+  /* 与 .proj-head 同盒模型：全宽 + 对称 padding，hover/active 高亮块才会左右对齐 */
+  margin: 1px 0;
+  padding: 7px var(--sp-2);
   min-height: var(--h-sm);
-  width: calc(100% - 18px);
-  max-width: calc(100% - 18px);
+  width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
   /* 两端都是圆弧（四角同半径） */
   border-radius: var(--r-md);
@@ -463,6 +486,8 @@ html[data-theme='dark'] {
 .sess .dot {
   width: 8px;
   height: 8px;
+  /* 与 .proj-head .ico 的 16px 图标位等宽，让会话标题与项目名左对齐 */
+  margin: 0 4px;
   border-radius: 50%;
   flex-shrink: 0;
   background: color-mix(in srgb, var(--text-3) 45%, transparent);
@@ -479,6 +504,11 @@ html[data-theme='dark'] {
     0 0 0 1px color-mix(in srgb, var(--green) 35%, transparent),
     0 0 6px color-mix(in srgb, var(--green) 45%, transparent);
   animation: sess-dot-pulse-green 1.4s ease-in-out infinite;
+}
+/* 常亮绿 = 执行结束（未读）；阅读后或当前会话 60s 后由水位线熄灭 */
+.sess.done .dot {
+  background: var(--green);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 35%, transparent);
 }
 /* 橙 = 需要授权等操作（轻闪提示） */
 .sess.approve .dot {

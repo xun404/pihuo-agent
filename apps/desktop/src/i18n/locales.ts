@@ -277,6 +277,7 @@ export type MessageKey =
   | 'sidebar.renameSession'
   | 'sidebar.settings'
   | 'sidebar.statusApprove'
+  | 'sidebar.statusDone'
   | 'sidebar.statusError'
   | 'sidebar.statusIdle'
   | 'sidebar.statusRun'
@@ -678,6 +679,7 @@ const zh: Dict = {
   'sidebar.renameSession': '重命名 Session',
   'sidebar.settings': '设置',
   'sidebar.statusApprove': '需要授权',
+  'sidebar.statusDone': '已完成',
   'sidebar.statusError': '响应报错',
   'sidebar.statusIdle': '空闲',
   'sidebar.statusRun': '正在执行',
@@ -1098,6 +1100,7 @@ const en: Dict = {
   'sidebar.renameSession': 'Rename session',
   'sidebar.settings': 'Settings',
   'sidebar.statusApprove': 'Needs authorization',
+  'sidebar.statusDone': 'Finished',
   'sidebar.statusError': 'Response error',
   'sidebar.statusIdle': 'Idle',
   'sidebar.statusRun': 'Running',

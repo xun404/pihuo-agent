@@ -68,4 +68,35 @@ describe('curate-builtin-providers', () => {
     assert.equal(catalog.recommended[0]?.id, 'openai/gpt-5.6')
     assert.equal(catalog.providers[0]?.models[0]?.id, 'openai/gpt-5.6')
   })
+
+  it('preserves the official base URL for a built-in provider', () => {
+    const policy: BuiltinProvidersPolicy = {
+      version: 1,
+      providers: [
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          apiKeyEnv: 'OPENAI_API_KEY',
+          docsUrl: 'https://example.com',
+          baseURL: 'https://api.openai.com/v1',
+          maxModels: 1,
+          includePrefixes: ['gpt-5.'],
+          excludeSubstrings: [],
+          tagRules: [{ match: '', tag: 'flagship' }],
+          contextWindowDefault: 400000,
+        },
+      ],
+      defaultLeaderPreferPrefixes: ['openai/gpt-5.'],
+      recommended: [],
+    }
+
+    const catalog = buildBuiltinCatalog(
+      policy,
+      { openai: ['gpt-5.6'] },
+      '1.0.0',
+      '2026-01-01T00:00:00.000Z',
+    )
+
+    assert.equal(catalog.providers[0]?.baseURL, 'https://api.openai.com/v1')
+  })
 })

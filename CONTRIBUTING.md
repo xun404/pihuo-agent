@@ -28,6 +28,10 @@ Local build leftovers can be removed with:
 npm run clean
 ```
 
+The development Electron launcher enables loopback-only CDP by default. See
+[Development CDP](./docs/development-cdp.md) for the port, overrides, and
+inspection commands.
+
 ## Before opening a pull request
 
 Run the checks that apply to your change:

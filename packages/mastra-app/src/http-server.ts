@@ -171,6 +171,9 @@ if (acpRuntime.mode !== 'owner' || !acpRuntime.manager) {
 
 // Only after lease: create writable Store and rest of composition
 const store = getSharedStore({ mode: 'owner' })
+// Re-derive persisted lamp statuses (running/needs_approval) from durable
+// jobs + approvals — a crashed run must not light the sidebar forever.
+store.reconcileSessionStatuses()
 // Owner serves REST via this http-server; Mastra only needs chat/agent surface.
 const mastra = createMastra({
   includeAdminApi: false,
@@ -2093,6 +2096,7 @@ const server = createServer(async (req, res) => {
           projectId: string
           title?: string
           mode?: LeaderMode
+          memoryThreadId?: string
         }
         if (!body.projectId) {
           send(res, 400, { error: 'projectId required' })
@@ -2104,6 +2108,7 @@ const server = createServer(async (req, res) => {
           projectId: body.projectId,
           title: body.title,
           mode: body.mode,
+          memoryThreadId: body.memoryThreadId,
         })
         send(res, 200, { session, snapshot: store.snapshot() })
         return
@@ -2182,6 +2187,21 @@ const server = createServer(async (req, res) => {
         } catch (e) {
           send(res, 404, { error: e instanceof Error ? e.message : String(e) })
         }
+        return
+      }
+
+      const readMatch = match(path, '/api/sessions/:id/read')
+      if (method === 'POST' && readMatch) {
+        const body = (await readJson(req).catch(() => ({}))) as { upTo?: string }
+        const session = store.markSessionRead(
+          readMatch.id!,
+          typeof body.upTo === 'string' ? body.upTo : undefined,
+        )
+        if (!session) {
+          send(res, 404, { error: `Session not found: ${readMatch.id}` })
+          return
+        }
+        send(res, 200, { session, snapshot: store.snapshot() })
         return
       }
 

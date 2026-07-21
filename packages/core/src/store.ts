@@ -212,6 +212,10 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
       approvalPolicy: isValidSessionApprovalPolicy((s as Partial<Session>).approvalPolicy)
         ? (s as Partial<Session>).approvalPolicy
         : 'manual',
+      // Legacy snapshots have no read watermark: treat "last modified" as the
+      // last time the user saw the session so old sessions don't all light up
+      // unread error/done lamps after upgrade.
+      lastReadAt: (s as Partial<Session>).lastReadAt ?? s.updatedAt,
     })) as Session[]
   let activeProjectId = raw.activeProjectId ?? null
   if (activeProjectId && !projectIds.has(activeProjectId)) {
@@ -609,12 +613,15 @@ export class LocalStore {
       if (!s) return
       s.lastReplyAt = ts
       s.updatedAt = ts
-      session = s
+      // The chat turn is over: drop the persisted `running` the send path
+      // stamped (re-derive from jobs/approvals — no-op while jobs are open).
+      this.recomputeSessionStatusOn(d, sessionId)
+      session = d.sessions.find((x) => x.id === sessionId)!
     })
     return session ? structuredClone(session) : null
   }
 
-  createSession(input: { projectId: string; title?: string; mode?: LeaderMode }): Session {
+  createSession(input: { projectId: string; title?: string; mode?: LeaderMode; memoryThreadId?: string }): Session {
     let session!: Session
     this.commit((d) => {
       const project = d.projects.find((p) => p.id === input.projectId)
@@ -631,10 +638,12 @@ export class LocalStore {
         status: 'idle',
         mode: input.mode ?? 'build',
         activeWorkerIds: [...project.workerIds],
-        memoryThreadId: createId('thread'),
+        memoryThreadId: input.memoryThreadId || createId('thread'),
         approvalPolicy: 'manual',
         createdAt: now(),
         updatedAt: now(),
+        // Born read: a fresh session has no unseen events to report.
+        lastReadAt: now(),
       }
       d.sessions.unshift(session)
       d.activeSessionId = session.id
@@ -692,6 +701,8 @@ export class LocalStore {
         if (opts.lastChatError) {
           s.lastChatError = opts.lastChatError
           s.lastChatErrorAt = now()
+          // Red-lamp event timestamp (lamp derives from timestamp + lastReadAt)
+          s.lastErrorAt = s.lastChatErrorAt
         } else {
           delete s.lastChatError
           delete s.lastChatErrorAt
@@ -701,9 +712,37 @@ export class LocalStore {
         delete s.lastChatError
         delete s.lastChatErrorAt
       }
+      // Sending a new message (running) counts as engaging with the session:
+      // extinguish unread error/done lamps.
+      if (status === 'running') {
+        s.lastReadAt = now()
+      }
       session = s
     })
     return structuredClone(session)
+  }
+
+  /**
+   * Stamp the sidebar lamp "read" watermark. Opening a session (or the
+   * active-session auto-expiry) calls this; notification lamps whose event
+   * timestamp is older than `lastReadAt` stop rendering. `upTo` reads only
+   * events at/before that timestamp (per-event 60s expiry). Never moves the
+   * watermark backwards, and deliberately does NOT bump `updatedAt` — reading
+   * must not re-sort recent lists.
+   */
+  markSessionRead(sessionId: string, upTo?: string): Session | null {
+    let session: Session | null = null
+    this.commit((d) => {
+      const s = d.sessions.find((x) => x.id === sessionId)
+      if (!s) return
+      const next = upTo ?? now()
+      // No-op still returns the session (null signals "not found" to callers).
+      if (!s.lastReadAt || s.lastReadAt < next) {
+        s.lastReadAt = next
+      }
+      session = s
+    })
+    return session ? structuredClone(session) : null
   }
 
   /**
@@ -714,10 +753,13 @@ export class LocalStore {
     let cleared = 0
     this.commit((d) => {
       for (const s of d.sessions) {
-        if (s.status === 'error' || s.lastChatError) {
+        if (s.status === 'error' || s.lastChatError || s.lastErrorAt) {
           s.status = 'idle'
           delete s.lastChatError
           delete s.lastChatErrorAt
+          // Lamp is timestamp-driven: clearing the message alone would leave
+          // the red lamp lit until read.
+          delete s.lastErrorAt
           s.updatedAt = now()
           cleared += 1
         }
@@ -1152,6 +1194,19 @@ export class LocalStore {
           patch.output !== undefined ? patch.output.slice(0, JOB_OUTPUT_MAX_CHARS) : prev.output,
       }
       draft.jobs[idx] = next
+      // Sidebar lamp event timestamps: green "done" on success, red on failure.
+      // Only stamp on the transition into a terminal state.
+      const becameTerminal = prev.status !== next.status
+      if (becameTerminal && next.sessionId) {
+        const s = draft.sessions.find((x) => x.id === next.sessionId)
+        if (s) {
+          if (next.status === 'succeeded') {
+            s.lastFinishedAt = next.finishedAt ?? now()
+          } else if (next.status === 'failed' || next.status === 'timed_out') {
+            s.lastErrorAt = next.finishedAt ?? now()
+          }
+        }
+      }
       // Preserve sticky error lamp (lastChatError) when no open jobs
       this.recomputeSessionStatusOn(draft, next.sessionId)
     })
@@ -1167,9 +1222,22 @@ export class LocalStore {
     }).length
   }
 
+  /**
+   * Startup reconciliation: persisted `running` / `needs_approval` survive a
+   * restart, but the jobs/approvals they were derived from may be gone (crash,
+   * kill, stale state). Re-derive every session's lamp status from durable
+   * jobs + approvals so a dead run doesn't pulse green forever.
+   */
+  reconcileSessionStatuses(): void {
+    const ids = this.data.sessions.map((s) => s.id)
+    if (ids.length === 0) return
+    this.commit((d) => {
+      for (const id of ids) this.recomputeSessionStatusOn(d, id)
+    })
+  }
+
   /** Derive and durably persist session status from open jobs + pending approvals. */
-  recomputeSessionStatus(sessionId: string): Session | undefined {
-    if (!this.data.sessions.some((session) => session.id === sessionId)) return undefined
+  recomputeSessionStatus(sessionId: string): Session | undefined {    if (!this.data.sessions.some((session) => session.id === sessionId)) return undefined
     let session: Session | undefined
     this.commit((draft) => {
       this.recomputeSessionStatusOn(draft, sessionId)
@@ -1199,17 +1267,11 @@ export class LocalStore {
     } else if (open.some((j) => j.status === 'running' || j.status === 'queued')) {
       status = 'running'
     } else if (stickyChatError) {
-      // Durable red lamp + error card after reload
+      // Durable red lamp + error card after reload. Job failures light the red
+      // lamp via `lastErrorAt` + the sidebar read watermark instead — no
+      // time-window guessing here (recompute only runs on events, so a
+      // "60s window" would never elapse on its own).
       status = 'error'
-    } else {
-      // Recent job failure also lights red (short window)
-      const latestFailed = sessionJobs.find(
-        (j) => j.status === 'failed' || j.status === 'timed_out',
-      )
-      if (latestFailed) {
-        const age = Date.now() - Date.parse(latestFailed.finishedAt ?? latestFailed.createdAt)
-        if (Number.isFinite(age) && age < 60_000) status = 'error'
-      }
     }
 
     session.status = status
@@ -1222,7 +1284,8 @@ export class LocalStore {
         delete session.lastChatErrorAt
       }
     }
-    session.updatedAt = now()
+    // NOTE: do not bump `updatedAt` here — recompute runs on every job event
+    // and would constantly re-sort recent-session lists.
     const runningWorkerIds = open.filter((j) => isJobOpen(j.status)).map((j) => j.workerId)
     session.activeWorkerIds = [...new Set(runningWorkerIds)]
   }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * CDP (Chrome DevTools Protocol) checker for the running Electron app.
- * Connects to ws://127.0.0.1:9222, drives the renderer page, and reports:
+ * Connects to ws://127.0.0.1:8315, drives the renderer page, and reports:
  *   - console errors / warnings (since load)
  *   - DOM queries (selectors you pass)
  *   - screenshots
@@ -16,12 +16,12 @@
  * No external deps — uses global WebSocket (Node 22+) or falls back to a tiny
  * ws client via dynamic import of 'ws' if present.
  *
- * Prerequisite: start the desktop with SWARMDESK_AGENT_CDP_PORT=9222.
+ * Prerequisite: start the desktop in development (CDP defaults to port 8315).
  */
 import { writeFileSync } from 'node:fs'
 
 const CDP_HOST = process.env.CDP_HOST || '127.0.0.1'
-const CDP_PORT = process.env.CDP_PORT || '9222'
+const CDP_PORT = process.env.CDP_PORT || '8315'
 
 async function getPageTarget() {
   const res = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`)

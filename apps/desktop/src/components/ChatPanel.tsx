@@ -10,6 +10,7 @@ import type {
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
 import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
+import type { PendingNewSession } from '../hooks/useAppState'
 import { api, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import {
@@ -142,6 +143,8 @@ interface Props {
   onRefreshGit?: () => void
   /** Pre-fill the composer once (e.g. text typed on the empty-state composer). */
   initialInput?: string
+  /** When true, also auto-send initialInput after pre-filling (new-session flow). */
+  autoSendInitialInput?: boolean
   /** Fired when initialInput has been applied so the parent can clear it. */
   onInitialInputConsumed?: () => void
   /** Persist session status + sticky chat error for sidebar / reload */
@@ -149,6 +152,17 @@ interface Props {
     status: Session['status'],
     opts?: { lastChatError?: string | null },
   ) => void | Promise<void>
+  /** Pending new session (not yet on server). Created on first message send. */
+  pendingNewSession?: PendingNewSession | null
+  /** Clear the pending new session state. */
+  clearPendingSession?: () => void
+  /** Create a session on the server (used by transport on first message send). */
+  createSession?: (
+    title: string | undefined,
+    mode?: LeaderMode,
+    explicitProjectId?: string,
+    memoryThreadId?: string,
+  ) => Promise<Session>
 }
 
 const THINK_LABEL_KEY: Record<
@@ -190,21 +204,32 @@ export function ChatPanel({
   onToggleInspector,
   onRefreshGit,
   initialInput,
+  autoSendInitialInput,
   onInitialInputConsumed,
   onSessionStatusChange,
+  pendingNewSession,
+  clearPendingSession,
+  createSession,
 }: Props) {
   const { t, locale } = useI18n()
   const { sendShortcut } = useSendShortcut()
   const [input, setInput] = useState('')
   /** Tracks the initialInput value already consumed, so we apply each text once. */
   const consumedInitialInputRef = useRef<string | undefined>(undefined)
+  /** When initialInput arrives with autoSendInitialInput, the text is staged
+   *  here and fired by the autoSend effect once a model is selected. */
+  const pendingAutoSendRef = useRef<string | null>(null)
   useEffect(() => {
     if (initialInput && initialInput !== consumedInitialInputRef.current) {
       consumedInitialInputRef.current = initialInput
       setInput(initialInput)
-      onInitialInputConsumed?.()
+      if (autoSendInitialInput) {
+        pendingAutoSendRef.current = initialInput
+      } else {
+        onInitialInputConsumed?.()
+      }
     }
-  }, [initialInput, onInitialInputConsumed])
+  }, [initialInput, autoSendInitialInput, onInitialInputConsumed])
   const [mode, setMode] = useState<LeaderMode>(session?.mode ?? 'build')
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
@@ -260,6 +285,12 @@ export function ChatPanel({
   projectRef.current = project
   const sessionRef = useRef(session)
   sessionRef.current = session
+  const pendingNewSessionRef = useRef(pendingNewSession)
+  pendingNewSessionRef.current = pendingNewSession
+  const createSessionRef = useRef(createSession)
+  createSessionRef.current = createSession
+  const clearPendingSessionRef = useRef(clearPendingSession)
+  clearPendingSessionRef.current = clearPendingSession
 
   // Bind Mastra memory thread/resource so goal-state + working memory can run
   const memoryThreadId = session.memoryThreadId ?? session.id
@@ -342,7 +373,24 @@ export function ChatPanel({
         prepareSendMessagesRequest: async ({ messages: msgs }) => {
           const last = msgs[msgs.length - 1]
           const proj = projectRef.current
-          const sess = sessionRef.current
+          let sess = sessionRef.current
+          const pending = pendingNewSessionRef.current
+          const createSessionFn = createSessionRef.current
+          const clearPendingFn = clearPendingSessionRef.current
+
+          // Lazy session creation: if there's a pending session, create it on the server now
+          if (pending && createSessionFn) {
+            try {
+              const created = await createSessionFn(undefined, pending.mode, pending.projectId, pending.memoryThreadId)
+              sess = created
+              sessionRef.current = created
+              clearPendingFn?.()
+            } catch (e) {
+              console.error('[ChatPanel] lazy session creation failed', e)
+              throw e
+            }
+          }
+
           // UI keeps clean user text; inject mode/context only on the wire
           const wireLast = enrichLastUserMessageForWire(last as never, {
             locale: localeRef.current,
@@ -424,6 +472,20 @@ export function ChatPanel({
   })
 
   const busy = status === 'submitted' || status === 'streaming'
+
+  // Auto-send the staged initial input once a model is available. Models load
+  // async after mount; sending before one is set would hit the no-model guard.
+  useEffect(() => {
+    const pending = pendingAutoSendRef.current
+    if (!pending || busy || !selectedModel || models.length === 0) return
+    pendingAutoSendRef.current = null
+    lastStatusPostRef.current = 'running'
+    if (error) clearError()
+    onSessionStatusChange?.('running', { lastChatError: null })
+    void sendMessage({ text: pending })
+    setInput('')
+    onInitialInputConsumed?.()
+  }, [selectedModel, models, busy, error, clearError, sendMessage, onSessionStatusChange, onInitialInputConsumed])
 
   // Load persisted history once per thread (survives refresh)
   useEffect(() => {

@@ -8,6 +8,7 @@ import type {
   WorkerJob,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
+import type { PendingNewSession } from '../hooks/useAppState'
 import { api } from '../lib/api'
 import { ChatPanel } from './ChatPanel'
 import { BrandLogo } from './BrandLogo'
@@ -76,12 +77,23 @@ interface Props {
   ) => void
   /** Click handler for the "open folder" chip on the empty-state composer (scene 1, no project). */
   onPickFolder?: () => void
-  /** Pre-fill text to inject into the active session's composer (once). */
-  initialInput?: string
-  /** Fired when the active ChatPanel has consumed initialInput. */
+  /** Pre-fill text to inject into a specific session's composer (once). */
+  pendingComposerForSession?: { sessionId: string; text: string; autoSend: boolean } | null
+  /** Fired when the matching ChatPanel has consumed pendingComposerForSession. */
   onInitialInputConsumed?: () => void
   /** True while the empty-state composer is creating a session (disables the input). */
   creatingFromComposer?: boolean
+  /** Pending new session (not yet on server). Created on first message send. */
+  pendingNewSession?: PendingNewSession | null
+  /** Clear the pending new session state. */
+  clearPendingSession?: () => void
+  /** Create a session on the server (used by transport on first message send). */
+  createSession?: (
+    title: string | undefined,
+    mode?: LeaderMode,
+    explicitProjectId?: string,
+    memoryThreadId?: string,
+  ) => Promise<Session>
 }
 
 /**
@@ -112,9 +124,12 @@ export function ChatWorkspace({
   onRefreshGit,
   onComposeFirstMessage,
   onPickFolder,
-  initialInput,
+  pendingComposerForSession,
   onInitialInputConsumed,
   creatingFromComposer,
+  pendingNewSession,
+  clearPendingSession,
+  createSession,
 }: Props) {
   const { t, locale } = useI18n()
   const { sendShortcut } = useSendShortcut()
@@ -250,7 +265,9 @@ export function ChatWorkspace({
       .filter(Boolean) as { session: Session; project: Project | null }[]
   }, [aliveIds, sessions, projects, project])
 
-  if (!session) {
+  // Show empty composer when no session is active OR when there's a pending new session
+  const showEmptyComposer = !session || pendingNewSession
+  if (showEmptyComposer) {
     return (
       <main className="main home-main">
         {/* Titleband only — content must not be window-drag */}
@@ -387,8 +404,19 @@ export function ChatWorkspace({
               session={s}
               serverUp={serverUp}
               isActive={isActive}
-              initialInput={isActive ? initialInput : undefined}
-              onInitialInputConsumed={isActive ? onInitialInputConsumed : undefined}
+              initialInput={
+                pendingComposerForSession?.sessionId === s.id
+                  ? pendingComposerForSession.text
+                  : undefined
+              }
+              autoSendInitialInput={
+                pendingComposerForSession?.sessionId === s.id
+                  ? pendingComposerForSession.autoSend
+                  : false
+              }
+              onInitialInputConsumed={
+                pendingComposerForSession?.sessionId === s.id ? onInitialInputConsumed : undefined
+              }
               onModeChange={isActive ? onModeChange : undefined}
               onRenameSession={
                 isActive && onRenameSession ? (title) => onRenameSession(s.id, title) : undefined
@@ -416,6 +444,9 @@ export function ChatWorkspace({
               inspectorOpen={inspectorOpen}
               onToggleInspector={onToggleInspector}
               onRefreshGit={onRefreshGit}
+              pendingNewSession={pendingNewSession}
+              clearPendingSession={clearPendingSession}
+              createSession={createSession}
             />
           </div>
         )

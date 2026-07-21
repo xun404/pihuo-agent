@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { Project, Session } from '@swarmdesk-agent/shared'
-import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
+import type { Project, Session, SessionLampClass } from '@swarmdesk-agent/shared'
+import {
+  SESSION_LAMP_ERROR_GRACE_MS,
+  isPlaceholderSessionTitle,
+  sessionLampClass,
+  sessionLampTimes,
+} from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
 import {
@@ -13,25 +18,22 @@ import {
 } from './Icons'
 
 /**
- * 任务状态灯（优先级从高到低，与 Session 持久化字段对齐）：
- * - red error：响应报错（status=error 或 lastChatError）
+ * 任务状态灯（优先级从高到低，判定逻辑见 shared/sessionLampClass）：
  * - orange approve：需要授权等操作
  * - green run（闪烁）：正在执行
+ * - red error：未读报错；阅读后 3s 熄灭，当前会话内 60s 自动熄灭
+ * - green done（常亮）：执行结束未读；阅读后熄灭，当前会话内 60s 自动熄灭
  * - gray idle：空闲
+ * 通知类灯（error/done）由事件时间戳 + lastReadAt 水位驱动，App 侧负责打点已读。
  */
-function statusClass(session: Session, busy?: boolean): string {
-  if (session.status === 'error' || Boolean(session.lastChatError?.trim())) return 'error'
-  if (session.status === 'needs_approval') return 'approve'
-  if (busy || session.status === 'running') return 'run'
-  return 'idle'
-}
 
 function statusTitleKey(
-  sc: string,
-): 'sidebar.statusError' | 'sidebar.statusApprove' | 'sidebar.statusRun' | 'sidebar.statusIdle' {
+  sc: SessionLampClass,
+): 'sidebar.statusError' | 'sidebar.statusApprove' | 'sidebar.statusRun' | 'sidebar.statusDone' | 'sidebar.statusIdle' {
   if (sc === 'error') return 'sidebar.statusError'
   if (sc === 'approve') return 'sidebar.statusApprove'
   if (sc === 'run') return 'sidebar.statusRun'
+  if (sc === 'done') return 'sidebar.statusDone'
   return 'sidebar.statusIdle'
 }
 
@@ -74,6 +76,7 @@ interface Props {
   onSelectSession: (session: Session) => void
   onSelectProject: (project: Project) => void
   onNewSession: () => void
+  onNewSessionForProject: (project: Project) => void
   onOpenProject: () => void
   onDeleteProject: (project: Project) => void
   onDeleteSession: (session: Session) => void
@@ -89,6 +92,7 @@ export function LeftSidebar({
   onSelectSession,
   onSelectProject,
   onNewSession,
+  onNewSessionForProject,
   onOpenProject,
   onDeleteProject,
   onDeleteSession,
@@ -96,6 +100,24 @@ export function LeftSidebar({
 }: Props) {
   const { t } = useI18n()
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  /**
+   * Ticking clock for lamp expiry: the only time-dependent render is the
+   * red lamp's 3s after-read grace. Schedule the next re-render exactly at
+   * the earliest pending grace deadline (no perpetual interval).
+   */
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    let next = Infinity
+    for (const s of sessions) {
+      const { errAt, readAt } = sessionLampTimes(s)
+      if (errAt > 0 && errAt <= readAt && now - readAt < SESSION_LAMP_ERROR_GRACE_MS) {
+        next = Math.min(next, readAt + SESSION_LAMP_ERROR_GRACE_MS)
+      }
+    }
+    if (next === Infinity) return
+    const t = setTimeout(() => setNow(Date.now()), Math.max(next - Date.now(), 50))
+    return () => clearTimeout(t)
+  }, [sessions, now])
 
   useEffect(() => {
     setCollapsed((prev) => {
@@ -186,6 +208,19 @@ export function LeftSidebar({
                 <span className="proj-name">{project.name}</span>
                 <button
                   type="button"
+                  className="proj-add"
+                  title={t('sidebar.newTask')}
+                  aria-label={t('sidebar.newTask')}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onNewSessionForProject(project)
+                  }}
+                >
+                  <IconPlus size={14} />
+                </button>
+                <button
+                  type="button"
                   className="row-del"
                   title={t('sidebar.deleteProject')}
                   aria-label={t('sidebar.deleteProject')}
@@ -204,8 +239,9 @@ export function LeftSidebar({
                     <div className="empty-sess">{t('sidebar.noSessions')}</div>
                   )}
                   {projectSessions.map((session) => {
+                    // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
                     const busy = busySessionIds?.has(session.id)
-                    const sc = statusClass(session, busy)
+                    const sc = sessionLampClass(session, busy ?? false, now)
                     const active = session.id === activeSessionId
                     const untitled = isPlaceholderSessionTitle(session.title)
                     const displayTitle = untitled ? t('sidebar.untitledSession') : session.title

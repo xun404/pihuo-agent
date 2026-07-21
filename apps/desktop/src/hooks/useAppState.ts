@@ -20,6 +20,12 @@ const empty: AppSnapshot = {
   locale: 'zh',
 }
 
+export type PendingNewSession = {
+  projectId: string
+  mode: LeaderMode
+  memoryThreadId: string
+}
+
 export function useAppState() {
   const [snapshot, setSnapshot] = useState<AppSnapshot>(empty)
   const [loading, setLoading] = useState(true)
@@ -28,6 +34,8 @@ export function useAppState() {
   const [resolvingState, setResolvingState] = useState<Record<string, boolean>>({})
   const resolvingRef = useRef(resolvingState)
   resolvingRef.current = resolvingState
+  /** Pending new session: created locally, not yet on server. Created on first message send. */
+  const [pendingNewSession, setPendingNewSession] = useState<PendingNewSession | null>(null)
   /** Monotonic apply generation — ignore stale responses that finish out of order. */
   const applyGenRef = useRef(0)
   const lastRevisionRef = useRef(0)
@@ -83,11 +91,12 @@ export function useAppState() {
     title: string | undefined,
     mode: LeaderMode = 'build',
     explicitProjectId?: string,
+    memoryThreadId?: string,
   ) => {
     const projectId = explicitProjectId ?? snapshot.activeProjectId ?? snapshot.projects[0]?.id
     // Surface a stable code for UI handling; user-facing copy lives in i18n.
     if (!projectId) throw new Error('NO_PROJECT')
-    const { session, snapshot: snap } = await api.createSession({ projectId, title, mode })
+    const { session, snapshot: snap } = await api.createSession({ projectId, title, mode, memoryThreadId })
     if (snap) applySnapshot(snap, ++applyGenRef.current)
     else await refresh()
     return session
@@ -112,11 +121,15 @@ export function useAppState() {
   }
 
   const activateSession = async (session: Session) => {
+    // Clear any pending new session when selecting an existing one
+    setPendingNewSession(null)
     await api.activateSession(session.id)
     await refresh()
   }
 
   const activateProject = async (projectId: string) => {
+    // Clear any pending new session when switching projects
+    setPendingNewSession(null)
     const { snapshot: next } = await api.activateProject(projectId)
     applySnapshot(next, ++applyGenRef.current)
   }
@@ -173,6 +186,31 @@ export function useAppState() {
     }))
     try {
       const { snapshot: next } = await api.setSessionStatus(sessionId, status, opts)
+      applySnapshot(next, ++applyGenRef.current)
+    } catch {
+      // Keep optimistic local state when API is down
+    }
+  }
+
+  /**
+   * Stamp the sidebar lamp read watermark. Optimistic first so lamps go out
+   * immediately and an in-flight poll cannot re-light them before the POST
+   * lands (server snapshot carries the authoritative revision anyway).
+   * `upTo` reads only events at/before that timestamp; the watermark never
+   * moves backwards.
+   */
+  const markSessionRead = async (sessionId: string, upTo?: string) => {
+    const readAt = upTo ?? new Date().toISOString()
+    setSnapshot((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((s) => {
+        if (s.id !== sessionId) return s
+        if (s.lastReadAt && s.lastReadAt >= readAt) return s
+        return { ...s, lastReadAt: readAt }
+      }),
+    }))
+    try {
+      const { snapshot: next } = await api.markSessionRead(sessionId, upTo)
       applySnapshot(next, ++applyGenRef.current)
     } catch {
       // Keep optimistic local state when API is down
@@ -288,6 +326,22 @@ export function useAppState() {
     applySnapshot(result.snapshot, ++applyGenRef.current)
   }
 
+  /** Create a pending session locally (no server call). Created on first message send. */
+  const createPendingSession = useCallback(
+    (projectId: string, mode: LeaderMode = 'build') => {
+      const memoryThreadId = `thread_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`
+      setPendingNewSession({ projectId, mode, memoryThreadId })
+      // Note: do NOT set activeSessionId=null here — server polling would overwrite it.
+      // ChatWorkspace checks pendingNewSession to decide whether to show empty composer.
+    },
+    [],
+  )
+
+  /** Clear pending session (e.g. when user selects another session). */
+  const clearPendingSession = useCallback(() => {
+    setPendingNewSession(null)
+  }, [])
+
   const activeProject =
     snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? snapshot.projects[0] ?? null
   const activeSession = snapshot.sessions.find((s) => s.id === snapshot.activeSessionId) ?? null
@@ -299,13 +353,17 @@ export function useAppState() {
     serverUp,
     activeProject,
     activeSession,
+    pendingNewSession,
     refresh,
     openProject,
     createSession,
+    createPendingSession,
+    clearPendingSession,
     activateSession,
     activateProject,
     setSessionMode,
     setSessionStatus,
+    markSessionRead,
     renameSession,
     deleteProject,
     deleteSession,

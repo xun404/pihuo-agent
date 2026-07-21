@@ -14,7 +14,7 @@
   },
   "scripts": {
     "dev": "mastra dev",
-    "dev:api": "node --import tsx src/http-server.ts",
+    "dev:api": "tsx watch src/http-server.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node --import tsx src/http-server.ts",

@@ -244,7 +244,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  createSession: (body: { projectId: string; title?: string; mode?: LeaderMode }) =>
+  createSession: (body: { projectId: string; title?: string; mode?: LeaderMode; memoryThreadId?: string }) =>
     request<{ session: Session; snapshot: AppSnapshot }>('/api/sessions', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -296,6 +296,12 @@ export const api = {
     request<{ ok: boolean; clearedSessionErrors: number; snapshot: AppSnapshot }>(
       '/api/sessions/clear-chat-errors',
       { method: 'POST' },
+    ),
+  /** Stamp the sidebar lamp read watermark (extinguishes unread error/done lamps) */
+  markSessionRead: (id: string, upTo?: string) =>
+    request<{ session: Session; snapshot: AppSnapshot }>(
+      `/api/sessions/${encodePathSegment(id)}/read`,
+      { method: 'POST', body: JSON.stringify(upTo ? { upTo } : {}) },
     ),
   setSessionApprovalPolicy: (id: string, approvalPolicy: SessionApprovalPolicy) =>
     request<{ session: Session; snapshot: AppSnapshot }>(

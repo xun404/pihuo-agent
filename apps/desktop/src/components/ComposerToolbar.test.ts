@@ -8,7 +8,7 @@
  *
  * Live interaction coverage (menu open/close, preset passthrough into a new
  * session, regression vs ChatPanel) is verified via CDP against the running
- * Electron renderer (port 9222) — see
+ * Electron renderer (port 8315) — see
  * docs/superpowers/plans/2026-07-19-composer-toolbar-review.md.
  */
 import { describe, it } from 'node:test'
