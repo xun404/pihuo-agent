@@ -409,9 +409,13 @@ html[data-theme='dark'] {
   overflow: hidden;
 }
 .brand .mark .queen-bee {
-  width: 22px;
-  height: 22px;
-  display: block;
+  width: 20px;
+  height: 20px;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 .brand .brand-name {
   font-size: 20px;
@@ -1790,7 +1794,11 @@ html[data-theme='dark'] .send.stop {
 .sup-avatar .queen-bee {
   width: 14px;
   height: 14px;
-  display: block;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 .sup-name {
   font-size: var(--fs-sm);

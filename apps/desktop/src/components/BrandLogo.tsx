@@ -8,7 +8,7 @@ type BrandLogoProps = {
 }
 
 /**
- * Theme-aware SwarmDesk brand mark (queen-bee / honeycomb).
+ * Theme-aware SwarmDesk brand mark (honeycomb).
  * Uses light SVG on light surfaces and dark SVG on dark.
  */
 export function BrandLogo({ className, size = 88, title }: BrandLogoProps) {

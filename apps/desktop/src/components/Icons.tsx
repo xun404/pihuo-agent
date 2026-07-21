@@ -1,4 +1,4 @@
-/** Linear UI icons (stroke 1.75, round cap) — no emoji. */
+/** Linear UI icons (stroke 1.75, round cap). Brand small-mark uses 🐝. */
 import React from 'react'
 
 type IconProps = {
@@ -73,172 +73,32 @@ export function IconWorkers(p: IconProps) {
 }
 
 /**
- * Leader / brand mark: queen bee only (cropped from docs/assets/icon.svg).
- * viewBox tight on crown → wings → abdomen; self-contained gradients (no theme card).
+ * Leader / sidebar brand glyph.
+ * Full honeycomb mark lives in docs/assets/icon.svg; small UI marks use 🐝.
  */
 export function IconQueenBee({ className, size = 16, title }: IconProps) {
-  const uid = React.useId().replace(/:/g, '')
-  const champagne = `qb-champagne-${uid}`
-  const body = `qb-body-${uid}`
-  const wing = `qb-wing-${uid}`
-
   return (
-    <svg
+    <span
       className={className ? `i queen-bee ${className}` : 'i queen-bee'}
-      width={size}
-      height={size}
-      viewBox="31 29 38 42"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden={title ? undefined : true}
+      style={{
+        width: size,
+        height: size,
+        fontSize: size,
+        lineHeight: 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
       role={title ? 'img' : undefined}
       aria-label={title}
+      aria-hidden={title ? undefined : true}
     >
-      <defs>
-        <linearGradient id={champagne} x1="15%" y1="5%" x2="90%" y2="95%">
-          <stop offset="0%" stopColor="#FFF3D8" />
-          <stop offset="35%" stopColor="#E6C873" />
-          <stop offset="65%" stopColor="#C69A2D" />
-          <stop offset="100%" stopColor="#806019" />
-        </linearGradient>
-        <linearGradient id={body} x1="20%" y1="0%" x2="80%" y2="100%">
-          <stop offset="0%" stopColor="#FFF7E7" />
-          <stop offset="25%" stopColor="#EACF87" />
-          <stop offset="62%" stopColor="#C89A2B" />
-          <stop offset="100%" stopColor="#795A17" />
-        </linearGradient>
-        <linearGradient id={wing} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
-          <stop offset="55%" stopColor="#DDE5EF" stopOpacity="0.72" />
-          <stop offset="100%" stopColor="#94A3B8" stopOpacity="0.28" />
-        </linearGradient>
-      </defs>
-
-      {/* Wings */}
-      <path
-        d="M46.2,45.6 C42.2,39.7 34.6,37.3 31.5,41.5 C29.1,44.7 33.5,49.2 43.4,50.7 C37.2,51.8 32.8,55 34.8,58.6 C37,62.3 43.3,59.7 47.1,54.6 Z"
-        fill={`url(#${wing})`}
-        stroke="#2D3748"
-        strokeWidth="0.72"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M53.8,45.6 C57.8,39.7 65.4,37.3 68.5,41.5 C70.9,44.7 66.5,49.2 56.6,50.7 C62.8,51.8 67.2,55 65.2,58.6 C63,62.3 56.7,59.7 52.9,54.6 Z"
-        fill={`url(#${wing})`}
-        stroke="#2D3748"
-        strokeWidth="0.72"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M44.8,47.5 C40.5,44 36.4,42.8 33.4,43"
-        stroke="#94A3B8"
-        strokeWidth="0.42"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
-      <path
-        d="M55.2,47.5 C59.5,44 63.6,42.8 66.6,43"
-        stroke="#94A3B8"
-        strokeWidth="0.42"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
-      <path
-        d="M44.2,52.8 C40.7,54.5 38.1,56.4 36.7,58"
-        stroke="#94A3B8"
-        strokeWidth="0.42"
-        strokeLinecap="round"
-        opacity="0.68"
-      />
-      <path
-        d="M55.8,52.8 C59.3,54.5 61.9,56.4 63.3,58"
-        stroke="#94A3B8"
-        strokeWidth="0.42"
-        strokeLinecap="round"
-        opacity="0.68"
-      />
-
-      {/* Head */}
-      <path
-        d="M45.7,44.4 C45.7,40.7 47.3,38.5 50,38.5 C52.7,38.5 54.3,40.7 54.3,44.4 C54.3,47.2 52.5,49 50,49 C47.5,49 45.7,47.2 45.7,44.4 Z"
-        fill="#263445"
-        stroke="#2D3748"
-        strokeWidth="0.72"
-      />
-      <ellipse cx="48.15" cy="43.6" rx="0.72" ry="1.12" fill="#FFFFFF" />
-      <ellipse cx="51.85" cy="43.6" rx="0.72" ry="1.12" fill="#FFFFFF" />
-
-      {/* Antennae */}
-      <path
-        d="M47.7,39.5 C46.6,36.8 44.3,36.7 43.9,34.7"
-        stroke="#2D3748"
-        strokeWidth="0.78"
-        strokeLinecap="round"
-      />
-      <path
-        d="M52.3,39.5 C53.4,36.8 55.7,36.7 56.1,34.7"
-        stroke="#2D3748"
-        strokeWidth="0.78"
-        strokeLinecap="round"
-      />
-      <circle cx="43.8" cy="34.3" r="0.78" fill={`url(#${champagne})`} />
-      <circle cx="56.2" cy="34.3" r="0.78" fill={`url(#${champagne})`} />
-
-      {/* Thorax */}
-      <path
-        d="M44.8,49 C45.8,46.8 48,46.1 50,46.1 C52,46.1 54.2,46.8 55.2,49 L54,54 C53.5,56.2 51.8,57.4 50,57.4 C48.2,57.4 46.5,56.2 46,54 Z"
-        fill={`url(#${body})`}
-        stroke="#2D3748"
-        strokeWidth="0.82"
-      />
-
-      {/* Abdomen */}
-      <path
-        d="M46.1,54 C45.8,58.2 46.5,64.8 50,69.5 C53.5,64.8 54.2,58.2 53.9,54 C52.8,55.4 51.5,56 50,56 C48.5,56 47.2,55.4 46.1,54 Z"
-        fill={`url(#${body})`}
-        stroke="#2D3748"
-        strokeWidth="0.82"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M46.4,57.2 C48.7,58.1 51.3,58.1 53.6,57.2"
-        stroke="#263445"
-        strokeWidth="1.22"
-        strokeLinecap="round"
-      />
-      <path
-        d="M46.8,61 C48.9,61.8 51.1,61.8 53.2,61"
-        stroke="#263445"
-        strokeWidth="1.22"
-        strokeLinecap="round"
-      />
-      <path
-        d="M47.7,64.7 C49.2,65.25 50.8,65.25 52.3,64.7"
-        stroke="#263445"
-        strokeWidth="1.05"
-        strokeLinecap="round"
-      />
-
-      {/* Chest highlight */}
-      <polygon points="50,48.7 47.9,51 50,53.3 52.1,51" fill="#FFFFFF" opacity="0.92" />
-
-      {/* Crown */}
-      <path
-        d="M44.4,37.6 L43.1,32.3 L46.5,34.4 L50,30.1 L53.5,34.4 L56.9,32.3 L55.6,37.6 Z"
-        fill={`url(#${champagne})`}
-        stroke="#2D3748"
-        strokeWidth="0.72"
-        strokeLinejoin="round"
-      />
-      <path d="M44.7,37.6 H55.3" stroke="#2D3748" strokeWidth="0.8" strokeLinecap="round" />
-      <circle cx="43.1" cy="32.25" r="0.72" fill="#FFFFFF" />
-      <circle cx="50" cy="30.05" r="0.82" fill="#FFFFFF" />
-      <circle cx="56.9" cy="32.25" r="0.72" fill="#FFFFFF" />
-    </svg>
+      🐝
+    </span>
   )
 }
 
-/** @deprecated Prefer IconQueenBee — alias kept for existing Leader call sites. */
+/** Alias for Leader / supervisor call sites. */
 export function IconSupervisor(p: IconProps) {
   return <IconQueenBee {...p} size={p.size ?? 14} />
 }

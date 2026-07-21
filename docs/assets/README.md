@@ -2,32 +2,33 @@
 
 Filenames are referenced by the root `README.md` and `docs/readme/README.zh-CN.md`.
 
-| File                               | Purpose                                                               |
-| ---------------------------------- | --------------------------------------------------------------------- |
-| `icon.svg`                         | Brand mark source — **light** (`theme-white`); desktop UI / favicon   |
-| `icon_dark.svg`                    | Brand mark source — **dark** (`theme-dark`); desktop UI / favicon     |
-| `icon.png`                         | Rasterized light (1024²) — README header, packaging, favicon fallback |
-| `icon_dark.png`                    | Rasterized dark (1024²) — README dark `<picture>` source              |
-| `readme-hero.png`                  | Hero under the tagline                                                |
-| `feature-wall/leader-chat.png`     | Leader chat + streaming                                               |
-| `feature-wall/worker-cards.png`    | Worker run cards                                                      |
-| `feature-wall/approvals.png`       | Permission approvals                                                  |
-| `feature-wall/registry.png`        | ACP Registry picker                                                   |
-| `feature-wall/settings-models.png` | Models & API keys                                                     |
-| `feature-wall/sessions.png`        | Multi-session / project                                               |
+| File | Purpose |
+| ---- | ------- |
+| `icon.svg` | Brand mark source — **light** (`theme-white`); desktop UI / favicon |
+| `icon_dark.svg` | Brand mark source — **dark** (`theme-dark`); desktop UI / favicon |
+| `icon.png` | Rasterized light (1024²) — README header, packaging, favicon fallback |
+| `icon_dark.png` | Rasterized dark (1024²) — README dark `<picture>` source |
+| `readme-hero.png` | Hero under the tagline |
+| `feature-wall/leader-chat.png` | Leader chat + streaming |
+| `feature-wall/worker-cards.png` | Worker run cards |
+| `feature-wall/approvals.png` | Permission approvals |
+| `feature-wall/registry.png` | ACP Registry picker |
+| `feature-wall/settings-models.png` | Models & API keys |
+| `feature-wall/sessions.png` | Multi-session / project |
 
 ## Brand icon pipeline
 
-Source of truth: `icon.svg` / `icon_dark.svg` (same artwork; root class `theme-white` vs `theme-dark`).
+Source of truth: `icon.svg` / `icon_dark.svg` (honeycomb mark; root class `theme-white` vs `theme-dark`).
 
 Applied to:
 
-| Surface                          | Path                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------- |
-| README (EN/ZH)                   | `icon.png` + `icon_dark.png` via `<picture>` (PNG for GitHub reliability) |
-| Desktop favicon / home logo      | `apps/desktop/public/icon.svg` + `icon_dark.svg`                          |
-| electron-builder (mac/win/linux) | `build/icon.png` (light raster)                                           |
-| BrowserWindow icon               | `public/icon.png` → Vite `dist/icon.png`                                  |
+| Surface | Path |
+| ------- | ---- |
+| README (EN/ZH) | `icon.png` + `icon_dark.png` via `<picture>` (PNG for GitHub reliability) |
+| Desktop favicon / home logo | `apps/desktop/public/icon.svg` + `icon_dark.svg` |
+| electron-builder (mac/win/linux) | `build/icon.png` (light raster) |
+| BrowserWindow icon | `public/icon.png` → Vite `dist/icon.png` |
+| Sidebar / Leader small glyph | `🐝` emoji via `IconQueenBee` / `IconSupervisor` |
 
 To regenerate rasters after editing the SVGs (requires Google Chrome):
 

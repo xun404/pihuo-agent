@@ -3,32 +3,19 @@ import { describe, it } from 'node:test'
 import { validateCiWorkflow, validateReleaseWorkflow } from './workflow-contract.mjs'
 
 describe('GitHub Actions workflow contract', () => {
-  it('requires read-only CI with quality and macOS/Linux package jobs', () => {
+  it('requires read-only CI with quality checks only (no packaging)', () => {
     assert.doesNotThrow(() =>
       validateCiWorkflow({
         on: { pull_request: null, push: { branches: ['main'] } },
         permissions: { contents: 'read' },
         jobs: {
-          quality: {},
-          package: {
-            strategy: {
-              matrix: {
-                include: [
-                  { os: 'macos-15', artifact: 'desktop-macos-arm64', builderArgs: '--mac --arm64' },
-                  {
-                    os: 'ubuntu-24.04',
-                    artifact: 'desktop-linux-x64',
-                    builderArgs: '--linux --x64',
-                  },
-                ],
-              },
-            },
+          quality: {
             steps: [
               { run: 'npm ci' },
-              { run: 'npm run build:runtime' },
-              { run: 'npm run verify:runtime' },
-              { run: 'npx electron-builder --dir ${{ matrix.builderArgs }} --publish never' },
-              { run: 'npm run smoke:packaged' },
+              { run: 'npm test' },
+              { run: 'npm run typecheck' },
+              { run: 'npm run lint' },
+              { run: 'npm run build' },
             ],
           },
         },
@@ -36,29 +23,40 @@ describe('GitHub Actions workflow contract', () => {
     )
   })
 
-  it('rejects CI workflows with write permission or a missing platform', () => {
+  it('rejects CI workflows with write permission or a missing quality job', () => {
     assert.throws(
       () =>
         validateCiWorkflow({
           on: { pull_request: {}, push: { branches: ['main'] } },
           permissions: { contents: 'write' },
           jobs: {
-            quality: {},
-            package: { strategy: { matrix: { include: [] } } },
+            quality: {
+              steps: [
+                { run: 'npm test' },
+                { run: 'npm run typecheck' },
+                { run: 'npm run build' },
+              ],
+            },
           },
         }),
       /contents: read/,
     )
   })
 
-  it('requires every native CI package job to build, verify PTY, and smoke its own runtime', () => {
+  it('rejects CI workflows that still package desktop builds', () => {
     assert.throws(
       () =>
         validateCiWorkflow({
           on: { pull_request: null, push: { branches: ['main'] } },
           permissions: { contents: 'read' },
           jobs: {
-            quality: {},
+            quality: {
+              steps: [
+                { run: 'npm test' },
+                { run: 'npm run typecheck' },
+                { run: 'npm run build' },
+              ],
+            },
             package: {
               strategy: {
                 matrix: {
@@ -68,24 +66,30 @@ describe('GitHub Actions workflow contract', () => {
                       artifact: 'desktop-macos-arm64',
                       builderArgs: '--mac --arm64',
                     },
-                    {
-                      os: 'windows-2025',
-                      artifact: 'desktop-windows-x64',
-                      builderArgs: '--win --x64',
-                    },
-                    {
-                      os: 'ubuntu-24.04',
-                      artifact: 'desktop-linux-x64',
-                      builderArgs: '--linux --x64',
-                    },
                   ],
                 },
               },
-              steps: [{ run: 'npm run package:prepare' }],
+              steps: [{ run: 'npx electron-builder --publish never' }],
             },
           },
         }),
-      /build:runtime|verify:runtime|smoke:packaged/,
+      /must not define a package job/,
+    )
+  })
+
+  it('requires CI quality to run tests, typecheck, and build', () => {
+    assert.throws(
+      () =>
+        validateCiWorkflow({
+          on: { pull_request: null, push: { branches: ['main'] } },
+          permissions: { contents: 'read' },
+          jobs: {
+            quality: {
+              steps: [{ run: 'npm ci' }],
+            },
+          },
+        }),
+      /npm test|typecheck|build/,
     )
   })
 
@@ -103,11 +107,7 @@ describe('GitHub Actions workflow contract', () => {
               matrix: {
                 include: [
                   { os: 'macos-15', artifact: 'desktop-macos-arm64', builderArgs: '--mac --arm64' },
-                  {
-                    os: 'windows-2025',
-                    artifact: 'desktop-windows-x64',
-                    builderArgs: '--win --x64',
-                  },
+                  // Windows packaging temporarily disabled (matches release.yml).
                   {
                     os: 'ubuntu-24.04',
                     artifact: 'desktop-linux-x64',

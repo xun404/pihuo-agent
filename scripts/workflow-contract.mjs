@@ -50,9 +50,18 @@ export function validateCiWorkflow(workflow) {
   assert(workflow?.on?.push?.branches?.includes('main'), 'CI must run on pushes to main')
   assert(workflow?.permissions?.contents === 'read', 'CI workflow must use contents: read')
   assert(workflow?.jobs?.quality, 'CI quality job is required')
-  assert(workflow?.jobs?.package, 'CI package job is required')
+  // Packaging is expensive and release-gated; PR/main CI is quality-only.
+  assert(
+    !workflow?.jobs?.package,
+    'CI must not define a package job; desktop packaging runs only on release tags',
+  )
 
-  validateNativePackageJob(workflow.jobs.package, 'CI')
+  const qualityCommands = (workflow.jobs.quality?.steps ?? [])
+    .map((step) => (typeof step?.run === 'string' ? step.run : ''))
+    .join('\n')
+  for (const command of ['npm test', 'npm run typecheck', 'npm run build']) {
+    assert(qualityCommands.includes(command), `CI quality job must run ${command}`)
+  }
 }
 
 export function validateReleaseWorkflow(workflow) {
