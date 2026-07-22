@@ -253,6 +253,23 @@ export function isValidSessionApprovalPolicy(v: unknown): v is SessionApprovalPo
  */
 export type WorkerRole = 'plan' | 'coder' | 'review' | 'test' | 'research' | 'general'
 
+export interface WorkerDefaultRole {
+  name: string
+  roleType: WorkerRole
+  instructions: string
+}
+
+export const DEFAULT_GENERAL_ROLE_INSTRUCTIONS =
+  '作为通用执行角色，完成 Leader 委派的任务并返回清晰、可验证的结果。'
+
+export function defaultWorkerRole(name: string): WorkerDefaultRole {
+  return {
+    name: name.trim(),
+    roleType: 'general',
+    instructions: DEFAULT_GENERAL_ROLE_INSTRUCTIONS,
+  }
+}
+
 /**
  * A Chat-scoped persona bound to an installed ACP Worker.
  * Multiple roles may bind the same Worker while retaining independent ACP sessions.
@@ -375,6 +392,9 @@ export interface Session {
   activeWorkerIds: string[]
   memoryThreadId: string
   approvalPolicy: SessionApprovalPolicy
+  /** New Sessions ask once whether the bootstrapped role definitions need adjustment. */
+  roleReviewState?: 'pending' | 'prompted'
+  roleReviewPromptedAt?: string
   /** Last chat/stream error message for UI (survives reload) */
   lastChatError?: string
   lastChatErrorAt?: string
@@ -553,6 +573,8 @@ export interface WorkerRegistration {
   scope: 'global' | 'project'
   projectId?: string
   description: string
+  /** Worker-owned template copied into each newly created Chat Session. */
+  defaultRole?: WorkerDefaultRole
   /** Shortcut = worst of cliHealth and acpSessionHealth (kept for compatibility) */
   health: WorkerHealthStatus
   /** Whether the CLI binary exists and can start */
@@ -912,6 +934,19 @@ export function normalizeWorkerRoles<
   const primaryRole =
     worker.primaryRole && roles.includes(worker.primaryRole) ? worker.primaryRole : roles[0]!
   return { ...worker, primaryRole, roles }
+}
+
+/** Normalize persisted/legacy Workers to one complete editable default role template. */
+export function normalizeWorkerDefaultRole(
+  worker: Pick<WorkerRegistration, 'name' | 'defaultRole'>,
+): WorkerDefaultRole {
+  const fallback = defaultWorkerRole(worker.name)
+  const role = worker.defaultRole
+  if (!role) return fallback
+  const name = role.name?.trim()
+  const instructions = role.instructions?.trim()
+  if (!name || !instructions || !WORKER_ROLES.includes(role.roleType)) return fallback
+  return { name, roleType: role.roleType, instructions }
 }
 
 function commandStatusToLegacy(status: CommandHealthStatus): WorkerHealthStatus {

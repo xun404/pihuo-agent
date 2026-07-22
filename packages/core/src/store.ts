@@ -32,6 +32,7 @@ import type {
   SessionApprovalPolicy,
   WorkerSource,
   WorkerRuntimeProfile,
+  WorkerDefaultRole,
   RoleDefinition,
   CreateRoleDefinitionInput,
   UpdateRoleDefinitionInput,
@@ -44,6 +45,8 @@ import {
   isJobOpen,
   normalizeWorkerHealth,
   normalizeWorkerRoles,
+  normalizeWorkerDefaultRole,
+  WORKER_ROLES,
   isValidSessionApprovalPolicy,
 } from '@swarmdesk-agent/shared'
 import { createId } from './id.js'
@@ -174,6 +177,7 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
       ...w,
       primaryRole: n.primaryRole,
       roles: n.roles,
+      defaultRole: normalizeWorkerDefaultRole(w as WorkerRegistration),
       capabilities: w.capabilities ?? [],
       enabled: w.enabled ?? true,
       scope: w.scope ?? 'global',
@@ -202,6 +206,7 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
       // last time the user saw the session so old sessions don't all light up
       // unread error/done lamps after upgrade.
       lastReadAt: (s as Partial<Session>).lastReadAt ?? s.updatedAt,
+      roleReviewState: (s as Partial<Session>).roleReviewState ?? 'prompted',
     })) as Session[]
   const sessionIds = new Set(sessions.map((session) => session.id))
   const workerIds = new Set(workers.map((worker) => worker.id))
@@ -423,7 +428,12 @@ export class LocalStore {
   listWorkers(): WorkerRegistration[] {
     return this.data.workers.map((w) => {
       const n = normalizeWorkerRoles(w)
-      return structuredClone({ ...w, primaryRole: n.primaryRole, roles: n.roles })
+      return structuredClone({
+        ...w,
+        primaryRole: n.primaryRole,
+        roles: n.roles,
+        defaultRole: normalizeWorkerDefaultRole(w),
+      })
     })
   }
 
@@ -753,6 +763,19 @@ export class LocalStore {
     return session ? structuredClone(session) : null
   }
 
+  markSessionRoleReviewPrompted(sessionId: string): Session | null {
+    let session: Session | null = null
+    const timestamp = now()
+    this.commit((draft) => {
+      const current = draft.sessions.find((candidate) => candidate.id === sessionId)
+      if (!current) return
+      current.roleReviewState = 'prompted'
+      current.roleReviewPromptedAt ??= timestamp
+      session = current
+    })
+    return session ? structuredClone(session) : null
+  }
+
   createSession(input: {
     projectId: string
     title?: string
@@ -764,6 +787,7 @@ export class LocalStore {
       const project = d.projects.find((p) => p.id === input.projectId)
       if (!project) throw new Error(`Project not found: ${input.projectId}`)
       const providedTitle = input.title?.trim()
+      const timestamp = now()
       session = {
         id: createId('sess'),
         projectId: input.projectId,
@@ -777,12 +801,31 @@ export class LocalStore {
         activeWorkerIds: [...project.workerIds],
         memoryThreadId: input.memoryThreadId || createId('thread'),
         approvalPolicy: 'manual',
-        createdAt: now(),
-        updatedAt: now(),
+        roleReviewState: 'pending',
+        createdAt: timestamp,
+        updatedAt: timestamp,
         // Born read: a fresh session has no unseen events to report.
-        lastReadAt: now(),
+        lastReadAt: timestamp,
       }
       d.sessions.unshift(session)
+      const bootstrappedRoles: RoleDefinition[] = d.workers
+        .filter((worker) => worker.enabled)
+        .map((worker) => {
+          const template = normalizeWorkerDefaultRole(worker)
+          return {
+            id: createId('role'),
+            chatSessionId: session.id,
+            workerId: worker.id,
+            name: template.name,
+            roleType: template.roleType,
+            instructions: template.instructions,
+            enabled: true,
+            revision: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          }
+        })
+      d.roleDefinitions = [...bootstrappedRoles, ...(d.roleDefinitions ?? [])]
       d.activeSessionId = session.id
       d.activeProjectId = project.id
     })
@@ -914,6 +957,10 @@ export class LocalStore {
         ...existing,
         ...worker,
         ...normalizeWorkerRoles(worker),
+        defaultRole: normalizeWorkerDefaultRole({
+          name: worker.name,
+          defaultRole: worker.defaultRole ?? existing?.defaultRole,
+        }),
       }
       if (worker.availableModels == null && existing?.availableModels?.length) {
         normalized.availableModels = existing.availableModels
@@ -949,6 +996,7 @@ export class LocalStore {
       normalized = {
         ...replacement,
         ...normalizeWorkerRoles(replacement),
+        defaultRole: normalizeWorkerDefaultRole(replacement),
       }
       d.workers[idx] = normalized
     })
@@ -1022,6 +1070,25 @@ export class LocalStore {
       w.primaryRole = input.primaryRole
       w.roles = roles
       worker = w
+    })
+    return structuredClone(worker)
+  }
+
+  setWorkerDefaultRole(workerId: string, input: WorkerDefaultRole): WorkerRegistration {
+    const name = input.name.trim()
+    const instructions = input.instructions.trim()
+    if (!name) throw new Error('Default role name required')
+    if (!instructions) throw new Error('Default role instructions required')
+    if (!WORKER_ROLES.includes(input.roleType)) {
+      throw new Error(`Invalid default role type: ${input.roleType}`)
+    }
+
+    let worker!: WorkerRegistration
+    this.commit((draft) => {
+      const current = draft.workers.find((candidate) => candidate.id === workerId)
+      if (!current) throw new Error(`Worker not found: ${workerId}`)
+      current.defaultRole = { name, roleType: input.roleType, instructions }
+      worker = current
     })
     return structuredClone(worker)
   }
