@@ -47,6 +47,7 @@ function AppShell({
   deleteSession,
   renameSession,
   toggleWorker,
+  setWorkerDefaultRole,
   healthAllWorkers,
   resolveApproval,
   resetAcpContext,
@@ -294,6 +295,7 @@ function AppShell({
                 initialTab={settingsTab}
                 workers={snapshot.workers}
                 onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
+                onSetWorkerDefaultRole={(id, role) => setWorkerDefaultRole(id, role)}
                 onHealthAllWorkers={() => healthAllWorkers()}
                 onRegisterCustomAcpWorker={(body) => registerCustomAcpWorker(body)}
                 onRefreshSnapshot={() => void refresh()}

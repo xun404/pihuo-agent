@@ -342,6 +342,8 @@ export type MessageKey =
   | 'workers.authSaveSecrets'
   | 'workers.authSecretHint'
   | 'workers.authSucceeded'
+  | 'workers.defaultRole'
+  | 'workers.defaultRoleInheritsModel'
   | 'workers.healthAll'
   | 'workers.healthAllHint'
   | 'workers.healthDeep'
@@ -787,6 +789,8 @@ const zh: Dict = {
   'workers.authSecretHint':
     '密钥值只发送给 Owner 的 Worker secret store，不会进入 snapshot、Job 或 Activity。',
   'workers.authSucceeded': '认证完成，Worker 已就绪',
+  'workers.defaultRole': '默认角色',
+  'workers.defaultRoleInheritsModel': '模型继承 Worker 默认模型',
   'workers.healthAll': '全部检查',
   'workers.healthAllHint': '检查所有已启用 Worker 的可用性',
   'workers.healthDeep': '深度检查（启动 ACP 进程）',
@@ -1252,6 +1256,8 @@ const en: Dict = {
   'workers.authSecretHint':
     'Secret values are sent only to the Owner worker-secret store and never enter snapshots, jobs, or activity.',
   'workers.authSucceeded': 'Authenticated and ready',
+  'workers.defaultRole': 'Default role',
+  'workers.defaultRoleInheritsModel': 'Model inherits the Worker default model',
   'workers.healthAll': 'Check all',
   'workers.healthAllHint': 'Probe all enabled workers',
   'workers.healthDeep': 'Deep check (start ACP process)',

@@ -4,6 +4,7 @@ import type {
   CustomAcpLaunchKind,
   CustomAcpRegistrationInput,
   WorkerRegistration,
+  WorkerDefaultRole,
 } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
@@ -90,6 +91,7 @@ import type { Locale } from '../i18n/locales'
 import { formatContextWindow, parseContextWindow } from '../lib/context-window'
 import { useToast } from './Toast'
 import { WorkerRegistryCombobox } from './WorkerRegistryCombobox'
+import { WorkerDefaultRoleEditor } from './WorkerDefaultRoleEditor'
 import {
   createWorkerDraftFromRegistry,
   resolveWorkerRegistrationRoute,
@@ -108,6 +110,7 @@ interface Props {
   initialTab?: TabId
   workers: WorkerRegistration[]
   onToggleWorker: (id: string, enabled: boolean) => void
+  onSetWorkerDefaultRole: (id: string, role: WorkerDefaultRole) => Promise<unknown>
   onHealthAllWorkers: () => void | Promise<unknown>
   onRegisterCustomAcpWorker: (body: CustomAcpRegistrationInput) => Promise<unknown>
   onRefreshSnapshot: () => void
@@ -182,6 +185,7 @@ export function SettingsPanel({
   initialTab,
   workers,
   onToggleWorker,
+  onSetWorkerDefaultRole,
   onHealthAllWorkers,
   onRegisterCustomAcpWorker,
   onRefreshSnapshot,
@@ -1846,121 +1850,134 @@ export function SettingsPanel({
 
               {workers.length === 0 && <p className="settings-muted">{t('workers.empty')}</p>}
               {workers.map((w) => (
-                <div key={w.id} className="w-row worker-list-row worker-settings-row">
-                  <span
-                    className={`worker-logo ${workerLogoClass(w.kind)}`}
-                    title={w.name}
-                    aria-hidden
-                  >
-                    <WorkerBrandLogo kind={w.kind} size={14} />
-                  </span>
-                  <div className="info">
-                    <div className="n">
-                      {w.name}
-                      {w.health === 'healthy' && (
-                        <span className="tag-on" style={{ marginLeft: 6 }}>
-                          {t('workers.health.healthy')}
-                        </span>
-                      )}
-                      {w.readiness && (
-                        <span style={{ marginLeft: 6, verticalAlign: 'middle' }}>
-                          <WorkerReadinessBadge
-                            status={w.readiness.status}
-                            code={w.readiness.code}
-                            nextAction={w.readiness.nextAction}
-                            locale={locale === 'zh' ? 'zh' : 'en'}
-                          />
-                        </span>
-                      )}
+                <div key={w.id} className="worker-settings-item">
+                  <div className="w-row worker-list-row worker-settings-row">
+                    <span
+                      className={`worker-logo ${workerLogoClass(w.kind)}`}
+                      title={w.name}
+                      aria-hidden
+                    >
+                      <WorkerBrandLogo kind={w.kind} size={14} />
+                    </span>
+                    <div className="info">
+                      <div className="n">
+                        {w.name}
+                        {w.health === 'healthy' && (
+                          <span className="tag-on" style={{ marginLeft: 6 }}>
+                            {t('workers.health.healthy')}
+                          </span>
+                        )}
+                        {w.readiness && (
+                          <span style={{ marginLeft: 6, verticalAlign: 'middle' }}>
+                            <WorkerReadinessBadge
+                              status={w.readiness.status}
+                              code={w.readiness.code}
+                              nextAction={w.readiness.nextAction}
+                              locale={locale === 'zh' ? 'zh' : 'en'}
+                            />
+                          </span>
+                        )}
+                      </div>
+                      <div className="s mono">
+                        {w.source?.type === 'registry'
+                          ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
+                          : `${w.command} ${(w.args ?? []).join(' ')}`}
+                      </div>
                     </div>
-                    <div className="s mono">
-                      {w.source?.type === 'registry'
-                        ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
-                        : `${w.command} ${(w.args ?? []).join(' ')}`}
-                    </div>
-                  </div>
-                  {w.readiness?.status === 'auth_required' &&
-                    (() => {
-                      const terminalMethod = w.capabilitySummary?.authMethods?.find(
-                        (candidate) => candidate.type === 'terminal',
-                      )
-                      const agentMethod = w.capabilitySummary?.authMethods?.find(
-                        (candidate) => candidate.type === 'agent',
-                      )
-                      const envMethod = w.capabilitySummary?.authMethods?.find(
-                        (candidate) => candidate.type === 'env_var',
-                      )
-                      const active =
-                        agentAuthOperation?.workerId === w.id ? agentAuthOperation.snapshot : null
-                      return (
-                        <div className="worker-settings-auth-actions">
-                          {terminalMethod && (
-                            <button
-                              type="button"
-                              className="settings-btn-soft worker-settings-auth-btn"
-                              onClick={() =>
-                                setTerminalAuth({
-                                  workerId: w.id,
-                                  workerName: w.name,
-                                  methodId: terminalMethod.id,
-                                })
-                              }
-                            >
-                              {t('workers.terminalOpen')}
-                            </button>
-                          )}
-                          {agentMethod && !active && (
-                            <button
-                              type="button"
-                              className="settings-btn-soft worker-settings-auth-btn"
-                              disabled={Boolean(agentAuthOperation)}
-                              onClick={() => void startAgentAuthentication(w.id, agentMethod.id)}
-                            >
-                              {t('workers.authAgent')}
-                            </button>
-                          )}
-                          {active && (
-                            <>
-                              <span className="settings-field-hint">
-                                {active.status === 'queued'
-                                  ? t('workers.authQueued')
-                                  : t('workers.authRunning')}
-                              </span>
+                    {w.readiness?.status === 'auth_required' &&
+                      (() => {
+                        const terminalMethod = w.capabilitySummary?.authMethods?.find(
+                          (candidate) => candidate.type === 'terminal',
+                        )
+                        const agentMethod = w.capabilitySummary?.authMethods?.find(
+                          (candidate) => candidate.type === 'agent',
+                        )
+                        const envMethod = w.capabilitySummary?.authMethods?.find(
+                          (candidate) => candidate.type === 'env_var',
+                        )
+                        const active =
+                          agentAuthOperation?.workerId === w.id ? agentAuthOperation.snapshot : null
+                        return (
+                          <div className="worker-settings-auth-actions">
+                            {terminalMethod && (
                               <button
                                 type="button"
-                                className="settings-btn-soft"
-                                onClick={() => void cancelAgentAuthentication()}
+                                className="settings-btn-soft worker-settings-auth-btn"
+                                onClick={() =>
+                                  setTerminalAuth({
+                                    workerId: w.id,
+                                    workerName: w.name,
+                                    methodId: terminalMethod.id,
+                                  })
+                                }
                               >
-                                {t('workers.authCancel')}
+                                {t('workers.terminalOpen')}
                               </button>
-                            </>
-                          )}
-                          {Boolean(envMethod?.envVarNames?.length) && (
-                            <button
-                              type="button"
-                              className="settings-btn-soft worker-settings-auth-btn"
-                              disabled={secretBusy}
-                              onClick={() =>
-                                setSecretEditor({
-                                  workerId: w.id,
-                                  workerName: w.name,
-                                  envVarNames: [...envMethod!.envVarNames!],
-                                })
-                              }
-                            >
-                              {t('workers.authConfigureSecrets')}
-                            </button>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  <button
-                    type="button"
-                    className={`switch toggle${w.enabled ? ' on' : ''}`}
-                    role="switch"
-                    aria-checked={w.enabled}
-                    aria-label={t('workers.formEnabled')}
-                    onClick={() => onToggleWorker?.(w.id, !w.enabled)}
+                            )}
+                            {agentMethod && !active && (
+                              <button
+                                type="button"
+                                className="settings-btn-soft worker-settings-auth-btn"
+                                disabled={Boolean(agentAuthOperation)}
+                                onClick={() => void startAgentAuthentication(w.id, agentMethod.id)}
+                              >
+                                {t('workers.authAgent')}
+                              </button>
+                            )}
+                            {active && (
+                              <>
+                                <span className="settings-field-hint">
+                                  {active.status === 'queued'
+                                    ? t('workers.authQueued')
+                                    : t('workers.authRunning')}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="settings-btn-soft"
+                                  onClick={() => void cancelAgentAuthentication()}
+                                >
+                                  {t('workers.authCancel')}
+                                </button>
+                              </>
+                            )}
+                            {Boolean(envMethod?.envVarNames?.length) && (
+                              <button
+                                type="button"
+                                className="settings-btn-soft worker-settings-auth-btn"
+                                disabled={secretBusy}
+                                onClick={() =>
+                                  setSecretEditor({
+                                    workerId: w.id,
+                                    workerName: w.name,
+                                    envVarNames: [...envMethod!.envVarNames!],
+                                  })
+                                }
+                              >
+                                {t('workers.authConfigureSecrets')}
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    <button
+                      type="button"
+                      className={`switch toggle${w.enabled ? ' on' : ''}`}
+                      role="switch"
+                      aria-checked={w.enabled}
+                      aria-label={t('workers.formEnabled')}
+                      onClick={() => onToggleWorker?.(w.id, !w.enabled)}
+                    />
+                  </div>
+                  <WorkerDefaultRoleEditor
+                    worker={w}
+                    onSave={async (role) => {
+                      try {
+                        await onSetWorkerDefaultRole(w.id, role)
+                        toastSuccess(t('roles.saved'))
+                      } catch (error) {
+                        toastError(error instanceof Error ? error.message : String(error))
+                      }
+                    }}
                   />
                 </div>
               ))}

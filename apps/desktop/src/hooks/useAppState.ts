@@ -8,6 +8,7 @@ import type {
   Session,
   SessionApprovalPolicy,
   UpdateRoleDefinitionInput,
+  WorkerDefaultRole,
 } from '@swarmdesk-agent/shared'
 import { api } from '../lib/api'
 
@@ -271,6 +272,12 @@ export function useAppState() {
     await refresh()
   }
 
+  const setWorkerDefaultRole = async (id: string, role: WorkerDefaultRole) => {
+    const result = await api.setWorkerDefaultRole(id, role)
+    applySnapshot(result.snapshot, ++applyGenRef.current)
+    return result.worker
+  }
+
   const healthWorker = async (id: string, depth: 'presence' | 'version' | 'acp' = 'version') => {
     const res = await api.healthWorker(id, depth)
     if (res.snapshot) applySnapshot(res.snapshot, ++applyGenRef.current)
@@ -400,6 +407,7 @@ export function useAppState() {
     deleteProject,
     deleteSession,
     toggleWorker,
+    setWorkerDefaultRole,
     healthWorker,
     healthAllWorkers,
     setWorkerModel,

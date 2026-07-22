@@ -804,6 +804,40 @@
   max-width: 640px;
   gap: var(--sp-3);
 }
+.worker-settings-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.worker-default-role-editor {
+  margin-left: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-input);
+}
+.worker-default-role-editor > summary {
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+.worker-default-role-editor > form {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
+.worker-default-role-instructions {
+  min-height: 76px;
+  height: auto;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  resize: vertical;
+}
+.worker-default-role-actions {
+  display: flex;
+  justify-content: flex-end;
+}
 .worker-registry-combobox {
   position: relative;
   width: 100%;
@@ -2467,4 +2501,3 @@
   width: min(var(--messages-max), 100%);
   margin-top: var(--sp-1);
 }
-
