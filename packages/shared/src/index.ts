@@ -239,6 +239,47 @@ export function isValidSessionApprovalPolicy(v: unknown): v is SessionApprovalPo
  */
 export type WorkerRole = 'plan' | 'coder' | 'review' | 'test' | 'research' | 'general'
 
+/**
+ * A Chat-scoped persona bound to an installed ACP Worker.
+ * Multiple roles may bind the same Worker while retaining independent ACP sessions.
+ */
+export interface RoleDefinition {
+  id: string
+  chatSessionId: string
+  workerId: string
+  name: string
+  roleType: WorkerRole
+  instructions: string
+  /** Optional role override; absent means inherit the Worker's default model. */
+  model?: string
+  enabled: boolean
+  /** Increments only when execution semantics change. */
+  revision: number
+  createdAt: string
+  updatedAt: string
+  archivedAt?: string
+}
+
+export interface CreateRoleDefinitionInput {
+  chatSessionId: string
+  workerId: string
+  name: string
+  roleType: WorkerRole
+  instructions: string
+  model?: string
+  enabled?: boolean
+}
+
+export interface UpdateRoleDefinitionInput {
+  workerId?: string
+  name?: string
+  roleType?: WorkerRole
+  instructions?: string
+  model?: string | null
+  enabled?: boolean
+  expectedRevision?: number
+}
+
 export type WorkerCapability = 'code-edit' | 'review' | 'research' | 'test' | 'general' | 'plan'
 
 /** Aggregated worker health status (UI + routing). */
@@ -618,6 +659,14 @@ export interface WorkerJob {
   workerId: string
   workerName: string
   role?: WorkerRole
+  /** Immutable role-definition snapshot captured at dispatch time. */
+  roleDefinitionId?: string
+  roleName?: string
+  roleType?: WorkerRole
+  roleRevision?: number
+  effectiveModel?: string
+  instructionsSnapshot?: string
+  effectivePrompt?: string
   task: string
   cwd: string
   status: JobStatus
@@ -826,6 +875,7 @@ export interface AppSnapshot {
   projects: Project[]
   sessions: Session[]
   workers: WorkerRegistration[]
+  roleDefinitions: RoleDefinition[]
   approvals: ApprovalItem[]
   /** Recent worker jobs (dispatch history + in-flight) */
   jobs?: WorkerJob[]

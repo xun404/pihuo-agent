@@ -32,11 +32,13 @@ import type {
   SessionApprovalPolicy,
   WorkerSource,
   WorkerRuntimeProfile,
+  RoleDefinition,
+  CreateRoleDefinitionInput,
+  UpdateRoleDefinitionInput,
 } from '@swarmdesk-agent/shared'
 import {
   DEFAULT_SESSION_TITLE,
   isPlaceholderSessionTitle,
-  DEFAULT_WORKERS,
   JOB_HISTORY_LIMIT,
   JOB_OUTPUT_MAX_CHARS,
   isJobOpen,
@@ -141,18 +143,11 @@ function migrateApprovalItem(value: unknown): ApprovalItem | null {
 }
 
 function emptySnapshot(): AppSnapshot {
-  const workers: WorkerRegistration[] = DEFAULT_WORKERS.map((w) => ({
-    ...w,
-    id: createId('worker'),
-    enabled: true,
-    scope: 'global' as const,
-    health: 'unknown' as const,
-  }))
-
   return {
     projects: [],
     sessions: [],
-    workers,
+    workers: [],
+    roleDefinitions: [],
     approvals: [],
     jobs: [],
     activeProjectId: null,
@@ -181,8 +176,7 @@ export function migrateWorkerSourceFields(worker: WorkerRegistration): WorkerReg
 }
 
 function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
-  const base = emptySnapshot()
-  const workers = (raw.workers ?? base.workers).map((w) => {
+  const workers = (raw.workers ?? []).map((w) => {
     const n = normalizeWorkerRoles(w as WorkerRegistration)
     const withHealth = normalizeWorkerHealth({
       ...w,
@@ -217,6 +211,11 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
       // unread error/done lamps after upgrade.
       lastReadAt: (s as Partial<Session>).lastReadAt ?? s.updatedAt,
     })) as Session[]
+  const sessionIds = new Set(sessions.map((session) => session.id))
+  const workerIds = new Set(workers.map((worker) => worker.id))
+  const roleDefinitions = (raw.roleDefinitions ?? []).filter(
+    (role) => sessionIds.has(role.chatSessionId) && workerIds.has(role.workerId),
+  )
   let activeProjectId = raw.activeProjectId ?? null
   if (activeProjectId && !projectIds.has(activeProjectId)) {
     activeProjectId = projects[0]?.id ?? null
@@ -239,6 +238,7 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
     projects,
     sessions,
     workers,
+    roleDefinitions,
     approvals: Array.isArray(raw.approvals)
       ? raw.approvals.map(migrateApprovalItem).filter((item): item is ApprovalItem => item !== null)
       : [],
@@ -442,6 +442,134 @@ export class LocalStore {
     })
   }
 
+  listRoleDefinitions(
+    chatSessionId?: string,
+    options: { includeArchived?: boolean } = {},
+  ): RoleDefinition[] {
+    let roles = this.data.roleDefinitions
+    if (chatSessionId) roles = roles.filter((role) => role.chatSessionId === chatSessionId)
+    if (!options.includeArchived) roles = roles.filter((role) => !role.archivedAt)
+    return structuredClone(roles)
+  }
+
+  getRoleDefinition(chatSessionId: string, roleDefinitionId: string): RoleDefinition | undefined {
+    const role = this.data.roleDefinitions.find(
+      (candidate) =>
+        candidate.id === roleDefinitionId && candidate.chatSessionId === chatSessionId,
+    )
+    return role ? structuredClone(role) : undefined
+  }
+
+  createRoleDefinition(input: CreateRoleDefinitionInput): RoleDefinition {
+    const name = input.name.trim()
+    if (!name) throw new Error('Role definition name required')
+    let role!: RoleDefinition
+    this.commit((draft) => {
+      if (!draft.sessions.some((session) => session.id === input.chatSessionId)) {
+        throw new Error(`Session not found: ${input.chatSessionId}`)
+      }
+      if (!draft.workers.some((worker) => worker.id === input.workerId)) {
+        throw new Error(`Worker not found: ${input.workerId}`)
+      }
+      const timestamp = now()
+      role = {
+        id: createId('role'),
+        chatSessionId: input.chatSessionId,
+        workerId: input.workerId,
+        name,
+        roleType: input.roleType,
+        instructions: input.instructions.trim(),
+        model: input.model?.trim() || undefined,
+        enabled: input.enabled ?? true,
+        revision: 1,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      draft.roleDefinitions.unshift(role)
+    })
+    return structuredClone(role)
+  }
+
+  updateRoleDefinition(
+    chatSessionId: string,
+    roleDefinitionId: string,
+    patch: UpdateRoleDefinitionInput,
+  ): RoleDefinition {
+    let updated!: RoleDefinition
+    this.commit((draft) => {
+      const role = draft.roleDefinitions.find(
+        (candidate) =>
+          candidate.id === roleDefinitionId && candidate.chatSessionId === chatSessionId,
+      )
+      if (!role || role.archivedAt) {
+        throw new Error(`Role definition not found: ${roleDefinitionId}`)
+      }
+      if (patch.expectedRevision !== undefined && patch.expectedRevision !== role.revision) {
+        throw new Error(
+          `Role definition revision conflict: expected ${patch.expectedRevision}, got ${role.revision}`,
+        )
+      }
+      if (
+        patch.workerId !== undefined &&
+        !draft.workers.some((worker) => worker.id === patch.workerId)
+      ) {
+        throw new Error(`Worker not found: ${patch.workerId}`)
+      }
+
+      const nextName = patch.name === undefined ? role.name : patch.name.trim()
+      if (!nextName) throw new Error('Role definition name required')
+      const nextModel =
+        patch.model === undefined
+          ? role.model
+          : typeof patch.model === 'string'
+            ? patch.model.trim() || undefined
+            : undefined
+      const executionChanged =
+        (patch.workerId !== undefined && patch.workerId !== role.workerId) ||
+        (patch.roleType !== undefined && patch.roleType !== role.roleType) ||
+        (patch.instructions !== undefined && patch.instructions.trim() !== role.instructions) ||
+        nextModel !== role.model
+
+      role.workerId = patch.workerId ?? role.workerId
+      role.name = nextName
+      role.roleType = patch.roleType ?? role.roleType
+      role.instructions =
+        patch.instructions === undefined ? role.instructions : patch.instructions.trim()
+      role.model = nextModel
+      role.enabled = patch.enabled ?? role.enabled
+      if (executionChanged) role.revision += 1
+      role.updatedAt = now()
+      updated = role
+    })
+    return structuredClone(updated)
+  }
+
+  archiveRoleDefinition(
+    chatSessionId: string,
+    roleDefinitionId: string,
+    expectedRevision?: number,
+  ): RoleDefinition {
+    let archived!: RoleDefinition
+    this.commit((draft) => {
+      const role = draft.roleDefinitions.find(
+        (candidate) =>
+          candidate.id === roleDefinitionId && candidate.chatSessionId === chatSessionId,
+      )
+      if (!role) throw new Error(`Role definition not found: ${roleDefinitionId}`)
+      if (expectedRevision !== undefined && expectedRevision !== role.revision) {
+        throw new Error(
+          `Role definition revision conflict: expected ${expectedRevision}, got ${role.revision}`,
+        )
+      }
+      const timestamp = now()
+      role.enabled = false
+      role.archivedAt ??= timestamp
+      role.updatedAt = timestamp
+      archived = role
+    })
+    return structuredClone(archived)
+  }
+
   getActive(): { project: Project | null; session: Session | null } {
     const project = this.data.projects.find((p) => p.id === this.data.activeProjectId) ?? null
     const session = this.data.sessions.find((s) => s.id === this.data.activeSessionId) ?? null
@@ -504,7 +632,13 @@ export class LocalStore {
     this.commit((d) => {
       const before = d.projects.length
       d.projects = d.projects.filter((p) => p.id !== projectId)
+      const deletedSessionIds = new Set(
+        d.sessions.filter((session) => session.projectId === projectId).map((session) => session.id),
+      )
       d.sessions = d.sessions.filter((s) => s.projectId !== projectId)
+      d.roleDefinitions = d.roleDefinitions.filter(
+        (role) => !deletedSessionIds.has(role.chatSessionId),
+      )
       if (d.activeProjectId === projectId) {
         d.activeProjectId = d.projects[0]?.id ?? null
       }
@@ -521,6 +655,7 @@ export class LocalStore {
   deleteSession(sessionId: string): void {
     this.commit((d) => {
       d.sessions = d.sessions.filter((s) => s.id !== sessionId)
+      d.roleDefinitions = d.roleDefinitions.filter((role) => role.chatSessionId !== sessionId)
       if (d.activeSessionId === sessionId) {
         d.activeSessionId = d.sessions[0]?.id ?? null
       }

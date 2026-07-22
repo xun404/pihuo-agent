@@ -14,6 +14,7 @@ const empty: AppSnapshot = {
   projects: [],
   sessions: [],
   workers: [],
+  roleDefinitions: [],
   approvals: [],
   activeProjectId: null,
   activeSessionId: null,
