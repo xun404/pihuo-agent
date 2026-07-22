@@ -392,6 +392,7 @@ export type MessageKey =
   | 'workers.registryLocalInstall'
   | 'workers.registryManifestUnavailable'
   | 'workers.registrySelectionUnavailable'
+  | 'workers.registryShowingCount'
   | 'workers.registryNetworkAuthNotice'
   | 'workers.registryNoShaWarning'
   | 'workers.registryNotInstalled'
@@ -844,6 +845,7 @@ const zh: Dict = {
     '此 Registry 条目缺少可验证的 manifest digest，无法由 Owner 准备；请刷新目录或升级应用。',
   'workers.registrySelectionUnavailable':
     '所选 Registry 条目已不可用，无法按自定义 Worker 保存；请重新选择或刷新目录。',
+  'workers.registryShowingCount': '{shown} / {total}',
   'workers.registryNetworkAuthNotice':
     '准备过程可能访问所选包或下载来源；认证需求会在 ACP initialize 后协商。',
   'workers.registryNoShaWarning': '没有声明 SHA-256；必须显式信任当前 manifest 才能准备。',
@@ -1311,6 +1313,7 @@ const en: Dict = {
     'This Registry entry has no verifiable manifest digest and cannot be prepared by the Owner. Refresh the catalog or upgrade the app.',
   'workers.registrySelectionUnavailable':
     'The selected Registry entry is no longer available and cannot be saved as a custom Worker. Select it again or refresh the catalog.',
+  'workers.registryShowingCount': '{shown} / {total}',
   'workers.registryNetworkAuthNotice':
     'Preparation may access the selected package or download source. Authentication needs are negotiated after ACP initialize.',
   'workers.registryNoShaWarning':

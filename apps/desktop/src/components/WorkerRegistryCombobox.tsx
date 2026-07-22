@@ -149,6 +149,14 @@ export function WorkerRegistryCombobox({
               {error}
             </div>
           )}
+          {!loading && !error && (
+            <div className="worker-registry-result-count" role="status">
+              {t('workers.registryShowingCount', {
+                shown: filtered.length,
+                total: options.length,
+              })}
+            </div>
+          )}
           {!loading && !error && filtered.length === 0 && (
             <div className="worker-registry-status">{emptyLabel}</div>
           )}

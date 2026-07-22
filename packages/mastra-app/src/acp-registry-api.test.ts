@@ -312,6 +312,7 @@ describe('acp-registry-api', () => {
   it('rejects Worker deletion before lifecycle mutations while an active Chat role references it', async () => {
     resetInstallations()
     const worker = await registerSeededWorker({ installationId: 'inst-role-reference' })
+    getSharedStore().setWorkerEnabled(worker.id, false)
     const project = getSharedStore().upsertProject({
       name: 'Role reference',
       rootPath: join(dir, 'role-reference-project'),
@@ -320,6 +321,7 @@ describe('acp-registry-api', () => {
       projectId: project.id,
       title: 'Role reference chat',
     })
+    getSharedStore().setWorkerEnabled(worker.id, true)
     const role = getSharedStore().createRoleDefinition({
       chatSessionId: session.id,
       workerId: worker.id,

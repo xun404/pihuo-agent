@@ -141,7 +141,7 @@ export interface WorkerRegistrationDraft {
 export function filterWorkerRegistryOptions(
   options: WorkerRegistryOption[],
   query: string,
-  limit = 12,
+  limit?: number,
 ): WorkerRegistryOption[] {
   const normalized = query.trim().toLocaleLowerCase()
   const filtered = normalized
@@ -155,7 +155,7 @@ export function filterWorkerRegistryOptions(
         ].some((value) => value.toLocaleLowerCase().includes(normalized)),
       )
     : options
-  return filtered.slice(0, Math.max(0, limit))
+  return limit === undefined ? filtered : filtered.slice(0, Math.max(0, limit))
 }
 
 /**

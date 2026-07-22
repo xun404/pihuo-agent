@@ -30,7 +30,7 @@ describe('LocalStore role definitions', () => {
       primaryRole: 'general',
       roles: ['general'],
       capabilities: ['general'],
-      enabled: true,
+      enabled: false,
       scope: 'global',
       description: 'Custom ACP worker',
       health: 'healthy',
@@ -43,6 +43,7 @@ describe('LocalStore role definitions', () => {
     const project = store.upsertProject({ name: 'P', rootPath: join(dir, 'project') })
     const firstChat = store.createSession({ projectId: project.id, title: 'First chat' })
     const secondChat = store.createSession({ projectId: project.id, title: 'Second chat' })
+    const enabledWorker = store.setWorkerEnabled(worker.id, true)
 
     const role = store.createRoleDefinition({
       chatSessionId: firstChat.id,
@@ -94,7 +95,7 @@ describe('LocalStore role definitions', () => {
       /Worker is referenced by active role definitions/,
     )
     assert.throws(
-      () => store.compareAndRemoveWorker(worker),
+      () => store.compareAndRemoveWorker(enabledWorker),
       /Worker is referenced by active role definitions/,
     )
 

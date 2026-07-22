@@ -62,4 +62,31 @@ describe('WorkerRegistryCombobox', () => {
     assert.match(html, /Authentication required/u)
     assert.doesNotMatch(html, /untrusted\.example\/agent\.svg/u)
   })
+
+  it('renders every option and reports the visible and total Agent counts', () => {
+    const options = Array.from({ length: 38 }, (_, index) => ({
+      ...option,
+      id: `fixture-agent-${index}`,
+      name: `Fixture Agent ${index}`,
+    }))
+    const html = renderToStaticMarkup(
+      <I18nProvider serverLocale="en">
+        <WorkerRegistryCombobox
+          options={options}
+          selectedId={null}
+          loading={false}
+          error={null}
+          placeholder="Search agents"
+          loadingLabel="Loading"
+          emptyLabel="Empty"
+          localInstallLabel="Local install"
+          defaultOpen
+          onSelect={() => {}}
+        />
+      </I18nProvider>,
+    )
+
+    assert.equal((html.match(/role="option"/gu) ?? []).length, 38)
+    assert.match(html, /38 \/ 38/u)
+  })
 })

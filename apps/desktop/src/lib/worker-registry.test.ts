@@ -137,6 +137,17 @@ describe('worker registry search', () => {
     )
   })
 
+  it('returns every local Registry Agent by default, including more than twelve matches', () => {
+    const complete = Array.from({ length: 38 }, (_, index) => ({
+      ...options[0]!,
+      id: `agent-${index}`,
+      name: `Coding Agent ${index}`,
+    }))
+
+    assert.equal(filterWorkerRegistryOptions(complete, '').length, 38)
+    assert.equal(filterWorkerRegistryOptions(complete, 'coding agent').length, 38)
+  })
+
   it('creates an editable registration draft and preserves registry env', () => {
     assert.deepEqual(createWorkerDraftFromRegistry(options[0]!), {
       selectedId: 'claude-acp',
