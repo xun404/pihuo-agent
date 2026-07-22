@@ -4,6 +4,7 @@ import {
   DEFAULT_PROMPT_SETTINGS,
   PROMPT_ROLE_ORDER,
   WORKER_ROLES,
+  isValidPromptSettings,
   normalizePromptSettings,
 } from './index.js'
 
@@ -41,5 +42,11 @@ describe('prompt settings', () => {
 
     assert.equal(second.leader, DEFAULT_PROMPT_SETTINGS.leader)
     assert.equal(second.roles.coder, DEFAULT_PROMPT_SETTINGS.roles.coder)
+  })
+
+  it('validates only complete non-empty prompt settings for explicit saves', () => {
+    assert.equal(isValidPromptSettings(normalizePromptSettings(undefined)), true)
+    assert.equal(isValidPromptSettings({ leader: '', roles: DEFAULT_PROMPT_SETTINGS.roles }), false)
+    assert.equal(isValidPromptSettings({ leader: 'ok', roles: { general: 'only one' } }), false)
   })
 })

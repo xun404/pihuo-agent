@@ -1,5 +1,6 @@
 import { api, clearDesktopToken, ensureDesktopToken } from './api'
 import type { AppSnapshot } from '@swarmdesk-agent/shared'
+import type { PromptSettings } from '@swarmdesk-agent/shared'
 
 export type ApiStyle = 'openai' | 'anthropic' | 'google' | 'custom'
 
@@ -76,6 +77,7 @@ export interface SettingsPayload {
     leaderModel: string
     thinkingIntensity?: ThinkingIntensity
     leaderMaxSteps?: number
+    prompts: PromptSettings
     updatedAt?: string
     customProviders?: CustomProvider[]
   }
@@ -90,6 +92,7 @@ export type SaveSettingsPayload = {
   leaderModel?: string
   thinkingIntensity?: ThinkingIntensity
   leaderMaxSteps?: number
+  prompts?: PromptSettings
   secrets?: Record<string, string | null>
   customProviders?: CustomProvider[]
 }

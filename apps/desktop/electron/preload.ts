@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { PromptSettings } from '@swarmdesk-agent/shared'
 
 contextBridge.exposeInMainWorld('routerAgents', {
   platform: process.platform,
@@ -14,6 +15,7 @@ contextBridge.exposeInMainWorld('routerAgents', {
       leaderModel?: string
       thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'max'
       leaderMaxSteps?: number
+      prompts?: PromptSettings
       secrets?: Record<string, string | null>
       customProviders?: {
         id: string

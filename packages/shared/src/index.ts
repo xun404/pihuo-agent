@@ -308,6 +308,19 @@ export function normalizePromptSettings(input: unknown): PromptSettings {
   }
 }
 
+export function isValidPromptSettings(input: unknown): input is PromptSettings {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false
+  const candidate = input as { leader?: unknown; roles?: unknown }
+  if (typeof candidate.leader !== 'string' || !candidate.leader.trim()) return false
+  if (!candidate.roles || typeof candidate.roles !== 'object' || Array.isArray(candidate.roles)) {
+    return false
+  }
+  const roles = candidate.roles as Record<string, unknown>
+  return WORKER_ROLES.every(
+    (role) => typeof roles[role] === 'string' && Boolean((roles[role] as string).trim()),
+  )
+}
+
 export interface WorkerDefaultRole {
   name: string
   roleType: WorkerRole

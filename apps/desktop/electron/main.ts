@@ -23,6 +23,7 @@ import {
 } from './packaged-smoke.js'
 import { resolveDesktopRuntimeLayout } from './runtime-layout.js'
 import { pickProjectDirectory } from './pick-directory.js'
+import { settingsMutationRequiresApiRestart } from './settings-restart.js'
 import {
   isSafeExternalUrl,
   isTrustedRendererUrl,
@@ -64,6 +65,11 @@ import {
   type CustomProviderSettings,
   type ThinkingIntensity,
 } from '@swarmdesk-agent/core'
+import {
+  isValidPromptSettings,
+  normalizePromptSettings,
+  type PromptSettings,
+} from '@swarmdesk-agent/shared'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -631,6 +637,7 @@ function registerIpc(): void {
         leaderModel?: string
         thinkingIntensity?: ThinkingIntensity
         leaderMaxSteps?: number
+        prompts?: PromptSettings
         secrets?: Record<string, string | null>
         customProviders?: CustomProviderSettings[]
       },
@@ -641,6 +648,9 @@ function registerIpc(): void {
       }
       if (payload.customProviders !== undefined && !Array.isArray(payload.customProviders)) {
         throw new Error('Custom providers payload is invalid')
+      }
+      if (payload.prompts !== undefined && !isValidPromptSettings(payload.prompts)) {
+        throw new Error('Complete non-empty prompt settings required')
       }
       if (
         payload.customProviders?.some(
@@ -667,6 +677,7 @@ function registerIpc(): void {
             ? normalizeThinkingIntensity(payload.thinkingIntensity)
             : prev.thinkingIntensity,
         leaderMaxSteps: payload.leaderMaxSteps ?? prev.leaderMaxSteps,
+        prompts: normalizePromptSettings(payload.prompts ?? prev.prompts),
         customProviders:
           payload.customProviders !== undefined
             ? payload.customProviders.map((c) => ({
@@ -702,7 +713,9 @@ function registerIpc(): void {
         }
       }
       applySecretsToEnv(process.env)
-      const ok = await restartApiServer('apply-settings')
+      const ok = settingsMutationRequiresApiRestart(payload)
+        ? await restartApiServer('apply-settings')
+        : true
       // Sticky chat errors stay until the user starts the next turn (status=running).
       const { status, providers, customProviders } = providersPayload()
       return {

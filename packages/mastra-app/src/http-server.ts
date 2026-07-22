@@ -91,6 +91,7 @@ import type {
   CreateRoleDefinitionInput,
   UpdateRoleDefinitionInput,
   CustomAcpRegistrationInput,
+  PromptSettings,
 } from '@swarmdesk-agent/shared'
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
@@ -132,7 +133,12 @@ import {
   extractBearerToken,
   tokenMatches,
 } from './desktop-auth.js'
-import { isTerminalWorkerEvent, type WorkerRunEvent } from '@swarmdesk-agent/shared'
+import {
+  isTerminalWorkerEvent,
+  isValidPromptSettings,
+  normalizePromptSettings,
+  type WorkerRunEvent,
+} from '@swarmdesk-agent/shared'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomBytes } from 'node:crypto'
 import { HttpJsonBodyError, readJsonBody as readJson } from './http-json-body.js'
@@ -2493,6 +2499,7 @@ const server = createServer(async (req, res) => {
           leaderModel?: string
           thinkingIntensity?: ThinkingIntensity
           leaderMaxSteps?: number
+          prompts?: PromptSettings
           secrets?: Record<string, string | null>
           customProviders?: CustomProviderSettings[]
         }
@@ -2509,6 +2516,10 @@ const server = createServer(async (req, res) => {
             return
           }
         }
+        if (body.prompts !== undefined && !isValidPromptSettings(body.prompts)) {
+          send(res, 400, { error: 'Complete non-empty prompt settings required' })
+          return
+        }
         const prev = loadSettings()
         const nextSettings = saveSettings({
           leaderModel: body.leaderModel?.trim() || prev.leaderModel,
@@ -2517,6 +2528,7 @@ const server = createServer(async (req, res) => {
               ? normalizeThinkingIntensity(body.thinkingIntensity)
               : prev.thinkingIntensity,
           leaderMaxSteps: body.leaderMaxSteps ?? prev.leaderMaxSteps,
+          prompts: normalizePromptSettings(body.prompts ?? prev.prompts),
           customProviders:
             body.customProviders !== undefined
               ? body.customProviders.map((c) => ({

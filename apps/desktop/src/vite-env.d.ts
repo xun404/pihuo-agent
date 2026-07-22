@@ -25,6 +25,7 @@ interface Window {
       save: (payload: {
         leaderModel?: string
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+        prompts?: import('@swarmdesk-agent/shared').PromptSettings
         secrets?: Record<string, string | null>
         customProviders?: {
           id: string

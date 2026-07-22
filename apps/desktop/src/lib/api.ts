@@ -14,6 +14,7 @@ import type {
   WorkerRegistration,
   WorkerDefaultRole,
   WorkerRole,
+  PromptSettings,
 } from '@swarmdesk-agent/shared'
 import type { WorkerRegistryCatalog } from './worker-registry'
 
@@ -712,6 +713,7 @@ export const api = {
         leaderModel: string
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
         leaderMaxSteps?: number
+        prompts: PromptSettings
         updatedAt?: string
         customProviders?: {
           id: string
@@ -767,6 +769,7 @@ export const api = {
     leaderModel?: string
     thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     leaderMaxSteps?: number
+    prompts?: PromptSettings
     secrets?: Record<string, string | null>
     customProviders?: {
       id: string
@@ -791,6 +794,7 @@ export const api = {
         leaderModel: string
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
         leaderMaxSteps?: number
+        prompts: PromptSettings
       }
       providers: {
         id: string
