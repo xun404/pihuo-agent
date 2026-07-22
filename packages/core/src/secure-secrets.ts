@@ -37,6 +37,10 @@ import {
 import { resolveLeaderMaxSteps, parseLeaderMaxStepsInput } from './leader-max-steps.js'
 import { resolveProviderEnv, PROVIDER_ENV_OVERRIDES } from './provider-env-resolver.js'
 import { DEFAULT_LEADER_MODEL } from './models-catalog.js'
+import {
+  normalizePromptSettings,
+  type PromptSettings,
+} from '@swarmdesk-agent/shared'
 
 export type SecretsMap = Record<string, string>
 
@@ -86,6 +90,8 @@ export interface AppSettings {
   customProviders?: CustomProviderSettings[]
   /** Maximum model steps per response (10–1000, default 500) */
   leaderMaxSteps?: number
+  /** Editable Leader behavior prompt and role defaults. */
+  prompts: PromptSettings
   /** Non-secret prefs */
   updatedAt?: string
 }
@@ -332,6 +338,7 @@ function defaultAppSettings(): AppSettings {
     thinkingIntensity: DEFAULT_THINKING_INTENSITY,
     customProviders: [],
     leaderMaxSteps: 500,
+    prompts: normalizePromptSettings(undefined),
   }
 }
 
@@ -363,11 +370,12 @@ function loadSettingsStrict(): AppSettings {
     ),
     customProviders,
     leaderMaxSteps: resolveLeaderMaxSteps(raw.leaderMaxSteps),
+    prompts: normalizePromptSettings(raw.prompts),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
   }
 }
 
-export function saveSettings(settings: AppSettings): AppSettings {
+export function saveSettings(settings: Partial<AppSettings>): AppSettings {
   ensureDir()
   // Preserve an unreadable file for diagnosis/recovery instead of silently
   // replacing it with defaults plus the single field being edited.
@@ -390,6 +398,7 @@ export function saveSettings(settings: AppSettings): AppSettings {
       settings.leaderMaxSteps !== undefined
         ? parseLeaderMaxStepsInput(settings.leaderMaxSteps)
         : (prev.leaderMaxSteps ?? resolveLeaderMaxSteps(undefined)),
+    prompts: normalizePromptSettings(settings.prompts ?? prev.prompts),
     updatedAt: new Date().toISOString(),
   }
   atomicWritePrivateFile(settingsPath(), JSON.stringify(next, null, 2))

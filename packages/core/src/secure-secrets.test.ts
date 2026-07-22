@@ -17,6 +17,7 @@ import {
   isConfigurableSecretEnvKey,
 } from './secure-secrets.js'
 import type { CustomProviderSettings } from './secure-secrets.js'
+import { DEFAULT_PROMPT_SETTINGS } from '@swarmdesk-agent/shared'
 
 const TEST_KEY = 'RA_TEST_ONLY_API_KEY'
 
@@ -126,6 +127,27 @@ describe('secure-secrets', () => {
       leaderModel: prev.leaderModel,
       thinkingIntensity: prev.thinkingIntensity ?? 'medium',
     })
+  })
+
+  it('persists complete prompt settings without losing unrelated settings', () => {
+    const prev = loadSettings()
+    const prompts = {
+      leader: '优先返回风险和验证证据。',
+      roles: {
+        ...DEFAULT_PROMPT_SETTINGS.roles,
+        test: '执行关键测试并清楚报告证据。',
+      },
+    }
+    try {
+      const next = saveSettings({ prompts })
+      assert.equal(next.prompts.leader, prompts.leader)
+      assert.equal(next.prompts.roles.test, prompts.roles.test)
+      assert.equal(next.leaderModel, prev.leaderModel)
+      assert.deepEqual(next.customProviders, prev.customProviders)
+      assert.deepEqual(loadSettings().prompts, prompts)
+    } finally {
+      saveSettings(prev)
+    }
   })
 
   it('persists the custom provider enabled flag used by Desktop settings', () => {

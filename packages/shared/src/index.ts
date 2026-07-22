@@ -253,20 +253,77 @@ export function isValidSessionApprovalPolicy(v: unknown): v is SessionApprovalPo
  */
 export type WorkerRole = 'plan' | 'coder' | 'review' | 'test' | 'research' | 'general'
 
+export const PROMPT_ROLE_ORDER = [
+  'general',
+  'plan',
+  'coder',
+  'review',
+  'test',
+  'research',
+] as const satisfies readonly WorkerRole[]
+
+export interface PromptSettings {
+  leader: string
+  roles: Record<WorkerRole, string>
+}
+
+export const DEFAULT_PROMPT_SETTINGS: Readonly<{
+  leader: string
+  roles: Readonly<Record<WorkerRole, string>>
+}> = {
+  leader:
+    '准确理解用户目标，优先复用合适的角色完成任务，并清楚说明关键决策、风险和验证结果。',
+  roles: {
+    general: '作为通用执行角色，完成 Leader 委派的任务并返回清晰、可验证的结果。',
+    plan: '作为规划角色，分析目标、约束和代码现状，输出可执行且可验证的步骤；除非明确要求，不直接实施。',
+    coder: '作为实现角色，根据任务修改代码，遵循现有架构，并运行相关验证后返回结果。',
+    review: '作为审查角色，优先发现正确性、安全性、兼容性和测试缺口，按严重程度给出可定位的问题。',
+    test: '作为测试角色，设计并执行与风险匹配的测试，报告可复现的失败、覆盖范围和验证结果。',
+    research: '作为研究角色，收集并核验相关事实，区分证据与推断，返回来源、结论和未决问题。',
+  },
+}
+
+export function normalizePromptSettings(input: unknown): PromptSettings {
+  const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  const rawLeader = (raw as { leader?: unknown }).leader
+  const rawRolesValue = (raw as { roles?: unknown }).roles
+  const rawRoles =
+    rawRolesValue && typeof rawRolesValue === 'object' && !Array.isArray(rawRolesValue)
+      ? (rawRolesValue as Record<string, unknown>)
+      : {}
+  const normalizedRoles = {} as Record<WorkerRole, string>
+  for (const role of WORKER_ROLES) {
+    const candidate = rawRoles[role]
+    normalizedRoles[role] =
+      typeof candidate === 'string' && candidate.trim()
+        ? candidate.trim()
+        : DEFAULT_PROMPT_SETTINGS.roles[role]
+  }
+  return {
+    leader:
+      typeof rawLeader === 'string' && rawLeader.trim()
+        ? rawLeader.trim()
+        : DEFAULT_PROMPT_SETTINGS.leader,
+    roles: normalizedRoles,
+  }
+}
+
 export interface WorkerDefaultRole {
   name: string
   roleType: WorkerRole
   instructions: string
 }
 
-export const DEFAULT_GENERAL_ROLE_INSTRUCTIONS =
-  '作为通用执行角色，完成 Leader 委派的任务并返回清晰、可验证的结果。'
+export const DEFAULT_GENERAL_ROLE_INSTRUCTIONS = DEFAULT_PROMPT_SETTINGS.roles.general
 
-export function defaultWorkerRole(name: string): WorkerDefaultRole {
+export function defaultWorkerRole(
+  name: string,
+  instructions: string = DEFAULT_GENERAL_ROLE_INSTRUCTIONS,
+): WorkerDefaultRole {
   return {
     name: name.trim(),
     roleType: 'general',
-    instructions: DEFAULT_GENERAL_ROLE_INSTRUCTIONS,
+    instructions: instructions.trim() || DEFAULT_GENERAL_ROLE_INSTRUCTIONS,
   }
 }
 
