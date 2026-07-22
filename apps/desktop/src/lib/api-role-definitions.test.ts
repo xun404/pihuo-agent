@@ -66,3 +66,32 @@ test('role-definition client keeps opaque Chat and role ids in encoded path segm
     },
   ])
 })
+
+test('Worker default-role client uses PUT with an encoded Worker id', async () => {
+  let request: { pathname: string; method: string; body?: unknown } | undefined
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input))
+    request = {
+      pathname: url.pathname,
+      method: String(init?.method ?? 'GET'),
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    }
+    return Response.json({ worker: {}, snapshot: {} })
+  }
+
+  await api.setWorkerDefaultRole('worker/one?x=1', {
+    name: '实现者',
+    roleType: 'coder',
+    instructions: '实现并验证任务。',
+  })
+
+  assert.deepEqual(request, {
+    pathname: `/api/workers/${encodePathSegment('worker/one?x=1')}/default-role`,
+    method: 'PUT',
+    body: {
+      name: '实现者',
+      roleType: 'coder',
+      instructions: '实现并验证任务。',
+    },
+  })
+})

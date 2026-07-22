@@ -35,6 +35,7 @@ import type {
   LeaderMode,
   Locale,
   WorkerRole,
+  WorkerDefaultRole,
   CreateRoleDefinitionInput,
   UpdateRoleDefinitionInput,
 } from '@swarmdesk-agent/shared'
@@ -554,6 +555,21 @@ export const apiRoutes = [
       }
       const worker = store().setWorkerRoles(id, body)
       return c.json({ worker })
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/default-role', {
+    method: 'PUT',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      try {
+        const body = (await c.req.json()) as WorkerDefaultRole
+        const worker = store().setWorkerDefaultRole(id, body)
+        return c.json({ worker, snapshot: store().snapshot() })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return c.json({ error: message }, message.startsWith('Worker not found:') ? 404 : 400)
+      }
     },
   }),
 

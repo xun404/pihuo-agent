@@ -12,6 +12,7 @@ import type {
   CustomAcpRegistrationInput,
   UpdateRoleDefinitionInput,
   WorkerRegistration,
+  WorkerDefaultRole,
   WorkerRole,
 } from '@swarmdesk-agent/shared'
 import type { WorkerRegistryCatalog } from './worker-registry'
@@ -518,6 +519,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ enabled }),
     }),
+  setWorkerDefaultRole: (id: string, body: WorkerDefaultRole) =>
+    request<{ worker: WorkerRegistration; snapshot: AppSnapshot }>(
+      `/api/workers/${encodePathSegment(id)}/default-role`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      },
+    ),
   healthWorker: (id: string, depth: 'presence' | 'version' | 'acp' = 'version') =>
     request<{
       worker: WorkerRegistration

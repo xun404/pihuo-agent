@@ -87,6 +87,7 @@ import type {
   LeaderMode,
   Locale,
   WorkerRole,
+  WorkerDefaultRole,
   CreateRoleDefinitionInput,
   UpdateRoleDefinitionInput,
   CustomAcpRegistrationInput,
@@ -1846,6 +1847,19 @@ const server = createServer(async (req, res) => {
         }
         const worker = store.setWorkerRoles(rolesMatch.id!, body)
         send(res, 200, { worker })
+        return
+      }
+
+      const defaultRoleMatch = match(path, '/api/workers/:id/default-role')
+      if (method === 'PUT' && defaultRoleMatch) {
+        try {
+          const body = (await readJson(req)) as WorkerDefaultRole
+          const worker = store.setWorkerDefaultRole(defaultRoleMatch.id!, body)
+          send(res, 200, { worker, snapshot: store.snapshot() })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          send(res, message.startsWith('Worker not found:') ? 404 : 400, { error: message })
+        }
         return
       }
 
