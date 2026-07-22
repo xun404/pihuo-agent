@@ -2479,9 +2479,15 @@ const server = createServer(async (req, res) => {
             send(res, 200, { messages: [], threadId, resourceId: resourceId ?? null })
             return
           }
+          // NOTE: resourceId is intentionally NOT forwarded to memory.recall().
+          // Passing it triggers validateThreadIsOwnedByResource, which calls
+          // getThreadById — and under SQLite WAL concurrency (another session
+          // streaming writes), that read can transiently return null even for
+          // a thread that exists, throwing "No thread found" → 500. Our endpoint
+          // only needs message history by threadId; the ownership check is an
+          // unnecessary gate for this read-only path.
           const { messages: stored } = await memory.recall({
             threadId,
-            ...(resourceId ? { resourceId } : {}),
             perPage: false,
           })
           const messages = toAISdkMessages(stored ?? [], { version: 'v6' })
