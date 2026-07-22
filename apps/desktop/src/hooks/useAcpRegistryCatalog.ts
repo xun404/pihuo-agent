@@ -7,6 +7,7 @@ import {
 
 type CatalogState = {
   loading: boolean
+  checking: boolean
   error: string | null
   catalog: WorkerRegistryCatalog | null
   options: WorkerRegistryOption[]
@@ -57,12 +58,14 @@ export class CatalogRequestCoordinator {
  * Does not install or spawn agents.
  */
 export function useAcpRegistryCatalog(opts: {
-  fetchCatalog: (signal: AbortSignal, refresh?: boolean) => Promise<WorkerRegistryCatalog>
+  fetchCatalog: (signal: AbortSignal) => Promise<WorkerRegistryCatalog>
+  checkCatalog: (signal: AbortSignal) => Promise<WorkerRegistryCatalog>
   enabled?: boolean
 }) {
   const enabled = opts.enabled !== false
   const [state, setState] = useState<CatalogState>({
     loading: false,
+    checking: false,
     error: null,
     catalog: null,
     options: [],
@@ -70,17 +73,27 @@ export function useAcpRegistryCatalog(opts: {
     updateRequired: false,
   })
   const fetchRef = useRef(opts.fetchCatalog)
+  const checkRef = useRef(opts.checkCatalog)
   const coordinatorRef = useRef(new CatalogRequestCoordinator())
   fetchRef.current = opts.fetchCatalog
+  checkRef.current = opts.checkCatalog
 
-  const load = useCallback(async (refresh = false, background = false) => {
+  const load = useCallback(async (kind: 'local' | 'check') => {
     const ticket = coordinatorRef.current.begin()
-    if (!background) setState((s) => ({ ...s, loading: true, error: null }))
+    setState((state) => ({
+      ...state,
+      loading: kind === 'local',
+      checking: kind === 'check',
+      error: null,
+    }))
     try {
-      const catalog = await fetchRef.current(ticket.controller.signal, refresh)
+      const catalog = await (kind === 'check' ? checkRef : fetchRef).current(
+        ticket.controller.signal,
+      )
       if (!coordinatorRef.current.isCurrent(ticket)) return false
       setState({
         loading: false,
+        checking: false,
         error: null,
         catalog,
         options: mapCatalogResponseToOptions(catalog),
@@ -98,6 +111,7 @@ export function useAcpRegistryCatalog(opts: {
       setState((s) => ({
         ...s,
         loading: false,
+        checking: false,
         error: e instanceof Error ? e.message : String(e),
       }))
       return false
@@ -108,16 +122,11 @@ export function useAcpRegistryCatalog(opts: {
 
   useEffect(() => {
     if (!enabled) return
-    let mounted = true
-    void (async () => {
-      const snapshotLoaded = await load(false)
-      if (mounted && snapshotLoaded) await load(true, true)
-    })()
+    void load('local')
     return () => {
-      mounted = false
       coordinatorRef.current.abort()
     }
   }, [enabled, load])
 
-  return { ...state, refresh: () => load(true) }
+  return { ...state, checkForUpdates: () => load('check') }
 }

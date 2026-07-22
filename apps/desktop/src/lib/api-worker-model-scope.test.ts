@@ -28,19 +28,27 @@ test('worker model list binds the request to an explicit project id', async () =
   assert.equal(url.searchParams.get('q'), 'sonnet')
 })
 
-test('worker registry catalog uses the local API proxy and explicit refresh query', async () => {
+test('worker registry catalog GET is local-only and manual update uses an explicit POST', async () => {
   let requestedUrl = ''
-  globalThis.fetch = async (input) => {
+  let requestedMethod = ''
+  globalThis.fetch = async (input, init) => {
     requestedUrl = String(input)
-    return Response.json({ version: '1.0.0', agents: [] })
+    requestedMethod = String(init?.method ?? 'GET')
+    return Response.json({ version: '1.0.0', agents: [], updateStatus: 'up_to_date' })
   }
 
-  const result = await api.getWorkerRegistry(undefined, true)
+  const result = await api.getWorkerRegistry()
 
-  const url = new URL(requestedUrl)
+  let url = new URL(requestedUrl)
   assert.equal(url.pathname, '/api/workers/registry')
-  assert.equal(url.searchParams.get('refresh'), '1')
-  assert.deepEqual(result, { version: '1.0.0', agents: [] })
+  assert.equal(url.searchParams.has('refresh'), false)
+  assert.equal(requestedMethod, 'GET')
+  assert.deepEqual(result, { version: '1.0.0', agents: [], updateStatus: 'up_to_date' })
+
+  await api.checkWorkerRegistryUpdate()
+  url = new URL(requestedUrl)
+  assert.equal(url.pathname, '/api/workers/registry/check-update')
+  assert.equal(requestedMethod, 'POST')
 })
 
 test('custom ACP registration uses the probe-before-persist Owner route', async () => {

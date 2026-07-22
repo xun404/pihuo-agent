@@ -268,7 +268,8 @@ export function SettingsPanel({
     error: workerRegistryError,
   } = useAcpRegistryCatalog({
     enabled: regOpen,
-    fetchCatalog: (signal, refresh) => api.getWorkerRegistry(signal, refresh),
+    fetchCatalog: (signal) => api.getWorkerRegistry(signal),
+    checkCatalog: (signal) => api.checkWorkerRegistryUpdate(signal),
   })
 
   const load = useCallback(async () => {

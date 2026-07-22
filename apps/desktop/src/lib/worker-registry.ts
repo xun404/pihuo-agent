@@ -66,8 +66,13 @@ export interface WorkerRegistryCatalog {
   schemaVersion?: string
   source?: string
   digest?: string
+  fetchedAt?: string
   stale?: boolean
   updateRequired?: boolean
+  code?: string
+  message?: string
+  updateStatus?: 'updated' | 'up_to_date' | 'failed' | 'update_required'
+  agentCount?: number
   agentsV2?: WorkerRegistryAgentV2[]
   terminalAuthEnabled?: boolean
   ptyReady?: boolean

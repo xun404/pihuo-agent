@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { describe, it, test } from 'node:test'
 
 import { CatalogRequestCoordinator } from './useAcpRegistryCatalog.js'
 
@@ -37,4 +38,12 @@ describe('CatalogRequestCoordinator', () => {
     coordinator.finish(second)
     assert.equal(coordinator.activeSignal, null)
   })
+})
+
+test('catalog hook loads local data once and exposes only an explicit update action', () => {
+  const source = readFileSync(new URL('./useAcpRegistryCatalog.ts', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(source, /await load\(true, true\)/u)
+  assert.match(source, /checkCatalog/u)
+  assert.match(source, /checkForUpdates/u)
 })

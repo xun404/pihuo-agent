@@ -387,8 +387,13 @@ export const api = {
       { method: 'POST' },
     ),
   listWorkers: () => request<{ workers: WorkerRegistration[] }>('/api/workers'),
-  getWorkerRegistry: (signal?: AbortSignal, refresh = false) =>
-    request<WorkerRegistryCatalog>(`/api/workers/registry${refresh ? '?refresh=1' : ''}`, {
+  getWorkerRegistry: (signal?: AbortSignal) =>
+    request<WorkerRegistryCatalog>('/api/workers/registry', {
+      signal,
+    }),
+  checkWorkerRegistryUpdate: (signal?: AbortSignal) =>
+    request<WorkerRegistryCatalog>('/api/workers/registry/check-update', {
+      method: 'POST',
       signal,
     }),
   /** Owner prepare: download/materialize Registry agent (no client command). */
