@@ -367,6 +367,10 @@ export type MessageKey =
   | 'workers.registered'
   | 'workers.registryAgent'
   | 'workers.registryAuthRequired'
+  | 'workers.registryAgentCount'
+  | 'workers.registryBundledAtRelease'
+  | 'workers.registryCheckUpdates'
+  | 'workers.registryCheckingUpdates'
   | 'workers.registryDetailAuthors'
   | 'workers.registryDetailCommand'
   | 'workers.registryDetailDeclared'
@@ -404,8 +408,16 @@ export type MessageKey =
   | 'workers.registryReady'
   | 'workers.registrySandboxNotice'
   | 'workers.registrySearch'
+  | 'workers.registrySource'
+  | 'workers.registrySourceBundled'
+  | 'workers.registrySourcePersisted'
   | 'workers.registryTrustNoSha'
   | 'workers.registryUnavailable'
+  | 'workers.registryUpdated'
+  | 'workers.registryUpdatedAt'
+  | 'workers.registryUpToDate'
+  | 'workers.registryUpdateFailed'
+  | 'workers.registryUpdateRequired'
   | 'workers.registryOwnerManagedHint'
   | 'workers.runAuthenticate'
   | 'workers.runAuthHint'
@@ -801,7 +813,11 @@ const zh: Dict = {
   'workers.registerTitle': '注册 CLI Worker',
   'workers.registered': '已注册 CLI',
   'workers.registryAgent': 'ACP Registry Agent',
+  'workers.registryAgentCount': 'Agent 数量',
   'workers.registryAuthRequired': '需要认证',
+  'workers.registryBundledAtRelease': '随应用发布',
+  'workers.registryCheckUpdates': '检查更新',
+  'workers.registryCheckingUpdates': '正在检查…',
   'workers.registryDetailAuthors': '作者',
   'workers.registryDetailCommand': '启动命令投影',
   'workers.registryDetailDeclared': '声明 SHA-256',
@@ -843,8 +859,16 @@ const zh: Dict = {
   'workers.registryReady': '可派发',
   'workers.registrySandboxNotice': 'Agent 是本机进程，并非安全沙箱；请仅准备你信任的版本和来源。',
   'workers.registrySearch': '搜索 Agent 名称或 ID…',
+  'workers.registrySource': '来源',
+  'workers.registrySourceBundled': '应用内置',
+  'workers.registrySourcePersisted': '本地更新',
   'workers.registryTrustNoSha': '信任此精确 manifest 及准备时观测到的 digest',
   'workers.registryUnavailable': '当前不可用',
+  'workers.registryUpdated': 'ACP Registry 已更新。',
+  'workers.registryUpdatedAt': '更新时间',
+  'workers.registryUpToDate': 'ACP Registry 已是最新版本。',
+  'workers.registryUpdateFailed': '检查 ACP Registry 更新失败，继续使用当前目录。',
+  'workers.registryUpdateRequired': 'Registry schema 需要更新应用后才能使用。',
   'workers.registryOwnerManagedHint':
     'Registry Agent 由 Owner 准备安装并生成启动命令；不在此编辑命令。',
   'workers.runAuthenticate': '去认证',
@@ -1254,7 +1278,11 @@ const en: Dict = {
   'workers.registerTitle': 'Register CLI worker',
   'workers.registered': 'Registered CLIs',
   'workers.registryAgent': 'ACP Registry agent',
+  'workers.registryAgentCount': 'Agents',
   'workers.registryAuthRequired': 'Authentication required',
+  'workers.registryBundledAtRelease': 'Bundled with this release',
+  'workers.registryCheckUpdates': 'Check for updates',
+  'workers.registryCheckingUpdates': 'Checking…',
   'workers.registryDetailAuthors': 'Authors',
   'workers.registryDetailCommand': 'Launch command projection',
   'workers.registryDetailDeclared': 'Declared SHA-256',
@@ -1298,9 +1326,18 @@ const en: Dict = {
   'workers.registrySandboxNotice':
     'The agent runs as a local process and is not a security sandbox. Prepare only versions and sources you trust.',
   'workers.registrySearch': 'Search agent name or ID…',
+  'workers.registrySource': 'Source',
+  'workers.registrySourceBundled': 'Bundled',
+  'workers.registrySourcePersisted': 'Local update',
   'workers.registryTrustNoSha':
     'Trust this exact manifest and the digest observed during preparation',
   'workers.registryUnavailable': 'Unavailable here',
+  'workers.registryUpdated': 'ACP Registry updated.',
+  'workers.registryUpdatedAt': 'Updated',
+  'workers.registryUpToDate': 'ACP Registry is up to date.',
+  'workers.registryUpdateFailed':
+    'Could not check for ACP Registry updates. The current catalog is still in use.',
+  'workers.registryUpdateRequired': 'This Registry schema requires an application update.',
   'workers.registryOwnerManagedHint':
     'Registry agents are prepared and launched by the Owner; the command is not edited here.',
   'workers.runAuthenticate': 'Go authenticate',

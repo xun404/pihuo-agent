@@ -263,14 +263,57 @@ export function SettingsPanel({
     'featured' | 'not_featured' | 'registry_unknown' | null
   >(null)
   const {
+    catalog: workerRegistryCatalog,
     options: workerRegistry,
     loading: workerRegistryLoading,
+    checking: workerRegistryChecking,
     error: workerRegistryError,
+    checkForUpdates: checkWorkerRegistryUpdates,
   } = useAcpRegistryCatalog({
     enabled: regOpen,
     fetchCatalog: (signal) => api.getWorkerRegistry(signal),
     checkCatalog: (signal) => api.checkWorkerRegistryUpdate(signal),
   })
+  const workerRegistryAgentCount =
+    workerRegistryCatalog?.agentCount ??
+    workerRegistryCatalog?.agentsV2?.length ??
+    workerRegistryCatalog?.agents.length ??
+    0
+  const workerRegistrySource =
+    workerRegistryCatalog?.source === 'persisted'
+      ? t('workers.registrySourcePersisted')
+      : t('workers.registrySourceBundled')
+  const workerRegistryFetchedAt = useMemo(() => {
+    const raw = workerRegistryCatalog?.fetchedAt
+    if (!raw) return t('workers.registryBundledAtRelease')
+    const date = new Date(raw)
+    if (!Number.isFinite(date.getTime())) return t('workers.registryBundledAtRelease')
+    return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(date)
+  }, [locale, t, workerRegistryCatalog?.fetchedAt])
+
+  const checkRegistryUpdates = async () => {
+    const result = await checkWorkerRegistryUpdates()
+    if (!result) {
+      toastError(t('workers.registryUpdateFailed'))
+      return
+    }
+    switch (result.updateStatus) {
+      case 'updated':
+        toastSuccess(t('workers.registryUpdated'))
+        break
+      case 'up_to_date':
+        toastSuccess(t('workers.registryUpToDate'))
+        break
+      case 'update_required':
+        toastError(t('workers.registryUpdateRequired'))
+        break
+      default:
+        toastError(result.message || t('workers.registryUpdateFailed'))
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1960,7 +2003,19 @@ export function SettingsPanel({
                   <div className="model-list-label">{t('workers.registerTitle')}</div>
                 </div>
                 <div className="settings-field">
-                  <label>{t('workers.registryAgent')}</label>
+                  <div className="registry-catalog-toolbar">
+                    <label>{t('workers.registryAgent')}</label>
+                    <button
+                      type="button"
+                      className="settings-btn-soft"
+                      disabled={workerRegistryLoading || workerRegistryChecking}
+                      onClick={() => void checkRegistryUpdates()}
+                    >
+                      {workerRegistryChecking
+                        ? t('workers.registryCheckingUpdates')
+                        : t('workers.registryCheckUpdates')}
+                    </button>
+                  </div>
                   <WorkerRegistryCombobox
                     options={workerRegistry}
                     selectedId={regSelectedId}
@@ -1990,6 +2045,19 @@ export function SettingsPanel({
                       setRegTrustNoSha(false)
                     }}
                   />
+                  {workerRegistryCatalog && (
+                    <div className="registry-catalog-meta">
+                      <span>
+                        {t('workers.registrySource')}: {workerRegistrySource}
+                      </span>
+                      <span>
+                        {t('workers.registryUpdatedAt')}: {workerRegistryFetchedAt}
+                      </span>
+                      <span>
+                        {t('workers.registryAgentCount')}: {workerRegistryAgentCount}
+                      </span>
+                    </div>
+                  )}
                   <span className="settings-field-hint">{t('workers.registryHint')}</span>
                 </div>
                 {selectedRegistryOption && (

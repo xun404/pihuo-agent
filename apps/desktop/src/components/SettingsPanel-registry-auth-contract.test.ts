@@ -41,3 +41,14 @@ test('a Registry selection never falls through to editable custom registration',
   assert.match(source, /if \(registrationRoute\.kind === 'registry'\)/u)
   assert.doesNotMatch(source, /if \(isRegistryPath && selectedRegistryOption\)/u)
 })
+
+test('Registry catalog updates are explicit and show active local snapshot metadata', () => {
+  assert.match(source, /catalog: workerRegistryCatalog/u)
+  assert.match(source, /checking: workerRegistryChecking/u)
+  assert.match(source, /checkForUpdates: checkWorkerRegistryUpdates/u)
+  assert.match(source, /workers\.registryCheckUpdates/u)
+  assert.match(source, /workerRegistryCatalog\?\.source/u)
+  assert.match(source, /workerRegistryCatalog\?\.fetchedAt/u)
+  assert.match(source, /workerRegistryCatalog\?\.agentCount/u)
+  assert.doesNotMatch(source, /getWorkerRegistry\(signal, refresh\)/u)
+})
