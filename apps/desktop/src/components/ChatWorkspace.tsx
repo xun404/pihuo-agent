@@ -267,140 +267,148 @@ export function ChatWorkspace({
       .filter(Boolean) as { session: Session; project: Project | null }[]
   }, [aliveIds, sessions, projects, project])
 
-  // Show empty composer when no session is active OR when there's a pending new session
+  // Show empty composer when no session is active OR when there's a pending new session.
+  // IMPORTANT: we do NOT early-return here. Doing so would unmount all ChatPanels
+  // (the mounted.map below), destroying their useChat state mid-stream — when the
+  // panels remount, the in-flight messages can't be recovered from memory (not yet
+  // persisted), so the chat shows an empty "home" placeholder forever. Instead we
+  // render the panels hidden and overlay the empty composer on top.
   const showEmptyComposer = !session || pendingNewSession
-  if (showEmptyComposer) {
-    return (
-      <main className="main home-main">
-        {/* Titleband only — content must not be window-drag */}
-        <div className="window-drag-top" aria-hidden />
-        <div className="home">
-          <div className="logo-cloud" aria-hidden>
-            <BrandLogo size={88} />
-          </div>
-          <h1 className="greeting">
-            {project ? (
-              <>
-                {t('chat.greeting', { project: '\uE000' }).split('\uE000')[0]}
-                <em>{project.name}</em>
-                {t('chat.greeting', { project: '\uE000' }).split('\uE000')[1]}
-              </>
-            ) : (
-              t('chat.greetingNoProject')
-            )}
-          </h1>
-          <p className="home-hint">{t(hintKey)}</p>
-          {onComposeFirstMessage && (
-            <form
-              className="composer-card home-composer"
-              onSubmit={(e) => {
-                e.preventDefault()
-                const text = firstMessage.trim()
-                if (!text || creatingFromComposer || !serverUp) return
-                onComposeFirstMessage(text, {
-                  mode: presetMode,
-                  approvalPolicy: presetPolicy,
-                })
-                // Clear immediately so a follow-up "新建任务" doesn't show stale text.
-                setFirstMessage('')
-              }}
-            >
-              <div className="context-bar">
-                {!project && onPickFolder && (
-                  <button
-                    type="button"
-                    className="ctx"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      onPickFolder()
-                    }}
-                  >
-                    <IconFolder size={13} />
-                    {t('chat.openFolder')}
-                  </button>
-                )}
-                {project && (
-                  <>
-                    <span className="ctx" title={project.rootPath}>
-                      <IconFolder size={13} />
-                      {project.name}
-                    </span>
-                    <BranchSwitcher
-                      project={project}
-                      snapshotWorkers={snapshotWorkers}
-                      snapshotJobs={snapshotJobs}
-                      onAfterSwitch={onRefreshGit}
-                    />
-                  </>
-                )}
-              </div>
-              <textarea
-                className="composer-input"
-                value={firstMessage}
-                onChange={(e) => setFirstMessage(e.target.value)}
-                placeholder={t('chat.placeholderHome')}
-                rows={3}
-                onKeyDown={(e) => {
-                  if (isComposerSendKey(e, sendShortcut, composing())) {
-                    e.preventDefault()
-                    const text = firstMessage.trim()
-                    if (text && !creatingFromComposer && serverUp) {
-                      onComposeFirstMessage(text, {
-                        mode: presetMode,
-                        approvalPolicy: presetPolicy,
-                      })
-                      // Clear immediately so a follow-up "新建任务" doesn't show stale text.
-                      setFirstMessage('')
-                    }
-                  }
-                }}
-                onCompositionStart={onCompositionStart}
-                onCompositionEnd={onCompositionEnd}
-                disabled={!serverUp || creatingFromComposer}
-              />
-              <div className="composer-tools">
-                <ComposerToolbar
-                  mode={presetMode}
-                  approvalPolicy={presetPolicy}
-                  selectedModel={presetModel}
-                  thinkingIntensity={presetThinking}
-                  models={presetModels}
-                  modelsLoading={presetModelsLoading}
-                  tokenCount={0}
-                  locale={locale}
-                  persistThinking={false}
-                  onModeChange={setPresetMode}
-                  onApprovalPolicyChange={setPresetPolicy}
-                  onModelChange={setPresetModel}
-                  onThinkingChange={setPresetThinking}
-                  onOpenSettings={onOpenSettings}
-                />
-                <button
-                  type="submit"
-                  className={`send${creatingFromComposer ? ' sending' : ''}`}
-                  disabled={!firstMessage.trim() || !serverUp || creatingFromComposer}
-                  title={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
-                  aria-label={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
-                >
-                  {creatingFromComposer ? <span className="send-spinner" /> : <IconArrowUp />}
-                </button>
-              </div>
-            </form>
-          )}
-          {!serverUp && (
-            <p className="home-hint" style={{ color: 'var(--danger)' }}>
-              {t('chat.serverDown')}
-            </p>
-          )}
+
+  const emptyComposer = showEmptyComposer ? (
+    <main className="main home-main home-overlay">
+      {/* Titleband only — content must not be window-drag */}
+      <div className="window-drag-top" aria-hidden />
+      <div className="home">
+        <div className="logo-cloud" aria-hidden>
+          <BrandLogo size={88} />
         </div>
-      </main>
-    )
-  }
+        <h1 className="greeting">
+          {project ? (
+            <>
+              {t('chat.greeting', { project: '\uE000' }).split('\uE000')[0]}
+              <em>{project.name}</em>
+              {t('chat.greeting', { project: '\uE000' }).split('\uE000')[1]}
+            </>
+          ) : (
+            t('chat.greetingNoProject')
+          )}
+        </h1>
+        <p className="home-hint">{t(hintKey)}</p>
+        {onComposeFirstMessage && (
+          <form
+            className="composer-card home-composer"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const text = firstMessage.trim()
+              if (!text || creatingFromComposer || !serverUp) return
+              onComposeFirstMessage(text, {
+                mode: presetMode,
+                approvalPolicy: presetPolicy,
+              })
+              // Clear immediately so a follow-up "新建任务" doesn't show stale text.
+              setFirstMessage('')
+            }}
+          >
+            <div className="context-bar">
+              {!project && onPickFolder && (
+                <button
+                  type="button"
+                  className="ctx"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    onPickFolder()
+                  }}
+                >
+                  <IconFolder size={13} />
+                  {t('chat.openFolder')}
+                </button>
+              )}
+              {project && (
+                <>
+                  <span className="ctx" title={project.rootPath}>
+                    <IconFolder size={13} />
+                    {project.name}
+                  </span>
+                  <BranchSwitcher
+                    project={project}
+                    snapshotWorkers={snapshotWorkers}
+                    snapshotJobs={snapshotJobs}
+                    onAfterSwitch={onRefreshGit}
+                  />
+                </>
+              )}
+            </div>
+            <textarea
+              className="composer-input"
+              value={firstMessage}
+              onChange={(e) => setFirstMessage(e.target.value)}
+              placeholder={t('chat.placeholderHome')}
+              rows={3}
+              onKeyDown={(e) => {
+                if (isComposerSendKey(e, sendShortcut, composing())) {
+                  e.preventDefault()
+                  const text = firstMessage.trim()
+                  if (text && !creatingFromComposer && serverUp) {
+                    onComposeFirstMessage(text, {
+                      mode: presetMode,
+                      approvalPolicy: presetPolicy,
+                    })
+                    // Clear immediately so a follow-up "新建任务" doesn't show stale text.
+                    setFirstMessage('')
+                  }
+                }
+              }}
+              onCompositionStart={onCompositionStart}
+              onCompositionEnd={onCompositionEnd}
+              disabled={!serverUp || creatingFromComposer}
+            />
+            <div className="composer-tools">
+              <ComposerToolbar
+                mode={presetMode}
+                approvalPolicy={presetPolicy}
+                selectedModel={presetModel}
+                thinkingIntensity={presetThinking}
+                models={presetModels}
+                modelsLoading={presetModelsLoading}
+                tokenCount={0}
+                locale={locale}
+                persistThinking={false}
+                onModeChange={setPresetMode}
+                onApprovalPolicyChange={setPresetPolicy}
+                onModelChange={setPresetModel}
+                onThinkingChange={setPresetThinking}
+                onOpenSettings={onOpenSettings}
+              />
+              <button
+                type="submit"
+                className={`send${creatingFromComposer ? ' sending' : ''}`}
+                disabled={!firstMessage.trim() || !serverUp || creatingFromComposer}
+                title={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
+                aria-label={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
+              >
+                {creatingFromComposer ? <span className="send-spinner" /> : <IconArrowUp />}
+              </button>
+            </div>
+          </form>
+        )}
+        {!serverUp && (
+          <p className="home-hint" style={{ color: 'var(--danger)' }}>
+            {t('chat.serverDown')}
+          </p>
+        )}
+      </div>
+    </main>
+  ) : null
 
   return (
     <div className="chat-workspace">
+      {emptyComposer}
       {mounted.map(({ session: s, project: p }) => {
-        const isActive = s.id === session.id
+        // Hide all panels when the empty composer overlay is shown, but keep
+        // them MOUNTED so their useChat state survives the overlay.
+        const hidden = showEmptyComposer
+        const isActive = !hidden && s.id === session.id
         return (
           <div
             key={s.id}

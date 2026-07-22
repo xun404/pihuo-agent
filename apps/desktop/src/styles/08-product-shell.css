@@ -108,6 +108,9 @@ button {
   height: 100%;
 }
 
+.chat-workspace {
+  position: relative;
+}
 .chat-workspace,
 .chat-workspace-pane,
 .chat-panel,
@@ -118,6 +121,14 @@ button {
   display: flex;
   flex-direction: column;
   background: transparent;
+}
+/* Empty-composer overlay: covers the hidden panels so their useChat state
+   survives while the user composes a new session's first message. */
+.home-main.home-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--bg-main);
 }
 
 /* Composer textarea */
