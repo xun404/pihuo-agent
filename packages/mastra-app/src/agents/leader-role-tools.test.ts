@@ -24,3 +24,11 @@ test('Leader manages and dispatches Chat role definitions instead of global Work
   }
   assert.doesNotMatch(tools, /\bdispatchWorkerTool\b/u)
 })
+
+test('Leader instructions consume the one-time role-review RequestContext', () => {
+  const source = readFileSync(fileURLToPath(new URL('./leader-agent.ts', import.meta.url)), 'utf8')
+
+  assert.match(source, /buildRoleReviewInstruction/u)
+  assert.match(source, /roleReviewPending/u)
+  assert.match(source, /bootstrappedRoleCount/u)
+})

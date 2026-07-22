@@ -138,6 +138,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { HttpJsonBodyError, readJsonBody as readJson } from './http-json-body.js'
 import { resolveHttpPort, resolveMemoryLastMessages } from './runtime-config.js'
 import { CustomAcpRegistrationError, registerCustomAcpWorker } from './custom-acp-registration.js'
+import { shouldMarkRoleReviewPrompted } from './role-review-prompt.js'
 
 const port = resolveHttpPort()
 const runtimeWorkspaceRoot = pathResolve(
@@ -793,10 +794,17 @@ const server = createServer(async (req, res) => {
 
           const routerSession =
             store.listSessions().find((s) => s.memoryThreadId === threadId) ?? null
+          let roleReviewPending = false
           if (routerSession) {
             requestContext.set('routerSessionId', routerSession.id)
             requestContext.set('routerProjectId', routerSession.projectId)
             requestContext.set('memoryThreadId', routerSession.memoryThreadId)
+            roleReviewPending = routerSession.roleReviewState === 'pending'
+            requestContext.set('roleReviewPending', roleReviewPending)
+            requestContext.set(
+              'bootstrappedRoleCount',
+              store.listRoleDefinitions(routerSession.id).length,
+            )
             const routerProject = store.listProjects().find((p) => p.id === routerSession.projectId)
             if (routerProject) {
               requestContext.set('routerProjectRoot', routerProject.rootPath)
@@ -852,6 +860,14 @@ const server = createServer(async (req, res) => {
                 // also bump). No-op if the session was deleted mid-stream.
                 if (routerSession) {
                   store.markSessionReply(routerSession.id)
+                  if (
+                    shouldMarkRoleReviewPrompted({
+                      roleReviewPending,
+                      finishReason: onFinishEvent.finishReason,
+                    })
+                  ) {
+                    store.markSessionRoleReviewPrompted(routerSession.id)
+                  }
                 }
 
                 // —— Delayed session naming ——

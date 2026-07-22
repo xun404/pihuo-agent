@@ -19,8 +19,14 @@ import {
   resetRoleSessionTool,
   updateRoleDefinitionTool,
 } from '../tools/session-tools.js'
+import { buildRoleReviewInstruction } from '../role-review-prompt.js'
 
-function buildLeaderInstructions(): string {
+function buildLeaderInstructions(
+  options: {
+    roleReviewPending?: boolean
+    bootstrappedRoleCount?: number
+  } = {},
+): string {
   return `You are the SwarmDesk Leader (Mastra Supervisor).
 
 You run inside a macOS desktop command center. Users work in Projects and Sessions.
@@ -58,6 +64,10 @@ Prefer concrete file paths and acceptance criteria in tool dispatches.
 8. If no project is active, ask the user to open a project first.
 9. Do not end the turn while a waited dispatch is still running — one dispatch-role call with default wait is enough.
 
+${buildRoleReviewInstruction({
+  roleReviewPending: options.roleReviewPending === true,
+  bootstrappedRoleCount: options.bootstrappedRoleCount ?? 0,
+})}
 ## Response language
 - Match the user's language (Chinese or English).
 - Keep responses concise and structured for developers.
@@ -186,7 +196,11 @@ export const leaderAgent = new Agent({
   // Per-request model + optional gateway url/apiKey (never mutates process.env base URL)
   model: ({ requestContext }) => resolveLeaderModelConfig(requestContext),
   // Rebuild each turn so the Leader sees the latest Workers panel model pins / catalogs
-  instructions: () => buildLeaderInstructions(),
+  instructions: ({ requestContext }) =>
+    buildLeaderInstructions({
+      roleReviewPending: requestContext?.get('roleReviewPending') === true,
+      bootstrappedRoleCount: Number(requestContext?.get('bootstrappedRoleCount') ?? 0),
+    }),
   tools: {
     listProjectsTool,
     getActiveContextTool,
