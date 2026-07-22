@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it, before, after } from 'node:test'
-import { mkdtempSync, rmSync, existsSync, writeFileSync, readdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -65,6 +65,18 @@ describe('acp-registry-catalog-store', () => {
     assert.equal(loaded!.snapshot.agents[0]?.id, 'a')
     assert.equal(loaded!.snapshot.source, 'persisted')
     assert.equal(loaded!.etag, '"etag1"')
+
+    const tampered = JSON.parse(readFileSync(path, 'utf8'))
+    tampered.digest = 'sha256:tampered'
+    writeFileSync(path, JSON.stringify(tampered))
+    assert.equal(loadAcpRegistryCatalogStore(), null)
+    assert.ok(!existsSync(path))
+
+    saveAcpRegistryCatalogStore({
+      schemaVersion: '1.0.0',
+      digest: 'sha256:abc',
+      snapshot,
+    })
 
     // corrupt → isolated; store returns null without inventing catalog
     writeFileSync(path, '{not-json')

@@ -93,7 +93,25 @@ export function loadAcpRegistryCatalogStore(
       return null
     }
     const snapshot = rec.snapshot as AcpRegistryCatalogSnapshot
-    if (!Array.isArray(snapshot.agents) || typeof snapshot.version !== 'string') {
+    if (
+      !Array.isArray(snapshot.agents) ||
+      snapshot.agents.length === 0 ||
+      typeof snapshot.version !== 'string' ||
+      typeof snapshot.schemaVersion !== 'string' ||
+      typeof snapshot.digest !== 'string' ||
+      rec.digest !== snapshot.digest ||
+      (typeof rec.schemaVersion === 'string' && rec.schemaVersion !== snapshot.schemaVersion) ||
+      snapshot.agents.some(
+        (agent) =>
+          !agent ||
+          typeof agent.id !== 'string' ||
+          typeof agent.name !== 'string' ||
+          typeof agent.version !== 'string' ||
+          typeof agent.manifestDigest !== 'string' ||
+          !Array.isArray(agent.distributions) ||
+          agent.distributions.length === 0,
+      )
+    ) {
       isolateCorrupt(path)
       return null
     }

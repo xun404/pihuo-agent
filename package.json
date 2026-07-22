@@ -20,7 +20,7 @@
     "build:runtime": "node apps/desktop/scripts/build-api-runtime.mjs",
     "verify:runtime": "node apps/desktop/scripts/verify-api-runtime.mjs",
     "sync:model-registry": "npm run sync:model-registry -w @swarmdesk-agent/mastra-app",
-    "package:prepare": "npm run sync:model-registry && npm run build && npm run build:runtime && npm run verify:runtime",
+    "package:prepare": "npm run sync:model-registry && npm run sync:acp-registry && npm run build && npm run build:runtime && npm run verify:runtime",
     "package:dir": "npm run package:prepare && electron-builder --dir --publish never",
     "package:mac": "npm run package:prepare && electron-builder --mac --arm64 --publish never",
     "package:win": "npm run package:prepare && electron-builder --win --x64 --publish never",

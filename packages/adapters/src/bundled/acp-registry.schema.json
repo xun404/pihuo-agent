@@ -4,7 +4,10 @@
   "title": "ACP Agent Registry",
   "description": "Schema for the aggregated ACP agent registry index",
   "type": "object",
-  "required": ["version", "agents"],
+  "required": [
+    "version",
+    "agents"
+  ],
   "properties": {
     "version": {
       "type": "string",

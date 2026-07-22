@@ -4,7 +4,13 @@
   "title": "ACP Agent",
   "description": "Schema for ACP agent registry entries",
   "type": "object",
-  "required": ["id", "name", "version", "description", "distribution"],
+  "required": [
+    "id",
+    "name",
+    "version",
+    "description",
+    "distribution"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -88,7 +94,10 @@
     },
     "binaryTarget": {
       "type": "object",
-      "required": ["archive", "cmd"],
+      "required": [
+        "archive",
+        "cmd"
+      ],
       "properties": {
         "archive": {
           "type": "string",
@@ -123,7 +132,9 @@
     },
     "packageDistribution": {
       "type": "object",
-      "required": ["package"],
+      "required": [
+        "package"
+      ],
       "properties": {
         "package": {
           "type": "string",

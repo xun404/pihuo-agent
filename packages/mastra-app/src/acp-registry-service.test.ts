@@ -3,11 +3,7 @@ import { describe, it, before, after } from 'node:test'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  checkRegistryCatalogUpdate,
-  refreshRegistryCatalog,
-  resolveLocalRegistryCatalog,
-} from './acp-registry-service.js'
+import { checkRegistryCatalogUpdate, resolveLocalRegistryCatalog } from './acp-registry-service.js'
 
 function registryWith(id: string, version = '1.0.0') {
   return {
@@ -62,6 +58,7 @@ describe('acp-registry-service', () => {
     assert.equal(first.status, 'updated')
     assert.equal(first.catalog.snapshot.source, 'persisted')
     assert.ok(first.catalog.snapshot.agents.some((agent) => agent.id === 'manual-update'))
+    assert.equal(resolveLocalRegistryCatalog().stale, false)
 
     const catalogPath = process.env.ACP_REGISTRY_CATALOG_PATH!
     const persistedBefore = readFileSync(catalogPath, 'utf8')
@@ -96,69 +93,6 @@ describe('acp-registry-service', () => {
     assert.ok(unsupported.catalog.snapshot.agents.some((agent) => agent.id === 'keep-manual'))
   })
 
-  it('refresh success persists LKG; failure keeps previous without empty forge', async () => {
-    const ok = await refreshRegistryCatalog({
-      fetchImpl: async () =>
-        Response.json({
-          version: '1.0.0',
-          extensions: [],
-          agents: [
-            {
-              id: 'remote-only',
-              name: 'Remote Only',
-              version: '9.9.9',
-              description: 'from remote',
-              icon: 'https://example.com/i.svg',
-              distribution: {
-                npx: { package: '@example/remote@9.9.9' },
-              },
-            },
-          ],
-        }),
-    })
-    assert.equal(ok.stale, false)
-    assert.ok(ok.snapshot.agents.some((a) => a.id === 'remote-only'))
-
-    const failed = await refreshRegistryCatalog({
-      fetchImpl: async () => {
-        throw new Error('network down')
-      },
-    })
-    assert.equal(failed.stale, true)
-    assert.ok(failed.snapshot.agents.some((a) => a.id === 'remote-only'))
-    assert.notEqual(failed.snapshot.agents.length, 0)
-  })
-
-  it('schema major too new returns updateRequired and keeps LKG', async () => {
-    // seed LKG first
-    await refreshRegistryCatalog({
-      fetchImpl: async () =>
-        Response.json({
-          version: '1.0.0',
-          agents: [
-            {
-              id: 'keep-me',
-              name: 'Keep',
-              version: '1.0.0',
-              description: 'd',
-              icon: 'x',
-              distribution: { npx: { package: '@e/k@1.0.0' } },
-            },
-          ],
-        }),
-    })
-    const r = await refreshRegistryCatalog({
-      fetchImpl: async () =>
-        Response.json({
-          version: '2.0.0',
-          agents: [],
-        }),
-    })
-    assert.equal(r.updateRequired, true)
-    assert.equal(r.code, 'ACP_REGISTRY_SCHEMA_UNSUPPORTED')
-    assert.ok(r.snapshot.agents.some((a) => a.id === 'keep-me'))
-  })
-
   it('never exposes private or oversized refresh failures in the public catalog result', async () => {
     const privateMessages = [
       'failed at /Users/private/registry.json',
@@ -172,21 +106,21 @@ describe('acp-registry-service', () => {
       `oversized-${'x'.repeat(1024)}`,
     ]
     for (const privateMessage of privateMessages) {
-      const result = await refreshRegistryCatalog({
+      const result = await checkRegistryCatalogUpdate({
         fetchImpl: async () => {
           throw new Error(privateMessage)
         },
       })
       const publicBody = JSON.stringify({
-        message: result.message,
-        diagnosticMessage: result.snapshot.diagnosticMessage,
+        message: result.catalog.message,
+        diagnosticMessage: result.catalog.snapshot.diagnosticMessage,
       })
       assert.equal(publicBody.includes(privateMessage), false)
-      assert.ok(Buffer.byteLength(result.message ?? '', 'utf8') <= 512)
-      assert.ok(Buffer.byteLength(result.snapshot.diagnosticMessage ?? '', 'utf8') <= 512)
-      assert.equal(/[\u0000-\u001f\u007f-\u009f]/u.test(result.message ?? ''), false)
-      assert.equal(result.message, 'Registry catalog is unavailable')
-      assert.equal(result.snapshot.diagnosticMessage, 'Registry catalog is unavailable')
+      assert.ok(Buffer.byteLength(result.catalog.message ?? '', 'utf8') <= 512)
+      assert.ok(Buffer.byteLength(result.catalog.snapshot.diagnosticMessage ?? '', 'utf8') <= 512)
+      assert.equal(/[\u0000-\u001f\u007f-\u009f]/u.test(result.catalog.message ?? ''), false)
+      assert.equal(result.catalog.message, 'Registry catalog is unavailable')
+      assert.equal(result.catalog.snapshot.diagnosticMessage, 'Registry catalog is unavailable')
     }
   })
 })

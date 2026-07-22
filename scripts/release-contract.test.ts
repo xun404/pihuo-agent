@@ -123,4 +123,14 @@ describe('desktop release contract', () => {
     // npm is the sole package manager; keep @electron/get on the API electron-builder expects.
     assert.equal(rootPackage.overrides?.['@electron/get'], '5.0.0')
   })
+
+  it('regenerates the complete ACP Registry snapshot before packaging', () => {
+    const rootPackage = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'))
+    const prepare = String(rootPackage.scripts?.['package:prepare'] ?? '')
+
+    assert.match(
+      prepare,
+      /^npm run sync:model-registry && npm run sync:acp-registry && npm run build/u,
+    )
+  })
 })
