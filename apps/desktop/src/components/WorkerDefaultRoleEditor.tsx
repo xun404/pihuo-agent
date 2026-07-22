@@ -1,7 +1,9 @@
 import React, { useEffect, useState, type FormEvent } from 'react'
 import {
+  DEFAULT_PROMPT_SETTINGS,
   normalizeWorkerDefaultRole,
   WORKER_ROLES,
+  type PromptSettings,
   type WorkerDefaultRole,
   type WorkerRegistration,
   type WorkerRole,
@@ -11,9 +13,14 @@ import { useI18n } from '../i18n/I18nProvider'
 interface Props {
   worker: WorkerRegistration
   onSave: (role: WorkerDefaultRole) => Promise<void>
+  rolePrompts?: Readonly<PromptSettings['roles']>
 }
 
-export function WorkerDefaultRoleEditor({ worker, onSave }: Props) {
+export function WorkerDefaultRoleEditor({
+  worker,
+  onSave,
+  rolePrompts = DEFAULT_PROMPT_SETTINGS.roles,
+}: Props) {
   const { t } = useI18n()
   const normalized = normalizeWorkerDefaultRole(worker)
   const [name, setName] = useState(normalized.name)
@@ -57,7 +64,11 @@ export function WorkerDefaultRoleEditor({ worker, onSave }: Props) {
           <select
             className="settings-input"
             value={roleType}
-            onChange={(event) => setRoleType(event.target.value as WorkerRole)}
+            onChange={(event) => {
+              const nextRole = event.target.value as WorkerRole
+              setRoleType(nextRole)
+              setInstructions(rolePrompts[nextRole])
+            }}
           >
             {WORKER_ROLES.map((role) => (
               <option key={role} value={role}>

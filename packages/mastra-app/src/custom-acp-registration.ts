@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { accessSync, constants, realpathSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import type { LocalStore } from '@swarmdesk-agent/core'
-import { createId, getSharedStore } from '@swarmdesk-agent/core'
+import { createId, getSharedStore, loadSettings } from '@swarmdesk-agent/core'
 import {
   buildEffectiveWorkerEnv,
   probeSpawnedAgent,
@@ -12,9 +12,11 @@ import {
 } from '@swarmdesk-agent/adapters'
 import type {
   CustomAcpRegistrationInput,
+  PromptSettings,
   WorkerLaunchSpec,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
+import { defaultWorkerRole, normalizePromptSettings } from '@swarmdesk-agent/shared'
 
 export class CustomAcpRegistrationError extends Error {
   constructor(
@@ -31,6 +33,7 @@ export interface CustomAcpRegistrationDeps {
   cwd?: string
   probe?: (input: SpawnedAcpSetupInput) => Promise<CapabilityProbeResult>
   resolveExecutable?: (command: string) => string | null
+  promptSettings?: PromptSettings
 }
 
 function cleanArgs(args: string[] | undefined): string[] {
@@ -173,6 +176,10 @@ export async function registerCustomAcpWorker(
     enabled: input.enabled ?? true,
     scope: 'global',
     description: input.description?.trim() || 'Custom ACP Worker',
+    defaultRole: defaultWorkerRole(
+      name,
+      normalizePromptSettings(deps.promptSettings ?? loadSettings().prompts).roles.general,
+    ),
     health: probe.readiness.status === 'ready' ? 'healthy' : 'unknown',
     commandHealth: { status: 'healthy', checkedAt: probe.readiness.checkedAt },
     acpHealth: {

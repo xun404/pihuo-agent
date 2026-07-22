@@ -8,10 +8,12 @@ import type {
   WorkerRegistration,
   WorkerRole,
 } from '@swarmdesk-agent/shared'
-import { WORKER_ROLES } from '@swarmdesk-agent/shared'
+import { normalizePromptSettings, WORKER_ROLES } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
 import { api, type FileEntryDto, type GitStatusResponse } from '../lib/api'
+import { fetchSettings } from '../lib/settings'
+import { roleDraftFromWorker, roleDraftWithType } from '../lib/role-prompt-defaults'
 import { ApprovalActions } from './ApprovalActions'
 import { useToast } from './Toast'
 
@@ -109,6 +111,9 @@ export function RightPanel({
   const [filesTruncated, setFilesTruncated] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [roleDraft, setRoleDraft] = useState<RoleDraft>(EMPTY_ROLE_DRAFT)
+  const [rolePrompts, setRolePrompts] = useState(
+    () => normalizePromptSettings(undefined).roles,
+  )
   const [roleBusy, setRoleBusy] = useState(false)
   const [roleJobs, setRoleJobs] = useState<WorkerJob[]>([])
   const [dispatchTasks, setDispatchTasks] = useState<Record<string, string>>({})
@@ -119,6 +124,20 @@ export function RightPanel({
   projectScopeRef.current = projectId
 
   const enabledWorkers = workers.filter((worker) => worker.enabled)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchSettings()
+      .then((settings) => {
+        if (!cancelled) setRolePrompts(normalizePromptSettings(settings.settings.prompts).roles)
+      })
+      .catch(() => {
+        // Built-in templates remain available when settings cannot be loaded.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const loadGit = useCallback(async () => {
     const gen = ++gitRequestGen.current
@@ -215,7 +234,8 @@ export function RightPanel({
 
   const startCreateRole = () => {
     setEditingId('new')
-    setRoleDraft({ ...EMPTY_ROLE_DRAFT, workerId: enabledWorkers[0]?.id ?? '' })
+    const worker = enabledWorkers[0]
+    setRoleDraft(worker ? roleDraftFromWorker(worker) : EMPTY_ROLE_DRAFT)
   }
 
   const startEditRole = (role: RoleDefinition) => {
@@ -324,9 +344,15 @@ export function RightPanel({
                   id="role-worker"
                   className="settings-select"
                   value={roleDraft.workerId}
-                  onChange={(event) =>
-                    setRoleDraft((draft) => ({ ...draft, workerId: event.target.value }))
-                  }
+                  onChange={(event) => {
+                    const workerId = event.target.value
+                    const worker = enabledWorkers.find((item) => item.id === workerId)
+                    setRoleDraft((draft) =>
+                      editingId === 'new' && worker
+                        ? roleDraftFromWorker(worker)
+                        : { ...draft, workerId },
+                    )
+                  }}
                 >
                   {enabledWorkers.map((worker) => (
                     <option key={worker.id} value={worker.id}>
@@ -341,12 +367,10 @@ export function RightPanel({
                   id="role-type"
                   className="settings-select"
                   value={roleDraft.roleType}
-                  onChange={(event) =>
-                    setRoleDraft((draft) => ({
-                      ...draft,
-                      roleType: event.target.value as WorkerRole,
-                    }))
-                  }
+                  onChange={(event) => {
+                    const roleType = event.target.value as WorkerRole
+                    setRoleDraft((draft) => roleDraftWithType(draft, roleType, rolePrompts))
+                  }}
                 >
                   {WORKER_ROLES.map((role) => (
                     <option key={role} value={role}>

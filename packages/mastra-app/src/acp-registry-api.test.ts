@@ -20,6 +20,7 @@ import type {
   WorkerReadiness,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
+import { DEFAULT_PROMPT_SETTINGS } from '@swarmdesk-agent/shared'
 import {
   AcpSessionManager,
   AcpInstallError,
@@ -215,15 +216,27 @@ describe('acp-registry-api', () => {
     })
     assert.ok(prepared.installationId)
 
-    const registered = await apiRegisterRegistry({
-      registryId: 'api-agent',
-      version: '1.0.0',
-      distribution: 'npx',
-      manifestDigest,
-      installationId: prepared.installationId,
-    })
+    const registered = await apiRegisterRegistry(
+      {
+        registryId: 'api-agent',
+        version: '1.0.0',
+        distribution: 'npx',
+        manifestDigest,
+        installationId: prepared.installationId,
+      },
+      {
+        promptSettings: {
+          ...DEFAULT_PROMPT_SETTINGS,
+          roles: {
+            ...DEFAULT_PROMPT_SETTINGS.roles,
+            general: 'Registry Worker 当前默认提示词。',
+          },
+        },
+      },
+    )
     const workerId = registered.worker.id
     assert.equal(registered.worker.readiness?.status, 'prepared')
+    assert.equal(registered.worker.defaultRole?.instructions, 'Registry Worker 当前默认提示词。')
 
     const status = apiWorkerReadinessStatus(workerId)
     assert.equal(status.dispatchable, false)

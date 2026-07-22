@@ -16,6 +16,7 @@ import {
   removeWorkerReference,
   upsertInstallation,
   getWorkerModelCatalogStore,
+  loadSettings,
   type AcpAgentInstallationRecord,
   type LocalStore,
   WorkerStoreConflictError,
@@ -33,6 +34,9 @@ import {
   type SpawnedAcpSetupInput,
 } from '@swarmdesk-agent/adapters'
 import {
+  defaultWorkerRole,
+  normalizePromptSettings,
+  type PromptSettings,
   type WorkerRegistration,
   type WorkerReadiness,
   type AcpRegistryDistributionKind,
@@ -551,13 +555,20 @@ export async function apiPrepareRegistry(
   }
 }
 
-export async function apiRegisterRegistry(body: RegistryRegisterBody) {
+export async function apiRegisterRegistry(
+  body: RegistryRegisterBody,
+  options: { promptSettings?: PromptSettings } = {},
+) {
   const worker = await registerRegistryWorker({
     body,
     existingWorkers: store().listWorkers(),
   })
-  store().upsertWorker(worker)
-  return { worker, snapshot: store().snapshot() }
+  const promptSettings = normalizePromptSettings(options.promptSettings ?? loadSettings().prompts)
+  const saved = store().upsertWorker({
+    ...worker,
+    defaultRole: defaultWorkerRole(worker.name, promptSettings.roles.general),
+  })
+  return { worker: saved, snapshot: store().snapshot() }
 }
 
 type RegistryPrepareOperationResult = Awaited<ReturnType<typeof apiPrepareRegistry>>

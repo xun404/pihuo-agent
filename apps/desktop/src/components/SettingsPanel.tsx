@@ -1970,6 +1970,7 @@ export function SettingsPanel({
                   </div>
                   <WorkerDefaultRoleEditor
                     worker={w}
+                    rolePrompts={data?.settings.prompts.roles}
                     onSave={async (role) => {
                       try {
                         await onSetWorkerDefaultRole(w.id, role)
