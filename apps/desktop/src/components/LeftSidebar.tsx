@@ -9,6 +9,7 @@ import {
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
 import {
+  IconChevronDown,
   IconFolder,
   IconOpen,
   IconPlus,
@@ -16,6 +17,20 @@ import {
   IconSettings,
   IconWorkers,
 } from './Icons'
+
+/** Sessions shown per project before the rest collapse behind "show more". */
+const SESSION_PREVIEW_LIMIT = 5
+
+/**
+ * Sort key for "most recently active first". Matches the relative-time source
+ * (`lastReplyAt ?? createdAt`) — see `relTime`. We deliberately avoid
+ * `updatedAt` (bumped by open / rename / mode-change).
+ */
+function sessionSortKey(s: Session): number {
+  const iso = s.lastReplyAt ?? s.createdAt
+  const t = Date.parse(iso)
+  return Number.isFinite(t) ? t : 0
+}
 
 /**
  * 任务状态灯（优先级从高到低，判定逻辑见 shared/sessionLampClass）：
@@ -100,6 +115,7 @@ export function LeftSidebar({
 }: Props) {
   const { t } = useI18n()
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   /**
    * Ticking clock for lamp expiry: the only time-dependent render is the
    * red lamp's 3s after-read grace. Schedule the next re-render exactly at
@@ -127,10 +143,26 @@ export function LeftSidebar({
       }
       return next
     })
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      for (const id of [...next]) {
+        if (!projects.some((p) => p.id === id)) next.delete(id)
+      }
+      return next
+    })
   }, [projects])
 
   const toggleCollapsed = (projectId: string) => {
     setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(projectId)) next.delete(projectId)
+      else next.add(projectId)
+      return next
+    })
+  }
+
+  const toggleExpanded = (projectId: string) => {
+    setExpanded((prev) => {
       const next = new Set(prev)
       if (next.has(projectId)) next.delete(projectId)
       else next.add(projectId)
@@ -181,8 +213,15 @@ export function LeftSidebar({
         {projects.length === 0 && <div className="empty-sess">{t('sidebar.empty')}</div>}
 
         {projects.map((project) => {
-          const projectSessions = sessions.filter((s) => s.projectId === project.id)
+          const projectSessions = sessions
+            .filter((s) => s.projectId === project.id)
+            .slice()
+            .sort((a, b) => sessionSortKey(b) - sessionSortKey(a))
           const isCollapsed = collapsed.has(project.id)
+          const isExpanded = expanded.has(project.id)
+          const overflow = Math.max(0, projectSessions.length - SESSION_PREVIEW_LIMIT)
+          const visibleSessions =
+            overflow === 0 || isExpanded ? projectSessions : projectSessions.slice(0, SESSION_PREVIEW_LIMIT)
           return (
             <div className="proj" key={project.id}>
               <div
@@ -238,47 +277,80 @@ export function LeftSidebar({
                   {projectSessions.length === 0 && (
                     <div className="empty-sess">{t('sidebar.noSessions')}</div>
                   )}
-                  {projectSessions.map((session) => {
-                    // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
-                    const busy = busySessionIds?.has(session.id)
-                    const sc = sessionLampClass(session, busy ?? false, now)
-                    const active = session.id === activeSessionId
-                    const untitled = isPlaceholderSessionTitle(session.title)
-                    const displayTitle = untitled ? t('sidebar.untitledSession') : session.title
-                    return (
-                      <div
-                        key={session.id}
-                        className={`sess${active ? ' active' : ''}${sc ? ` ${sc}` : ''}${untitled ? ' untitled' : ''}`}
-                        onClick={() => onSelectSession(session)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') onSelectSession(session)
-                        }}
-                      >
-                        <span className="dot" aria-hidden title={t(statusTitleKey(sc))} />
-                        <span className="sess-title">{displayTitle}</span>
-                        <span className="sess-trail">
-                          <span className="time">
-                            {relTime(session.lastReplyAt ?? session.createdAt, t)}
+                  <div className="sess-list">
+                    {visibleSessions.map((session) => {
+                      // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
+                      const busy = busySessionIds?.has(session.id)
+                      const sc = sessionLampClass(session, busy ?? false, now)
+                      const active = session.id === activeSessionId
+                      const untitled = isPlaceholderSessionTitle(session.title)
+                      const displayTitle = untitled ? t('sidebar.untitledSession') : session.title
+                      return (
+                        <div
+                          key={session.id}
+                          className={`sess${active ? ' active' : ''}${sc ? ` ${sc}` : ''}${untitled ? ' untitled' : ''}`}
+                          onClick={() => onSelectSession(session)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') onSelectSession(session)
+                          }}
+                        >
+                          <span className="dot" aria-hidden title={t(statusTitleKey(sc))} />
+                          <span className="sess-title">{displayTitle}</span>
+                          <span className="sess-trail">
+                            <span className="time">
+                              {relTime(session.lastReplyAt ?? session.createdAt, t)}
+                            </span>
+                            <button
+                              type="button"
+                              className="row-del"
+                              title={t('sidebar.deleteSession')}
+                              aria-label={t('sidebar.deleteSession')}
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                onDeleteSession(session)
+                              }}
+                            >
+                              ×
+                            </button>
                           </span>
-                          <button
-                            type="button"
-                            className="row-del"
-                            title={t('sidebar.deleteSession')}
-                            aria-label={t('sidebar.deleteSession')}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              onDeleteSession(session)
-                            }}
-                          >
-                            ×
-                          </button>
-                        </span>
+                        </div>
+                      )
+                    })}
+                    {overflow > 0 && !isExpanded && (
+                      /* 渐变遮罩盖在第 5 个 session 上：底部淡入侧栏背景色，
+                         中间放一个向下箭头，提示下面还有更多 session。遮罩自身
+                         pointer-events:none，仅箭头按钮可点。 */
+                      <div className="sess-fade" aria-hidden>
+                        <button
+                          type="button"
+                          className="sess-toggle"
+                          onClick={() => toggleExpanded(project.id)}
+                          aria-label={t('sidebar.showMore', { count: overflow })}
+                          title={t('sidebar.showMore', { count: overflow })}
+                        >
+                          <span className="sess-toggle-chevron" aria-hidden>
+                            <IconChevronDown size={14} />
+                          </span>
+                        </button>
                       </div>
-                    )
-                  })}
+                    )}
+                    {overflow > 0 && isExpanded && (
+                      <button
+                        type="button"
+                        className="sess-toggle sess-toggle-text"
+                        onClick={() => toggleExpanded(project.id)}
+                        aria-expanded={isExpanded}
+                      >
+                        <span className="sess-toggle-chevron up" aria-hidden>
+                          <IconChevronDown size={12} />
+                        </span>
+                        {t('sidebar.showLess')}
+                      </button>
+                    )}
+                  </div>
                 </>
               )}
             </div>

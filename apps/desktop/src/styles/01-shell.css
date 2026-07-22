@@ -342,7 +342,7 @@ html[data-theme='dark'] {
   background: var(--bg-hover);
   color: var(--danger);
 }
-/* 任务行：时间居右；悬停用红色 × 覆盖时间 */
+/* 任务行：时间居右；只有鼠标移到右侧时间区才出现红色 ×（避免整行 hover 误显） */
 .sess-trail {
   position: relative;
   margin-left: auto;
@@ -352,6 +352,7 @@ html[data-theme='dark'] {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  border-radius: var(--r-sm);
 }
 .sess-trail .time {
   margin-left: 0;
@@ -379,23 +380,96 @@ html[data-theme='dark'] {
   font-weight: var(--fw-semibold);
   background: color-mix(in srgb, var(--bg-sidebar) 88%, var(--bg-surface));
   border-radius: var(--r-sm);
-  color: var(--danger);
+  color: var(--text-3);
   font-size: 15px;
+  transition: opacity var(--dur-instant) ease, color var(--dur-instant) ease, background var(--dur-instant) ease;
 }
-.sess:hover .sess-trail .time {
+/* 仅当鼠标进入右侧 trail 区域时才淡入删除按钮（并淡出时间让位） */
+.sess-trail:hover .time {
   opacity: 0;
 }
-.sess:hover .sess-trail .row-del {
+.sess-trail:hover .row-del {
   opacity: 1;
   pointer-events: auto;
 }
 .sess-trail .row-del:hover {
-  background: color-mix(in srgb, var(--danger) 12%, var(--bg-surface));
+  background: var(--bg-hover);
   color: var(--danger);
 }
 .sess.untitled .sess-title {
   color: var(--text-3);
   font-style: italic;
+}
+/* 折叠/展开容器：相对定位，承载渐变遮罩与 session 行 */
+.sess-list {
+  position: relative;
+}
+/* 渐变遮罩：覆盖第 5 个 session，自下而上淡入侧栏背景色；中间放展开按钮 */
+.sess-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 2px;
+  /* 渐变末端颜色用侧栏背景色，让 session 文字自然淡出 */
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg-sidebar) 0%, transparent) 0%,
+    color-mix(in srgb, var(--bg-sidebar) 55%, transparent) 45%,
+    var(--bg-sidebar) 100%
+  );
+  /* 遮罩整体不拦截点击，让被覆盖的 session 仍可点；只有按钮可点 */
+  pointer-events: none;
+  border-radius: var(--r-md);
+}
+/* 折叠态按钮：只放一个向下箭头，居中悬浮在遮罩底部，提示"下面还有" */
+.sess-toggle {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border: none;
+  background: var(--bg-sidebar);
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--text-3);
+  box-shadow: 0 0 0 1px var(--border-soft);
+  transition: color var(--dur-instant) ease, background var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
+}
+.sess-toggle:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.sess-toggle .sess-toggle-chevron {
+  display: inline-flex;
+  transition: transform var(--dur-instant) ease;
+}
+/* 展开后的文字按钮（收起）：行内、与 session 同左缩进，箭头向上 */
+.sess-toggle.sess-toggle-text {
+  width: auto;
+  height: auto;
+  gap: 4px;
+  margin: 2px 0 1px calc(8px + 4px + var(--sp-2));
+  padding: 3px var(--sp-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  box-shadow: none;
+  background: transparent;
+}
+.sess-toggle.sess-toggle-text:hover {
+  background: var(--bg-hover);
+  box-shadow: none;
+}
+.sess-toggle .sess-toggle-chevron.up {
+  transform: rotate(180deg);
 }
 .nav-item .k {
   margin-left: auto;
@@ -443,7 +517,8 @@ html[data-theme='dark'] {
   font-size: var(--fs-base);
   font-weight: var(--fw-semibold);
   line-height: var(--lh-snug);
-  color: var(--text-1);
+  /* 项目名比其下 session 行浅：用 text-2，靠 semibold 维持分组标题层级 */
+  color: var(--text-2);
   background: transparent;
 }
 .proj-head .ico {
@@ -463,9 +538,10 @@ html[data-theme='dark'] {
   align-items: center;
   gap: var(--sp-2);
   /* 与 .proj-head 同盒模型：全宽 + 对称 padding，hover/active 高亮块才会左右对齐 */
-  margin: 1px 0;
-  padding: 7px var(--sp-2);
-  min-height: var(--h-sm);
+  /* 间距紧凑：去掉行间 margin，收紧行高 */
+  margin: 0;
+  padding: 4px var(--sp-2);
+  min-height: 24px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -473,7 +549,8 @@ html[data-theme='dark'] {
   border-radius: var(--r-md);
   font-size: var(--fs-sm);
   font-weight: var(--fw-regular);
-  color: var(--text-2);
+  /* session 标题比项目名更深：用 text-1，与 .proj-head 的 text-2 形成层级反转 */
+  color: var(--text-1);
   line-height: var(--lh-snug);
 }
 .sess.active {

@@ -4,6 +4,7 @@ import {
   allowsExistingApiReuse,
   createSerialTaskRunner,
   isOwnedLegacyApiProcess,
+  isWatchSupervisor,
   matchesApiIdentity,
   parseListenerPids,
   shouldStopApiOnAllWindowsClosed,
@@ -186,5 +187,26 @@ describe('desktop API restart coordination', () => {
   it('reuses a verified external API only for readiness, never to claim settings applied', () => {
     assert.equal(allowsExistingApiReuse('ensure'), true)
     assert.equal(allowsExistingApiReuse('apply-settings'), false)
+  })
+
+  it('identifies watch supervisors that would respawn a killed API child', () => {
+    // tsx watch / nodemon / pm2 with a `watch` arg are supervisors.
+    assert.equal(
+      isWatchSupervisor(
+        'node /repo/node_modules/.bin/tsx watch src/http-server.ts',
+      ),
+      true,
+    )
+    assert.equal(isWatchSupervisor('nodemon --watch src server.js'), true)
+    assert.equal(isWatchSupervisor('pm2 start watch app.js'), true)
+    // Plain node/http-server (no supervisor, no watch) is NOT a supervisor.
+    assert.equal(
+      isWatchSupervisor('node --import tsx src/http-server.ts'),
+      false,
+    )
+    // tsx without `watch` is a one-shot runner, not a supervisor.
+    assert.equal(isWatchSupervisor('tsx src/http-server.ts'), false)
+    // Unrelated command.
+    assert.equal(isWatchSupervisor('git status'), false)
   })
 })

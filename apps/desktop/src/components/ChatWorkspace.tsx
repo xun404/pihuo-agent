@@ -21,6 +21,7 @@ import {
   type ThinkingIntensity,
 } from '../lib/settings'
 import { useSendShortcut } from '../hooks/useSendShortcut'
+import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
 import { IconArrowUp, IconFolder } from './Icons'
 
@@ -133,6 +134,7 @@ export function ChatWorkspace({
 }: Props) {
   const { t, locale } = useI18n()
   const { sendShortcut } = useSendShortcut()
+  const { composing, onCompositionStart, onCompositionEnd } = useComposing()
   const [aliveIds, setAliveIds] = useState<string[]>([])
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({})
   const [firstMessage, setFirstMessage] = useState('')
@@ -299,6 +301,8 @@ export function ChatWorkspace({
                   mode: presetMode,
                   approvalPolicy: presetPolicy,
                 })
+                // Clear immediately so a follow-up "新建任务" doesn't show stale text.
+                setFirstMessage('')
               }}
             >
               <div className="context-bar">
@@ -337,16 +341,21 @@ export function ChatWorkspace({
                 placeholder={t('chat.placeholderHome')}
                 rows={3}
                 onKeyDown={(e) => {
-                  if (isComposerSendKey(e, sendShortcut)) {
+                  if (isComposerSendKey(e, sendShortcut, composing())) {
                     e.preventDefault()
                     const text = firstMessage.trim()
-                    if (text && !creatingFromComposer && serverUp)
+                    if (text && !creatingFromComposer && serverUp) {
                       onComposeFirstMessage(text, {
                         mode: presetMode,
                         approvalPolicy: presetPolicy,
                       })
+                      // Clear immediately so a follow-up "新建任务" doesn't show stale text.
+                      setFirstMessage('')
+                    }
                   }
                 }}
+                onCompositionStart={onCompositionStart}
+                onCompositionEnd={onCompositionEnd}
                 disabled={!serverUp || creatingFromComposer}
               />
               <div className="composer-tools">

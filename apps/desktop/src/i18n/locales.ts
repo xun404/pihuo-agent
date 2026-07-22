@@ -276,6 +276,8 @@ export type MessageKey =
   | 'sidebar.renamePlaceholder'
   | 'sidebar.renameSession'
   | 'sidebar.settings'
+  | 'sidebar.showMore'
+  | 'sidebar.showLess'
   | 'sidebar.statusApprove'
   | 'sidebar.statusDone'
   | 'sidebar.statusError'
@@ -673,11 +675,13 @@ const zh: Dict = {
   'sidebar.relDays': '{count} 天前',
   'sidebar.relWeeks': '{count} 周前',
   'sidebar.relMonth': '1 个月前',
-  'sidebar.openProject': '打开项目…',
+  'sidebar.openProject': '打开项目',
   'sidebar.projects': '项目',
   'sidebar.renamePlaceholder': '输入新的 Session 标题',
   'sidebar.renameSession': '重命名 Session',
   'sidebar.settings': '设置',
+  'sidebar.showMore': '展开 {count} 个',
+  'sidebar.showLess': '收起',
   'sidebar.statusApprove': '需要授权',
   'sidebar.statusDone': '已完成',
   'sidebar.statusError': '响应报错',
@@ -1094,11 +1098,13 @@ const en: Dict = {
   'sidebar.relDays': '{count}d ago',
   'sidebar.relWeeks': '{count}w ago',
   'sidebar.relMonth': '1 month ago',
-  'sidebar.openProject': 'Open project…',
+  'sidebar.openProject': 'Open project',
   'sidebar.projects': 'Projects',
   'sidebar.renamePlaceholder': 'Enter a new session title',
   'sidebar.renameSession': 'Rename session',
   'sidebar.settings': 'Settings',
+  'sidebar.showMore': 'Show {count} more',
+  'sidebar.showLess': 'Show less',
   'sidebar.statusApprove': 'Needs authorization',
   'sidebar.statusDone': 'Finished',
   'sidebar.statusError': 'Response error',

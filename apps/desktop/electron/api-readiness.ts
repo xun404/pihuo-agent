@@ -131,3 +131,13 @@ export function isOwnedLegacyApiProcess(input: {
   if (!/(?:^|[\s/\\])http-server\.(?:ts|js)(?:\s|$)/.test(command)) return false
   return true
 }
+
+/**
+ * A supervisor process (e.g. `tsx watch`, `nodemon`) that auto-restarts its
+ * child when the child exits. Killing only the listening child would let the
+ * supervisor immediately respawn it and reclaim the port, racing the new API
+ * we are about to start. Such a parent must be torn down too.
+ */
+export function isWatchSupervisor(command: string): boolean {
+  return /(?:^|[\s/\\])(?:tsx|nodemon|pm2)(?:[\s/\\]|$)/.test(command) && /\bwatch\b/.test(command)
+}

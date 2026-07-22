@@ -36,14 +36,27 @@ export function saveSendShortcut(mode: SendShortcut): void {
   }
 }
 
-/** True when this keyboard event should submit the composer. */
+/**
+ * True when this keyboard event should submit the composer.
+ *
+ * `composing` is the parent's own composition state (tracked from
+ * `compositionstart`/`compositionend`). It is preferred over the event's
+ * `isComposing` flag because Chromium's `isComposing` is unreliable for some
+ * IMEs (notably Chinese Pinyin in Electron): the final Enter that confirms a
+ * candidate can arrive with `isComposing === false`, which would both commit
+ * the candidate AND fire send. We also fall back to `keyCode === 229` — the
+ * long-standing signal that a key was swallowed by an IME.
+ */
 export function isComposerSendKey(
-  event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'metaKey' | 'ctrlKey'> & { isComposing?: boolean },
+  event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'metaKey' | 'ctrlKey' | 'keyCode'> & {
+    isComposing?: boolean
+  },
   mode: SendShortcut = loadSendShortcut(),
+  composing = false,
 ): boolean {
   if (event.key !== 'Enter') return false
-  // Ignore Enter during IME composition (e.g. Chinese input method)
-  if (event.isComposing) return false
+  // Ignore Enter during IME composition (e.g. Chinese input method).
+  if (composing || event.isComposing || event.keyCode === 229) return false
   if (mode === 'enter') {
     // Shift+Enter keeps newline; bare Enter sends.
     return !event.shiftKey

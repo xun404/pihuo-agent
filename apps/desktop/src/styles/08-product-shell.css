@@ -518,19 +518,21 @@ button {
   border: none;
   background: transparent;
   text-align: left;
-  /* 覆盖：与 .proj-head 同盒模型（全宽 + 对称 padding），hover/active 高亮块对齐 */
+  /* 覆盖：与 .proj-head 同盒模型（全宽 + 对称 padding），hover/active 高亮块对齐。
+     间距紧凑：去掉行间 margin，收紧行高 */
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  margin: 1px 0;
-  padding: 7px var(--sp-2);
-  min-height: var(--h-sm);
+  margin: 0;
+  padding: 4px var(--sp-2);
+  min-height: 24px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
   border-radius: var(--r-md);
   font-size: var(--fs-sm);
-  color: var(--text-2);
+  /* session 标题比项目名（.proj-head → text-2）更深一层 */
+  color: var(--text-1);
 }
 .sess.active {
   color: var(--text-1);

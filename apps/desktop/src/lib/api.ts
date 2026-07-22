@@ -127,6 +127,18 @@ export interface FilesResponse {
 
 export type RegistryOperationStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
+export interface ThreadMessagesResult {
+  messages: Array<{
+    id: string
+    role: string
+    parts: Array<{ type: string; [k: string]: unknown }>
+  }>
+  threadId: string
+  resourceId: string | null
+  count?: number
+  error?: string
+}
+
 export interface RegistryPrepareResult {
   installationId: string
   installation: {
@@ -872,21 +884,25 @@ export const api = {
       600_000,
     ),
   /** Load Mastra Memory history as AI SDK UI messages for a session thread */
-  getThreadMessages: (threadId: string, resourceId?: string) => {
-    const q = new URLSearchParams({ threadId })
-    if (resourceId) q.set('resourceId', resourceId)
-    return request<{
-      messages: Array<{
-        id: string
-        role: string
-        parts: Array<{ type: string; [k: string]: unknown }>
-      }>
-      threadId: string
-      resourceId: string | null
-      count?: number
-      error?: string
-    }>(`/api/memory/messages?${q.toString()}`)
-  },
+  getThreadMessages: (() => {
+    // In-flight de-duplication: React StrictMode double-mounts effects in dev,
+    // and multiple ChatPanels may recall the same thread concurrently. SQLite
+    // (LibSQL) serializes on a single connection, so concurrent identical
+    // recalls can transiently fail with a 500. Share one request per key.
+    const inflight = new Map<string, Promise<ThreadMessagesResult>>()
+    return (threadId: string, resourceId?: string): Promise<ThreadMessagesResult> => {
+      const q = new URLSearchParams({ threadId })
+      if (resourceId) q.set('resourceId', resourceId)
+      const key = q.toString()
+      const existing = inflight.get(key)
+      if (existing) return existing
+      const p = request<ThreadMessagesResult>(`/api/memory/messages?${key}`).finally(() => {
+        inflight.delete(key)
+      })
+      inflight.set(key, p)
+      return p
+    }
+  })(),
 }
 
 export function chatUrl(agentId = 'swarmdesk-leader'): string {

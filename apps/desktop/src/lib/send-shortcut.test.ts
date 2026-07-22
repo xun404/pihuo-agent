@@ -43,4 +43,19 @@ describe('send-shortcut', () => {
       true,
     )
   })
+
+  it('ignores Enter during IME composition (the regression guard)', () => {
+    const enter = { key: 'Enter', shiftKey: false, metaKey: false, ctrlKey: false, keyCode: 13 }
+    // Parent reports active composition (compositionstart fired, no end yet).
+    assert.equal(isComposerSendKey(enter, 'enter', true), false)
+    // Event's own isComposing flag set (some browsers report it correctly).
+    assert.equal(isComposerSendKey({ ...enter, isComposing: true }, 'enter', false), false)
+    // keyCode 229 fallback: key swallowed by IME.
+    assert.equal(isComposerSendKey({ ...enter, keyCode: 229 }, 'enter', false), false)
+  })
+
+  it('still sends on bare Enter after composition has ended', () => {
+    const enter = { key: 'Enter', shiftKey: false, metaKey: false, ctrlKey: false, keyCode: 13 }
+    assert.equal(isComposerSendKey(enter, 'enter', false), true)
+  })
 })

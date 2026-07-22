@@ -38,6 +38,7 @@ import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
 import { useSendShortcut } from '../hooks/useSendShortcut'
+import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
 import { formatElapsedHms } from '../lib/format-elapsed'
@@ -213,6 +214,7 @@ export function ChatPanel({
 }: Props) {
   const { t, locale } = useI18n()
   const { sendShortcut } = useSendShortcut()
+  const { composing, onCompositionStart, onCompositionEnd } = useComposing()
   const [input, setInput] = useState('')
   /** Tracks the initialInput value already consumed, so we apply each text once. */
   const consumedInitialInputRef = useRef<string | undefined>(undefined)
@@ -487,7 +489,11 @@ export function ChatPanel({
     onInitialInputConsumed?.()
   }, [selectedModel, models, busy, error, clearError, sendMessage, onSessionStatusChange, onInitialInputConsumed])
 
-  // Load persisted history once per thread (survives refresh)
+  // Load persisted history once per thread (survives refresh). Retries on
+  // transient failure: memory.recall() can 500 under SQLite concurrency (e.g.
+  // while another session is streaming + React StrictMode double-mounts in dev).
+  // Without retry, the session would render the empty "home" state even though
+  // the messages exist on disk — looking like the chat "disappeared" until reload.
   useEffect(() => {
     if (historyLoadedFor.current === memoryThreadId) {
       setHistoryLoading(false)
@@ -495,20 +501,35 @@ export function ChatPanel({
     }
     let cancelled = false
     setHistoryLoading(true)
+    const MAX_ATTEMPTS = 4
+    const RETRY_DELAYS = [500, 1500, 3000]
     ;(async () => {
-      try {
-        const res = await api.getThreadMessages(memoryThreadId, memoryResourceId)
-        if (cancelled) return
-        historyLoadedFor.current = memoryThreadId
-        if (Array.isArray(res.messages) && res.messages.length > 0) {
-          // Don't clobber an in-flight / already-populated chat
-          setMessages((prev) => (prev.length > 0 ? prev : (res.messages as never)))
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        try {
+          const res = await api.getThreadMessages(memoryThreadId, memoryResourceId)
+          if (cancelled) return
+          historyLoadedFor.current = memoryThreadId
+          if (Array.isArray(res.messages) && res.messages.length > 0) {
+            // Don't clobber an in-flight / already-populated chat
+            setMessages((prev) => (prev.length > 0 ? prev : (res.messages as never)))
+          }
+          return
+        } catch (e) {
+          if (cancelled) return
+          if (attempt < MAX_ATTEMPTS - 1) {
+            console.warn(
+              `[ChatPanel] load history failed (attempt ${attempt + 1}/${MAX_ATTEMPTS}), retrying…`,
+              e,
+            )
+            await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt] ?? 3000))
+            if (cancelled) return
+          } else {
+            console.warn('[ChatPanel] load history failed, giving up', e)
+            // Mark loaded so we stop retrying, but messages stay empty — the
+            // home placeholder will show (same as a brand-new empty session).
+            historyLoadedFor.current = memoryThreadId
+          }
         }
-      } catch (e) {
-        console.warn('[ChatPanel] load history failed', e)
-        historyLoadedFor.current = memoryThreadId
-      } finally {
-        if (!cancelled) setHistoryLoading(false)
       }
     })()
     return () => {
@@ -1142,11 +1163,13 @@ export function ChatPanel({
           placeholder={hasMessages ? t('chat.placeholder') : t('chat.placeholderHome')}
           rows={hasMessages ? 2 : 3}
           onKeyDown={(e) => {
-            if (isComposerSendKey(e, sendShortcut)) {
+            if (isComposerSendKey(e, sendShortcut, composing())) {
               e.preventDefault()
               onSubmit(e)
             }
           }}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
         />
         <div className="composer-tools">
           <ComposerToolbar

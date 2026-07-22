@@ -327,15 +327,16 @@ export function useAppState() {
   }
 
   /** Create a pending session locally (no server call). Created on first message send. */
-  const createPendingSession = useCallback(
-    (projectId: string, mode: LeaderMode = 'build') => {
-      const memoryThreadId = `thread_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`
-      setPendingNewSession({ projectId, mode, memoryThreadId })
-      // Note: do NOT set activeSessionId=null here — server polling would overwrite it.
-      // ChatWorkspace checks pendingNewSession to decide whether to show empty composer.
-    },
-    [],
-  )
+  const createPendingSession = useCallback((projectId: string, mode: LeaderMode = 'build') => {
+    const memoryThreadId = `thread_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`
+    setPendingNewSession({
+      projectId,
+      mode,
+      memoryThreadId,
+    })
+    // Note: do NOT set activeSessionId=null here — server polling would overwrite it.
+    // ChatWorkspace checks pendingNewSession to decide whether to show empty composer.
+  }, [])
 
   /** Clear pending session (e.g. when user selects another session). */
   const clearPendingSession = useCallback(() => {

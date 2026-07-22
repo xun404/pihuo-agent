@@ -34,6 +34,7 @@ import {
   createSerialTaskRunner,
   matchesApiIdentity,
   isOwnedLegacyApiProcess,
+  isWatchSupervisor,
   parseListenerPids,
   shouldStopApiOnAllWindowsClosed,
   shouldWaitForOwnedApiOnQuit,
@@ -272,6 +273,20 @@ function processCwd(pid: number): string {
   }
 }
 
+/** Returns the parent PID for a process, or null if it cannot be determined. */
+function processPpid(pid: number): number | null {
+  try {
+    const raw = execFileSync('ps', ['-p', String(pid), '-o', 'ppid='], {
+      encoding: 'utf8',
+      timeout: 2000,
+    }).trim()
+    const ppid = Number(raw)
+    return Number.isInteger(ppid) && ppid > 0 ? ppid : null
+  } catch {
+    return null
+  }
+}
+
 async function waitForPidExit(pid: number, timeoutMs = 8000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -289,6 +304,12 @@ async function waitForPidExit(pid: number, timeoutMs = 8000): Promise<boolean> {
  * Upgrade path for a legacy instance from this exact checkout that occupies the
  * API port but has no valid discovery/token identity. The ownership checks are
  * intentionally strict; unrelated listeners are never terminated.
+ *
+ * Also handles a same-workspace API that is still healthy but externally owned
+ * (e.g. a `tsx watch` started from the terminal): the listening child is killed
+ * along with any watch supervisor parent, so the port is freed for the new API
+ * this Electron instance is about to start. Without retiring the supervisor,
+ * it would respawn the child and reclaim the port.
  */
 async function retireOwnedLegacyApi(): Promise<boolean> {
   const health = await fetchHealth()
@@ -308,6 +329,20 @@ async function retireOwnedLegacyApi(): Promise<boolean> {
       continue
     }
 
+    // If a supervisor (tsx watch / nodemon) parents this listener, kill it
+    // first so it cannot respawn the child and reclaim the port.
+    const supervisorPpid = processPpid(pid)
+    if (supervisorPpid) {
+      const supervisorCommand = processCommand(supervisorPpid)
+      if (isWatchSupervisor(supervisorCommand)) {
+        console.warn(
+          '[electron] retiring API watch supervisor before listener',
+          supervisorPpid,
+        )
+        await terminateProcessTree(supervisorPpid)
+      }
+    }
+
     console.warn('[electron] retiring incompatible SwarmDesk API process', pid)
     try {
       process.kill(pid, 'SIGTERM')
@@ -323,6 +358,25 @@ async function retireOwnedLegacyApi(): Promise<boolean> {
     return await waitForPidExit(pid, 2000)
   }
   return false
+}
+
+/**
+ * Gracefully terminate a process: SIGTERM, then SIGKILL after a short grace.
+ * Used for watch supervisors that would otherwise respawn killed children.
+ */
+async function terminateProcessTree(pid: number): Promise<boolean> {
+  try {
+    process.kill(pid, 'SIGTERM')
+  } catch {
+    return true
+  }
+  if (await waitForPidExit(pid, 4000)) return true
+  try {
+    process.kill(pid, 'SIGKILL')
+  } catch {
+    return true
+  }
+  return waitForPidExit(pid, 2000)
 }
 
 /**
@@ -452,16 +506,18 @@ async function restartApiServerNow(mode: ApiRestartMode): Promise<boolean> {
   if (oldMeta && lastApiChildMeta?.child === oldMeta.child) lastApiChildMeta = null
 
   // Only reuse when discovery identity + desktop token handshake succeeds
-  if (await canReuseExistingApi()) {
-    if (allowsExistingApiReuse(mode)) {
-      console.log('[electron] verified external API; reusing')
-      apiStartedByUs = false
-      return true
-    }
-    console.error(
-      '[electron] settings saved, but API is externally owned; refusing to claim they were applied',
-    )
-    return false
+  const externalApiHealthy = await canReuseExistingApi()
+  if (externalApiHealthy && allowsExistingApiReuse(mode)) {
+    console.log('[electron] verified external API; reusing')
+    apiStartedByUs = false
+    return true
+  }
+  if (externalApiHealthy) {
+    // A healthy external API that we cannot reuse (apply-settings needs a
+    // restart to pick up new secrets). Retire the same-workspace listener
+    // (and any watch supervisor) so we can start our own with the new env,
+    // instead of giving up and leaving the saved settings inactive.
+    console.warn('[electron] settings saved; retiring external API to apply them')
   }
   await retireOwnedLegacyApi()
   const expectedChild = await startApiServer()
