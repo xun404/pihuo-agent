@@ -7,6 +7,10 @@ import type {
   Project,
   Session,
   SessionApprovalPolicy,
+  RoleDefinition,
+  CreateRoleDefinitionInput,
+  CustomAcpRegistrationInput,
+  UpdateRoleDefinitionInput,
   WorkerRegistration,
   WorkerRole,
 } from '@swarmdesk-agent/shared'
@@ -256,7 +260,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  createSession: (body: { projectId: string; title?: string; mode?: LeaderMode; memoryThreadId?: string }) =>
+  createSession: (body: {
+    projectId: string
+    title?: string
+    mode?: LeaderMode
+    memoryThreadId?: string
+  }) =>
     request<{ session: Session; snapshot: AppSnapshot }>('/api/sessions', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -331,6 +340,52 @@ export const api = {
     request<{ ok: boolean; snapshot: AppSnapshot }>(`/api/projects/${encodePathSegment(id)}`, {
       method: 'DELETE',
     }),
+  listRoleDefinitions: (chatSessionId: string, includeArchived = false) =>
+    request<{ roleDefinitions: RoleDefinition[] }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions${
+        includeArchived ? '?includeArchived=1' : ''
+      }`,
+    ),
+  createRoleDefinition: (
+    chatSessionId: string,
+    body: Omit<CreateRoleDefinitionInput, 'chatSessionId'>,
+  ) =>
+    request<{ roleDefinition: RoleDefinition; snapshot: AppSnapshot }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  updateRoleDefinition: (
+    chatSessionId: string,
+    roleDefinitionId: string,
+    body: UpdateRoleDefinitionInput,
+  ) =>
+    request<{ roleDefinition: RoleDefinition; snapshot: AppSnapshot }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions/${encodePathSegment(
+        roleDefinitionId,
+      )}`,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ),
+  archiveRoleDefinition: (
+    chatSessionId: string,
+    roleDefinitionId: string,
+    expectedRevision?: number,
+  ) =>
+    request<{ roleDefinition: RoleDefinition; snapshot: AppSnapshot }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions/${encodePathSegment(
+        roleDefinitionId,
+      )}`,
+      {
+        method: 'DELETE',
+        body: JSON.stringify(expectedRevision === undefined ? {} : { expectedRevision }),
+      },
+    ),
+  resetRoleSession: (chatSessionId: string, roleDefinitionId: string) =>
+    request<{ deleted: boolean }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions/${encodePathSegment(
+        roleDefinitionId,
+      )}/reset-session`,
+      { method: 'POST' },
+    ),
   listWorkers: () => request<{ workers: WorkerRegistration[] }>('/api/workers'),
   getWorkerRegistry: (signal?: AbortSignal, refresh = false) =>
     request<WorkerRegistryCatalog>(`/api/workers/registry${refresh ? '?refresh=1' : ''}`, {
@@ -486,48 +541,8 @@ export const api = {
       false,
       120_000,
     ),
-  registerWorker: (body: Partial<WorkerRegistration>) =>
-    request<{ worker: WorkerRegistration }>('/api/workers', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  /** Detect ACP CLIs on this machine; apply=true enables/updates workers */
-  detectWorkers: (body?: { apply?: boolean; autoDisableMissing?: boolean }) =>
-    request<{
-      candidates: {
-        kind: string
-        name: string
-        installed: boolean
-        detectVia: string
-        command: string
-        args: string[]
-        installHint: string
-        docsUrl?: string
-      }[]
-      recommended: { kind: string; name: string; installed: boolean; installHint: string }[]
-      enabled?: string[]
-      applied?: boolean
-      firstRun?: boolean
-      snapshot?: AppSnapshot
-      workers?: WorkerRegistration[]
-    }>('/api/workers/detect', {
-      method: 'POST',
-      body: JSON.stringify(body ?? { apply: true }),
-    }),
-  getWorkerDetect: () =>
-    request<{
-      candidates: {
-        kind: string
-        name: string
-        installed: boolean
-        installHint: string
-        docsUrl?: string
-      }[]
-      recommended: { kind: string; name: string; installed: boolean }[]
-      firstRun: boolean
-    }>('/api/workers/detect'),
-  setWorkerRoles: (id: string, body: { primaryRole: WorkerRole; roles: WorkerRole[] }) =>
-    request<{ worker: WorkerRegistration }>(`/api/workers/${encodePathSegment(id)}/roles`, {
+  registerCustomAcpWorker: (body: CustomAcpRegistrationInput) =>
+    request<{ worker: WorkerRegistration; snapshot: AppSnapshot }>('/api/workers/custom/register', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -643,19 +658,17 @@ export const api = {
       projectId ? `/api/projects/${encodePathSegment(projectId)}/git` : '/api/git',
     ),
   listBranches: (projectId: string) =>
-    request<BranchListResult>(
-      `/api/projects/${encodePathSegment(projectId)}/branches`,
-    ),
+    request<BranchListResult>(`/api/projects/${encodePathSegment(projectId)}/branches`),
   switchBranch: (projectId: string, targetBranchName: string) =>
-    request<BranchSwitchResult>(
-      `/api/projects/${encodePathSegment(projectId)}/branches/switch`,
-      { method: 'POST', body: JSON.stringify({ targetBranchName }) },
-    ),
+    request<BranchSwitchResult>(`/api/projects/${encodePathSegment(projectId)}/branches/switch`, {
+      method: 'POST',
+      body: JSON.stringify({ targetBranchName }),
+    }),
   createBranchAndSwitch: (projectId: string, branchName: string, startPoint?: string) =>
-    request<BranchSwitchResult>(
-      `/api/projects/${encodePathSegment(projectId)}/branches/create`,
-      { method: 'POST', body: JSON.stringify({ branchName, startPoint }) },
-    ),
+    request<BranchSwitchResult>(`/api/projects/${encodePathSegment(projectId)}/branches/create`, {
+      method: 'POST',
+      body: JSON.stringify({ branchName, startPoint }),
+    }),
   commitAndSwitch: (projectId: string, targetBranchName: string, message: string) =>
     request<BranchSwitchResult>(
       `/api/projects/${encodePathSegment(projectId)}/branches/commit-and-switch`,
@@ -849,6 +862,7 @@ export const api = {
   },
   createJob: (body: {
     task: string
+    roleDefinitionId?: string
     role?: import('@swarmdesk-agent/shared').WorkerRole
     workerIdOrKind?: string
     cwd?: string

@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AppSnapshot,
   ApprovalDecision,
+  CreateRoleDefinitionInput,
   LeaderMode,
   Locale,
   Session,
   SessionApprovalPolicy,
-  WorkerRole,
+  UpdateRoleDefinitionInput,
 } from '@swarmdesk-agent/shared'
 import { api } from '../lib/api'
 
@@ -14,6 +15,7 @@ const empty: AppSnapshot = {
   projects: [],
   sessions: [],
   workers: [],
+  roleDefinitions: [],
   approvals: [],
   activeProjectId: null,
   activeSessionId: null,
@@ -96,7 +98,12 @@ export function useAppState() {
     const projectId = explicitProjectId ?? snapshot.activeProjectId ?? snapshot.projects[0]?.id
     // Surface a stable code for UI handling; user-facing copy lives in i18n.
     if (!projectId) throw new Error('NO_PROJECT')
-    const { session, snapshot: snap } = await api.createSession({ projectId, title, mode, memoryThreadId })
+    const { session, snapshot: snap } = await api.createSession({
+      projectId,
+      title,
+      mode,
+      memoryThreadId,
+    })
     if (snap) applySnapshot(snap, ++applyGenRef.current)
     else await refresh()
     return session
@@ -108,17 +115,49 @@ export function useAppState() {
     else await refresh()
   }
 
-  const detectWorkers = async (opts?: { apply?: boolean }) => {
-    const res = await api.detectWorkers({ apply: opts?.apply !== false })
-    if (res.snapshot) applySnapshot(res.snapshot, ++applyGenRef.current)
-    else await refresh()
-    return res
+  const registerCustomAcpWorker = async (
+    body: Parameters<typeof api.registerCustomAcpWorker>[0],
+  ) => {
+    const result = await api.registerCustomAcpWorker(body)
+    applySnapshot(result.snapshot, ++applyGenRef.current)
+    return result.worker
   }
 
-  const registerWorker = async (body: Parameters<typeof api.registerWorker>[0]) => {
-    await api.registerWorker(body)
-    await refresh()
+  const createRoleDefinition = async (
+    chatSessionId: string,
+    body: Omit<CreateRoleDefinitionInput, 'chatSessionId'>,
+  ) => {
+    const result = await api.createRoleDefinition(chatSessionId, body)
+    applySnapshot(result.snapshot, ++applyGenRef.current)
+    return result.roleDefinition
   }
+
+  const updateRoleDefinition = async (
+    chatSessionId: string,
+    roleDefinitionId: string,
+    body: UpdateRoleDefinitionInput,
+  ) => {
+    const result = await api.updateRoleDefinition(chatSessionId, roleDefinitionId, body)
+    applySnapshot(result.snapshot, ++applyGenRef.current)
+    return result.roleDefinition
+  }
+
+  const archiveRoleDefinition = async (
+    chatSessionId: string,
+    roleDefinitionId: string,
+    expectedRevision: number,
+  ) => {
+    const result = await api.archiveRoleDefinition(
+      chatSessionId,
+      roleDefinitionId,
+      expectedRevision,
+    )
+    applySnapshot(result.snapshot, ++applyGenRef.current)
+    return result.roleDefinition
+  }
+
+  const resetRoleSession = async (chatSessionId: string, roleDefinitionId: string) =>
+    api.resetRoleSession(chatSessionId, roleDefinitionId)
 
   const activateSession = async (session: Session) => {
     // Clear any pending new session when selecting an existing one
@@ -245,14 +284,6 @@ export function useAppState() {
     return res.summary
   }
 
-  const setWorkerRoles = async (
-    id: string,
-    body: { primaryRole: WorkerRole; roles: WorkerRole[] },
-  ) => {
-    await api.setWorkerRoles(id, body)
-    await refresh()
-  }
-
   const setWorkerModel = async (
     id: string,
     model: string | null,
@@ -371,13 +402,15 @@ export function useAppState() {
     toggleWorker,
     healthWorker,
     healthAllWorkers,
-    setWorkerRoles,
     setWorkerModel,
     fetchWorkerModels,
     setLocale,
     resolveApproval,
-    registerWorker,
-    detectWorkers,
+    registerCustomAcpWorker,
+    createRoleDefinition,
+    updateRoleDefinition,
+    archiveRoleDefinition,
+    resetRoleSession,
     setSessionApprovalPolicy,
     resetAcpContext,
     resolvingState,

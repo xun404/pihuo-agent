@@ -1,4 +1,5 @@
-export { WORKER_PRESETS, resolveWorkerCwd } from './presets.js'
+export { resolveWorkerCwd } from './presets.js'
+export { whichSync } from './which.js'
 export {
   checkWorkerCommand,
   probeWorkerHealth,
@@ -33,13 +34,6 @@ export {
   type RunAcpTaskOptions,
   type ListAcpModelsResult,
 } from './acp-runner.js'
-export {
-  detectAcpWorkers,
-  applyDetectionToWorkers,
-  whichSync,
-  type AcpDetectCandidate,
-  type ApplyDetectResult,
-} from './detect-workers.js'
 export {
   ACP_REGISTRY_URL,
   fetchAcpRegistryCatalog,

@@ -19,6 +19,8 @@ export interface AcpSessionCatalogRecord {
   keyDigest: string
   routerSessionId: string
   workerId: string
+  roleDefinitionId?: string
+  roleRevision?: number
   installationId?: string
   manifestDigest?: string
   canonicalCwd: string

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
-  ApprovalDecision,
   ApprovalItem,
+  CreateRoleDefinitionInput,
+  RoleDefinition,
+  UpdateRoleDefinitionInput,
   WorkerJob,
-  WorkerKind,
   WorkerRegistration,
   WorkerRole,
 } from '@swarmdesk-agent/shared'
@@ -11,36 +12,10 @@ import { WORKER_ROLES } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
 import { api, type FileEntryDto, type GitStatusResponse } from '../lib/api'
-import { resolveWorkerModelOptions, shouldApplyScopedModelResponse } from '../lib/worker-model-view'
 import { ApprovalActions } from './ApprovalActions'
-import { WorkerBrandLogo } from './Icons'
 import { useToast } from './Toast'
 
-type Tab = 'workers' | 'git' | 'files' | 'approvals'
-
-function kindClass(kind: WorkerRegistration['kind']): string {
-  if (kind === 'claude') return 'claude'
-  if (kind === 'codex') return 'codex'
-  if (kind === 'opencode') return 'opencode'
-  return 'custom'
-}
-
-function roleBadgeClass(role: WorkerRole): string {
-  switch (role) {
-    case 'plan':
-      return 'badge-blue'
-    case 'coder':
-      return 'badge-orange'
-    case 'review':
-      return 'badge-purple'
-    case 'test':
-      return 'badge-green'
-    case 'research':
-      return 'badge-yellow'
-    default:
-      return 'badge-gray'
-  }
-}
+type Tab = 'roles' | 'git' | 'files' | 'approvals'
 
 function statusLetter(status: string): string {
   if (status === '??') return '?'
@@ -50,21 +25,21 @@ function statusLetter(status: string): string {
 function FileTree({ entries, depth = 0 }: { entries: FileEntryDto[]; depth?: number }) {
   return (
     <>
-      {entries.map((e) => (
-        <div key={e.path}>
+      {entries.map((entry) => (
+        <div key={entry.path}>
           <div
-            className={`tree-item w-row inspector-list-row${e.type === 'directory' ? ' folder' : ''}`}
+            className={`tree-item w-row inspector-list-row${entry.type === 'directory' ? ' folder' : ''}`}
             style={{ paddingLeft: 10 + depth * 12 }}
           >
             <span className="tree-item-ico" aria-hidden>
-              {e.type === 'directory' ? '▾' : '·'}
+              {entry.type === 'directory' ? '▾' : '·'}
             </span>
             <div className="info">
-              <div className="n">{e.name}</div>
+              <div className="n">{entry.name}</div>
             </div>
           </div>
-          {e.children && e.children.length > 0 && (
-            <FileTree entries={e.children} depth={depth + 1} />
+          {entry.children && entry.children.length > 0 && (
+            <FileTree entries={entry.children} depth={depth + 1} />
           )}
         </div>
       ))}
@@ -74,30 +49,14 @@ function FileTree({ entries, depth = 0 }: { entries: FileEntryDto[]; depth?: num
 
 interface Props {
   workers: WorkerRegistration[]
+  roleDefinitions: RoleDefinition[]
   approvals: ApprovalItem[]
   projectId: string | null
   sessionId?: string | null
-  onToggle: (id: string, enabled: boolean) => void
-  onHealth: (id: string, depth?: 'presence' | 'version' | 'acp') => void | Promise<void>
-  onHealthAll?: () => void | Promise<unknown>
-  onSetRoles: (id: string, body: { primaryRole: WorkerRole; roles: WorkerRole[] }) => void
-  onSetModel?: (id: string, model: string | null, projectId: string | null) => void | Promise<void>
-  onFetchModels?: (
-    id: string,
-    opts?: { q?: string; force?: boolean; limit?: number; projectId?: string | null },
-  ) => Promise<{
-    ok: boolean
-    models: { modelId: string; name: string; description?: string }[]
-    error?: string
-    errorCode?: string
-    stale?: boolean
-    catalogState?: 'empty' | 'fresh' | 'stale'
-    currentPinState?: {
-      modelId: string
-      status: 'available' | 'unavailable' | 'unknown'
-      reasonCode?: string
-    }
-  }>
+  onCreateRoleDefinition: (body: Omit<CreateRoleDefinitionInput, 'chatSessionId'>) => Promise<void>
+  onUpdateRoleDefinition: (id: string, body: UpdateRoleDefinitionInput) => Promise<void>
+  onArchiveRoleDefinition: (id: string, expectedRevision: number) => Promise<void>
+  onResetRoleSession: (id: string) => Promise<void>
   onResolveApproval: (
     approvalId: string,
     optionId: string | undefined,
@@ -105,139 +64,61 @@ interface Props {
     surface: 'chat' | 'panel',
   ) => void
   resolving?: Record<string, boolean>
-  onRegisterWorker: (body: Partial<WorkerRegistration>) => Promise<void>
-  onDetectWorkers?: () => Promise<{
-    recommended?: { kind: string; name: string; installed: boolean; installHint?: string }[]
-    candidates?: { kind: string; name: string; installed: boolean; installHint?: string }[]
-  } | void>
   onRefreshSnapshot: () => void
 }
 
-function jobStatusClass(status: string): string {
-  if (status === 'running') return 'job-status running'
-  if (status === 'pending_approval') return 'job-status pending'
-  if (status === 'succeeded') return 'job-status ok'
-  if (status === 'failed' || status === 'timed_out') return 'job-status err'
-  if (status === 'cancelled') return 'job-status muted'
-  return 'job-status'
+type RoleDraft = {
+  name: string
+  workerId: string
+  roleType: WorkerRole
+  instructions: string
+  model: string
 }
 
-function healthBadgeClass(status: string): string {
-  if (status === 'healthy' || status === 'ready') return 'badge-green'
-  if (status === 'unhealthy' || status === 'degraded') return 'badge-yellow'
-  if (status === 'missing' || status === 'unavailable') return 'badge-orange'
-  return 'badge-gray'
-}
-
-function healthLabelKey(
-  status: string,
-):
-  | 'workers.health.healthy'
-  | 'workers.health.unhealthy'
-  | 'workers.health.missing'
-  | 'workers.health.unknown' {
-  if (status === 'healthy' || status === 'ready') return 'workers.health.healthy'
-  if (status === 'unhealthy' || status === 'degraded') return 'workers.health.unhealthy'
-  if (status === 'missing' || status === 'unavailable') return 'workers.health.missing'
-  return 'workers.health.unknown'
-}
-
-function shortHealthLabel(status: string): string {
-  return status
-}
-
-function relChecked(iso: string | undefined, nowLabel: string): string | null {
-  if (!iso) return null
-  const t = Date.parse(iso)
-  if (!Number.isFinite(t)) return null
-  const m = Math.floor((Date.now() - t) / 60000)
-  if (m < 1) return nowLabel
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
+const EMPTY_ROLE_DRAFT: RoleDraft = {
+  name: '',
+  workerId: '',
+  roleType: 'general',
+  instructions: '',
+  model: '',
 }
 
 export function RightPanel({
   workers,
+  roleDefinitions,
   approvals,
   projectId,
   sessionId,
-  onToggle,
-  onHealth,
-  onHealthAll,
-  onSetRoles,
-  onSetModel,
-  onFetchModels,
+  onCreateRoleDefinition,
+  onUpdateRoleDefinition,
+  onArchiveRoleDefinition,
+  onResetRoleSession,
   onResolveApproval,
   resolving = {},
-  onRegisterWorker,
-  onDetectWorkers,
   onRefreshSnapshot,
 }: Props) {
   const { t } = useI18n()
-  const [checkingIds, setCheckingIds] = useState<Set<string>>(() => new Set())
-  const [checkingAll, setCheckingAll] = useState(false)
-  const [detecting, setDetecting] = useState(false)
-  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast()
-  const [expandedHealth, setExpandedHealth] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('workers')
-  const [jobs, setJobs] = useState<WorkerJob[]>([])
-  const [busyWorkerIds, setBusyWorkerIds] = useState<Set<string>>(() => new Set())
-  const [jobsLoading, setJobsLoading] = useState(false)
-  const [dispatchTask, setDispatchTask] = useState('')
-  const [dispatchRole, setDispatchRole] = useState<WorkerRole>('coder')
-  const [dispatchBusy, setDispatchBusy] = useState(false)
-  const [expandedJobId, setExpandedJobId] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [modelsLoadingIds, setModelsLoadingIds] = useState<Set<string>>(() => new Set())
-  const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({})
-  const [modelErrors, setModelErrors] = useState<Record<string, string>>({})
-  const [modelSearch, setModelSearch] = useState<Record<string, string>>({})
-  const [searchResults, setSearchResults] = useState<
-    Record<string, { modelId: string; name: string; description?: string }[]>
-  >({})
-  const [catalogResults, setCatalogResults] = useState<
-    Record<string, { modelId: string; name: string; description?: string }[]>
-  >({})
-  const [catalogStates, setCatalogStates] = useState<Record<string, 'empty' | 'fresh' | 'stale'>>(
-    {},
-  )
-  const searchTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  /** Monotonic search generation per worker — drop stale responses */
-  const searchGen = useRef<Record<string, number>>({})
-  const catalogGen = useRef<Record<string, number>>({})
-  const modelScopeRef = useRef(projectId)
-  modelScopeRef.current = projectId
-  /** Pin availability from models API (unavailable pins are not options) */
-  const [pinStates, setPinStates] = useState<
-    Record<string, { modelId: string; status: string; reasonCode?: string }>
-  >({})
-  /** Per-worker pin mutation generation — ignore stale success/failure */
-  const pinGen = useRef<Record<string, number>>({})
-  const pinInFlight = useRef<Record<string, boolean>>({})
-  const gitRequestGen = useRef(0)
-  const filesRequestGen = useRef(0)
-  const jobsRequestGen = useRef(0)
-  const dispatchRequestGen = useRef(0)
-  const sessionScopeRef = useRef(sessionId)
-  sessionScopeRef.current = sessionId
-
+  const { success: toastSuccess, error: toastError } = useToast()
+  const [tab, setTab] = useState<Tab>('roles')
   const [git, setGit] = useState<GitStatusResponse | null>(null)
   const [gitLoading, setGitLoading] = useState(false)
   const [gitError, setGitError] = useState<string | null>(null)
-
   const [files, setFiles] = useState<FileEntryDto[] | null>(null)
   const [filesLoading, setFilesLoading] = useState(false)
   const [filesError, setFilesError] = useState<string | null>(null)
   const [filesTruncated, setFilesTruncated] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [roleDraft, setRoleDraft] = useState<RoleDraft>(EMPTY_ROLE_DRAFT)
+  const [roleBusy, setRoleBusy] = useState(false)
+  const [roleJobs, setRoleJobs] = useState<WorkerJob[]>([])
+  const [dispatchTasks, setDispatchTasks] = useState<Record<string, string>>({})
+  const [dispatchingRoleId, setDispatchingRoleId] = useState<string | null>(null)
+  const gitRequestGen = useRef(0)
+  const filesRequestGen = useRef(0)
+  const projectScopeRef = useRef(projectId)
+  projectScopeRef.current = projectId
 
-  const [regName, setRegName] = useState('')
-  const [regCommand, setRegCommand] = useState('')
-  const [regArgs, setRegArgs] = useState('')
-  const [regRole, setRegRole] = useState<WorkerRole>('general')
-  const [regBusy, setRegBusy] = useState(false)
+  const enabledWorkers = workers.filter((worker) => worker.enabled)
 
   const loadGit = useCallback(async () => {
     const gen = ++gitRequestGen.current
@@ -252,15 +133,15 @@ export function RightPanel({
     setGitError(null)
     try {
       const data = await api.gitStatus(projectId)
-      if (gen !== gitRequestGen.current || modelScopeRef.current !== requestProjectId) return
+      if (gen !== gitRequestGen.current || projectScopeRef.current !== requestProjectId) return
       setGit(data)
       if (!data.ok) setGitError(data.error ?? t('git.error'))
-    } catch (e) {
-      if (gen !== gitRequestGen.current || modelScopeRef.current !== requestProjectId) return
+    } catch (error) {
+      if (gen !== gitRequestGen.current || projectScopeRef.current !== requestProjectId) return
       setGit(null)
-      setGitError(e instanceof Error ? e.message : String(e))
+      setGitError(error instanceof Error ? error.message : String(error))
     } finally {
-      if (gen === gitRequestGen.current && modelScopeRef.current === requestProjectId) {
+      if (gen === gitRequestGen.current && projectScopeRef.current === requestProjectId) {
         setGitLoading(false)
       }
     }
@@ -279,7 +160,7 @@ export function RightPanel({
     setFilesError(null)
     try {
       const data = await api.listFiles(projectId)
-      if (gen !== filesRequestGen.current || modelScopeRef.current !== requestProjectId) return
+      if (gen !== filesRequestGen.current || projectScopeRef.current !== requestProjectId) return
       if (!data.ok) {
         setFiles(null)
         setFilesError(data.error ?? t('files.error'))
@@ -287,36 +168,24 @@ export function RightPanel({
         setFiles(data.entries)
         setFilesTruncated(data.truncated)
       }
-    } catch (e) {
-      if (gen !== filesRequestGen.current || modelScopeRef.current !== requestProjectId) return
+    } catch (error) {
+      if (gen !== filesRequestGen.current || projectScopeRef.current !== requestProjectId) return
       setFiles(null)
-      setFilesError(e instanceof Error ? e.message : String(e))
+      setFilesError(error instanceof Error ? error.message : String(error))
     } finally {
-      if (gen === filesRequestGen.current && modelScopeRef.current === requestProjectId) {
+      if (gen === filesRequestGen.current && projectScopeRef.current === requestProjectId) {
         setFilesLoading(false)
       }
     }
   }, [projectId, t])
 
-  const loadJobs = useCallback(async () => {
-    const gen = ++jobsRequestGen.current
-    const requestSessionId = sessionId
-    setJobsLoading(true)
-    try {
-      const data = await api.listJobs({
-        sessionId: sessionId ?? undefined,
-        limit: 40,
-      })
-      if (gen !== jobsRequestGen.current || sessionScopeRef.current !== requestSessionId) return
-      setJobs(data.jobs ?? [])
-      setBusyWorkerIds(new Set(data.busyWorkerIds ?? []))
-    } catch {
-      /* ignore */
-    } finally {
-      if (gen === jobsRequestGen.current && sessionScopeRef.current === requestSessionId) {
-        setJobsLoading(false)
-      }
+  const loadRoleJobs = useCallback(async () => {
+    if (!sessionId) {
+      setRoleJobs([])
+      return
     }
+    const result = await api.listJobs({ sessionId, limit: 100 })
+    setRoleJobs(result.jobs)
   }, [sessionId])
 
   useEffect(() => {
@@ -332,96 +201,75 @@ export function RightPanel({
   }, [projectId])
 
   useEffect(() => {
-    jobsRequestGen.current += 1
-    dispatchRequestGen.current += 1
-    setJobs([])
-    setBusyWorkerIds(new Set())
-    setJobsLoading(false)
-    setDispatchBusy(false)
-  }, [sessionId])
-
-  useEffect(() => {
     if (tab === 'git') void loadGit()
     if (tab === 'files') void loadFiles()
-  }, [tab, loadGit, loadFiles])
+    if (tab === 'roles') void loadRoleJobs()
+  }, [tab, loadGit, loadFiles, loadRoleJobs])
 
-  // Clear model-search debounce timers on unmount
   useEffect(() => {
-    return () => {
-      for (const t of Object.values(searchTimers.current)) {
-        clearTimeout(t)
+    setEditingId(null)
+    setRoleDraft(EMPTY_ROLE_DRAFT)
+    setDispatchTasks({})
+    void loadRoleJobs()
+  }, [sessionId, loadRoleJobs])
+
+  const startCreateRole = () => {
+    setEditingId('new')
+    setRoleDraft({ ...EMPTY_ROLE_DRAFT, workerId: enabledWorkers[0]?.id ?? '' })
+  }
+
+  const startEditRole = (role: RoleDefinition) => {
+    setEditingId(role.id)
+    setRoleDraft({
+      name: role.name,
+      workerId: role.workerId,
+      roleType: role.roleType,
+      instructions: role.instructions,
+      model: role.model ?? '',
+    })
+  }
+
+  const saveRole = async () => {
+    if (!roleDraft.name.trim() || !roleDraft.workerId || !roleDraft.instructions.trim()) return
+    setRoleBusy(true)
+    try {
+      if (editingId === 'new') {
+        await onCreateRoleDefinition({
+          workerId: roleDraft.workerId,
+          name: roleDraft.name.trim(),
+          roleType: roleDraft.roleType,
+          instructions: roleDraft.instructions.trim(),
+          model: roleDraft.model.trim() || undefined,
+          enabled: true,
+        })
+      } else if (editingId) {
+        const role = roleDefinitions.find((item) => item.id === editingId)
+        if (!role) return
+        await onUpdateRoleDefinition(editingId, {
+          workerId: roleDraft.workerId,
+          name: roleDraft.name.trim(),
+          roleType: roleDraft.roleType,
+          instructions: roleDraft.instructions.trim(),
+          model: roleDraft.model.trim() || null,
+          expectedRevision: role.revision,
+        })
       }
-      searchTimers.current = {}
+      setEditingId(null)
+      setRoleDraft(EMPTY_ROLE_DRAFT)
+      toastSuccess(t('roles.saved'))
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRoleBusy(false)
     }
-  }, [])
-
-  // Catalogs are cwd-scoped. Invalidate every transient view/request boundary when
-  // the active project changes so project A can never populate project B's controls.
-  useEffect(() => {
-    for (const timer of Object.values(searchTimers.current)) clearTimeout(timer)
-    searchTimers.current = {}
-    for (const workerId of Object.keys(searchGen.current)) searchGen.current[workerId]! += 1
-    for (const workerId of Object.keys(catalogGen.current)) catalogGen.current[workerId]! += 1
-    for (const workerId of Object.keys(pinGen.current)) pinGen.current[workerId]! += 1
-    pinInFlight.current = {}
-    setModelsLoadingIds(new Set())
-    setModelDrafts({})
-    setModelSearch({})
-    setSearchResults({})
-    setCatalogResults({})
-    setCatalogStates({})
-    setPinStates({})
-    setModelErrors({})
-  }, [projectId])
+  }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'workers', label: t('right.workers') },
+    { id: 'roles', label: t('right.roles') },
     { id: 'git', label: t('right.git') },
     { id: 'files', label: t('right.files') },
     { id: 'approvals', label: t('right.approvals') },
   ]
-
-  const cyclePrimary = (w: WorkerRegistration) => {
-    const list = w.roles.length ? w.roles : ([...WORKER_ROLES] as WorkerRole[])
-    const idx = list.indexOf(w.primaryRole)
-    const next = list[(idx + 1) % list.length]!
-    onSetRoles(w.id, { primaryRole: next, roles: list })
-  }
-
-  const toggleRole = (w: WorkerRegistration, role: WorkerRole) => {
-    const has = w.roles.includes(role)
-    let roles = has ? w.roles.filter((r) => r !== role) : [...w.roles, role]
-    if (roles.length === 0) roles = [w.primaryRole]
-    let primaryRole = w.primaryRole
-    if (!roles.includes(primaryRole)) primaryRole = roles[0]!
-    onSetRoles(w.id, { primaryRole, roles })
-  }
-
-  const submitWorker = async () => {
-    if (!regName.trim() || !regCommand.trim()) return
-    setRegBusy(true)
-    try {
-      const args = regArgs.trim().split(/\s+/).filter(Boolean)
-      await onRegisterWorker({
-        name: regName.trim(),
-        command: regCommand.trim(),
-        args,
-        kind: 'custom' as WorkerKind,
-        primaryRole: regRole,
-        roles: [regRole, 'general'],
-        capabilities: ['general'],
-        description: `Custom worker: ${regName.trim()}`,
-        enabled: true,
-      })
-      setRegName('')
-      setRegCommand('')
-      setRegArgs('')
-      setShowForm(false)
-      onRefreshSnapshot()
-    } finally {
-      setRegBusy(false)
-    }
-  }
 
   return (
     <aside className="panel panel-right inspector-panel">
@@ -438,198 +286,263 @@ export function RightPanel({
         ))}
       </div>
 
-      {tab === 'workers' && (
+      {tab === 'roles' && (
         <div className="drawer-body tab-panel active">
-          {/* 线稿：section-hint + w-row 列表；运维动作收在底部 */}
-          <div className="section-hint">{t('right.workersHint')}</div>
-          {workers.map((w) => {
-            const checking = checkingIds.has(w.id)
-            const report = w.healthReport
-            const healthKey =
-              w.health === 'healthy'
-                ? ('workers.health.healthy' as const)
-                : w.health === 'missing'
-                  ? ('workers.health.missing' as const)
-                  : w.health === 'unhealthy'
-                    ? ('workers.health.unhealthy' as const)
-                    : ('workers.health.unknown' as const)
-            const roleLabel =
-              w.primaryRole === 'coder'
-                ? 'coder'
-                : w.primaryRole === 'review'
-                  ? 'review'
-                  : w.primaryRole === 'plan'
-                    ? 'plan'
-                    : w.primaryRole === 'test'
-                      ? 'test'
-                      : w.primaryRole === 'research'
-                        ? 'research'
-                        : 'general'
-            const healthEn =
-              w.health === 'healthy'
-                ? 'healthy'
-                : w.health === 'missing'
-                  ? 'missing'
-                  : w.health === 'unhealthy'
-                    ? 'unhealthy'
-                    : 'unknown'
-            return (
-              <div className="w-row inspector-worker-row" key={w.id}>
-                <span className={`worker-logo ${kindClass(w.kind)}`} title={w.name} aria-hidden>
-                  <WorkerBrandLogo kind={w.kind} name={w.name} size={14} />
-                </span>
-                <div className="info">
-                  <div className="n">
-                    {w.name}
-                    {busyWorkerIds.has(w.id) && (
-                      <span
-                        className="badge badge-green worker-busy-badge"
-                        title={t('workers.busy')}
-                      >
-                        {t('workers.busy')}
-                      </span>
-                    )}
-                  </div>
-                  {/* 线稿副行：role · health */}
-                  <div className="s">
-                    <span>{roleLabel}</span>
-                    <span aria-hidden> · </span>
-                    <button
-                      type="button"
-                      className={`health-inline${checking ? ' checking' : ''}`}
-                      title={report?.message ?? t('workers.healthHint')}
-                      onClick={() => {
-                        if (checking) return
-                        setCheckingIds((s) => new Set(s).add(w.id))
-                        void Promise.resolve(onHealth(w.id, 'version')).finally(() => {
-                          setCheckingIds((s) => {
-                            const n = new Set(s)
-                            n.delete(w.id)
-                            return n
-                          })
-                        })
-                      }}
-                    >
-                      {checking ? '…' : healthEn}
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={`toggle${w.enabled ? '' : ' off'}`}
-                  role="switch"
-                  aria-checked={w.enabled}
-                  aria-label={t('workers.formEnabled')}
-                  onClick={() => onToggle(w.id, !w.enabled)}
-                />
-              </div>
-            )
-          })}
-          {workers.length === 0 && <p className="section-hint">{t('workers.detectFirstRun')}</p>}
-          <div className="inspector-actions">
+          <div className="inspector-panel-head">
+            <div className="inspector-panel-title">{t('right.roles')}</div>
             <button
               className="settings-btn-soft"
               type="button"
-              disabled={detecting || !onDetectWorkers}
-              title={t('workers.detectHint')}
-              onClick={() => {
-                if (!onDetectWorkers) return
-                setDetecting(true)
-                void Promise.resolve(onDetectWorkers())
-                  .then((res) => {
-                    const rec =
-                      res?.recommended ?? res?.candidates?.filter((c) => c.installed) ?? []
-                    if (rec.length === 0) toastInfo(t('workers.detectNone'))
-                    else
-                      toastSuccess(
-                        t('workers.detectOk', {
-                          names: rec.map((c) => c.name).join(' · '),
-                        }),
-                      )
-                  })
-                  .catch((e) => toastError(String(e)))
-                  .finally(() => setDetecting(false))
-              }}
+              disabled={!sessionId || enabledWorkers.length === 0 || editingId === 'new'}
+              onClick={startCreateRole}
             >
-              {detecting ? t('app.loading') : t('workers.detect')}
-            </button>
-            <button
-              className="settings-btn-soft"
-              type="button"
-              disabled={checkingAll}
-              title={t('workers.healthAllHint')}
-              onClick={() => {
-                if (!onHealthAll) return
-                setCheckingAll(true)
-                void Promise.resolve(onHealthAll()).finally(() => setCheckingAll(false))
-              }}
-            >
-              {checkingAll ? t('app.loading') : t('workers.healthAll')}
-            </button>
-            <button
-              className="settings-btn-soft"
-              type="button"
-              onClick={() => setShowForm((v) => !v)}
-            >
-              {t('workers.register')}
+              {t('roles.add')}
             </button>
           </div>
-          {showForm && (
-            <div className="settings-form-card worker-register-card" style={{ maxWidth: '100%' }}>
-              <div className="model-list-label">{t('workers.registerTitle')}</div>
+          <p className="section-hint">{t('right.rolesHint')}</p>
+          {!sessionId && <p className="section-hint is-warn">{t('roles.needSession')}</p>}
+          {sessionId && enabledWorkers.length === 0 && (
+            <p className="section-hint is-warn">{t('roles.noWorkers')}</p>
+          )}
+
+          {editingId && (
+            <div className="inspector-approval-card" style={{ padding: 12, marginBottom: 10 }}>
               <div className="settings-field">
-                <label>{t('workers.formName')}</label>
+                <label htmlFor="role-name">{t('roles.name')}</label>
                 <input
-                  className="settings-input"
-                  value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
+                  id="role-name"
+                  className="settings-input ui-font"
+                  value={roleDraft.name}
+                  onChange={(event) =>
+                    setRoleDraft((draft) => ({ ...draft, name: event.target.value }))
+                  }
                 />
               </div>
-              <div className="settings-field">
-                <label>{t('workers.formCommand')}</label>
-                <input
-                  className="settings-input mono"
-                  value={regCommand}
-                  onChange={(e) => setRegCommand(e.target.value)}
-                />
-              </div>
-              <div className="settings-field">
-                <label>{t('workers.formArgs')}</label>
-                <input
-                  className="settings-input mono"
-                  value={regArgs}
-                  onChange={(e) => setRegArgs(e.target.value)}
-                />
-              </div>
-              <div className="settings-field">
-                <label>{t('workers.primary')}</label>
+              <div className="settings-field" style={{ marginTop: 10 }}>
+                <label htmlFor="role-worker">{t('roles.worker')}</label>
                 <select
-                  className="field-select"
-                  value={regRole}
-                  onChange={(e) => setRegRole(e.target.value as WorkerRole)}
+                  id="role-worker"
+                  className="settings-select"
+                  value={roleDraft.workerId}
+                  onChange={(event) =>
+                    setRoleDraft((draft) => ({ ...draft, workerId: event.target.value }))
+                  }
                 >
-                  {WORKER_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {t(roleMessageKey(r))}
+                  {enabledWorkers.map((worker) => (
+                    <option key={worker.id} value={worker.id}>
+                      {worker.name}
                     </option>
                   ))}
                 </select>
               </div>
-              <div className="model-edit-actions">
-                <button type="button" className="btn-ghost" onClick={() => setShowForm(false)}>
-                  {t('workers.cancel')}
+              <div className="settings-field" style={{ marginTop: 10 }}>
+                <label htmlFor="role-type">{t('roles.type')}</label>
+                <select
+                  id="role-type"
+                  className="settings-select"
+                  value={roleDraft.roleType}
+                  onChange={(event) =>
+                    setRoleDraft((draft) => ({
+                      ...draft,
+                      roleType: event.target.value as WorkerRole,
+                    }))
+                  }
+                >
+                  {WORKER_ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {t(roleMessageKey(role))}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="settings-field" style={{ marginTop: 10 }}>
+                <label htmlFor="role-instructions">{t('roles.instructions')}</label>
+                <textarea
+                  id="role-instructions"
+                  className="settings-input ui-font"
+                  style={{
+                    minHeight: 92,
+                    height: 92,
+                    padding: 10,
+                    lineHeight: 1.4,
+                    whiteSpace: 'normal',
+                  }}
+                  value={roleDraft.instructions}
+                  onChange={(event) =>
+                    setRoleDraft((draft) => ({ ...draft, instructions: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="settings-field" style={{ marginTop: 10 }}>
+                <label htmlFor="role-model">{t('roles.model')}</label>
+                <input
+                  id="role-model"
+                  className="settings-input"
+                  placeholder={t('roles.modelInherit')}
+                  value={roleDraft.model}
+                  onChange={(event) =>
+                    setRoleDraft((draft) => ({ ...draft, model: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="inspector-actions" style={{ marginTop: 12 }}>
+                <button
+                  className="settings-btn-soft"
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null)
+                    setRoleDraft(EMPTY_ROLE_DRAFT)
+                  }}
+                >
+                  {t('prompt.cancel')}
                 </button>
                 <button
-                  type="button"
                   className="settings-save-btn"
-                  disabled={regBusy || !regName.trim() || !regCommand.trim()}
-                  onClick={() => void submitWorker()}
+                  type="button"
+                  disabled={
+                    roleBusy ||
+                    !roleDraft.name.trim() ||
+                    !roleDraft.workerId ||
+                    !roleDraft.instructions.trim()
+                  }
+                  onClick={() => void saveRole()}
                 >
-                  {regBusy ? t('app.loading') : t('workers.formSave')}
+                  {roleBusy ? t('app.loading') : t('roles.save')}
                 </button>
               </div>
             </div>
           )}
+
+          {sessionId && roleDefinitions.length === 0 && !editingId && (
+            <p className="section-hint">{t('roles.empty')}</p>
+          )}
+          {roleDefinitions.map((role) => {
+            const worker = workers.find((item) => item.id === role.workerId)
+            const openJobs = roleJobs.filter(
+              (job) =>
+                job.roleDefinitionId === role.id &&
+                ['queued', 'running', 'pending_approval'].includes(job.status),
+            )
+            const effectiveModel = role.model
+              ? role.model
+              : worker?.model
+                ? t('roles.inheritsWorker', { model: worker.model })
+                : t('roles.acpDefault')
+            return (
+              <div className="inspector-approval-card" key={role.id} style={{ marginBottom: 10 }}>
+                <div className="inspector-approval-title">{role.name}</div>
+                <div className="inspector-approval-meta">
+                  {t(roleMessageKey(role.roleType))} · {worker?.name ?? t('roles.workerMissing')}
+                </div>
+                <div className="inspector-approval-meta">
+                  {worker?.readiness?.status ??
+                    worker?.acpHealth?.status ??
+                    worker?.health ??
+                    'unknown'}
+                  {' · '}
+                  {openJobs.length > 0
+                    ? t('roles.openJobs', { count: openJobs.length })
+                    : t('roles.idle')}
+                </div>
+                <div className="inspector-approval-meta mono">{effectiveModel}</div>
+                <div className="inspector-approval-meta">{role.instructions}</div>
+                <div style={{ padding: '6px 12px 0' }}>
+                  <input
+                    className="settings-input ui-font"
+                    placeholder={t('roles.dispatchPlaceholder')}
+                    value={dispatchTasks[role.id] ?? ''}
+                    onChange={(event) =>
+                      setDispatchTasks((current) => ({
+                        ...current,
+                        [role.id]: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="inspector-actions" style={{ padding: '6px 12px 10px' }}>
+                  <button
+                    className="settings-save-btn"
+                    type="button"
+                    disabled={
+                      dispatchingRoleId === role.id || !(dispatchTasks[role.id] ?? '').trim()
+                    }
+                    onClick={() => {
+                      const task = (dispatchTasks[role.id] ?? '').trim()
+                      if (!task || !sessionId) return
+                      setDispatchingRoleId(role.id)
+                      void api
+                        .createJob({
+                          task,
+                          roleDefinitionId: role.id,
+                          sessionId,
+                          wait: false,
+                        })
+                        .then(() => {
+                          setDispatchTasks((current) => ({ ...current, [role.id]: '' }))
+                          toastSuccess(t('roles.dispatched'))
+                          return loadRoleJobs()
+                        })
+                        .catch((error) =>
+                          toastError(error instanceof Error ? error.message : String(error)),
+                        )
+                        .finally(() => setDispatchingRoleId(null))
+                    }}
+                  >
+                    {dispatchingRoleId === role.id ? t('app.loading') : t('roles.dispatch')}
+                  </button>
+                  <button
+                    className="settings-btn-soft"
+                    type="button"
+                    onClick={() => startEditRole(role)}
+                  >
+                    {t('roles.edit')}
+                  </button>
+                  <button
+                    className="settings-btn-soft"
+                    type="button"
+                    onClick={() => {
+                      setEditingId('new')
+                      setRoleDraft({
+                        name: `${role.name} ${t('roles.copySuffix')}`,
+                        workerId: role.workerId,
+                        roleType: role.roleType,
+                        instructions: role.instructions,
+                        model: role.model ?? '',
+                      })
+                    }}
+                  >
+                    {t('roles.copy')}
+                  </button>
+                  <button
+                    className="settings-btn-soft"
+                    type="button"
+                    disabled={openJobs.length > 0}
+                    title={openJobs.length > 0 ? t('roles.resetBlocked') : undefined}
+                    onClick={() =>
+                      void onResetRoleSession(role.id)
+                        .then(() => toastSuccess(t('roles.sessionReset')))
+                        .catch((error) =>
+                          toastError(error instanceof Error ? error.message : String(error)),
+                        )
+                    }
+                  >
+                    {t('roles.resetSession')}
+                  </button>
+                  <button
+                    className="settings-btn-soft"
+                    type="button"
+                    onClick={() =>
+                      void onArchiveRoleDefinition(role.id, role.revision).catch((error) =>
+                        toastError(error instanceof Error ? error.message : String(error)),
+                      )
+                    }
+                  >
+                    {t('roles.archive')}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -666,13 +579,13 @@ export function RightPanel({
           {!gitError && git && git.files.length === 0 && (
             <p className="section-hint">{t('git.clean')}</p>
           )}
-          {git?.files.map((f) => (
-            <div className="w-row inspector-list-row" key={f.path}>
-              <span className={`git-status-badge ${statusLetter(f.status)}`}>
-                {statusLetter(f.status)}
+          {git?.files.map((file) => (
+            <div className="w-row inspector-list-row" key={file.path}>
+              <span className={`git-status-badge ${statusLetter(file.status)}`}>
+                {statusLetter(file.status)}
               </span>
               <div className="info">
-                <div className="n mono">{f.path}</div>
+                <div className="n mono">{file.path}</div>
               </div>
             </div>
           ))}
@@ -706,33 +619,34 @@ export function RightPanel({
         <div className="drawer-body tab-panel active">
           <div className="inspector-panel-head">
             <div className="inspector-panel-title">
-              {t('approvals.pending')} ({approvals.filter((a) => a.status === 'pending').length})
+              {t('approvals.pending')} (
+              {approvals.filter((item) => item.status === 'pending').length})
             </div>
-            <button className="settings-btn-soft" type="button" onClick={() => onRefreshSnapshot()}>
+            <button className="settings-btn-soft" type="button" onClick={onRefreshSnapshot}>
               {t('common.refresh')}
             </button>
           </div>
-          {approvals.filter((a) => a.status === 'pending').length === 0 && (
+          {approvals.filter((item) => item.status === 'pending').length === 0 && (
             <p className="section-hint">{t('approvals.empty')}</p>
           )}
           {approvals
-            .filter((a) => a.status === 'pending')
-            .map((a) => (
-              <div className="inspector-approval-card" key={a.id}>
-                <div className="inspector-approval-title">{a.title}</div>
-                {a.workerName && (
+            .filter((item) => item.status === 'pending')
+            .map((approval) => (
+              <div className="inspector-approval-card" key={approval.id}>
+                <div className="inspector-approval-title">{approval.title}</div>
+                {approval.workerName && (
                   <div className="inspector-approval-meta">
-                    {t('approvals.worker')}: {a.workerName}
+                    {t('approvals.worker')}: {approval.workerName}
                   </div>
                 )}
-                {a.pathOrTarget && (
+                {approval.pathOrTarget && (
                   <div className="inspector-approval-meta mono">
-                    {t('approvals.target')}: {a.pathOrTarget}
+                    {t('approvals.target')}: {approval.pathOrTarget}
                   </div>
                 )}
                 <div className="approval-row inspector-approval-actions">
                   <ApprovalActions
-                    approval={a}
+                    approval={approval}
                     surface="panel"
                     resolving={resolving}
                     onResolve={onResolveApproval}

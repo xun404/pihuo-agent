@@ -1,6 +1,9 @@
 import type {
   ApprovalItem,
   JobSource,
+  RoleDefinition,
+  CreateRoleDefinitionInput,
+  UpdateRoleDefinitionInput,
   WorkerJob,
   WorkerRole,
   WorkerRunEvent,
@@ -9,6 +12,7 @@ import { isTerminalWorkerEvent } from '@swarmdesk-agent/shared'
 import type { LocalStore } from '@swarmdesk-agent/core'
 import type { ScheduleRequest, ScheduleResult } from './scheduler.js'
 import type { WorkerEventEmitter } from './worker-events.js'
+import { getAcpSessionManager } from '@swarmdesk-agent/adapters'
 
 export interface RouterSessionContext {
   routerSessionId: string
@@ -19,6 +23,7 @@ export interface RouterSessionContext {
 
 export interface TrustedDispatchInput {
   context: RouterSessionContext
+  roleDefinitionId?: string
   workerId?: string
   workerIdOrKind?: string
   role?: WorkerRole
@@ -27,6 +32,11 @@ export interface TrustedDispatchInput {
   source?: JobSource
   wait?: boolean
   onEvent?: (event: WorkerRunEvent) => void
+}
+
+export interface RoleDefinitionMutationInput {
+  context: RouterSessionContext
+  roleDefinitionId: string
 }
 
 export interface ResolveApprovalPortInput {
@@ -66,6 +76,22 @@ export function validateRuntimeApprovalResolveInput(
 export interface RuntimeDispatchPort {
   resolveSessionContext(memoryThreadId: string): Promise<RouterSessionContext | null>
   dispatch(input: TrustedDispatchInput): Promise<WorkerJob>
+  listRoleDefinitions?(context: RouterSessionContext): Promise<RoleDefinition[]>
+  createRoleDefinition?(input: {
+    context: RouterSessionContext
+    input: Omit<CreateRoleDefinitionInput, 'chatSessionId'>
+  }): Promise<RoleDefinition>
+  updateRoleDefinition?(
+    input: RoleDefinitionMutationInput & {
+      patch: UpdateRoleDefinitionInput
+    },
+  ): Promise<RoleDefinition>
+  archiveRoleDefinition?(
+    input: RoleDefinitionMutationInput & {
+      expectedRevision?: number
+    },
+  ): Promise<RoleDefinition>
+  resetRoleSession?(input: RoleDefinitionMutationInput): Promise<{ deleted: boolean }>
   events(
     jobId: string,
     signal?: AbortSignal,
@@ -91,14 +117,37 @@ export interface LocalDispatchScheduler {
 }
 
 export interface LocalRuntimeDispatchDeps {
-  store: Pick<LocalStore, 'listSessions' | 'listProjects'>
+  store: Pick<
+    LocalStore,
+    | 'listSessions'
+    | 'listProjects'
+    | 'listRoleDefinitions'
+    | 'createRoleDefinition'
+    | 'updateRoleDefinition'
+    | 'archiveRoleDefinition'
+    | 'countOpenJobs'
+    | 'listJobs'
+  >
   scheduler: LocalDispatchScheduler
   events: Pick<WorkerEventEmitter, 'subscribe' | 'isTerminal'>
+  assertRoleModel?: (workerId: string, model: string | null | undefined, cwd?: string) => void
 }
 
 export function createLocalRuntimeDispatchPort(
   deps: LocalRuntimeDispatchDeps,
 ): RuntimeDispatchPort {
+  const assertContext = (context: RouterSessionContext) => {
+    const session = deps.store
+      .listSessions()
+      .find(
+        (candidate) =>
+          candidate.id === context.routerSessionId &&
+          candidate.memoryThreadId === context.memoryThreadId &&
+          candidate.projectId === context.routerProjectId,
+      )
+    if (!session) throw new Error('SWARMDESK_AGENT_SESSION_MISMATCH')
+  }
+
   return {
     async resolveSessionContext(memoryThreadId: string): Promise<RouterSessionContext | null> {
       const threadId = memoryThreadId?.trim()
@@ -118,6 +167,7 @@ export function createLocalRuntimeDispatchPort(
       const workerIdOrKind = input.workerIdOrKind ?? input.workerId
       const { job } = await deps.scheduler.enqueue({
         task: input.task,
+        roleDefinitionId: input.roleDefinitionId,
         role: input.role,
         workerIdOrKind,
         cwd: input.cwd ?? input.context.routerProjectRoot,
@@ -129,6 +179,78 @@ export function createLocalRuntimeDispatchPort(
         onEvent: input.onEvent,
       })
       return job
+    },
+
+    async listRoleDefinitions(context: RouterSessionContext): Promise<RoleDefinition[]> {
+      assertContext(context)
+      return deps.store.listRoleDefinitions(context.routerSessionId)
+    },
+
+    async createRoleDefinition(input): Promise<RoleDefinition> {
+      assertContext(input.context)
+      deps.assertRoleModel?.(
+        input.input.workerId,
+        input.input.model,
+        input.context.routerProjectRoot,
+      )
+      return deps.store.createRoleDefinition({
+        ...input.input,
+        chatSessionId: input.context.routerSessionId,
+      })
+    },
+
+    async updateRoleDefinition(input): Promise<RoleDefinition> {
+      assertContext(input.context)
+      const current = deps.store
+        .listRoleDefinitions(input.context.routerSessionId)
+        .find((role) => role.id === input.roleDefinitionId)
+      if (!current) throw new Error(`Role definition not found: ${input.roleDefinitionId}`)
+      if (input.patch.workerId !== undefined || input.patch.model !== undefined) {
+        deps.assertRoleModel?.(
+          input.patch.workerId ?? current.workerId,
+          input.patch.model === undefined ? current.model : input.patch.model,
+          input.context.routerProjectRoot,
+        )
+      }
+      return deps.store.updateRoleDefinition(
+        input.context.routerSessionId,
+        input.roleDefinitionId,
+        input.patch,
+      )
+    },
+
+    async archiveRoleDefinition(input): Promise<RoleDefinition> {
+      assertContext(input.context)
+      return deps.store.archiveRoleDefinition(
+        input.context.routerSessionId,
+        input.roleDefinitionId,
+        input.expectedRevision,
+      )
+    },
+
+    async resetRoleSession(input): Promise<{ deleted: boolean }> {
+      assertContext(input.context)
+      const role = deps.store
+        .listRoleDefinitions(input.context.routerSessionId, { includeArchived: true })
+        .find((candidate) => candidate.id === input.roleDefinitionId)
+      if (!role) throw new Error(`Role definition not found: ${input.roleDefinitionId}`)
+      if (deps.store.countOpenJobs({ sessionId: input.context.routerSessionId }) > 0) {
+        const hasOpenRoleJob = deps.store
+          .listJobs({
+            sessionId: input.context.routerSessionId,
+            status: ['queued', 'running', 'pending_approval'],
+            limit: 500,
+          })
+          .some((job) => job.roleDefinitionId === input.roleDefinitionId)
+        if (hasOpenRoleJob) {
+          throw new Error('ROLE_CONTEXT_HAS_OPEN_JOBS')
+        }
+      }
+      const result = getAcpSessionManager().deleteContextsByRole(
+        input.context.routerSessionId,
+        input.roleDefinitionId,
+      )
+      return { deleted: result.deleted > 0 }
     },
 
     async *events(

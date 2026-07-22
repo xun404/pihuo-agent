@@ -45,6 +45,7 @@ import {
   type ApprovalLocation,
   type JobSource,
   type JobStatus,
+  type RoleDefinition,
   type SessionApprovalPolicy,
   type WorkerJob,
   type WorkerRegistration,
@@ -148,6 +149,8 @@ export function finalizeApprovalTimeout(input: {
 
 export interface ScheduleRequest {
   task: string
+  /** Preferred dispatch identity: a Chat-scoped role definition. */
+  roleDefinitionId?: string
   role?: WorkerRole
   workerIdOrKind?: string
   cwd?: string
@@ -166,6 +169,33 @@ export interface ScheduleResult {
   job: WorkerJob
   /** Present when wait=true or job finished before return */
   output?: string
+}
+
+export function buildRoleDispatchSnapshot(
+  role: RoleDefinition,
+  worker: WorkerRegistration,
+  task: string,
+): Pick<
+  WorkerJob,
+  | 'roleDefinitionId'
+  | 'roleName'
+  | 'roleType'
+  | 'roleRevision'
+  | 'effectiveModel'
+  | 'instructionsSnapshot'
+  | 'effectivePrompt'
+> {
+  const instructions = role.instructions.trim()
+  const normalizedTask = task.trim()
+  return {
+    roleDefinitionId: role.id,
+    roleName: role.name,
+    roleType: role.roleType,
+    roleRevision: role.revision,
+    effectiveModel: role.model?.trim() || worker.model?.trim() || undefined,
+    instructionsSnapshot: instructions,
+    effectivePrompt: instructions ? `${instructions}\n\nTask:\n${normalizedTask}` : normalizedTask,
+  }
 }
 
 type RuntimeEntry = {
@@ -526,9 +556,31 @@ export class WorkerScheduler {
     const threadId = req.threadId ?? active.session?.memoryThreadId
     const source = req.source ?? 'api'
 
+    const roleDefinition = req.roleDefinitionId
+      ? store().getRoleDefinition(sessionId, req.roleDefinitionId)
+      : undefined
+    if (
+      req.roleDefinitionId &&
+      (!roleDefinition || !roleDefinition.enabled || roleDefinition.archivedAt)
+    ) {
+      throw new Error(`Role definition not found or disabled: ${req.roleDefinitionId}`)
+    }
+    const roleWorker = roleDefinition
+      ? store()
+          .listWorkers()
+          .find((worker) => worker.id === roleDefinition.workerId)
+      : undefined
+    if (roleDefinition && !roleWorker) {
+      throw new Error(`Worker not found: ${roleDefinition.workerId}`)
+    }
+    const roleSnapshot =
+      roleDefinition && roleWorker
+        ? buildRoleDispatchSnapshot(roleDefinition, roleWorker, task)
+        : undefined
+
     const resolved = await this.resolveWorker({
-      role: req.role,
-      workerIdOrKind: req.workerIdOrKind,
+      role: roleDefinition?.roleType ?? req.role,
+      workerIdOrKind: roleDefinition?.workerId ?? req.workerIdOrKind,
       preferHealthy: req.preferHealthy !== false,
       cwd,
     })
@@ -543,7 +595,8 @@ export class WorkerScheduler {
         threadId,
         workerId: resolved.worker?.id ?? 'none',
         workerName: resolved.worker?.name ?? req.workerIdOrKind ?? req.role ?? 'unknown',
-        role: req.role,
+        role: roleDefinition?.roleType ?? req.role,
+        ...roleSnapshot,
         task,
         cwd,
         source,
@@ -579,13 +632,14 @@ export class WorkerScheduler {
       threadId,
       workerId: worker.id,
       workerName: worker.name,
-      role: req.role,
+      role: roleDefinition?.roleType ?? req.role,
+      ...roleSnapshot,
       task,
       cwd,
       source,
       status: 'queued',
       message: `Queued for ${worker.name}`,
-      meta: { forced: Boolean(req.workerIdOrKind?.trim()) },
+      meta: { forced: Boolean(roleDefinition || req.workerIdOrKind?.trim()) },
     })
 
     // Register onEvent before tick so started/delta are never missed
@@ -662,8 +716,9 @@ export class WorkerScheduler {
     if (!prev) throw new Error(`Job not found: ${jobId}`)
     return this.enqueue({
       task: prev.task,
-      role: prev.role,
-      workerIdOrKind: prev.workerId,
+      roleDefinitionId: prev.roleDefinitionId,
+      role: prev.roleDefinitionId ? undefined : prev.role,
+      workerIdOrKind: prev.roleDefinitionId ? undefined : prev.workerId,
       cwd: prev.cwd,
       sessionId: prev.sessionId,
       projectId: prev.projectId,
@@ -1085,7 +1140,10 @@ export class WorkerScheduler {
     const workerSecretSnapshot = loadWorkerSecretsSnapshotForSpawn(worker.id)
     const workerSecrets = workerSecretSnapshot.secrets
     const eligibilityCandidates = resolveEligibilityCandidates(worker, catalog) ?? []
-    const pin = worker.model?.trim() || undefined
+    // Role model is snapshotted at enqueue time; absent means ACP default for legacy jobs.
+    const pin = job.roleDefinitionId
+      ? job.effectiveModel?.trim() || undefined
+      : worker.model?.trim() || undefined
     // Always re-merge evidence at dispatch (env + catalog providers). Empty catalog = fail-closed
     // for non-zen pins (same boundary as discovery/pin/execute).
     const providersFromCatalog: Record<string, 'free' | 'authenticated' | 'disabled' | 'unknown'> =
@@ -1239,6 +1297,8 @@ export class WorkerScheduler {
     const reuseKey = sessionMgr.buildReuseKey({
       routerSessionId: job.sessionId,
       workerId: worker.id,
+      roleDefinitionId: job.roleDefinitionId,
+      roleRevision: job.roleRevision,
       cwd: job.cwd,
       config: sessionConfig,
     })
@@ -1307,7 +1367,7 @@ export class WorkerScheduler {
         key: reuseKey,
         config: sessionConfig,
         kind: worker.kind,
-        task: job.task,
+        task: job.effectivePrompt ?? job.task,
         binding: {
           jobId,
           signal: abort.signal,
@@ -1322,7 +1382,7 @@ export class WorkerScheduler {
               workerName: worker.name,
               workerKind: worker.kind,
               role: job.role,
-              model: worker.model?.trim() || undefined,
+              model: job.roleDefinitionId ? job.effectiveModel : worker.model?.trim() || undefined,
               reusedSession: disposition !== 'new',
               sessionDisposition: disposition,
             } as WorkerRunEvent)

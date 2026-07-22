@@ -1,4 +1,4 @@
-import type { WorkerJob, WorkerRunEvent } from '@swarmdesk-agent/shared'
+import type { RoleDefinition, WorkerJob, WorkerRunEvent } from '@swarmdesk-agent/shared'
 import { isTerminalWorkerEvent } from '@swarmdesk-agent/shared'
 import type {
   ResolveApprovalPortInput,
@@ -216,6 +216,7 @@ export function createRemoteRuntimeDispatchPort(
     async dispatch(input: TrustedDispatchInput): Promise<WorkerJob> {
       const data = await requestJson<{ job: WorkerJob }>('POST', '/internal/runtime/dispatch', {
         context: input.context,
+        roleDefinitionId: input.roleDefinitionId,
         workerId: input.workerId,
         workerIdOrKind: input.workerIdOrKind,
         role: input.role,
@@ -225,6 +226,53 @@ export function createRemoteRuntimeDispatchPort(
         wait: false,
       })
       return data.job
+    },
+
+    async listRoleDefinitions(context): Promise<RoleDefinition[]> {
+      const q = encodeURIComponent(context.memoryThreadId)
+      const data = await requestJson<{ roleDefinitions: RoleDefinition[] }>(
+        'GET',
+        `/internal/runtime/role-definitions?memoryThreadId=${q}`,
+      )
+      return data.roleDefinitions
+    },
+
+    async createRoleDefinition(input): Promise<RoleDefinition> {
+      const data = await requestJson<{ roleDefinition: RoleDefinition }>(
+        'POST',
+        '/internal/runtime/role-definitions',
+        input,
+      )
+      return data.roleDefinition
+    },
+
+    async updateRoleDefinition(input): Promise<RoleDefinition> {
+      const id = encodeURIComponent(input.roleDefinitionId)
+      const data = await requestJson<{ roleDefinition: RoleDefinition }>(
+        'PATCH',
+        `/internal/runtime/role-definitions/${id}`,
+        { context: input.context, patch: input.patch },
+      )
+      return data.roleDefinition
+    },
+
+    async archiveRoleDefinition(input): Promise<RoleDefinition> {
+      const id = encodeURIComponent(input.roleDefinitionId)
+      const data = await requestJson<{ roleDefinition: RoleDefinition }>(
+        'DELETE',
+        `/internal/runtime/role-definitions/${id}`,
+        { context: input.context, expectedRevision: input.expectedRevision },
+      )
+      return data.roleDefinition
+    },
+
+    async resetRoleSession(input): Promise<{ deleted: boolean }> {
+      const id = encodeURIComponent(input.roleDefinitionId)
+      return requestJson<{ deleted: boolean }>(
+        'POST',
+        `/internal/runtime/role-definitions/${id}/reset-session`,
+        { context: input.context },
+      )
     },
 
     async *events(

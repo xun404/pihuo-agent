@@ -142,8 +142,35 @@ export type MessageKey =
   | 'right.files'
   | 'right.git'
   | 'right.jobs'
-  | 'right.workers'
-  | 'right.workersHint'
+  | 'right.roles'
+  | 'right.rolesHint'
+  | 'roles.acpDefault'
+  | 'roles.add'
+  | 'roles.archive'
+  | 'roles.copy'
+  | 'roles.copySuffix'
+  | 'roles.dispatch'
+  | 'roles.dispatched'
+  | 'roles.dispatchPlaceholder'
+  | 'roles.edit'
+  | 'roles.empty'
+  | 'roles.inheritsWorker'
+  | 'roles.instructions'
+  | 'roles.idle'
+  | 'roles.model'
+  | 'roles.modelInherit'
+  | 'roles.name'
+  | 'roles.needSession'
+  | 'roles.noWorkers'
+  | 'roles.openJobs'
+  | 'roles.resetSession'
+  | 'roles.resetBlocked'
+  | 'roles.save'
+  | 'roles.saved'
+  | 'roles.sessionReset'
+  | 'roles.type'
+  | 'roles.worker'
+  | 'roles.workerMissing'
   | 'role.coder'
   | 'role.general'
   | 'role.plan'
@@ -289,13 +316,14 @@ export type MessageKey =
   | 'theme.system'
   | 'workers.busy'
   | 'workers.cancel'
-  | 'workers.detect'
-  | 'workers.detectFirstRun'
-  | 'workers.detectHint'
-  | 'workers.detectNone'
-  | 'workers.detectOk'
+  | 'workers.empty'
+  | 'workers.manualRegistrationHint'
   | 'workers.formArgs'
   | 'workers.formCommand'
+  | 'workers.customLaunchKind'
+  | 'workers.customSystemExecutable'
+  | 'workers.customLocalExecutable'
+  | 'workers.customPackageSpec'
   | 'workers.formEnabled'
   | 'workers.formName'
   | 'workers.formPrimary'
@@ -525,7 +553,7 @@ const zh: Dict = {
   'jobs.dispatch': '派发任务',
   'jobs.dispatchPlaceholder': '描述要委派给 Worker 的任务…',
   'jobs.dispatchRole': '角色',
-  'jobs.empty': '暂无任务。可在下方派发，或由 Leader 调用 dispatch-worker。',
+  'jobs.empty': '暂无任务。可通过角色定义派发，或由 Leader 调用 dispatch-role。',
   'jobs.modelDisabledHint':
     '模型不可用：请到 Workers 面板为该 Worker 选择可用模型后再重试（勿使用「默认」）。',
   'jobs.needSession': '请先打开一个 Session 再派发。',
@@ -543,8 +571,35 @@ const zh: Dict = {
   'right.files': '文件',
   'right.git': 'Git',
   'right.jobs': 'Jobs',
-  'right.workers': 'Workers',
-  'right.workersHint': '运行面运维视图；审批优先在对话内 Worker 卡片完成。',
+  'right.roles': '角色定义',
+  'right.rolesHint': '角色属于当前 Chat；同一 Worker 可绑定多个角色，并使用独立会话。',
+  'roles.acpDefault': 'ACP 默认模型',
+  'roles.add': '添加角色',
+  'roles.archive': '归档',
+  'roles.copy': '复制',
+  'roles.copySuffix': '副本',
+  'roles.dispatch': '派发',
+  'roles.dispatched': '任务已通过角色派发。',
+  'roles.dispatchPlaceholder': '通过此角色发起任务…',
+  'roles.edit': '编辑',
+  'roles.empty': '当前 Chat 尚未定义角色。',
+  'roles.inheritsWorker': '继承 Worker：{model}',
+  'roles.instructions': '角色指令',
+  'roles.idle': '空闲',
+  'roles.model': '模型覆盖（可选）',
+  'roles.modelInherit': '留空以继承 Worker 默认模型',
+  'roles.name': '角色名称',
+  'roles.needSession': '请先打开一个 Chat。',
+  'roles.noWorkers': '暂无可用 Worker，请先到 Agent Worker 面板安装或注册。',
+  'roles.openJobs': '{count} 个进行中任务',
+  'roles.resetSession': '重置会话',
+  'roles.resetBlocked': '请先完成或取消此角色的进行中任务。',
+  'roles.save': '保存角色',
+  'roles.saved': '角色定义已保存。',
+  'roles.sessionReset': '角色会话已重置。',
+  'roles.type': '语义类型',
+  'roles.worker': '绑定 Worker',
+  'roles.workerMissing': 'Worker 不可用',
   'role.coder': '编码',
   'role.general': '通用',
   'role.plan': '规划',
@@ -693,14 +748,14 @@ const zh: Dict = {
   'theme.system': '系统',
   'workers.busy': '忙碌',
   'workers.cancel': '取消',
-  'workers.detect': '自动侦测',
-  'workers.detectFirstRun':
-    '首次使用：点击「自动侦测」识别本机 CLI，并启用可用的 ACP Worker。OpenCode 请在列表中选择可用模型（避免 “Model is disabled”）。',
-  'workers.detectHint': '扫描本机已安装的 ACP CLI（Claude / Codex / OpenCode）',
-  'workers.detectNone': '未发现可用 CLI。请安装 Claude Code、Codex 或 OpenCode 后重试。',
-  'workers.detectOk': '已识别并启用：{names}',
+  'workers.empty': '尚未安装或注册 Worker。请从 Registry 手动安装，或注册自定义 ACP。',
+  'workers.manualRegistrationHint': 'Worker 仅在此面板由用户显式安装或注册。',
   'workers.formArgs': '参数（空格分隔）',
   'workers.formCommand': '命令',
+  'workers.customLaunchKind': '自定义 ACP 启动方式',
+  'workers.customSystemExecutable': '系统 PATH 可执行文件',
+  'workers.customLocalExecutable': '本地绝对路径',
+  'workers.customPackageSpec': '包名与版本',
   'workers.formEnabled': '启用',
   'workers.formName': '名称',
   'workers.formPrimary': '主角色',
@@ -852,8 +907,7 @@ const en: Dict = {
   // Empty-state hint pool (rotates randomly on each entry, 4 total incl. subhead)
   'chat.hint.compose':
     'Describe a task — Leader will break it down and dispatch to the right Workers.',
-  'chat.hint.capability':
-    'Implement, review, plan — tell me your goal and I will orchestrate.',
+  'chat.hint.capability': 'Implement, review, plan — tell me your goal and I will orchestrate.',
   'chat.hint.start': 'Start with a question, or describe the feature you want to build.',
   'chat.inspector': 'Open Inspector',
   'chat.inspectorClose': 'Close Inspector',
@@ -918,14 +972,16 @@ const en: Dict = {
   'git.branchSwitcher.toast.switchSuccess': 'Switched to branch {branchName}',
   'git.branchSwitcher.toast.createSuccess': 'Created and switched to {branchName}',
   'git.branchSwitcher.createDialog.title': 'Create new branch',
-  'git.branchSwitcher.createDialog.description': 'Create and checkout a new branch from current HEAD.',
+  'git.branchSwitcher.createDialog.description':
+    'Create and checkout a new branch from current HEAD.',
   'git.branchSwitcher.createDialog.nameLabel': 'Branch name',
   'git.branchSwitcher.createDialog.placeholder': 'feature/my-branch',
   'git.branchSwitcher.createDialog.startPointLabel': 'Start point (optional)',
   'git.branchSwitcher.createDialog.startPointPlaceholder': 'main / commit-ish',
   'git.branchSwitcher.createDialog.confirm': 'Create and switch',
   'git.branchSwitcher.commitDialog.title': 'Commit and switch',
-  'git.branchSwitcher.commitDialog.description': 'Commit current changes before switching to {target}.',
+  'git.branchSwitcher.commitDialog.description':
+    'Commit current changes before switching to {target}.',
   'git.branchSwitcher.commitDialog.messageLabel': 'Commit message',
   'git.branchSwitcher.commitDialog.confirm': 'Commit and switch',
   'git.branchSwitcher.error.tracked-changes-would-be-overwritten':
@@ -933,15 +989,17 @@ const en: Dict = {
   'git.branchSwitcher.error.untracked-changes-would-be-overwritten':
     'Untracked working tree files would be overwritten.',
   'git.branchSwitcher.error.conflicts-present': 'Unresolved conflicts in the index.',
-  'git.branchSwitcher.error.operation-in-progress': 'Another git process is running. Try again shortly.',
-  'git.branchSwitcher.error.branch-in-other-worktree': 'Branch is already checked out in another worktree.',
+  'git.branchSwitcher.error.operation-in-progress':
+    'Another git process is running. Try again shortly.',
+  'git.branchSwitcher.error.branch-in-other-worktree':
+    'Branch is already checked out in another worktree.',
   'git.branchSwitcher.error.target-branch-not-found': 'Target branch does not exist.',
   'git.branchSwitcher.error.request-failed': 'Operation failed. Please retry.',
   'jobs.cancel': 'Cancel',
   'jobs.dispatch': 'Dispatch',
   'jobs.dispatchPlaceholder': 'Describe the task for the worker…',
   'jobs.dispatchRole': 'Role',
-  'jobs.empty': 'No jobs yet. Dispatch below, or let the Leader call dispatch-worker.',
+  'jobs.empty': 'No jobs yet. Dispatch through a role, or let the Leader call dispatch-role.',
   'jobs.modelDisabledHint':
     'Model unavailable: open Workers, select a working model for this worker, then retry (do not use Default).',
   'jobs.needSession': 'Open a session before dispatching.',
@@ -959,9 +1017,36 @@ const en: Dict = {
   'right.files': 'Files',
   'right.git': 'Git',
   'right.jobs': 'Jobs',
-  'right.workers': 'Workers',
-  'right.workersHint':
-    'Ops view for the run surface; prefer resolving approvals on Worker cards in chat.',
+  'right.roles': 'Role definitions',
+  'right.rolesHint':
+    'Roles belong to this chat. One Worker may back multiple roles with isolated sessions.',
+  'roles.acpDefault': 'ACP default model',
+  'roles.add': 'Add role',
+  'roles.archive': 'Archive',
+  'roles.copy': 'Copy',
+  'roles.copySuffix': 'copy',
+  'roles.dispatch': 'Dispatch',
+  'roles.dispatched': 'Task dispatched through the role.',
+  'roles.dispatchPlaceholder': 'Start a task through this role…',
+  'roles.edit': 'Edit',
+  'roles.empty': 'No roles are defined for this chat.',
+  'roles.inheritsWorker': 'Inherits Worker: {model}',
+  'roles.instructions': 'Role instructions',
+  'roles.idle': 'Idle',
+  'roles.model': 'Model override (optional)',
+  'roles.modelInherit': 'Leave empty to inherit the Worker default model',
+  'roles.name': 'Role name',
+  'roles.needSession': 'Open a chat first.',
+  'roles.noWorkers': 'No Worker is available. Install or register one in Agent Worker settings.',
+  'roles.openJobs': '{count} open jobs',
+  'roles.resetSession': 'Reset session',
+  'roles.resetBlocked': 'Finish or cancel this role’s open jobs first.',
+  'roles.save': 'Save role',
+  'roles.saved': 'Role definition saved.',
+  'roles.sessionReset': 'Role session reset.',
+  'roles.type': 'Semantic type',
+  'roles.worker': 'Worker binding',
+  'roles.workerMissing': 'Worker unavailable',
   'role.coder': 'Coder',
   'role.general': 'General',
   'role.plan': 'Plan',
@@ -1116,14 +1201,14 @@ const en: Dict = {
   'theme.system': 'System',
   'workers.busy': 'Busy',
   'workers.cancel': 'Cancel',
-  'workers.detect': 'Auto-detect',
-  'workers.detectFirstRun':
-    'First run: click Auto-detect to enable installed ACP workers. For OpenCode, pick a working model to avoid “Model is disabled”.',
-  'workers.detectHint': 'Scan for ACP CLIs on this machine (Claude / Codex / OpenCode)',
-  'workers.detectNone': 'No CLI found. Install Claude Code, Codex, or OpenCode and retry.',
-  'workers.detectOk': 'Detected and enabled: {names}',
+  'workers.empty': 'No Worker is installed. Install one from Registry or register a custom ACP.',
+  'workers.manualRegistrationHint': 'Workers are installed or registered explicitly in this panel.',
   'workers.formArgs': 'Args (space-separated)',
   'workers.formCommand': 'Command',
+  'workers.customLaunchKind': 'Custom ACP launch method',
+  'workers.customSystemExecutable': 'System PATH executable',
+  'workers.customLocalExecutable': 'Local absolute path',
+  'workers.customPackageSpec': 'Package and version',
   'workers.formEnabled': 'Enabled',
   'workers.formName': 'Name',
   'workers.formPrimary': 'Primary role',

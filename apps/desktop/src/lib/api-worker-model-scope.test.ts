@@ -43,6 +43,29 @@ test('worker registry catalog uses the local API proxy and explicit refresh quer
   assert.deepEqual(result, { version: '1.0.0', agents: [] })
 })
 
+test('custom ACP registration uses the probe-before-persist Owner route', async () => {
+  let requestedUrl = ''
+  let requestBody: unknown
+  globalThis.fetch = async (input, init) => {
+    requestedUrl = String(input)
+    requestBody = JSON.parse(String(init?.body))
+    return Response.json({ worker: {} })
+  }
+
+  await api.registerCustomAcpWorker({
+    name: 'Custom Agent',
+    launchKind: 'npx',
+    packageSpec: '@scope/agent@1',
+  })
+
+  assert.equal(new URL(requestedUrl).pathname, '/api/workers/custom/register')
+  assert.deepEqual(requestBody, {
+    name: 'Custom Agent',
+    launchKind: 'npx',
+    packageSpec: '@scope/agent@1',
+  })
+})
+
 test('registry prepare returns an operation and supports bounded polling/cancellation', async () => {
   const requests: Array<{ pathname: string; method: string }> = []
   globalThis.fetch = async (input, init) => {

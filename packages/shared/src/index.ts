@@ -21,10 +21,10 @@ export type AcpRegistryTarget =
   | 'windows-x86_64'
 
 export type AcpRegistryDistributionKind = 'binary' | 'npx' | 'uvx'
+export type CustomAcpLaunchKind = 'npx' | 'uvx' | 'system' | 'local'
 
 /** How the Worker is managed for install / version / trust. */
 export type WorkerSource =
-  | { type: 'builtin' }
   | {
       type: 'registry'
       registryId: string
@@ -35,7 +35,7 @@ export type WorkerSource =
       target?: AcpRegistryTarget
       installationId: string
     }
-  | { type: 'custom' }
+  | { type: 'custom'; launchKind?: CustomAcpLaunchKind; launchDigest?: string }
 
 /**
  * Runtime execution profile (small set of verified overrides).
@@ -61,6 +61,20 @@ export interface WorkerLaunchSpec {
     observedSha256?: string
     executableRelativePath: string
   }
+}
+
+export interface CustomAcpRegistrationInput {
+  name: string
+  launchKind: CustomAcpLaunchKind
+  /** Required for npx/uvx. */
+  packageSpec?: string
+  /** Required for system/local executable launch. */
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  description?: string
+  defaultModel?: string
+  enabled?: boolean
 }
 
 /**
@@ -238,6 +252,47 @@ export function isValidSessionApprovalPolicy(v: unknown): v is SessionApprovalPo
  * Distinct from `kind` (which CLI product) and `capabilities` (raw abilities).
  */
 export type WorkerRole = 'plan' | 'coder' | 'review' | 'test' | 'research' | 'general'
+
+/**
+ * A Chat-scoped persona bound to an installed ACP Worker.
+ * Multiple roles may bind the same Worker while retaining independent ACP sessions.
+ */
+export interface RoleDefinition {
+  id: string
+  chatSessionId: string
+  workerId: string
+  name: string
+  roleType: WorkerRole
+  instructions: string
+  /** Optional role override; absent means inherit the Worker's default model. */
+  model?: string
+  enabled: boolean
+  /** Increments only when execution semantics change. */
+  revision: number
+  createdAt: string
+  updatedAt: string
+  archivedAt?: string
+}
+
+export interface CreateRoleDefinitionInput {
+  chatSessionId: string
+  workerId: string
+  name: string
+  roleType: WorkerRole
+  instructions: string
+  model?: string
+  enabled?: boolean
+}
+
+export interface UpdateRoleDefinitionInput {
+  workerId?: string
+  name?: string
+  roleType?: WorkerRole
+  instructions?: string
+  model?: string | null
+  enabled?: boolean
+  expectedRevision?: number
+}
 
 export type WorkerCapability = 'code-edit' | 'review' | 'research' | 'test' | 'general' | 'plan'
 
@@ -488,13 +543,9 @@ export interface WorkerRegistration {
   command: string
   args: string[]
   env?: Record<string, string>
-  /**
-   * Primary role used for default routing (plan / coder / review / test / …).
-   */
+  /** @deprecated Execution compatibility metadata; Chat routing uses RoleDefinition.roleType. */
   primaryRole: WorkerRole
-  /**
-   * All roles this worker may accept. Must include primaryRole.
-   */
+  /** @deprecated Execution compatibility metadata; every ready Worker may back any Chat role. */
   roles: WorkerRole[]
   capabilities: WorkerCapability[]
   enabled: boolean
@@ -531,8 +582,7 @@ export interface WorkerRegistration {
   /** Most recent model refresh error (truncated, no secrets) */
   modelsError?: string
   /**
-   * Install / version ownership. Omitted on legacy snapshots → treat as
-   * builtin (claude/codex/opencode) or custom via migration.
+   * Install / version ownership. New Workers are Registry-managed or explicitly custom-registered.
    */
   source?: WorkerSource
   /** Execution branching profile (small override set). */
@@ -618,6 +668,14 @@ export interface WorkerJob {
   workerId: string
   workerName: string
   role?: WorkerRole
+  /** Immutable role-definition snapshot captured at dispatch time. */
+  roleDefinitionId?: string
+  roleName?: string
+  roleType?: WorkerRole
+  roleRevision?: number
+  effectiveModel?: string
+  instructionsSnapshot?: string
+  effectivePrompt?: string
   task: string
   cwd: string
   status: JobStatus
@@ -826,6 +884,7 @@ export interface AppSnapshot {
   projects: Project[]
   sessions: Session[]
   workers: WorkerRegistration[]
+  roleDefinitions: RoleDefinition[]
   approvals: ApprovalItem[]
   /** Recent worker jobs (dispatch history + in-flight) */
   jobs?: WorkerJob[]
@@ -839,45 +898,6 @@ export interface AppSnapshot {
    */
   revision?: number
 }
-
-export const DEFAULT_WORKERS: Omit<
-  WorkerRegistration,
-  'id' | 'health' | 'lastSeenAt' | 'enabled' | 'scope'
->[] = [
-  {
-    name: 'Claude Code',
-    kind: 'claude',
-    command: 'npx',
-    args: ['-y', '@agentclientprotocol/claude-agent-acp@latest'],
-    primaryRole: 'coder',
-    roles: ['coder', 'plan', 'research', 'general'],
-    capabilities: ['code-edit', 'plan', 'research', 'general'],
-    description:
-      'Primary coder: multi-file implementation and refactors via ACP. Can also plan and research.',
-  },
-  {
-    name: 'Codex CLI',
-    kind: 'codex',
-    command: 'npx',
-    args: ['-y', '@zed-industries/codex-acp@latest'],
-    primaryRole: 'review',
-    roles: ['review', 'coder', 'test', 'general'],
-    capabilities: ['review', 'code-edit', 'test', 'general'],
-    description:
-      'Primary reviewer: code review and quality checks via ACP. Also capable of coding and tests.',
-  },
-  {
-    name: 'OpenCode',
-    kind: 'opencode',
-    command: 'opencode',
-    args: ['acp'],
-    primaryRole: 'general',
-    roles: ['general', 'coder', 'plan', 'test'],
-    capabilities: ['general', 'code-edit', 'plan', 'test'],
-    description:
-      'General-purpose coding agent via native ACP. Flexible for plan / code / test tasks.',
-  },
-]
 
 /** Normalize legacy workers that lack role fields. */
 export function normalizeWorkerRoles<

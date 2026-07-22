@@ -1,6 +1,5 @@
 import { registerApiRoute } from '@mastra/core/server'
 import {
-  createId,
   getGitStatus,
   listLocalBranches,
   switchBranch,
@@ -12,7 +11,6 @@ import {
   globalActivityLog,
 } from '@swarmdesk-agent/core'
 import {
-  applyHealthReport,
   parseHealthDepth,
   getAcpSessionManager,
   formatPublicError,
@@ -29,16 +27,17 @@ import {
   registryCatalogApiPublicError,
 } from '../acp-registry-api.js'
 import { getWorkerModels, evaluateWorkerModelPin, applyWorkerModelPin } from '../worker-models.js'
+import { assertRoleModelAccepted } from '../role-definitions.js'
 import { checkOneWorker, checkWorkersBatch } from '../workers-health.js'
 import { getWorkerScheduler } from '../scheduler.js'
 import type {
   ApprovalDecision,
   LeaderMode,
   Locale,
-  WorkerRegistration,
   WorkerRole,
+  CreateRoleDefinitionInput,
+  UpdateRoleDefinitionInput,
 } from '@swarmdesk-agent/shared'
-import { normalizeWorkerRoles } from '@swarmdesk-agent/shared'
 import { basename } from 'node:path'
 import { asAcpHttpFailure } from '../acp-http-error.js'
 import {
@@ -224,6 +223,127 @@ export const apiRoutes = [
       } catch (e) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 404)
       }
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:sessionId/role-definitions', {
+    method: 'GET',
+    handler: async (c) => {
+      const sessionId = c.req.param('sessionId')
+      if (
+        !store()
+          .listSessions()
+          .some((session) => session.id === sessionId)
+      ) {
+        return c.json({ error: `Session not found: ${sessionId}` }, 404)
+      }
+      return c.json({
+        roleDefinitions: store().listRoleDefinitions(sessionId, {
+          includeArchived: c.req.query('includeArchived') === '1',
+        }),
+      })
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:sessionId/role-definitions', {
+    method: 'POST',
+    handler: async (c) => {
+      const sessionId = c.req.param('sessionId')
+      const body = (await c.req.json()) as Omit<CreateRoleDefinitionInput, 'chatSessionId'>
+      try {
+        const session = store()
+          .listSessions()
+          .find((candidate) => candidate.id === sessionId)
+        const projectRoot = session
+          ? store()
+              .listProjects()
+              .find((project) => project.id === session.projectId)?.rootPath
+          : undefined
+        assertRoleModelAccepted(body.workerId, body.model, projectRoot)
+        const roleDefinition = store().createRoleDefinition({
+          ...body,
+          chatSessionId: sessionId,
+        })
+        return c.json({ roleDefinition, snapshot: store().snapshot() }, 201)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return c.json({ error: message }, message.includes('not found') ? 404 : 400)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:sessionId/role-definitions/:roleDefinitionId', {
+    method: 'PATCH',
+    handler: async (c) => {
+      const body = (await c.req.json()) as UpdateRoleDefinitionInput
+      try {
+        const sessionId = c.req.param('sessionId')
+        const roleDefinitionId = c.req.param('roleDefinitionId')
+        const current = store().getRoleDefinition(sessionId, roleDefinitionId)
+        if (!current) throw new Error(`Role definition not found: ${roleDefinitionId}`)
+        const session = store()
+          .listSessions()
+          .find((candidate) => candidate.id === sessionId)
+        const projectRoot = session
+          ? store()
+              .listProjects()
+              .find((project) => project.id === session.projectId)?.rootPath
+          : undefined
+        if (body.workerId !== undefined || body.model !== undefined) {
+          assertRoleModelAccepted(
+            body.workerId ?? current.workerId,
+            body.model === undefined ? current.model : body.model,
+            projectRoot,
+          )
+        }
+        const roleDefinition = store().updateRoleDefinition(sessionId, roleDefinitionId, body)
+        return c.json({ roleDefinition, snapshot: store().snapshot() })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        const status = message.includes('revision conflict')
+          ? 409
+          : message.includes('not found')
+            ? 404
+            : 400
+        return c.json({ error: message }, status)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:sessionId/role-definitions/:roleDefinitionId', {
+    method: 'DELETE',
+    handler: async (c) => {
+      const body = (await c.req.json().catch(() => ({}))) as { expectedRevision?: number }
+      try {
+        const roleDefinition = store().archiveRoleDefinition(
+          c.req.param('sessionId'),
+          c.req.param('roleDefinitionId'),
+          body.expectedRevision,
+        )
+        return c.json({ roleDefinition, snapshot: store().snapshot() })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        const status = message.includes('revision conflict')
+          ? 409
+          : message.includes('not found')
+            ? 404
+            : 400
+        return c.json({ error: message }, status)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:sessionId/role-definitions/:roleDefinitionId/reset-session', {
+    method: 'POST',
+    handler: async (c) => {
+      const sessionId = c.req.param('sessionId')
+      const roleDefinitionId = c.req.param('roleDefinitionId')
+      const role = store()
+        .listRoleDefinitions(sessionId, { includeArchived: true })
+        .find((candidate) => candidate.id === roleDefinitionId)
+      if (!role) return c.json({ error: 'Role definition not found' }, 404)
+      const result = getAcpSessionManager().deleteContextsByRole(sessionId, roleDefinitionId)
+      return c.json({ deleted: result.deleted > 0 })
     },
   }),
 
@@ -574,57 +694,10 @@ export const apiRoutes = [
     },
   }),
 
-  registerApiRoute('/api/workers', {
+  registerApiRoute('/api/workers/custom/register', {
     method: 'POST',
     handler: async (c) => {
-      const body = (await c.req.json()) as Partial<WorkerRegistration>
-      if (!body.name || !body.command) {
-        return c.json({ error: 'name and command required' }, 400)
-      }
-      const draft = normalizeWorkerRoles({
-        name: body.name,
-        kind: body.kind ?? 'custom',
-        primaryRole: body.primaryRole,
-        roles: body.roles,
-        capabilities: body.capabilities,
-      })
-      const worker: WorkerRegistration = {
-        id: body.id ?? createId('worker'),
-        name: body.name,
-        kind: body.kind ?? 'custom',
-        command: body.command,
-        args: body.args ?? [],
-        env: body.env,
-        primaryRole: draft.primaryRole,
-        roles: draft.roles,
-        capabilities: body.capabilities ?? ['general'],
-        enabled: body.enabled ?? true,
-        scope: body.scope ?? 'global',
-        projectId: body.projectId,
-        description: body.description ?? 'Custom ACP/CLI worker',
-        health: 'unknown',
-      }
-      const previous = body.id
-        ? store()
-            .listWorkers()
-            .find((candidate) => candidate.id === body.id)
-        : undefined
-      if (previous) {
-        try {
-          reconcileWorkerRuntimeResources({
-            before: previous,
-            after: worker,
-            manager: getAcpSessionManager(),
-            catalogStore: getWorkerModelCatalogStore(),
-          })
-        } catch (error) {
-          const failure = asAcpHttpFailure(error)
-          if (failure) return c.json(failure.body, failure.status)
-          throw error
-        }
-      }
-      store().upsertWorkerLogged(worker)
-      return c.json({ worker })
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
     },
   }),
 
@@ -847,7 +920,9 @@ export const apiRoutes = [
     method: 'GET',
     handler: async (c) => {
       const id = c.req.param('id')
-      const project = store().listProjects().find((p) => p.id === id)
+      const project = store()
+        .listProjects()
+        .find((p) => p.id === id)
       if (!project) return c.json({ error: 'project not found' }, 404)
       return c.json(await listLocalBranches(project.rootPath))
     },
@@ -857,7 +932,9 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const id = c.req.param('id')
-      const project = store().listProjects().find((p) => p.id === id)
+      const project = store()
+        .listProjects()
+        .find((p) => p.id === id)
       if (!project) return c.json({ error: 'project not found' }, 404)
       const body = await c.req.json().catch(() => ({}))
       const target = String(body?.targetBranchName ?? '').trim()
@@ -870,7 +947,9 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const id = c.req.param('id')
-      const project = store().listProjects().find((p) => p.id === id)
+      const project = store()
+        .listProjects()
+        .find((p) => p.id === id)
       if (!project) return c.json({ error: 'project not found' }, 404)
       const body = await c.req.json().catch(() => ({}))
       const name = String(body?.branchName ?? '').trim()
@@ -884,7 +963,9 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const id = c.req.param('id')
-      const project = store().listProjects().find((p) => p.id === id)
+      const project = store()
+        .listProjects()
+        .find((p) => p.id === id)
       if (!project) return c.json({ error: 'project not found' }, 404)
       const body = await c.req.json().catch(() => ({}))
       const target = String(body?.targetBranchName ?? '').trim()

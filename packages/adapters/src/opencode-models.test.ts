@@ -5,7 +5,7 @@ import {
   sortOpenCodeModelIds,
   listOpenCodeModelsViaCli,
 } from './opencode-models.js'
-import { whichSync } from './detect-workers.js'
+import { whichSync } from './which.js'
 
 describe('opencode-models parse/sort', () => {
   it('parses provider/model lines and ignores JSON noise', () => {
