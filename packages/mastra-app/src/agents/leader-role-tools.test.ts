@@ -33,3 +33,11 @@ test('Leader instructions consume the one-time role-review RequestContext', () =
   assert.match(source, /roleReviewPending/u)
   assert.match(source, /bootstrappedRoleCount/u)
 })
+
+test('Leader mounts TaskSignalProvider so the task list persists across turns', () => {
+  const source = readFileSync(fileURLToPath(new URL('./leader-agent.ts', import.meta.url)), 'utf8')
+
+  assert.match(source, /from '@mastra\/core\/signals'/u)
+  assert.match(source, /TaskSignalProvider/u)
+  assert.match(source, /signals:\s*\[\s*new TaskSignalProvider\(\)\s*\]/u)
+})

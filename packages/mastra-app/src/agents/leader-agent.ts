@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent'
+import { TaskSignalProvider } from '@mastra/core/signals'
 import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 import { mkdirSync } from 'node:fs'
@@ -167,6 +168,12 @@ export const leaderAgent = new Agent({
     cancelJobTool,
   },
   memory: leaderMemory,
+  // TaskSignalProvider bundles task_write/update/complete/check + the
+  // TaskStateProcessor that persists the task list to the thread-scoped
+  // `tasks` (threadState) domain so it survives across turns. Without it the
+  // built-in task tools keep the list only in transient tool-call state and
+  // silently lose it next turn. Backed by the same LibSQL leaderStorage.
+  signals: [new TaskSignalProvider()],
   // NOTE: do NOT put role dispatch in backgroundTasks.
   // Background wrapping returns before wait=true finishes, so the Leader
   // polls get-job with a missing jobId and the chat stream ends early.
