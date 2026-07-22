@@ -2471,6 +2471,73 @@
 .approval-block {
   padding: 8px 0;
 }
+
+/* Prompt defaults — editable behavior layer above protected ACP/tool contracts. */
+.settings-prompts-page {
+  width: min(860px, 100%);
+}
+.prompt-settings-editor {
+  display: grid;
+  gap: 14px;
+}
+.prompt-settings-section {
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+}
+.prompt-settings-section-head,
+.prompt-settings-role-head,
+.prompt-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.prompt-settings-section-head h3,
+.prompt-settings-role-head label {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+.prompt-settings-section-head p {
+  margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.prompt-settings-roles-head {
+  margin-bottom: 14px;
+}
+.prompt-settings-role-list {
+  display: grid;
+  gap: 12px;
+}
+.prompt-settings-role-head {
+  margin-bottom: 6px;
+}
+.prompt-settings-textarea {
+  width: 100%;
+  min-height: 104px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.55;
+}
+.prompt-settings-role .prompt-settings-textarea {
+  min-height: 88px;
+  margin-top: 0;
+}
+.prompt-settings-actions {
+  justify-content: flex-end;
+  padding-bottom: 4px;
+}
+
+@media (max-width: 760px) {
+  .prompt-settings-section-head {
+    align-items: flex-start;
+  }
+}
 .approval-title {
   font-weight: var(--fw-semibold);
   color: var(--text-1);

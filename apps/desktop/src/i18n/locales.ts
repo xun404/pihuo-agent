@@ -247,6 +247,7 @@ export type MessageKey =
   | 'settings.navAbout'
   | 'settings.navGeneral'
   | 'settings.navModel'
+  | 'settings.navPrompts'
   | 'settings.navWorkers'
   | 'settings.needKey'
   | 'settings.perModelThinking'
@@ -261,12 +262,20 @@ export type MessageKey =
   | 'settings.providerKey'
   | 'settings.descGeneral'
   | 'settings.descModel'
+  | 'settings.descPrompts'
   | 'settings.descWorkers'
   | 'settings.descAbout'
   | 'settings.runtime.leaderMaxSteps'
   | 'settings.runtime.leaderMaxStepsDesc'
   | 'settings.runtime.leaderMaxStepsError'
   | 'settings.runtime.saveSuccess'
+  | 'settings.prompts.leader'
+  | 'settings.prompts.leaderHint'
+  | 'settings.prompts.roles'
+  | 'settings.prompts.rolesHint'
+  | 'settings.prompts.reset'
+  | 'settings.prompts.save'
+  | 'settings.prompts.saved'
   | 'settings.storageRoot'
   | 'settings.storageData'
   | 'settings.storageCache'
@@ -638,6 +647,7 @@ const zh: Dict = {
   'settings.back': '返回工作区',
   'settings.descGeneral': '主题、语言与基础行为。',
   'settings.descModel': '管理模型供应商与 API Key，配置后可在聊天时选择使用。',
+  'settings.descPrompts': '设置 Leader 和各类角色在后续任务中使用的默认提示词。',
   'settings.descWorkers': '注册与管理 CLI Worker（Claude Code / Codex / OpenCode 等）。',
   'settings.descAbout': '产品信息与版本。',
   'settings.cancelEdit': '取消编辑',
@@ -697,6 +707,7 @@ const zh: Dict = {
   'settings.navAbout': '关于',
   'settings.navGeneral': '常规',
   'settings.navModel': '模型设置',
+  'settings.navPrompts': '提示词',
   'settings.navWorkers': 'Agent Worker',
   'settings.needKey': '未配置 Key',
   'settings.perModelThinking': '支持的思考强度',
@@ -713,6 +724,13 @@ const zh: Dict = {
   'settings.runtime.leaderMaxStepsDesc': '单次任务预算，默认 500',
   'settings.runtime.leaderMaxStepsError': '请输入 10 到 1000 之间的整数',
   'settings.runtime.saveSuccess': '运行设置已保存',
+  'settings.prompts.leader': 'Leader',
+  'settings.prompts.leaderHint': '此内容会附加在内置协议和工具约束之后，从下一轮对话开始生效。',
+  'settings.prompts.roles': '角色默认提示词',
+  'settings.prompts.rolesHint': '用于新 Worker 默认角色和新建角色，不会覆盖已有 Session。',
+  'settings.prompts.reset': '恢复默认',
+  'settings.prompts.save': '保存提示词',
+  'settings.prompts.saved': '提示词已保存，将用于后续新建角色和下一轮 Leader 对话。',
   'settings.storageRoot': '配置目录',
   'settings.storageData': '数据目录',
   'settings.storageCache': '缓存目录',
@@ -1101,6 +1119,7 @@ const en: Dict = {
   'settings.back': 'Back to workspace',
   'settings.descGeneral': 'Theme, language, and basic behavior.',
   'settings.descModel': 'Manage model providers and API keys for chat.',
+  'settings.descPrompts': 'Set the default Leader and role prompts used for future tasks.',
   'settings.descWorkers': 'Register and manage CLI workers (Claude Code / Codex / OpenCode).',
   'settings.descAbout': 'Product info and version.',
   'settings.cancelEdit': 'Cancel',
@@ -1162,6 +1181,7 @@ const en: Dict = {
   'settings.navAbout': 'About',
   'settings.navGeneral': 'General',
   'settings.navModel': 'Models',
+  'settings.navPrompts': 'Prompts',
   'settings.navWorkers': 'Agent Worker',
   'settings.needKey': 'No key',
   'settings.perModelThinking': 'Supported thinking levels',
@@ -1180,6 +1200,15 @@ const en: Dict = {
   'settings.runtime.leaderMaxStepsDesc': 'Per-task budget, default 500',
   'settings.runtime.leaderMaxStepsError': 'Please enter an integer between 10 and 1000',
   'settings.runtime.saveSuccess': 'Runtime settings saved',
+  'settings.prompts.leader': 'Leader',
+  'settings.prompts.leaderHint':
+    'Appended after the protected protocol and tool contract; applies from the next turn.',
+  'settings.prompts.roles': 'Default role prompts',
+  'settings.prompts.rolesHint':
+    'Used for new Worker defaults and new roles without overwriting existing Sessions.',
+  'settings.prompts.reset': 'Restore default',
+  'settings.prompts.save': 'Save prompts',
+  'settings.prompts.saved': 'Prompts saved for future roles and the next Leader turn.',
   'settings.storageRoot': 'Config',
   'settings.storageData': 'Data',
   'settings.storageCache': 'Cache',

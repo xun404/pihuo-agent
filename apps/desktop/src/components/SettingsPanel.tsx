@@ -3,9 +3,11 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type {
   CustomAcpLaunchKind,
   CustomAcpRegistrationInput,
+  PromptSettings,
   WorkerRegistration,
   WorkerDefaultRole,
 } from '@swarmdesk-agent/shared'
+import { normalizePromptSettings } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   fetchSettings,
@@ -83,6 +85,7 @@ import {
   IconChevronLeft,
   IconCpu,
   IconInfo,
+  IconFileEdit,
   IconSettings,
   IconWorkers,
   WorkerBrandLogo,
@@ -92,6 +95,7 @@ import { formatContextWindow, parseContextWindow } from '../lib/context-window'
 import { useToast } from './Toast'
 import { WorkerRegistryCombobox } from './WorkerRegistryCombobox'
 import { WorkerDefaultRoleEditor } from './WorkerDefaultRoleEditor'
+import { PromptSettingsEditor } from './PromptSettingsEditor'
 import {
   createWorkerDraftFromRegistry,
   resolveWorkerRegistrationRoute,
@@ -102,7 +106,7 @@ import { RegistryAgentDetail } from './RegistryAgentDetail'
 import { WorkerAuthTerminalModal } from './WorkerAuthTerminalModal'
 import { useAcpRegistryCatalog } from '../hooks/useAcpRegistryCatalog'
 
-type TabId = 'general' | 'model' | 'workers' | 'about'
+type TabId = 'general' | 'model' | 'prompts' | 'workers' | 'about'
 
 interface Props {
   onClose: () => void
@@ -243,8 +247,12 @@ export function SettingsPanel({
   const secretControllerRef = useRef<AbortController | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [promptSaving, setPromptSaving] = useState(false)
   const [data, setData] = useState<SettingsPayload | null>(null)
   const [leaderModel, setLeaderModel] = useState('')
+  const [promptSettings, setPromptSettings] = useState<PromptSettings>(() =>
+    normalizePromptSettings(undefined),
+  )
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({})
 
   const [customModel, setCustomModel] = useState(false)
@@ -325,6 +333,7 @@ export function SettingsPanel({
       const s = await fetchSettings()
       setData(s)
       setLeaderModel(s.settings.leaderModel)
+      setPromptSettings(normalizePromptSettings(s.settings.prompts))
       setDraftKeys({})
       const customs = s.customProviders ?? s.settings.customProviders ?? []
       setCustomProviders(customs)
@@ -890,9 +899,25 @@ export function SettingsPanel({
     }
   }
 
+  const savePromptSettings = async (prompts: PromptSettings) => {
+    setPromptSaving(true)
+    try {
+      const normalized = normalizePromptSettings(prompts)
+      const saved = await saveSettings({ prompts: normalized })
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      setPromptSettings(normalizePromptSettings(saved.settings?.prompts ?? normalized))
+      toastSuccess(t('settings.prompts.saved'))
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setPromptSaving(false)
+    }
+  }
+
   const navItems: { id: TabId; label: string }[] = [
     { id: 'general', label: t('settings.navGeneral') },
     { id: 'model', label: t('settings.navModel') },
+    { id: 'prompts', label: t('settings.navPrompts') },
     { id: 'workers', label: t('settings.navWorkers') },
     { id: 'about', label: t('settings.navAbout') },
   ]
@@ -1816,6 +1841,19 @@ export function SettingsPanel({
         </div>
       )}
 
+      {!loading && tab === 'prompts' && (
+        <div className="settings-prompts-page">
+          <h2 className="settings-page-title">{t('settings.navPrompts')}</h2>
+          <p className="settings-page-desc">{t('settings.descPrompts')}</p>
+          <PromptSettingsEditor
+            prompts={promptSettings}
+            saving={promptSaving}
+            onChange={setPromptSettings}
+            onSave={savePromptSettings}
+          />
+        </div>
+      )}
+
       {!loading && tab === 'workers' && (
         <div className="settings-workers">
           <h2 className="settings-page-title">{t('settings.navWorkers')}</h2>
@@ -2276,6 +2314,7 @@ export function SettingsPanel({
   const navIcon = (id: TabId) => {
     if (id === 'general') return <IconSettings size={16} />
     if (id === 'model') return <IconCpu size={16} />
+    if (id === 'prompts') return <IconFileEdit size={16} />
     if (id === 'workers') return <IconWorkers size={16} />
     return <IconInfo size={16} />
   }
