@@ -90,8 +90,8 @@ describe('LocalStore Registry source migration', () => {
 
     const builtin = snapshot.workers.find((worker) => worker.id === 'worker-builtin')
     const custom = snapshot.workers.find((worker) => worker.id === 'worker-custom')
-    assert.deepEqual(builtin?.source, { type: 'builtin' })
-    assert.equal(builtin?.runtimeProfile, 'codex')
+    assert.deepEqual(builtin?.source, { type: 'custom' })
+    assert.equal(builtin?.runtimeProfile, 'generic-acp')
     assert.deepEqual(custom?.source, { type: 'custom' })
     assert.equal(custom?.runtimeProfile, 'generic-acp')
     assert.equal(custom?.command, '/opt/custom-acp')

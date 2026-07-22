@@ -308,6 +308,69 @@ describe('acp-registry-api', () => {
     assert.notEqual(findInstallationById(prepared.installation.installationId)?.status, 'removed')
   })
 
+  it('rejects Worker deletion before lifecycle mutations while an active Chat role references it', async () => {
+    resetInstallations()
+    const worker = await registerSeededWorker({ installationId: 'inst-role-reference' })
+    const project = getSharedStore().upsertProject({
+      name: 'Role reference',
+      rootPath: join(dir, 'role-reference-project'),
+    })
+    const session = getSharedStore().createSession({
+      projectId: project.id,
+      title: 'Role reference chat',
+    })
+    const role = getSharedStore().createRoleDefinition({
+      chatSessionId: session.id,
+      workerId: worker.id,
+      name: 'Implementer',
+      roleType: 'coder',
+      instructions: 'Implement the task.',
+    })
+
+    assert.throws(
+      () => apiDeleteWorker({ workerId: worker.id }),
+      (error: unknown) =>
+        error instanceof RegistryApiError &&
+        error.code === 'WORKER_REFERENCED_BY_ROLE' &&
+        error.httpStatus === 409,
+    )
+    assert.equal(
+      getSharedStore()
+        .listWorkers()
+        .find((item) => item.id === worker.id)?.id,
+      worker.id,
+    )
+
+    getSharedStore().archiveRoleDefinition(session.id, role.id, role.revision)
+    const openJob = getSharedStore().createJob({
+      id: 'job-role-worker-reference',
+      sessionId: session.id,
+      projectId: project.id,
+      workerId: worker.id,
+      workerName: worker.name,
+      roleDefinitionId: role.id,
+      role: role.roleType,
+      task: 'Still running',
+      cwd: project.rootPath,
+      status: 'queued',
+      approvalPolicy: 'manual',
+      createdAt: new Date().toISOString(),
+      source: 'api',
+    })
+    assert.throws(
+      () => apiDeleteWorker({ workerId: worker.id }),
+      (error: unknown) =>
+        error instanceof RegistryApiError &&
+        error.code === 'WORKER_HAS_OPEN_JOBS' &&
+        error.httpStatus === 409,
+    )
+    getSharedStore().updateJob(openJob.id, {
+      status: 'succeeded',
+      finishedAt: new Date().toISOString(),
+    })
+    assert.equal(apiDeleteWorker({ workerId: worker.id }).workerId, worker.id)
+  })
+
   it('maps legacy Session worker references to the current installation', async () => {
     resetInstallations()
     const prepared = await seedInstallation({})

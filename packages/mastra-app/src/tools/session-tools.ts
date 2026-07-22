@@ -56,6 +56,8 @@ export function jobToToolResult(job: WorkerJob) {
     status: job.status,
     workerName: job.workerName,
     workerId: job.workerId,
+    roleDefinitionId: job.roleDefinitionId,
+    roleName: job.roleName,
     role: job.role,
     cwd: job.cwd,
     task: job.task,
@@ -160,6 +162,32 @@ const jobStatusSchema = z.enum([
   'timed_out',
 ])
 
+const roleDefinitionOutputSchema = z.object({
+  id: z.string(),
+  chatSessionId: z.string(),
+  workerId: z.string(),
+  name: z.string(),
+  roleType: roleSchema,
+  instructions: z.string(),
+  model: z.string().optional(),
+  enabled: z.boolean(),
+  revision: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  archivedAt: z.string().optional(),
+})
+
+function boundRoleContext(context: unknown) {
+  const { routerSessionId, routerProjectId, routerProjectRoot, memoryThreadId } =
+    resolveDispatchContext(context as any)
+  return {
+    routerSessionId,
+    routerProjectId,
+    routerProjectRoot,
+    memoryThreadId,
+  }
+}
+
 export const listProjectsTool = createTool({
   id: 'list-projects',
   description: 'List local projects known to SwarmDesk.',
@@ -190,10 +218,9 @@ export const listProjectsTool = createTool({
 export const listWorkersTool = createTool({
   id: 'list-workers',
   description:
-    'List registered workers (builtin, custom, and Registry) with roles, command health, ACP readiness, and model catalog. Prefer ready non-busy workers. Call this before dispatch-worker to get current worker ids/names. For OpenCode-profile workers, require modelConfigured=true before dispatch.',
+    'Read the globally installed Registry/custom ACP Worker roster so the current Chat can choose a Worker when creating a role definition. This tool cannot install, authenticate, update, or remove Workers.',
   inputSchema: z.object({
     enabledOnly: z.boolean().optional().default(true),
-    role: roleSchema.optional().describe('Only workers that can serve this role'),
   }),
   outputSchema: z.object({
     workers: z.array(
@@ -201,8 +228,6 @@ export const listWorkersTool = createTool({
         id: z.string(),
         name: z.string(),
         kind: z.string(),
-        primaryRole: z.string(),
-        roles: z.array(z.string()),
         capabilities: z.array(z.string()),
         enabled: z.boolean(),
         description: z.string(),
@@ -241,9 +266,9 @@ export const listWorkersTool = createTool({
       }),
     ),
   }),
-  execute: async ({ enabledOnly, role }) => {
+  execute: async ({ enabledOnly }) => {
     const { evaluateWorkerReadinessGate } = await import('../acp-worker-readiness.js')
-    let workers = role ? store().listWorkersByRole(role, enabledOnly) : store().listWorkers()
+    let workers = store().listWorkers()
     if (enabledOnly) workers = workers.filter((w) => w.enabled)
     workers = [...workers].sort((a, b) => {
       const rank = (s: string) =>
@@ -270,8 +295,6 @@ export const listWorkersTool = createTool({
           id: w.id,
           name: w.name,
           kind: w.kind,
-          primaryRole: w.primaryRole,
-          roles: w.roles,
           capabilities: w.capabilities,
           enabled: w.enabled,
           description: w.description,
@@ -341,21 +364,116 @@ export const getActiveContextTool = createTool({
   },
 })
 
+export const listRoleDefinitionsTool = createTool({
+  id: 'list-role-definitions',
+  description:
+    'List role definitions for the current Chat. Roles are Chat-scoped personas bound to installed ACP Workers; each role has an independent ACP session.',
+  inputSchema: z.object({}),
+  outputSchema: z.object({ roleDefinitions: z.array(roleDefinitionOutputSchema) }),
+  execute: async (_input, context) => {
+    const port = getRuntimeDispatchPort()
+    if (!port.listRoleDefinitions) throw new Error('Role-definition runtime is unavailable')
+    return { roleDefinitions: await port.listRoleDefinitions(boundRoleContext(context)) }
+  },
+})
+
+export const createRoleDefinitionTool = createTool({
+  id: 'create-role-definition',
+  description:
+    'Create a role definition in the current Chat using an already installed Worker. Omit model to inherit the Worker default model.',
+  inputSchema: z.object({
+    workerId: z.string(),
+    name: z.string(),
+    roleType: roleSchema,
+    instructions: z.string(),
+    model: z.string().optional(),
+    enabled: z.boolean().optional(),
+  }),
+  outputSchema: z.object({ roleDefinition: roleDefinitionOutputSchema }),
+  execute: async (input, context) => {
+    const port = getRuntimeDispatchPort()
+    if (!port.createRoleDefinition) throw new Error('Role-definition runtime is unavailable')
+    return {
+      roleDefinition: await port.createRoleDefinition({
+        context: boundRoleContext(context),
+        input,
+      }),
+    }
+  },
+})
+
+export const updateRoleDefinitionTool = createTool({
+  id: 'update-role-definition',
+  description:
+    'Update a role definition in the current Chat. Changing Worker, type, instructions, or model increments its execution revision and starts a distinct ACP session on next dispatch.',
+  inputSchema: z.object({
+    roleDefinitionId: z.string(),
+    workerId: z.string().optional(),
+    name: z.string().optional(),
+    roleType: roleSchema.optional(),
+    instructions: z.string().optional(),
+    model: z.string().nullable().optional(),
+    enabled: z.boolean().optional(),
+    expectedRevision: z.number().optional(),
+  }),
+  outputSchema: z.object({ roleDefinition: roleDefinitionOutputSchema }),
+  execute: async ({ roleDefinitionId, ...patch }, context) => {
+    const port = getRuntimeDispatchPort()
+    if (!port.updateRoleDefinition) throw new Error('Role-definition runtime is unavailable')
+    return {
+      roleDefinition: await port.updateRoleDefinition({
+        context: boundRoleContext(context),
+        roleDefinitionId,
+        patch,
+      }),
+    }
+  },
+})
+
+export const archiveRoleDefinitionTool = createTool({
+  id: 'archive-role-definition',
+  description: 'Archive a role definition in the current Chat so it can no longer be dispatched.',
+  inputSchema: z.object({
+    roleDefinitionId: z.string(),
+    expectedRevision: z.number().optional(),
+  }),
+  outputSchema: z.object({ roleDefinition: roleDefinitionOutputSchema }),
+  execute: async (input, context) => {
+    const port = getRuntimeDispatchPort()
+    if (!port.archiveRoleDefinition) throw new Error('Role-definition runtime is unavailable')
+    return {
+      roleDefinition: await port.archiveRoleDefinition({
+        context: boundRoleContext(context),
+        ...input,
+      }),
+    }
+  },
+})
+
+export const resetRoleSessionTool = createTool({
+  id: 'reset-role-session',
+  description:
+    'Reset only the ACP session context owned by one role definition in the current Chat.',
+  inputSchema: z.object({ roleDefinitionId: z.string() }),
+  outputSchema: z.object({ deleted: z.boolean() }),
+  execute: async (input, context) => {
+    const port = getRuntimeDispatchPort()
+    if (!port.resetRoleSession) throw new Error('Role-definition runtime is unavailable')
+    return port.resetRoleSession({ context: boundRoleContext(context), ...input })
+  },
+})
+
 /**
  * Schedule a worker job (ACP).
  * Default waits for terminal status so the Leader can relay worker output in the same turn.
  * Pass wait=false only for long fire-and-forget work (then poll get-job).
  */
-export const dispatchWorkerTool = createTool({
-  id: 'dispatch-worker',
+export const dispatchRoleTool = createTool({
+  id: 'dispatch-role',
   description:
-    'Delegate a task to a registered worker. First call list-workers to get current worker id/name/role/readiness. Prefer role=plan|coder|review|test|research|general, or pass workerIdOrKind as an exact worker id from list-workers. Do not hardcode product names. By default waits until the job finishes and returns output. Set wait=false only for long fire-and-forget work, then poll get-job. Never invent results: only trust status=succeeded + output. If errorCode is WORKER_AUTH_REQUIRED, tell the user to authenticate that Agent in Settings — do not wait for OAuth in this turn. If error mentions Model is disabled / 【模型不可用】, tell the user to pick a model in the Workers panel.',
+    'Delegate a task through one role definition from list-role-definitions. The role selects its bound Worker, instructions, model inheritance/override, and independent ACP session. By default waits for completion. Never invent results: only trust status=succeeded + output.',
   inputSchema: z.object({
-    role: roleSchema.optional().describe('Desired worker role for this task'),
-    workerIdOrKind: z
-      .string()
-      .optional()
-      .describe('Optional exact worker id from list-workers, or kind/name match'),
+    roleDefinitionId: z.string().describe('Exact role id from list-role-definitions'),
     task: z.string().describe('Clear task prompt for the coding agent'),
     cwd: z
       .string()
@@ -374,6 +492,8 @@ export const dispatchWorkerTool = createTool({
     status: jobStatusSchema,
     workerName: z.string(),
     workerId: z.string().optional(),
+    roleDefinitionId: z.string().optional(),
+    roleName: z.string().optional(),
     role: z.string().optional(),
     cwd: z.string(),
     task: z.string(),
@@ -382,9 +502,8 @@ export const dispatchWorkerTool = createTool({
     error: z.string().optional(),
   }),
   execute: async (input, context) => {
-    const { role, workerIdOrKind, task, cwd, wait } = input as {
-      role?: WorkerRole
-      workerIdOrKind?: string
+    const { roleDefinitionId, task, cwd, wait } = input as {
+      roleDefinitionId: string
       task: string
       cwd?: string
       wait?: boolean
@@ -399,7 +518,7 @@ export const dispatchWorkerTool = createTool({
         jobId: '',
         status: 'failed' as const,
         workerName: '',
-        role,
+        roleDefinitionId,
         cwd: cwd ?? routerProjectRoot ?? '',
         task,
         message: cwdAuth.error,
@@ -422,7 +541,7 @@ export const dispatchWorkerTool = createTool({
       )
       if (!result.ok) {
         if (result.timedOut) writerTimedOut = true
-        console.error(`[dispatchWorkerTool] ${phase} writer failed`, result.error)
+        console.error(`[dispatchRoleTool] ${phase} writer failed`, result.error)
       }
       return result.ok
     }
@@ -455,8 +574,7 @@ export const dispatchWorkerTool = createTool({
         memoryThreadId,
       },
       task,
-      role,
-      workerIdOrKind,
+      roleDefinitionId,
       cwd: workdir,
       source: 'leader',
       wait: false,
@@ -668,7 +786,7 @@ export const dispatchWorkerTool = createTool({
 export const getJobTool = createTool({
   id: 'get-job',
   description:
-    'Get status and output of a worker job by id (from dispatch-worker) for the bound session.',
+    'Get status and output of a worker job by id (from dispatch-role) for the bound session.',
   inputSchema: z.object({
     jobId: z.string(),
   }),

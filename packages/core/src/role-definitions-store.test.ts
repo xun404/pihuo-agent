@@ -89,11 +89,22 @@ describe('LocalStore role definitions', () => {
       /Role definition revision conflict/,
     )
 
+    assert.throws(
+      () => store.removeWorker(worker.id),
+      /Worker is referenced by active role definitions/,
+    )
+    assert.throws(
+      () => store.compareAndRemoveWorker(worker),
+      /Worker is referenced by active role definitions/,
+    )
+
     const archived = store.archiveRoleDefinition(firstChat.id, role.id, 2)
     assert.equal(archived.enabled, false)
     assert.ok(archived.archivedAt)
     assert.deepEqual(store.listRoleDefinitions(firstChat.id), [])
     assert.deepEqual(store.listRoleDefinitions(firstChat.id, { includeArchived: true }), [archived])
+
+    assert.equal(store.removeWorker(worker.id).id, worker.id)
 
     store.deleteSession(firstChat.id)
     assert.deepEqual(store.listRoleDefinitions(firstChat.id, { includeArchived: true }), [])

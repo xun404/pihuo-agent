@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import type { WorkerKind, WorkerRegistration, WorkerRole } from '@swarmdesk-agent/shared'
-import { WORKER_ROLES } from '@swarmdesk-agent/shared'
+import type {
+  CustomAcpLaunchKind,
+  CustomAcpRegistrationInput,
+  WorkerRegistration,
+} from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   fetchSettings,
@@ -83,7 +86,6 @@ import {
   IconWorkers,
   WorkerBrandLogo,
 } from './Icons'
-import { roleMessageKey } from '../i18n/locales'
 import type { Locale } from '../i18n/locales'
 import { formatContextWindow, parseContextWindow } from '../lib/context-window'
 import { useToast } from './Toast'
@@ -106,13 +108,8 @@ interface Props {
   initialTab?: TabId
   workers: WorkerRegistration[]
   onToggleWorker: (id: string, enabled: boolean) => void
-  onHealthWorker: (id: string, depth?: 'presence' | 'version' | 'acp') => void | Promise<void>
   onHealthAllWorkers: () => void | Promise<unknown>
-  onRegisterWorker: (body: Partial<WorkerRegistration>) => Promise<void>
-  onDetectWorkers: () => Promise<{
-    recommended?: { kind: string; name: string; installed: boolean; installHint?: string }[]
-    candidates?: { kind: string; name: string; installed: boolean; installHint?: string }[]
-  } | void>
+  onRegisterCustomAcpWorker: (body: CustomAcpRegistrationInput) => Promise<unknown>
   onRefreshSnapshot: () => void
 }
 
@@ -185,10 +182,8 @@ export function SettingsPanel({
   initialTab,
   workers,
   onToggleWorker,
-  onHealthWorker,
   onHealthAllWorkers,
-  onRegisterWorker,
-  onDetectWorkers,
+  onRegisterCustomAcpWorker,
   onRefreshSnapshot,
 }: Props) {
   const { t, locale, setLocale } = useI18n()
@@ -199,7 +194,7 @@ export function SettingsPanel({
     duration: reduceMotion ? 0.01 : 0.18,
     ease: SETTINGS_TAB_EASE,
   }
-  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast()
+  const { success: toastSuccess, error: toastError } = useToast()
   const [tab, setTab] = useState<TabId>(initialTab ?? 'general')
   // Sync external tab changes (e.g. "管理模型" entry pinning 'model') even
   // when the panel is already open — useState initial value only fires on mount.
@@ -210,7 +205,7 @@ export function SettingsPanel({
   const [regName, setRegName] = useState('')
   const [regCommand, setRegCommand] = useState('')
   const [regArgs, setRegArgs] = useState('')
-  const [regKind, setRegKind] = useState<WorkerKind>('custom')
+  const [regCustomLaunchKind, setRegCustomLaunchKind] = useState<CustomAcpLaunchKind>('system')
   const [regEnv, setRegEnv] = useState<Record<string, string>>({})
   const [regDescription, setRegDescription] = useState('')
   const [regSelectedId, setRegSelectedId] = useState<string | null>(null)
@@ -223,8 +218,6 @@ export function SettingsPanel({
     operation: RegistryOperationSnapshot<RegistryPrepareResult>
     registration: Omit<Parameters<typeof api.registerRegistryWorker>[0], 'installationId'>
   } | null>(null)
-  const [regPrimary, setRegPrimary] = useState<WorkerRole>('coder')
-  const [regRoles, setRegRoles] = useState<WorkerRole[]>(['coder', 'general'])
   const [regEnabled, setRegEnabled] = useState(true)
   const [regBusy, setRegBusy] = useState(false)
   const [terminalAuth, setTerminalAuth] = useState<{
@@ -244,7 +237,6 @@ export function SettingsPanel({
   } | null>(null)
   const [secretBusy, setSecretBusy] = useState(false)
   const secretControllerRef = useRef<AbortController | null>(null)
-  const [detecting, setDetecting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [data, setData] = useState<SettingsPayload | null>(null)
@@ -960,7 +952,7 @@ export function SettingsPanel({
     setRegName('')
     setRegCommand('')
     setRegArgs('')
-    setRegKind('custom')
+    setRegCustomLaunchKind('system')
     setRegEnv({})
     setRegDescription('')
     setRegSelectedId(null)
@@ -999,10 +991,6 @@ export function SettingsPanel({
     setPendingRegistryPrepare(null)
     let operationStarted = false
     try {
-      const roles = regRoles.includes(regPrimary)
-        ? regRoles
-        : ([regPrimary, ...regRoles] as WorkerRole[])
-
       // Registry path: Owner prepare → register (never trust client command)
       if (registrationRoute.kind === 'registry_unavailable') {
         throw new Error(t('workers.registrySelectionUnavailable'))
@@ -1032,8 +1020,6 @@ export function SettingsPanel({
             distribution: dist,
             manifestDigest: regManifestDigest,
             name: regName.trim(),
-            primaryRole: regPrimary,
-            roles,
             enabled: regEnabled,
           },
         })
@@ -1041,16 +1027,16 @@ export function SettingsPanel({
         return
       } else {
         // Custom / manual path
-        if (!onRegisterWorker || !regCommand.trim()) return
+        if (!regCommand.trim()) return
         const args = regArgs.trim().split(/\s+/).filter(Boolean)
-        await onRegisterWorker({
+        await onRegisterCustomAcpWorker({
           name: regName.trim(),
-          command: regCommand.trim(),
+          launchKind: regCustomLaunchKind,
+          ...(regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
+            ? { packageSpec: regCommand.trim() }
+            : { command: regCommand.trim() }),
           args,
           env: Object.keys(regEnv).length > 0 ? regEnv : undefined,
-          kind: regKind,
-          primaryRole: regPrimary,
-          roles,
           enabled: regEnabled,
           description: regDescription.trim() || undefined,
         })
@@ -1517,9 +1503,7 @@ export function SettingsPanel({
                           <input
                             className="settings-input mono"
                             value={addModelForm.id}
-                            onChange={(e) =>
-                              setAddModelForm((f) => ({ ...f, id: e.target.value }))
-                            }
+                            onChange={(e) => setAddModelForm((f) => ({ ...f, id: e.target.value }))}
                             placeholder={t('settings.customModelPh')}
                           />
                           <span className="settings-field-hint">
@@ -1688,9 +1672,7 @@ export function SettingsPanel({
                   </div>
 
                   <div className="settings-field">
-                    <label htmlFor="settings-builtin-base-url">
-                      {t('settings.customBaseUrl')}
-                    </label>
+                    <label htmlFor="settings-builtin-base-url">{t('settings.customBaseUrl')}</label>
                     <input
                       id="settings-builtin-base-url"
                       className="settings-input mono"
@@ -1799,34 +1781,6 @@ export function SettingsPanel({
                   <button
                     type="button"
                     className="settings-btn-soft"
-                    disabled={detecting || !onDetectWorkers}
-                    onClick={() => {
-                      if (!onDetectWorkers) return
-                      setDetecting(true)
-                      void Promise.resolve(onDetectWorkers())
-                        .then((res) => {
-                          const rec =
-                            res?.recommended ?? res?.candidates?.filter((c) => c.installed) ?? []
-                          if (rec.length > 0) {
-                            toastSuccess(
-                              t('workers.detectOk', {
-                                names: rec.map((c) => c.name).join(' · '),
-                              }),
-                            )
-                          } else {
-                            toastInfo(t('workers.detectNone'))
-                          }
-                          onRefreshSnapshot?.()
-                        })
-                        .catch((e) => toastError(String(e)))
-                        .finally(() => setDetecting(false))
-                    }}
-                  >
-                    {detecting ? t('app.loading') : t('workers.detect')}
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-btn-soft"
                     onClick={() => setRegOpen((v) => !v)}
                   >
                     {t('workers.register')}
@@ -1843,10 +1797,10 @@ export function SettingsPanel({
                 </div>
               </div>
               <p className="settings-field-hint" style={{ margin: '0 0 4px' }}>
-                {t('workers.detectFirstRun')}
+                {t('workers.manualRegistrationHint')}
               </p>
 
-              {workers.length === 0 && <p className="settings-muted">{t('workers.detectNone')}</p>}
+              {workers.length === 0 && <p className="settings-muted">{t('workers.empty')}</p>}
               {workers.map((w) => (
                 <div key={w.id} className="w-row worker-list-row worker-settings-row">
                   <span
@@ -1879,19 +1833,6 @@ export function SettingsPanel({
                       {w.source?.type === 'registry'
                         ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
                         : `${w.command} ${(w.args ?? []).join(' ')}`}
-                      {w.primaryRole
-                        ? ` · ${t('workers.primary')} ${t(roleMessageKey(w.primaryRole))}`
-                        : ''}
-                    </div>
-                    <div className="worker-role-line">
-                      <span className="role-pill on">{t(roleMessageKey(w.primaryRole))} ★</span>
-                      {(w.roles ?? [])
-                        .filter((r) => r !== w.primaryRole)
-                        .map((r) => (
-                          <span key={r} className="role-pill">
-                            {t(roleMessageKey(r))}
-                          </span>
-                        ))}
                     </div>
                   </div>
                   {w.readiness?.status === 'auth_required' &&
@@ -2041,14 +1982,11 @@ export function SettingsPanel({
                       setRegCommand(draft.command)
                       setRegArgs(draft.args)
                       setRegEnv(draft.env)
-                      setRegKind(draft.kind)
                       setRegDescription(draft.description)
                       setRegVersion(option.version)
                       setRegManifestDigest(option.manifestDigest ?? '')
                       setRegDistribution(option.distribution)
                       setRegTrustNoSha(false)
-                      setRegPrimary('general')
-                      setRegRoles(['general'])
                     }}
                   />
                   <span className="settings-field-hint">{t('workers.registryHint')}</span>
@@ -2117,12 +2055,37 @@ export function SettingsPanel({
                 {!isRegistryPath && (
                   <>
                     <div className="settings-field">
-                      <label>{t('workers.formCommand')}</label>
+                      <label>{t('workers.customLaunchKind')}</label>
+                      <select
+                        className="field-select"
+                        value={regCustomLaunchKind}
+                        onChange={(event) =>
+                          setRegCustomLaunchKind(event.target.value as CustomAcpLaunchKind)
+                        }
+                      >
+                        <option value="npx">npx package</option>
+                        <option value="uvx">uvx package</option>
+                        <option value="system">{t('workers.customSystemExecutable')}</option>
+                        <option value="local">{t('workers.customLocalExecutable')}</option>
+                      </select>
+                    </div>
+                    <div className="settings-field">
+                      <label>
+                        {regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
+                          ? t('workers.customPackageSpec')
+                          : t('workers.formCommand')}
+                      </label>
                       <input
                         className="settings-input mono"
                         value={regCommand}
                         onChange={(e) => setRegCommand(e.target.value)}
-                        placeholder="claude / codex / opencode"
+                        placeholder={
+                          regCustomLaunchKind === 'local'
+                            ? '/absolute/path/to/acp-agent'
+                            : regCustomLaunchKind === 'system'
+                              ? 'acp-agent'
+                              : '@scope/acp-agent@version'
+                        }
                       />
                     </div>
                     <div className="settings-field">
@@ -2138,52 +2101,6 @@ export function SettingsPanel({
                 {isRegistryPath && (
                   <p className="settings-field-hint">{t('workers.registryOwnerManagedHint')}</p>
                 )}
-                <div className="settings-field">
-                  <label>{t('workers.formPrimary')}</label>
-                  <select
-                    className="field-select"
-                    style={{ width: '100%', maxWidth: 280 }}
-                    value={regPrimary}
-                    onChange={(e) => {
-                      const r = e.target.value as WorkerRole
-                      setRegPrimary(r)
-                      setRegRoles((prev) =>
-                        prev.includes(r) ? prev : ([r, ...prev] as WorkerRole[]),
-                      )
-                    }}
-                  >
-                    {WORKER_ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {t(roleMessageKey(r))}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="settings-field">
-                  <label>{t('workers.formRoles')}</label>
-                  <div className="role-grid">
-                    {WORKER_ROLES.map((r) => {
-                      const on = regRoles.includes(r)
-                      return (
-                        <button
-                          key={r}
-                          type="button"
-                          className={`role-chip${on ? ' on' : ''}`}
-                          onClick={() => {
-                            setRegRoles((prev) => {
-                              if (r === regPrimary) return prev
-                              return on ? prev.filter((x) => x !== r) : [...prev, r]
-                            })
-                          }}
-                        >
-                          <span className="box" aria-hidden />
-                          {t(roleMessageKey(r))}
-                          {r === regPrimary ? ' ★' : ''}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
                 <div className="settings-row card-row">
                   <div className="lbl-block">
                     <div className="lbl">{t('workers.formEnabled')}</div>

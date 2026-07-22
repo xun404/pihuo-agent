@@ -141,8 +141,11 @@ test('runJob passes only the selected Worker secret through the singleton Manage
     const manager = getAcpSessionManager()
     const captured: Array<{
       workerId: string
+      roleDefinitionId?: string
+      roleRevision?: number
       buildConfig: SessionEntryConfig
       enqueueConfig?: SessionEntryConfig
+      task?: string
       fingerprintInput: string
     }> = []
     ;(
@@ -150,6 +153,8 @@ test('runJob passes only the selected Worker secret through the singleton Manage
         buildReuseKey(input: {
           routerSessionId: string
           workerId: string
+          roleDefinitionId?: string
+          roleRevision?: number
           cwd: string
           config: SessionEntryConfig
         }): unknown
@@ -162,6 +167,8 @@ test('runJob passes only the selected Worker secret through the singleton Manage
       })
       captured.push({
         workerId: input.workerId,
+        roleDefinitionId: input.roleDefinitionId,
+        roleRevision: input.roleRevision,
         buildConfig: input.config,
         fingerprintInput,
       })
@@ -177,7 +184,7 @@ test('runJob passes only the selected Worker secret through the singleton Manage
     ;(manager as unknown as { canAccept(): boolean }).canAccept = () => true
     ;(
       manager as unknown as {
-        enqueuePrompt(input: { config: SessionEntryConfig }): Promise<{
+        enqueuePrompt(input: { config: SessionEntryConfig; task: string }): Promise<{
           ok: boolean
           output: string
           stopReason: string
@@ -188,6 +195,7 @@ test('runJob passes only the selected Worker secret through the singleton Manage
       const current = captured.at(-1)
       assert.ok(current)
       current.enqueueConfig = input.config
+      current.task = input.task
       return { ok: true, output: 'safe output', stopReason: 'end_turn', reusedSession: false }
     }
 
@@ -208,7 +216,26 @@ test('runJob passes only the selected Worker secret through the singleton Manage
       await (scheduler as unknown as { runJob(jobId: string): Promise<void> }).runJob(job.id)
     }
 
-    assert.equal(captured.length, 2)
+    const roleJob = store.createJob({
+      sessionId: session.id,
+      projectId: project.id,
+      workerId: 'worker-a',
+      workerName: 'worker-a',
+      role: 'coder',
+      roleDefinitionId: 'role-implementer',
+      roleName: 'Implementer',
+      roleType: 'coder',
+      roleRevision: 4,
+      instructionsSnapshot: 'Implement carefully.',
+      effectivePrompt: 'Implement carefully.\n\nTask:\nAdd role dispatch.',
+      task: 'Add role dispatch.',
+      cwd: dir,
+      source: 'api',
+      status: 'queued',
+    })
+    await (scheduler as unknown as { runJob(jobId: string): Promise<void> }).runJob(roleJob.id)
+
+    assert.equal(captured.length, 3)
     for (const capture of captured) {
       const expected = capture.workerId === 'worker-a' ? secretA : secretB
       const rejected = capture.workerId === 'worker-a' ? secretB : secretA
@@ -221,6 +248,9 @@ test('runJob passes only the selected Worker secret through the singleton Manage
       assert.equal(JSON.stringify(capture.buildConfig).includes(expected), false)
       assert.equal(JSON.stringify(capture.buildConfig).includes(rejected), false)
     }
+    assert.equal(captured[2]?.roleDefinitionId, 'role-implementer')
+    assert.equal(captured[2]?.roleRevision, 4)
+    assert.equal(captured[2]?.task, 'Implement carefully.\n\nTask:\nAdd role dispatch.')
 
     const jobsAndActivity = JSON.stringify({
       jobs: store.listJobs({ limit: 20 }),

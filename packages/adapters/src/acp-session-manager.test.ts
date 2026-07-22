@@ -343,6 +343,38 @@ describe('buildSessionReuseKey', () => {
     assert.notEqual(k1.workerId, k2.workerId)
   })
 
+  it('isolates different Chat roles bound to the same Worker', () => {
+    const implementer = buildSessionReuseKey({
+      ...baseParams,
+      roleDefinitionId: 'role-implementer',
+      roleRevision: 1,
+    })
+    const reviewer = buildSessionReuseKey({
+      ...baseParams,
+      roleDefinitionId: 'role-reviewer',
+      roleRevision: 1,
+    })
+
+    assert.notDeepEqual(implementer, reviewer)
+    assert.notEqual(computeKeyDigest(implementer), computeKeyDigest(reviewer))
+  })
+
+  it('invalidates a role session when its execution revision changes', () => {
+    const before = buildSessionReuseKey({
+      ...baseParams,
+      roleDefinitionId: 'role-implementer',
+      roleRevision: 1,
+    })
+    const after = buildSessionReuseKey({
+      ...baseParams,
+      roleDefinitionId: 'role-implementer',
+      roleRevision: 2,
+    })
+
+    assert.notDeepEqual(before, after)
+    assert.notEqual(computeKeyDigest(before), computeKeyDigest(after))
+  })
+
   it('different cwd produces different key', () => {
     const k1 = buildSessionReuseKey(baseParams)
     const k2 = buildSessionReuseKey({ ...baseParams, cwd: '/tmp/b' })
@@ -2408,6 +2440,35 @@ describe('pinned model transaction boundary', () => {
 })
 
 describe('remote cleanup handoff', () => {
+  it('resets only contexts owned by one Chat role', () => {
+    const roleA = catalogRecord({
+      keyDigest: 'digest-role-a',
+      routerSessionId: 'session-role',
+      roleDefinitionId: 'role-a',
+      roleRevision: 2,
+    })
+    const roleB = catalogRecord({
+      keyDigest: 'digest-role-b',
+      routerSessionId: 'session-role',
+      roleDefinitionId: 'role-b',
+      roleRevision: 1,
+    })
+    const records = [roleA, roleB]
+    const deleted: string[] = []
+    const port = {
+      ...emptyCatalogPort(),
+      listByRouterSession: () => records,
+      lookup: (digest: string) => records.find((record) => record.keyDigest === digest),
+      deleteByKey: (digest: string) => deleted.push(digest),
+    }
+    const mgr = new AcpSessionManager({ catalogPort: port })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+
+    assert.deepEqual(mgr.deleteContextsByRole('session-role', 'role-a'), { deleted: 1 })
+    assert.deepEqual(deleted, ['digest-role-a'])
+  })
+
   it('resets one reuse key through local close, catalog delete, then remote cleanup', async () => {
     const key = mkKey({ routerSessionId: 'session-reset', workerId: 'worker-reset' })
     const keyDigest = computeKeyDigest(key)

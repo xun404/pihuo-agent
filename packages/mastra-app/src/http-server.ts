@@ -8,7 +8,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { basename, resolve as pathResolve } from 'node:path'
 import {
-  createId,
   getWorkerModelCatalogStore,
   getGitStatus,
   listProjectFiles,
@@ -46,10 +45,7 @@ import {
   type ThinkingIntensity,
 } from '@swarmdesk-agent/core'
 import {
-  applyHealthReport,
   parseHealthDepth,
-  detectAcpWorkers,
-  applyDetectionToWorkers,
   formatPublicError,
   type SessionEntryConfig,
 } from '@swarmdesk-agent/adapters'
@@ -83,16 +79,17 @@ import {
   isPtyFeatureReady,
   terminalAuthAttemptPublicStatus,
 } from './acp-auth-terminal.js'
-import { RegistryRegistrationError } from './acp-worker-registration.js'
 import { getWorkerModels, evaluateWorkerModelPin, applyWorkerModelPin } from './worker-models.js'
+import { assertRoleModelAccepted } from './role-definitions.js'
 import type {
   ApprovalDecision,
   LeaderMode,
   Locale,
-  WorkerRegistration,
   WorkerRole,
+  CreateRoleDefinitionInput,
+  UpdateRoleDefinitionInput,
+  CustomAcpRegistrationInput,
 } from '@swarmdesk-agent/shared'
-import { normalizeWorkerRoles } from '@swarmdesk-agent/shared'
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 import { pipeUIMessageStreamToResponse } from 'ai'
@@ -138,6 +135,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomBytes } from 'node:crypto'
 import { HttpJsonBodyError, readJsonBody as readJson } from './http-json-body.js'
 import { resolveHttpPort, resolveMemoryLastMessages } from './runtime-config.js'
+import { CustomAcpRegistrationError, registerCustomAcpWorker } from './custom-acp-registration.js'
 
 const port = resolveHttpPort()
 const runtimeWorkspaceRoot = pathResolve(
@@ -298,6 +296,7 @@ const server = createServer(async (req, res) => {
             }
             workerId?: string
             workerIdOrKind?: string
+            roleDefinitionId?: string
             role?: WorkerRole
             task?: string
             cwd?: string
@@ -346,6 +345,7 @@ const server = createServer(async (req, res) => {
             context: resolved,
             workerId: body.workerId,
             workerIdOrKind: body.workerIdOrKind,
+            roleDefinitionId: body.roleDefinitionId,
             role: body.role,
             task: body.task,
             cwd: cwdAuth.cwd,
@@ -353,6 +353,103 @@ const server = createServer(async (req, res) => {
             wait: false,
           })
           send(res, 200, { job })
+          return
+        }
+
+        if (method === 'GET' && path === '/internal/runtime/role-definitions') {
+          const memoryThreadId = url.searchParams.get('memoryThreadId') ?? ''
+          const context = await dispatchPort.resolveSessionContext(memoryThreadId)
+          if (!context) {
+            send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
+            return
+          }
+          const roleDefinitions = dispatchPort.listRoleDefinitions
+            ? await dispatchPort.listRoleDefinitions(context)
+            : []
+          send(res, 200, { roleDefinitions })
+          return
+        }
+
+        if (method === 'POST' && path === '/internal/runtime/role-definitions') {
+          const body = (await readJson(req)) as {
+            context?: { memoryThreadId?: string }
+            input?: Omit<CreateRoleDefinitionInput, 'chatSessionId'>
+          }
+          const context = await dispatchPort.resolveSessionContext(
+            body.context?.memoryThreadId ?? '',
+          )
+          if (!context || !body.input || !dispatchPort.createRoleDefinition) {
+            send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
+            return
+          }
+          const roleDefinition = await dispatchPort.createRoleDefinition({
+            context,
+            input: body.input,
+          })
+          send(res, 201, { roleDefinition })
+          return
+        }
+
+        const internalRoleMatch = match(
+          path,
+          '/internal/runtime/role-definitions/:roleDefinitionId',
+        )
+        if ((method === 'PATCH' || method === 'DELETE') && internalRoleMatch) {
+          const body = (await readJson(req)) as {
+            context?: { memoryThreadId?: string }
+            patch?: UpdateRoleDefinitionInput
+            expectedRevision?: number
+          }
+          const context = await dispatchPort.resolveSessionContext(
+            body.context?.memoryThreadId ?? '',
+          )
+          if (!context) {
+            send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
+            return
+          }
+          if (method === 'PATCH' && dispatchPort.updateRoleDefinition && body.patch) {
+            const roleDefinition = await dispatchPort.updateRoleDefinition({
+              context,
+              roleDefinitionId: internalRoleMatch.roleDefinitionId!,
+              patch: body.patch,
+            })
+            send(res, 200, { roleDefinition })
+            return
+          }
+          if (method === 'DELETE' && dispatchPort.archiveRoleDefinition) {
+            const roleDefinition = await dispatchPort.archiveRoleDefinition({
+              context,
+              roleDefinitionId: internalRoleMatch.roleDefinitionId!,
+              expectedRevision: body.expectedRevision,
+            })
+            send(res, 200, { roleDefinition })
+            return
+          }
+          send(res, 400, { error: 'invalid role-definition mutation' })
+          return
+        }
+
+        const internalRoleResetMatch = match(
+          path,
+          '/internal/runtime/role-definitions/:roleDefinitionId/reset-session',
+        )
+        if (method === 'POST' && internalRoleResetMatch) {
+          const body = (await readJson(req)) as { context?: { memoryThreadId?: string } }
+          const context = await dispatchPort.resolveSessionContext(
+            body.context?.memoryThreadId ?? '',
+          )
+          if (!context || !dispatchPort.resetRoleSession) {
+            send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
+            return
+          }
+          send(
+            res,
+            200,
+            await dispatchPort.resetRoleSession({
+              context,
+              roleDefinitionId: internalRoleResetMatch.roleDefinitionId!,
+            }),
+          )
           return
         }
 
@@ -482,9 +579,6 @@ const server = createServer(async (req, res) => {
           }
           const isTerminalStatus = (s: string) =>
             s === 'succeeded' || s === 'failed' || s === 'cancelled' || s === 'timed_out'
-          const isOpenStatus = (s: string) =>
-            s === 'queued' || s === 'running' || s === 'pending_approval'
-
           /** Always re-read Job — never use request-start snapshot for terminalization. */
           const synthesizeTerminalFromJob = (): boolean => {
             const job = getWorkerScheduler().getJob(jobId)
@@ -993,6 +1087,7 @@ const server = createServer(async (req, res) => {
 
       if (method === 'POST' && path === '/api/jobs') {
         const body = (await readJson(req)) as {
+          roleDefinitionId?: string
           role?: WorkerRole
           workerIdOrKind?: string
           task: string
@@ -1882,92 +1977,6 @@ const server = createServer(async (req, res) => {
         return
       }
 
-      // Batch health check (must be before :id route)
-      // Auto-detect ACP CLIs on this machine (Claude / Codex / OpenCode …)
-      if (method === 'GET' && path === '/api/workers/detect') {
-        const candidates = await detectAcpWorkers()
-        send(res, 200, {
-          candidates,
-          recommended: candidates.filter((c) => c.installed),
-          firstRun: store.listWorkers().every((w) => w.health === 'unknown' || !w.lastSeenAt),
-        })
-        return
-      }
-
-      if (method === 'POST' && path === '/api/workers/detect') {
-        let apply = true
-        let autoDisableMissing = false
-        try {
-          const body = (await readJson(req)) as {
-            apply?: boolean
-            autoDisableMissing?: boolean
-          }
-          if (body.apply === false) apply = false
-          if (body.autoDisableMissing === true) autoDisableMissing = true
-        } catch {
-          /* empty body = apply defaults */
-        }
-        const candidates = await detectAcpWorkers()
-        if (!apply) {
-          send(res, 200, {
-            candidates,
-            recommended: candidates.filter((c) => c.installed),
-            applied: false,
-            snapshot: store.snapshot(),
-          })
-          return
-        }
-
-        const existing = store.listWorkers()
-        const existingById = new Map(existing.map((worker) => [worker.id, worker]))
-        const merged = applyDetectionToWorkers(existing, candidates, {
-          autoDisableMissing,
-          createMissing: true,
-        })
-
-        // Persist: update by kind, create new rows with real ids
-        for (const w of merged.workers) {
-          if (w.id.startsWith('detect-')) {
-            const real = { ...w, id: createId('worker') }
-            store.upsertWorkerLogged(real)
-          } else {
-            const previous = existingById.get(w.id)
-            if (previous) {
-              reconcileWorkerRuntimeResources({
-                before: previous,
-                after: w,
-                manager: sessionMgr,
-                catalogStore: getWorkerModelCatalogStore(),
-              })
-            }
-            store.upsertWorker(w)
-          }
-        }
-
-        // Refresh health for enabled workers (async batch)
-        void checkWorkersBatch({ onlyEnabled: true, depth: 'version' }).catch(() => null)
-
-        globalActivityLog.append(
-          'system',
-          `Worker detect: ${merged.recommended.map((c) => c.name).join(', ') || 'none'} installed`,
-          {
-            enabled: merged.enabled,
-            recommended: merged.recommended.map((c) => c.kind),
-          },
-        )
-
-        send(res, 200, {
-          candidates,
-          recommended: merged.recommended,
-          enabled: merged.enabled,
-          disabled: merged.disabled,
-          applied: true,
-          snapshot: store.snapshot(),
-          workers: store.listWorkers(),
-        })
-        return
-      }
-
       if (method === 'POST' && path === '/api/workers/health') {
         const body = (await readJson(req).catch(() => ({}))) as {
           workerIds?: string[]
@@ -2014,50 +2023,21 @@ const server = createServer(async (req, res) => {
         return
       }
 
-      if (method === 'POST' && path === '/api/workers') {
-        const body = (await readJson(req)) as Partial<WorkerRegistration>
-        if (!body.name || !body.command) {
-          send(res, 400, { error: 'name and command required' })
-          return
-        }
-        const draft = normalizeWorkerRoles({
-          name: body.name,
-          kind: body.kind ?? 'custom',
-          primaryRole: body.primaryRole,
-          roles: body.roles,
-          capabilities: body.capabilities,
-        })
-        const worker: WorkerRegistration = {
-          id: body.id ?? createId('worker'),
-          name: body.name,
-          kind: body.kind ?? 'custom',
-          command: body.command,
-          args: body.args ?? [],
-          env: body.env,
-          primaryRole: draft.primaryRole,
-          roles: draft.roles,
-          capabilities: body.capabilities ?? ['general'],
-          enabled: body.enabled ?? true,
-          scope: body.scope ?? 'global',
-          projectId: body.projectId,
-          description: body.description ?? 'Custom ACP/CLI worker',
-          health: 'unknown',
-        }
-        const previous = body.id
-          ? store.listWorkers().find((candidate) => candidate.id === body.id)
-          : undefined
-        if (previous) {
-          reconcileWorkerRuntimeResources({
-            before: previous,
-            after: worker,
-            manager: sessionMgr,
-            catalogStore: getWorkerModelCatalogStore(),
+      if (method === 'POST' && path === '/api/workers/custom/register') {
+        const body = (await readJson(req)) as CustomAcpRegistrationInput
+        try {
+          const worker = await registerCustomAcpWorker(body, {
+            store,
+            cwd: store.getActive().project?.rootPath ?? process.cwd(),
           })
+          send(res, 201, { worker, snapshot: store.snapshot() })
+        } catch (error) {
+          if (error instanceof CustomAcpRegistrationError) {
+            send(res, 400, { error: error.message, code: error.code })
+          } else {
+            sendUnexpectedFailure(res, error, 'custom ACP registration')
+          }
         }
-        store.upsertWorkerLogged(worker)
-        // Async presence check for newly registered workers
-        void checkOneWorker(worker, 'version').catch(() => null)
-        send(res, 200, { worker })
         return
       }
 
@@ -2229,6 +2209,137 @@ const server = createServer(async (req, res) => {
           send(res, 200, { session, snapshot: store.snapshot() })
         } catch (e) {
           send(res, 404, { error: e instanceof Error ? e.message : String(e) })
+        }
+        return
+      }
+
+      const roleDefinitionsMatch = match(path, '/api/sessions/:sessionId/role-definitions')
+      if (method === 'GET' && roleDefinitionsMatch) {
+        const sessionId = roleDefinitionsMatch.sessionId!
+        if (!store.listSessions().some((session) => session.id === sessionId)) {
+          send(res, 404, { error: `Session not found: ${sessionId}` })
+          return
+        }
+        send(res, 200, {
+          roleDefinitions: store.listRoleDefinitions(sessionId, {
+            includeArchived: url.searchParams.get('includeArchived') === '1',
+          }),
+        })
+        return
+      }
+      if (method === 'POST' && roleDefinitionsMatch) {
+        const body = (await readJson(req)) as Omit<CreateRoleDefinitionInput, 'chatSessionId'>
+        try {
+          const session = store
+            .listSessions()
+            .find((candidate) => candidate.id === roleDefinitionsMatch.sessionId)
+          const projectRoot = session
+            ? store.listProjects().find((project) => project.id === session.projectId)?.rootPath
+            : undefined
+          assertRoleModelAccepted(body.workerId, body.model, projectRoot)
+          const roleDefinition = store.createRoleDefinition({
+            ...body,
+            chatSessionId: roleDefinitionsMatch.sessionId!,
+          })
+          send(res, 201, { roleDefinition, snapshot: store.snapshot() })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          send(res, message.includes('not found') ? 404 : 400, { error: message })
+        }
+        return
+      }
+
+      const roleDefinitionMatch = match(
+        path,
+        '/api/sessions/:sessionId/role-definitions/:roleDefinitionId',
+      )
+      const roleSessionResetMatch = match(
+        path,
+        '/api/sessions/:sessionId/role-definitions/:roleDefinitionId/reset-session',
+      )
+      if (method === 'POST' && roleSessionResetMatch) {
+        const roleDispatchPort = getRuntimeDispatchPort()
+        const session = store
+          .listSessions()
+          .find((candidate) => candidate.id === roleSessionResetMatch.sessionId)
+        const role = store
+          .listRoleDefinitions(roleSessionResetMatch.sessionId!, { includeArchived: true })
+          .find((candidate) => candidate.id === roleSessionResetMatch.roleDefinitionId)
+        if (!session || !role || !roleDispatchPort.resetRoleSession) {
+          send(res, 404, { error: 'Role definition not found' })
+          return
+        }
+        const context = await roleDispatchPort.resolveSessionContext(session.memoryThreadId)
+        if (!context) {
+          send(res, 409, { error: 'Role session context is unavailable' })
+          return
+        }
+        send(
+          res,
+          200,
+          await roleDispatchPort.resetRoleSession({
+            context,
+            roleDefinitionId: role.id,
+          }),
+        )
+        return
+      }
+      if (method === 'PATCH' && roleDefinitionMatch) {
+        const body = (await readJson(req)) as UpdateRoleDefinitionInput
+        try {
+          const current = store.getRoleDefinition(
+            roleDefinitionMatch.sessionId!,
+            roleDefinitionMatch.roleDefinitionId!,
+          )
+          if (!current)
+            throw new Error(`Role definition not found: ${roleDefinitionMatch.roleDefinitionId}`)
+          const session = store
+            .listSessions()
+            .find((candidate) => candidate.id === roleDefinitionMatch.sessionId)
+          const projectRoot = session
+            ? store.listProjects().find((project) => project.id === session.projectId)?.rootPath
+            : undefined
+          if (body.workerId !== undefined || body.model !== undefined) {
+            assertRoleModelAccepted(
+              body.workerId ?? current.workerId,
+              body.model === undefined ? current.model : body.model,
+              projectRoot,
+            )
+          }
+          const roleDefinition = store.updateRoleDefinition(
+            roleDefinitionMatch.sessionId!,
+            roleDefinitionMatch.roleDefinitionId!,
+            body,
+          )
+          send(res, 200, { roleDefinition, snapshot: store.snapshot() })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          const status = message.includes('revision conflict')
+            ? 409
+            : message.includes('not found')
+              ? 404
+              : 400
+          send(res, status, { error: message })
+        }
+        return
+      }
+      if (method === 'DELETE' && roleDefinitionMatch) {
+        const body = (await readJson(req).catch(() => ({}))) as { expectedRevision?: number }
+        try {
+          const roleDefinition = store.archiveRoleDefinition(
+            roleDefinitionMatch.sessionId!,
+            roleDefinitionMatch.roleDefinitionId!,
+            body.expectedRevision,
+          )
+          send(res, 200, { roleDefinition, snapshot: store.snapshot() })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          const status = message.includes('revision conflict')
+            ? 409
+            : message.includes('not found')
+              ? 404
+              : 400
+          send(res, status, { error: message })
         }
         return
       }

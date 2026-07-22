@@ -3,78 +3,37 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { summarizeWorkerModels } from '@swarmdesk-agent/adapters'
-import {
-  DEFAULT_LEADER_MODEL,
-  getSharedStore,
-  loadSettings,
-  resolveRouterDataPaths,
-} from '@swarmdesk-agent/core'
+import { DEFAULT_LEADER_MODEL, loadSettings, resolveRouterDataPaths } from '@swarmdesk-agent/core'
 import { resolveGoalMaxRuns, resolveMemoryLastMessages } from '../runtime-config.js'
 import {
   cancelJobTool,
-  dispatchWorkerTool,
+  archiveRoleDefinitionTool,
+  createRoleDefinitionTool,
+  dispatchRoleTool,
   getActiveContextTool,
   getJobTool,
   listJobsTool,
-  listProjectsTool,
   listWorkersTool,
+  listProjectsTool,
+  listRoleDefinitionsTool,
+  resetRoleSessionTool,
+  updateRoleDefinitionTool,
 } from '../tools/session-tools.js'
 
-function workerModelRosterBlock(): string {
-  try {
-    // client-only / Studio: do not touch local Store; use list-workers tool instead
-    if (
-      process.env.SWARMDESK_AGENT_CLIENT_ONLY === '1' ||
-      process.env.SWARMDESK_AGENT_RUNTIME_ROLE === 'client-only'
-    ) {
-      return '(remote roster — call list-workers for live state)'
-    }
-    const workers = getSharedStore().listWorkers()
-    return summarizeWorkerModels(workers)
-  } catch {
-    return '(worker model roster unavailable)'
-  }
-}
-
 function buildLeaderInstructions(): string {
-  const roster = workerModelRosterBlock()
   return `You are the SwarmDesk Leader (Mastra Supervisor).
 
 You run inside a macOS desktop command center. Users work in Projects and Sessions.
-You coordinate specialized CLI coding agents (workers) rather than editing large codebases yourself.
+You coordinate Chat-scoped role definitions backed by installed ACP Workers.
 
-## Worker roles (prefer routing by role)
-- plan: break down work, architecture, step plans
-- coder: implement features, refactors, multi-file edits
-- review: code review, quality, risk, suggestions
-- test: write/run tests, verify behavior
-- research: explore codebase, gather facts, survey options
-- general: flexible fallback when no specialist fits
-
-Each worker has a primaryRole and a roles[] list. Prefer primaryRole matches, then any worker whose roles include the needed role.
-
-Default product mapping (may change via UI):
-- Claude Code → primary coder (also plan/research)
-- Codex CLI → primary review (also coder/test)
-- OpenCode → primary general (flexible)
-
-Always call list-workers (optionally with role=) and get-active-context when you need current state.
-
-## Worker models (critical)
-Each worker may pin an ACP model (Workers panel). list-workers returns:
-- model / modelConfigured — currently selected model id
-- availableModels — catalog last fetched from ACP
-- needsModelSelection — true when OpenCode has no pin (default often fails)
-
-**Current enabled workers & models (snapshot; refresh via list-workers):**
-${roster}
-
-Rules:
-1. Prefer workers with modelConfigured=true when available.
-2. If needsModelSelection=true (typical OpenCode without a pick), **do not pretend the dispatch will work** — tell the user clearly to open **Workers** and select a model from the list (not “Default”).
-3. If a job fails with “Model is disabled” / 【模型不可用】, relay that message and instruct the user to change the model in Workers; do not invent a successful worker reply.
-4. You cannot set worker models yourself — only the user can via the UI.
+## Role definitions
+- A role definition belongs only to the current Chat and has a name, fixed roleType, instructions, Worker binding, and optional model override.
+- The same Worker may back multiple roles. Every role has an independent ACP session.
+- When a role model is absent, it inherits the Worker's default model. Do not invent or copy a model override merely to match the Worker default.
+- Changing Worker, roleType, instructions, or model increments the role revision and starts a distinct ACP session on next dispatch.
+- Use list-role-definitions before dispatching. Use create/update/archive-role-definition only when the user's request requires maintaining the current Chat's roles.
+- reset-role-session resets only that role's ACP context.
+- Worker installation, uninstallation, authentication, secrets, and global default model remain user operations in the Agent Worker panel. You do not have tools for them.
 
 ## Modes (from UI)
 - ask: answer questions, no destructive actions
@@ -87,18 +46,17 @@ When a <current-objective> appears in context, keep working toward it until the 
 Prefer concrete file paths and acceptance criteria in tool dispatches.
 
 ## Delegation / job scheduler
-1. Pick role first via list-workers (prefer health=healthy, busy=false, and a configured model when needed).
-2. Call dispatch-worker with role and/or workerIdOrKind (e.g. codex) + a self-contained task.
+1. Pick an enabled role from list-role-definitions.
+2. Call dispatch-role with its exact roleDefinitionId and a self-contained task.
 3. **Default is wait until the job finishes** and returns output in the same tool result.
-   - Use this for any user request that expects a worker reply (e.g. "跟 codex 说 hey，看它回复").
+   - Use this for any user request that expects a role reply.
    - Only set wait=false for long fire-and-forget work; then poll get-job / list-jobs until terminal.
 4. When status=succeeded, briefly summarize what the worker did and suggest next steps — the WorkerRunCard in chat already shows the full raw output, so do NOT copy-paste or repeat the complete worker output. Keep your summary to 1-3 sentences.
 5. Never claim files were changed unless a job succeeded with confirming output.
 6. Permissions appear in the Approvals panel; user must allow for the job to continue.
 7. cancel-job can stop queued/running work. Prefer not cancelling unless the user asks.
 8. If no project is active, ask the user to open a project first.
-9. Available roles: plan, coder, review, test, research, general.
-10. Do not end the turn while a waited dispatch is still running — one dispatch-worker call with default wait is enough.
+9. Do not end the turn while a waited dispatch is still running — one dispatch-role call with default wait is enough.
 
 ## Response language
 - Match the user's language (Chinese or English).
@@ -231,15 +189,20 @@ export const leaderAgent = new Agent({
   instructions: () => buildLeaderInstructions(),
   tools: {
     listProjectsTool,
-    listWorkersTool,
     getActiveContextTool,
-    dispatchWorkerTool,
+    listWorkersTool,
+    listRoleDefinitionsTool,
+    createRoleDefinitionTool,
+    updateRoleDefinitionTool,
+    archiveRoleDefinitionTool,
+    resetRoleSessionTool,
+    dispatchRoleTool,
     getJobTool,
     listJobsTool,
     cancelJobTool,
   },
   memory: leaderMemory,
-  // NOTE: do NOT put dispatch-worker in backgroundTasks.
+  // NOTE: do NOT put role dispatch in backgroundTasks.
   // Background wrapping returns before wait=true finishes, so the Leader
   // polls get-job with a missing jobId and the chat stream ends early.
   // Long ACP runs stay open via chat untilIdle while the tool blocks on wait.

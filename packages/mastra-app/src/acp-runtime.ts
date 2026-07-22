@@ -23,6 +23,7 @@ import {
   setRuntimeDispatchPort,
   resetRuntimeDispatchPortForTests,
 } from './runtime-dispatch-port.js'
+import { assertRoleModelAccepted } from './role-definitions.js'
 import { createRemoteRuntimeDispatchPort } from './remote-runtime-dispatch-port.js'
 import { getWorkerScheduler } from './scheduler.js'
 import { getWorkerEventEmitter } from './worker-events.js'
@@ -254,6 +255,7 @@ export function initializeAcpRuntime(options: AcpRuntimeOptions = {}): AcpRuntim
       store: getSharedStore(),
       scheduler,
       events: getWorkerEventEmitter(),
+      assertRoleModel: assertRoleModelAccepted,
     }),
   )
 

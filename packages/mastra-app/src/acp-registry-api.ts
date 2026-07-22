@@ -1027,6 +1027,24 @@ export function apiDeleteWorker(
   deps: RegistryCleanupDependencies = {},
 ) {
   const worker = findWorker(input.workerId)
+  if (store().countOpenJobs({ workerId: input.workerId }) > 0) {
+    throw new RegistryApiError(
+      'WORKER_HAS_OPEN_JOBS',
+      'Cancel or finish every open Job for this Worker before deleting it',
+      409,
+    )
+  }
+  if (
+    store()
+      .snapshot()
+      .roleDefinitions.some((role) => role.workerId === input.workerId && !role.archivedAt)
+  ) {
+    throw new RegistryApiError(
+      'WORKER_REFERENCED_BY_ROLE',
+      'Archive every active role definition that uses this Worker before deleting it',
+      409,
+    )
+  }
   // Deletion becomes an execution boundary at the first lifecycle action.
   clearTerminalAuthProbeMethods(input.workerId)
   const lifecycle = beginWorkerLifecycle(input.workerId)

@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import type { LeaderMode, Project, Session, SessionApprovalPolicy, WorkerJob } from '@swarmdesk-agent/shared'
+import type {
+  LeaderMode,
+  Project,
+  Session,
+  SessionApprovalPolicy,
+  WorkerJob,
+} from '@swarmdesk-agent/shared'
 import {
   SESSION_LAMP_ACTIVE_TTL_MS,
   sessionHasUnreadLamp,
@@ -41,16 +47,15 @@ function AppShell({
   deleteSession,
   renameSession,
   toggleWorker,
-  healthWorker,
   healthAllWorkers,
-  setWorkerRoles,
-  setWorkerModel,
-  fetchWorkerModels,
   resolveApproval,
   resetAcpContext,
   resolvingState,
-  registerWorker,
-  detectWorkers,
+  registerCustomAcpWorker,
+  createRoleDefinition,
+  updateRoleDefinition,
+  archiveRoleDefinition,
+  resetRoleSession,
   refresh,
   setSessionApprovalPolicy,
 }: ReturnType<typeof useAppState>) {
@@ -112,8 +117,7 @@ function AppShell({
     const pending = [errAt, doneAt].filter((ts) => ts > readAt)
     if (pending.length === 0) return
     const oldest = Math.min(...pending)
-    const fire = () =>
-      void markReadRef.current(activeSessionId, new Date(oldest).toISOString())
+    const fire = () => void markReadRef.current(activeSessionId, new Date(oldest).toISOString())
     const delay = oldest + SESSION_LAMP_ACTIVE_TTL_MS - Date.now()
     if (delay <= 0) {
       fire()
@@ -290,10 +294,8 @@ function AppShell({
                 initialTab={settingsTab}
                 workers={snapshot.workers}
                 onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
-                onHealthWorker={(id, depth) => void healthWorker(id, depth)}
                 onHealthAllWorkers={() => healthAllWorkers()}
-                onRegisterWorker={(body) => registerWorker(body)}
-                onDetectWorkers={() => detectWorkers({ apply: true })}
+                onRegisterCustomAcpWorker={(body) => registerCustomAcpWorker(body)}
                 onRefreshSnapshot={() => void refresh()}
               />
             </motion.div>
@@ -384,25 +386,34 @@ function AppShell({
                     <div className="drawer-panel">
                       <RightPanel
                         workers={snapshot.workers}
+                        roleDefinitions={snapshot.roleDefinitions.filter(
+                          (role) => role.chatSessionId === activeSession?.id && !role.archivedAt,
+                        )}
                         approvals={snapshot.approvals ?? []}
                         projectId={activeProject?.id ?? null}
                         sessionId={activeSession?.id ?? null}
-                        onToggle={(id, enabled) => void toggleWorker(id, enabled)}
-                        onHealth={(id, depth) => void healthWorker(id, depth)}
-                        onHealthAll={() => healthAllWorkers()}
-                        onSetRoles={(id, body) => void setWorkerRoles(id, body)}
-                        onSetModel={(id, model, projectId) =>
-                          void setWorkerModel(id, model, projectId)
-                        }
-                        onFetchModels={(id, opts) => fetchWorkerModels(id, opts)}
+                        onCreateRoleDefinition={async (body) => {
+                          if (!activeSession) throw new Error('Chat session is required')
+                          await createRoleDefinition(activeSession.id, body)
+                        }}
+                        onUpdateRoleDefinition={async (id, body) => {
+                          if (!activeSession) throw new Error('Chat session is required')
+                          await updateRoleDefinition(activeSession.id, id, body)
+                        }}
+                        onArchiveRoleDefinition={async (id, expectedRevision) => {
+                          if (!activeSession) throw new Error('Chat session is required')
+                          await archiveRoleDefinition(activeSession.id, id, expectedRevision)
+                        }}
+                        onResetRoleSession={async (id) => {
+                          if (!activeSession) throw new Error('Chat session is required')
+                          await resetRoleSession(activeSession.id, id)
+                        }}
                         onResolveApproval={(id, optionId, decision, surface) =>
                           void resolveApproval(id, decision, optionId, surface).catch((e) =>
                             toastError(String(e)),
                           )
                         }
                         resolving={resolvingState}
-                        onRegisterWorker={(body) => registerWorker(body)}
-                        onDetectWorkers={() => detectWorkers({ apply: true })}
                         onRefreshSnapshot={() => void refresh()}
                       />
                     </div>

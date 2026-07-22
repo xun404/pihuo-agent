@@ -207,6 +207,87 @@ describe('LocalRuntimeDispatchPort contract', () => {
     assert.equal(enqueued.length, 1)
   })
 
+  it('manages Chat role definitions and dispatches by role identity', async () => {
+    const session = store.listSessions()[0]!
+    const context = await port.resolveSessionContext(session.memoryThreadId)
+    assert.ok(context)
+    store.upsertWorker({
+      id: 'worker-role',
+      name: 'Role Worker',
+      kind: 'custom',
+      command: 'agent-acp',
+      args: [],
+      primaryRole: 'general',
+      roles: ['general'],
+      capabilities: ['general'],
+      enabled: true,
+      scope: 'global',
+      description: '',
+      health: 'healthy',
+    })
+
+    const created = await port.createRoleDefinition!({
+      context: context!,
+      input: {
+        workerId: 'worker-role',
+        name: 'Implementer',
+        roleType: 'coder',
+        instructions: 'Implement carefully.',
+      },
+    })
+    assert.equal(created.chatSessionId, session.id)
+    assert.deepEqual(await port.listRoleDefinitions!(context!), [created])
+
+    const updated = await port.updateRoleDefinition!({
+      context: context!,
+      roleDefinitionId: created.id,
+      patch: { model: 'role-model', expectedRevision: 1 },
+    })
+    assert.equal(updated.revision, 2)
+
+    await port.dispatch({
+      context: context!,
+      roleDefinitionId: created.id,
+      task: 'implement feature',
+    })
+    assert.equal(enqueued.at(-1)?.roleDefinitionId, created.id)
+
+    const openJob = store.createJob(
+      makeJob({
+        id: 'job_role_open',
+        sessionId: session.id,
+        projectId: session.projectId,
+        roleDefinitionId: created.id,
+      }),
+    )
+    await assert.rejects(
+      () =>
+        port.resetRoleSession!({
+          context: context!,
+          roleDefinitionId: created.id,
+        }),
+      /ROLE_CONTEXT_HAS_OPEN_JOBS/u,
+    )
+    store.updateJob(openJob.id, {
+      status: 'succeeded',
+      finishedAt: new Date().toISOString(),
+    })
+    assert.deepEqual(
+      await port.resetRoleSession!({
+        context: context!,
+        roleDefinitionId: created.id,
+      }),
+      { deleted: false },
+    )
+
+    const archived = await port.archiveRoleDefinition!({
+      context: context!,
+      roleDefinitionId: created.id,
+      expectedRevision: 2,
+    })
+    assert.ok(archived.archivedAt)
+  })
+
   it('events eventually terminal', async () => {
     const session = store.listSessions()[0]!
     const project = store.listProjects().find((p) => p.id === session.projectId)!
@@ -725,7 +806,7 @@ describe('internal runtime approval input', () => {
   })
 })
 
-describe('dispatchWorkerTool via RuntimeDispatchPort', () => {
+describe('dispatchRoleTool via RuntimeDispatchPort', () => {
   const originalJobTimeout = process.env.WORKER_JOB_TIMEOUT_MS
 
   afterEach(async () => {
@@ -737,7 +818,7 @@ describe('dispatchWorkerTool via RuntimeDispatchPort', () => {
 
   it('wait=true completes from port.events without local scheduler.waitForJob', async () => {
     const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
-    const { dispatchWorkerTool } = await import('./tools/session-tools.js')
+    const { dispatchRoleTool } = await import('./tools/session-tools.js')
     const { mkdtempSync } = await import('node:fs')
     const { join } = await import('node:path')
     const { tmpdir } = await import('node:os')
@@ -800,8 +881,8 @@ describe('dispatchWorkerTool via RuntimeDispatchPort', () => {
       },
     }
 
-    const resultPromise = dispatchWorkerTool.execute!(
-      { task: 'remote wait', wait: true },
+    const resultPromise = dispatchRoleTool.execute!(
+      { roleDefinitionId: 'role_remote', task: 'remote wait', wait: true },
       ctx as never,
     )
     const timed = await Promise.race([
@@ -817,7 +898,7 @@ describe('dispatchWorkerTool via RuntimeDispatchPort', () => {
     assert.equal(
       waitForJobStyle,
       false,
-      'dispatchWorkerTool hung — still using scheduler.waitForJob?',
+      'dispatchRoleTool hung — still using scheduler.waitForJob?',
     )
     assert.ok(timed.kind === 'ok')
     if (timed.kind !== 'ok') return
@@ -838,7 +919,7 @@ describe('dispatchWorkerTool via RuntimeDispatchPort', () => {
 
   it('wait=true streaming path consumes port.events not dispatch onEvent', async () => {
     const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
-    const { dispatchWorkerTool } = await import('./tools/session-tools.js')
+    const { dispatchRoleTool } = await import('./tools/session-tools.js')
     const { mkdtempSync } = await import('node:fs')
     const { join } = await import('node:path')
     const { tmpdir } = await import('node:os')
@@ -909,7 +990,10 @@ describe('dispatchWorkerTool via RuntimeDispatchPort', () => {
     }
 
     const timed = await Promise.race([
-      dispatchWorkerTool.execute!({ task: 'stream me', wait: true }, ctx as never).then((r) => ({
+      dispatchRoleTool.execute!(
+        { roleDefinitionId: 'role_stream', task: 'stream me', wait: true },
+        ctx as never,
+      ).then((r) => ({
         kind: 'ok' as const,
         r,
       })),
@@ -933,7 +1017,7 @@ describe('dispatchWorkerTool via RuntimeDispatchPort', () => {
   it('wait=true without a writer times out, aborts observation, and cancels the job', async () => {
     process.env.WORKER_JOB_TIMEOUT_MS = '20'
     const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
-    const { dispatchWorkerTool } = await import('./tools/session-tools.js')
+    const { dispatchRoleTool } = await import('./tools/session-tools.js')
     const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-timeout-'))
     const job = makeJob({
       id: 'job_never_terminal',
@@ -970,19 +1054,26 @@ describe('dispatchWorkerTool via RuntimeDispatchPort', () => {
     }
     setRuntimeDispatchPort(port)
 
-    const result = (await dispatchWorkerTool.execute!({ task: job.task, wait: true }, {
-      requestContext: {
-        get(key: string) {
-          const values: Record<string, string> = {
-            routerSessionId: job.sessionId,
-            routerProjectId: job.projectId,
-            routerProjectRoot: projectRoot,
-            memoryThreadId: job.threadId!,
-          }
-          return values[key]
-        },
+    const result = (await dispatchRoleTool.execute!(
+      {
+        roleDefinitionId: 'role_timeout',
+        task: job.task,
+        wait: true,
       },
-    } as never)) as { status?: string; error?: string }
+      {
+        requestContext: {
+          get(key: string) {
+            const values: Record<string, string> = {
+              routerSessionId: job.sessionId,
+              routerProjectId: job.projectId,
+              routerProjectRoot: projectRoot,
+              memoryThreadId: job.threadId!,
+            }
+            return values[key]
+          },
+        },
+      } as never,
+    )) as { status?: string; error?: string }
 
     assert.equal(result.status, 'timed_out')
     assert.match(result.error ?? '', /timed out/i)

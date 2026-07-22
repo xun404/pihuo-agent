@@ -10,7 +10,7 @@ import {
   unlinkSync,
   chmodSync,
 } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 
 import { randomBytes } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
@@ -162,16 +162,8 @@ function emptySnapshot(): AppSnapshot {
  * Never auto-bind legacy workers to Registry IDs from command/name.
  */
 export function migrateWorkerSourceFields(worker: WorkerRegistration): WorkerRegistration {
-  const source: WorkerSource =
-    worker.source ??
-    (worker.kind === 'claude' || worker.kind === 'codex' || worker.kind === 'opencode'
-      ? { type: 'builtin' }
-      : { type: 'custom' })
-  const runtimeProfile: WorkerRuntimeProfile =
-    worker.runtimeProfile ??
-    (worker.kind === 'claude' || worker.kind === 'codex' || worker.kind === 'opencode'
-      ? worker.kind
-      : 'generic-acp')
+  const source: WorkerSource = worker.source ?? { type: 'custom' }
+  const runtimeProfile: WorkerRuntimeProfile = worker.runtimeProfile ?? 'generic-acp'
   return { ...worker, source, runtimeProfile }
 }
 
@@ -454,8 +446,7 @@ export class LocalStore {
 
   getRoleDefinition(chatSessionId: string, roleDefinitionId: string): RoleDefinition | undefined {
     const role = this.data.roleDefinitions.find(
-      (candidate) =>
-        candidate.id === roleDefinitionId && candidate.chatSessionId === chatSessionId,
+      (candidate) => candidate.id === roleDefinitionId && candidate.chatSessionId === chatSessionId,
     )
     return role ? structuredClone(role) : undefined
   }
@@ -468,9 +459,11 @@ export class LocalStore {
       if (!draft.sessions.some((session) => session.id === input.chatSessionId)) {
         throw new Error(`Session not found: ${input.chatSessionId}`)
       }
-      if (!draft.workers.some((worker) => worker.id === input.workerId)) {
+      if (!draft.workers.some((worker) => worker.id === input.workerId && worker.enabled)) {
         throw new Error(`Worker not found: ${input.workerId}`)
       }
+      const instructions = input.instructions.trim()
+      if (!instructions) throw new Error('Role definition instructions required')
       const timestamp = now()
       role = {
         id: createId('role'),
@@ -478,7 +471,7 @@ export class LocalStore {
         workerId: input.workerId,
         name,
         roleType: input.roleType,
-        instructions: input.instructions.trim(),
+        instructions,
         model: input.model?.trim() || undefined,
         enabled: input.enabled ?? true,
         revision: 1,
@@ -511,13 +504,16 @@ export class LocalStore {
       }
       if (
         patch.workerId !== undefined &&
-        !draft.workers.some((worker) => worker.id === patch.workerId)
+        !draft.workers.some((worker) => worker.id === patch.workerId && worker.enabled)
       ) {
         throw new Error(`Worker not found: ${patch.workerId}`)
       }
 
       const nextName = patch.name === undefined ? role.name : patch.name.trim()
       if (!nextName) throw new Error('Role definition name required')
+      const nextInstructions =
+        patch.instructions === undefined ? role.instructions : patch.instructions.trim()
+      if (!nextInstructions) throw new Error('Role definition instructions required')
       const nextModel =
         patch.model === undefined
           ? role.model
@@ -527,14 +523,13 @@ export class LocalStore {
       const executionChanged =
         (patch.workerId !== undefined && patch.workerId !== role.workerId) ||
         (patch.roleType !== undefined && patch.roleType !== role.roleType) ||
-        (patch.instructions !== undefined && patch.instructions.trim() !== role.instructions) ||
+        nextInstructions !== role.instructions ||
         nextModel !== role.model
 
       role.workerId = patch.workerId ?? role.workerId
       role.name = nextName
       role.roleType = patch.roleType ?? role.roleType
-      role.instructions =
-        patch.instructions === undefined ? role.instructions : patch.instructions.trim()
+      role.instructions = nextInstructions
       role.model = nextModel
       role.enabled = patch.enabled ?? role.enabled
       if (executionChanged) role.revision += 1
@@ -633,7 +628,9 @@ export class LocalStore {
       const before = d.projects.length
       d.projects = d.projects.filter((p) => p.id !== projectId)
       const deletedSessionIds = new Set(
-        d.sessions.filter((session) => session.projectId === projectId).map((session) => session.id),
+        d.sessions
+          .filter((session) => session.projectId === projectId)
+          .map((session) => session.id),
       )
       d.sessions = d.sessions.filter((s) => s.projectId !== projectId)
       d.roleDefinitions = d.roleDefinitions.filter(
@@ -756,7 +753,12 @@ export class LocalStore {
     return session ? structuredClone(session) : null
   }
 
-  createSession(input: { projectId: string; title?: string; mode?: LeaderMode; memoryThreadId?: string }): Session {
+  createSession(input: {
+    projectId: string
+    title?: string
+    mode?: LeaderMode
+    memoryThreadId?: string
+  }): Session {
     let session!: Session
     this.commit((d) => {
       const project = d.projects.find((p) => p.id === input.projectId)
@@ -964,6 +966,11 @@ export class LocalStore {
       if (idx < 0 || !isDeepStrictEqual(d.workers[idx], expected)) {
         throw new WorkerStoreConflictError(expected.id)
       }
+      if (
+        (d.roleDefinitions ?? []).some((role) => role.workerId === expected.id && !role.archivedAt)
+      ) {
+        throw new Error(`Worker is referenced by active role definitions: ${expected.id}`)
+      }
       removed = d.workers[idx]!
       d.workers.splice(idx, 1)
     })
@@ -990,6 +997,11 @@ export class LocalStore {
     this.commit((d) => {
       const idx = d.workers.findIndex((x) => x.id === workerId)
       if (idx < 0) throw new Error(`Worker not found: ${workerId}`)
+      if (
+        (d.roleDefinitions ?? []).some((role) => role.workerId === workerId && !role.archivedAt)
+      ) {
+        throw new Error(`Worker is referenced by active role definitions: ${workerId}`)
+      }
       removed = d.workers[idx]!
       d.workers.splice(idx, 1)
     })
@@ -1372,7 +1384,8 @@ export class LocalStore {
   }
 
   /** Derive and durably persist session status from open jobs + pending approvals. */
-  recomputeSessionStatus(sessionId: string): Session | undefined {    if (!this.data.sessions.some((session) => session.id === sessionId)) return undefined
+  recomputeSessionStatus(sessionId: string): Session | undefined {
+    if (!this.data.sessions.some((session) => session.id === sessionId)) return undefined
     let session: Session | undefined
     this.commit((draft) => {
       this.recomputeSessionStatusOn(draft, sessionId)

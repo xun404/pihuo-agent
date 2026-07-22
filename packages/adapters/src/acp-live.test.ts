@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { whichSync } from './detect-workers.js'
+import { whichSync } from './which.js'
 import { listAcpModels } from './acp-runner.js'
 
 const hasClaude = Boolean(whichSync('claude'))

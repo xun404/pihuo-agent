@@ -257,6 +257,8 @@ function canonicalizeCwd(raw: string): string {
 export interface SessionReuseKey {
   routerSessionId: string
   workerId: string
+  roleDefinitionId?: string
+  roleRevision?: number
   canonicalCwd: string
   executionFingerprint: string
 }
@@ -265,6 +267,8 @@ export function buildSessionReuseKey(
   params: {
     routerSessionId: string
     workerId: string
+    roleDefinitionId?: string
+    roleRevision?: number
     cwd: string
     config: SessionEntryConfig
   },
@@ -273,6 +277,8 @@ export function buildSessionReuseKey(
   return {
     routerSessionId: params.routerSessionId,
     workerId: params.workerId,
+    roleDefinitionId: params.roleDefinitionId,
+    roleRevision: params.roleRevision,
     canonicalCwd: canonicalizeCwd(params.cwd),
     executionFingerprint: computeExecutionFingerprint(params.config, fingerprintFn),
   }
@@ -286,6 +292,12 @@ export function computeKeyDigest(key: SessionReuseKey): string {
   const data = JSON.stringify({
     routerSessionId: key.routerSessionId,
     workerId: key.workerId,
+    ...(key.roleDefinitionId
+      ? {
+          roleDefinitionId: key.roleDefinitionId,
+          roleRevision: key.roleRevision ?? null,
+        }
+      : {}),
     canonicalCwd: key.canonicalCwd,
     executionFingerprint: key.executionFingerprint,
   })
@@ -605,6 +617,8 @@ export class AcpSessionManager {
   buildReuseKey(params: {
     routerSessionId: string
     workerId: string
+    roleDefinitionId?: string
+    roleRevision?: number
     cwd: string
     config: SessionEntryConfig
   }): SessionReuseKey {
@@ -1011,6 +1025,8 @@ export class AcpSessionManager {
           keyDigest: this.computeKeyDigest(key),
           routerSessionId: key.routerSessionId,
           workerId: key.workerId,
+          roleDefinitionId: key.roleDefinitionId,
+          roleRevision: key.roleRevision,
           installationId: config.installationId,
           manifestDigest: config.manifestDigest,
           canonicalCwd: key.canonicalCwd,
@@ -1433,6 +1449,33 @@ export class AcpSessionManager {
       this.launchRemoteCleanup(records)
     }
     return { deleted: foundLive || catalogDeleted }
+  }
+
+  /** Reset every live/durable ACP context for one Chat-scoped role only. */
+  deleteContextsByRole(routerSessionId: string, roleDefinitionId: string): { deleted: number } {
+    const digests = new Set<string>()
+    for (const entry of this.entries.values()) {
+      if (
+        entry.key.routerSessionId === routerSessionId &&
+        entry.key.roleDefinitionId === roleDefinitionId
+      ) {
+        digests.add(this.computeKeyDigest(entry.key))
+      }
+    }
+    if (this.reuseEnabled && this.catalogIsAvailable()) {
+      const records = this.readCatalogRecords(() =>
+        this.catalogPort!.listByRouterSession(routerSessionId),
+      )
+      for (const record of records) {
+        if (record.roleDefinitionId === roleDefinitionId) digests.add(record.keyDigest)
+      }
+    }
+
+    let deleted = 0
+    for (const digest of digests) {
+      if (this.deleteContextByDigest(digest).deleted) deleted += 1
+    }
+    return { deleted }
   }
 
   /** Reset exactly one durable ACP context and hand its remote session to cleanup. */

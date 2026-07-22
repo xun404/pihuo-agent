@@ -6,7 +6,7 @@
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { whichSync } from './detect-workers.js'
+import { whichSync } from './which.js'
 import {
   pickOpenCodeAcpModel,
   prepareOpenCodeAcpEnv,
