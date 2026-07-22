@@ -30,7 +30,34 @@ describe('Registry catalog GET public error contract', () => {
       assert.match(block, /registryCatalogApiPublicError\(error\)/u)
       assert.doesNotMatch(block, /error\.message/u)
       assert.doesNotMatch(block, /String\(error\)/u)
+      assert.doesNotMatch(block, /refresh/u)
+      assert.match(block, /apiGetRegistryCatalog\(\)/u)
     }
+  })
+
+  it('keeps GET local-only and exposes an explicit Owner update route', () => {
+    const owner = readFileSync(fileURLToPath(new URL('./http-server.ts', import.meta.url)), 'utf8')
+    const studio = readFileSync(fileURLToPath(new URL('./routes/api.ts', import.meta.url)), 'utf8')
+    const ownerGet = routeBlock(
+      owner,
+      "if (method === 'GET' && path === '/api/workers/registry')",
+      '// Registry manual update:',
+    )
+    const ownerUpdate = routeBlock(
+      owner,
+      "if (method === 'POST' && path === '/api/workers/registry/check-update')",
+      '// Registry prepare:',
+    )
+    const studioUpdate = routeBlock(
+      studio,
+      "registerApiRoute('/api/workers/registry/check-update',",
+      "registerApiRoute('/api/workers/registry/prepare',",
+    )
+
+    assert.doesNotMatch(ownerGet, /refresh/u)
+    assert.match(ownerGet, /apiGetRegistryCatalog\(\)/u)
+    assert.match(ownerUpdate, /apiCheckRegistryUpdate/u)
+    assert.match(studioUpdate, /REGISTRY_OWNER_REQUIRED/u)
   })
 })
 

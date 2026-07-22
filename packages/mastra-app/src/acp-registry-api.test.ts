@@ -32,6 +32,7 @@ import {
 import {
   apiAdoptRegistryManagement,
   apiAuthenticateWorker,
+  apiCheckRegistryUpdate,
   apiGetRegistryCatalog,
   apiGetWorkerAuthMethods,
   apiLogoutWorker,
@@ -655,22 +656,20 @@ describe('acp-registry-api', () => {
     })
   })
 
-  it('keeps catalog refresh failures bounded through the public API projection', async () => {
-    const originalFetch = globalThis.fetch
+  it('keeps manual catalog update failures bounded and retains a usable catalog', async () => {
     const privateMessage = `failed at /Users/private/catalog?token=secret-${'x'.repeat(700)}`
-    globalThis.fetch = async () => {
-      throw new Error(privateMessage)
-    }
-    try {
-      const result = await apiGetRegistryCatalog({ refresh: true })
-      const publicBody = JSON.stringify(result)
-      assert.equal(publicBody.includes('/Users/private'), false)
-      assert.equal(publicBody.includes('token=secret'), false)
-      assert.equal(publicBody.includes('x'.repeat(700)), false)
-      assert.ok(Buffer.byteLength(result.message ?? '', 'utf8') <= 512)
-    } finally {
-      globalThis.fetch = originalFetch
-    }
+    const result = await apiCheckRegistryUpdate({
+      fetchImpl: async () => {
+        throw new Error(privateMessage)
+      },
+    })
+    const publicBody = JSON.stringify(result)
+    assert.equal(result.updateStatus, 'failed')
+    assert.ok(result.agents.length > 0)
+    assert.equal(publicBody.includes('/Users/private'), false)
+    assert.equal(publicBody.includes('token=secret'), false)
+    assert.equal(publicBody.includes('x'.repeat(700)), false)
+    assert.ok(Buffer.byteLength(result.message ?? '', 'utf8') <= 512)
   })
 
   it('probes the exact immutable launch with the scoped secret snapshot and promotes only ready', async () => {

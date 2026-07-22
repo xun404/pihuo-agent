@@ -360,11 +360,18 @@ export const apiRoutes = [
     method: 'GET',
     handler: async (c) => {
       try {
-        return c.json(await apiGetRegistryCatalog({ refresh: false }))
+        return c.json(await apiGetRegistryCatalog())
       } catch (error) {
         const p = registryCatalogApiPublicError(error)
         return c.json({ error: p.error, code: p.code }, p.status as 502)
       }
+    },
+  }),
+
+  registerApiRoute('/api/workers/registry/check-update', {
+    method: 'POST',
+    handler: async (c) => {
+      return c.json(REGISTRY_OWNER_REQUIRED, 409)
     },
   }),
 

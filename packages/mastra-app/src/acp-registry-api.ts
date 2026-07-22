@@ -51,7 +51,12 @@ import {
   evaluateWorkerReadinessGate,
 } from './acp-worker-readiness.js'
 import { reconcileWorkerRuntimeResources } from './acp-resource-lifecycle.js'
-import { getRegistryCatalogForApi, resolveLocalRegistryCatalog } from './acp-registry-service.js'
+import {
+  checkRegistryCatalogUpdate,
+  getRegistryCatalogForApi,
+  resolveLocalRegistryCatalog,
+  type ResolveCatalogResult,
+} from './acp-registry-service.js'
 import {
   clearTerminalAuthProbeMethods,
   isTerminalAuthFeatureEnabled,
@@ -469,8 +474,7 @@ export { unknownRegistryCatalogPublicError as registryCatalogApiPublicError }
 
 // ── Catalog ──
 
-export async function apiGetRegistryCatalog(opts?: { refresh?: boolean }) {
-  const catalog = await getRegistryCatalogForApi({ refresh: opts?.refresh })
+function projectRegistryCatalog(catalog: ResolveCatalogResult) {
   const workers = store().listWorkers()
   const target = resolveAcpRegistryTarget()
   const agentsV2 = catalog.snapshot.agents.map((agent) => {
@@ -491,7 +495,7 @@ export async function apiGetRegistryCatalog(opts?: { refresh?: boolean }) {
   })
   return {
     version: catalog.legacy.version,
-    agents: catalog.agents,
+    agents: catalog.legacy.agents,
     schemaVersion: catalog.snapshot.schemaVersion,
     source: catalog.snapshot.source,
     digest: catalog.snapshot.digest,
@@ -503,6 +507,21 @@ export async function apiGetRegistryCatalog(opts?: { refresh?: boolean }) {
     agentsV2,
     terminalAuthEnabled: isTerminalAuthFeatureEnabled(),
     ptyReady: isPtyFeatureReady(),
+  }
+}
+
+export async function apiGetRegistryCatalog() {
+  return projectRegistryCatalog(await getRegistryCatalogForApi())
+}
+
+export async function apiCheckRegistryUpdate(
+  options: { fetchImpl?: typeof fetch; signal?: AbortSignal; timeoutMs?: number } = {},
+) {
+  const result = await checkRegistryCatalogUpdate(options)
+  return {
+    ...projectRegistryCatalog(result.catalog),
+    updateStatus: result.status,
+    agentCount: result.catalog.snapshot.agents.length,
   }
 }
 

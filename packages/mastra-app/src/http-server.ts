@@ -51,6 +51,7 @@ import {
 } from '@swarmdesk-agent/adapters'
 import {
   apiGetRegistryCatalog,
+  apiCheckRegistryUpdate,
   apiStartPrepareRegistry,
   apiGetRegistryOperation,
   apiCancelRegistryOperation,
@@ -1435,8 +1436,18 @@ const server = createServer(async (req, res) => {
 
       if (method === 'GET' && path === '/api/workers/registry') {
         try {
-          const refresh = url.searchParams.get('refresh') === '1'
-          send(res, 200, await apiGetRegistryCatalog({ refresh }))
+          send(res, 200, await apiGetRegistryCatalog())
+        } catch (error) {
+          const p = registryCatalogApiPublicError(error)
+          send(res, p.status, { error: p.error, code: p.code })
+        }
+        return
+      }
+
+      // Registry manual update: the only runtime path allowed to contact the official catalog.
+      if (method === 'POST' && path === '/api/workers/registry/check-update') {
+        try {
+          send(res, 200, await apiCheckRegistryUpdate())
         } catch (error) {
           const p = registryCatalogApiPublicError(error)
           send(res, p.status, { error: p.error, code: p.code })
