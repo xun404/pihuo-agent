@@ -504,32 +504,37 @@ export function ChatPanel({
     const MAX_ATTEMPTS = 4
     const RETRY_DELAYS = [500, 1500, 3000]
     ;(async () => {
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        try {
-          const res = await api.getThreadMessages(memoryThreadId, memoryResourceId)
-          if (cancelled) return
-          historyLoadedFor.current = memoryThreadId
-          if (Array.isArray(res.messages) && res.messages.length > 0) {
-            // Don't clobber an in-flight / already-populated chat
-            setMessages((prev) => (prev.length > 0 ? prev : (res.messages as never)))
-          }
-          return
-        } catch (e) {
-          if (cancelled) return
-          if (attempt < MAX_ATTEMPTS - 1) {
-            console.warn(
-              `[ChatPanel] load history failed (attempt ${attempt + 1}/${MAX_ATTEMPTS}), retrying…`,
-              e,
-            )
-            await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt] ?? 3000))
+      try {
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          try {
+            const res = await api.getThreadMessages(memoryThreadId, memoryResourceId)
             if (cancelled) return
-          } else {
-            console.warn('[ChatPanel] load history failed, giving up', e)
-            // Mark loaded so we stop retrying, but messages stay empty — the
-            // home placeholder will show (same as a brand-new empty session).
             historyLoadedFor.current = memoryThreadId
+            if (Array.isArray(res.messages) && res.messages.length > 0) {
+              // Don't clobber an in-flight / already-populated chat
+              setMessages((prev) => (prev.length > 0 ? prev : (res.messages as never)))
+            }
+            return
+          } catch (e) {
+            if (cancelled) return
+            if (attempt < MAX_ATTEMPTS - 1) {
+              console.warn(
+                `[ChatPanel] load history failed (attempt ${attempt + 1}/${MAX_ATTEMPTS}), retrying…`,
+                e,
+              )
+              await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt] ?? 3000))
+              if (cancelled) return
+            } else {
+              console.warn('[ChatPanel] load history failed, giving up', e)
+              historyLoadedFor.current = memoryThreadId
+            }
           }
         }
+      } finally {
+        // MUST clear loading on every exit path (success, give-up, or cancel)
+        // — otherwise hasMessages stays true via historyLoading and the chat
+        // is stuck in a perpetual "loading" state.
+        if (!cancelled) setHistoryLoading(false)
       }
     })()
     return () => {
