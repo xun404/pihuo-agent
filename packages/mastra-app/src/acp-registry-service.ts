@@ -43,6 +43,11 @@ export interface ResolveCatalogResult {
   message?: string
 }
 
+export interface RegistryCatalogUpdateResult {
+  status: 'updated' | 'up_to_date' | 'failed' | 'update_required'
+  catalog: ResolveCatalogResult
+}
+
 function toLegacy(snapshot: AcpRegistryCatalogSnapshot): AcpRegistryCatalog {
   const target = resolveAcpRegistryTarget()
   return {
@@ -166,6 +171,113 @@ export async function refreshRegistryCatalog(
         stale: true,
         diagnosticCode: 'ACP_REGISTRY_UNAVAILABLE',
         diagnosticMessage: message,
+      },
+    }
+  }
+}
+
+/**
+ * Explicit owner action: check the official Registry and persist a complete changed snapshot.
+ * Ordinary reads must use resolveLocalRegistryCatalog() and never call this function implicitly.
+ */
+export async function checkRegistryCatalogUpdate(
+  options: {
+    fetchImpl?: typeof fetch
+    signal?: AbortSignal
+    timeoutMs?: number
+  } = {},
+): Promise<RegistryCatalogUpdateResult> {
+  const local = resolveLocalRegistryCatalog()
+  try {
+    const remote = await fetchAcpRegistryCatalogV2({
+      fetchImpl: options.fetchImpl,
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+      etag: local.etag,
+    })
+    if (remote.notModified || remote.digest === local.snapshot.digest) {
+      return {
+        status: 'up_to_date',
+        catalog: {
+          ...local,
+          stale: false,
+          snapshot: { ...local.snapshot, stale: false },
+        },
+      }
+    }
+    if (!remote.agents.length || !remote.digest) {
+      return {
+        status: 'failed',
+        catalog: {
+          ...local,
+          stale: true,
+          code: 'ACP_REGISTRY_UNAVAILABLE',
+          message: 'Registry catalog is unavailable',
+        },
+      }
+    }
+    saveAcpRegistryCatalogStore({
+      etag: remote.etag,
+      fetchedAt: remote.fetchedAt,
+      schemaVersion: remote.schemaVersion,
+      digest: remote.digest,
+      snapshot: remote,
+    })
+    const persisted = resolveLocalRegistryCatalog()
+    return {
+      status: 'updated',
+      catalog: {
+        ...persisted,
+        stale: false,
+        snapshot: { ...persisted.snapshot, stale: false },
+      },
+    }
+  } catch (error) {
+    if (
+      error instanceof AcpRegistrySchemaError &&
+      error.code === 'ACP_REGISTRY_SCHEMA_UNSUPPORTED'
+    ) {
+      const message = projectRegistryPublicError({
+        code: error.code,
+        message: 'Registry schema is not supported; update SwarmDesk',
+        status: 409,
+      }).error
+      return {
+        status: 'update_required',
+        catalog: {
+          ...local,
+          stale: true,
+          updateRequired: true,
+          code: error.code,
+          message,
+          snapshot: {
+            ...local.snapshot,
+            stale: true,
+            updateRequired: true,
+            diagnosticCode: error.code,
+            diagnosticMessage: message,
+          },
+        },
+      }
+    }
+    const message = projectRegistryPublicError({
+      code: 'ACP_REGISTRY_UNAVAILABLE',
+      message: 'Unable to refresh ACP Registry catalog',
+      status: 502,
+    }).error
+    return {
+      status: 'failed',
+      catalog: {
+        ...local,
+        stale: true,
+        code: 'ACP_REGISTRY_UNAVAILABLE',
+        message,
+        snapshot: {
+          ...local.snapshot,
+          stale: true,
+          diagnosticCode: 'ACP_REGISTRY_UNAVAILABLE',
+          diagnosticMessage: message,
+        },
       },
     }
   }
