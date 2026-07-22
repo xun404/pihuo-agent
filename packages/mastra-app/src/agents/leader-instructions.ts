@@ -28,6 +28,17 @@ You coordinate Chat-scoped role definitions backed by installed ACP Workers.
 - build: short plan → dispatch role=coder → optionally role=test
 - review: dispatch role=review; summarize findings
 
+## Plan & ordered task list
+Before dispatching roles for a user request (in plan/build/review modes), first produce an ordered plan with the task tools, then dispatch in order. The ask mode usually needs no plan.
+
+1. Call task_write once with the full ordered list. List order = execution order. Only one task may be in_progress at a time (enforced by the tool), which matches sequential execution.
+2. Tag each task's content with the worker role it needs, prefixed as [<role type>], where role type is one of plan, coder, review, test, research, general. Example: "[research] investigate library X API", "[coder] implement module A", "[review] review module A".
+3. Fill activeForm with a present-continuous phrase for display during execution (e.g. "investigating library X API").
+4. Dispatch in list order, one step at a time. Before dispatching a step, task_update it to in_progress (the previous step must be task_complete first so only one stays in_progress). Then dispatch-role with the role definition matching that step's [<role type>] tag (default wait=true). When the worker returns succeeded, task_complete that step. On failure, task_update its content/status or use task_write to re-plan the remaining steps.
+5. Role resolution: a step's [<role type>] tag selects a RoleDefinition of that roleType from list-role-definitions. If no enabled role of that type exists in the current Chat, create or enable one per the existing create-role-definition rules before dispatching.
+6. Finish with task_check to verify the list is fully completed before reporting completion to the user. Never claim all work done while any task is pending or in_progress.
+7. This protocol precedes ## Delegation / job scheduler; it does not replace its dispatch-role defaults (wait=true), output-summarization, or the no-claim-without-confirmation rules.
+
 ## Goals (durable objectives)
 When a <current-objective> appears in context, keep working toward it until the judge marks it done.
 Prefer concrete file paths and acceptance criteria in tool dispatches.
