@@ -1,5 +1,6 @@
-import type { RoleDefinition, WorkerJob, WorkerRunEvent } from '@swarmdesk-agent/shared'
+import type { TeamMember, TeamTemplate, WorkerJob, WorkerRunEvent } from '@swarmdesk-agent/shared'
 import { isTerminalWorkerEvent } from '@swarmdesk-agent/shared'
+import { loadSettings } from '@swarmdesk-agent/core'
 import type {
   ResolveApprovalPortInput,
   RouterSessionContext,
@@ -11,13 +12,15 @@ import {
   defaultRuntimeDiscoveryPath,
   RuntimeDiscoveryError,
 } from './runtime-discovery.js'
-import { raceWithTimeout, resolveWorkerJobTimeoutMs } from './worker-events.js'
+import { MAX_TIMER_DELAY_MS, raceWithTimeout, resolveWorkerJobTimeoutMs } from './worker-events.js'
 
 export interface RemoteRuntimeDispatchDeps {
   baseUrl?: string
   token?: string
   discoveryPath?: string
   fetchImpl?: typeof fetch
+  /** Test/embedding override for the total event observation deadline. */
+  eventTimeoutMs?: number
 }
 
 interface RuntimeEndpoint {
@@ -216,7 +219,7 @@ export function createRemoteRuntimeDispatchPort(
     async dispatch(input: TrustedDispatchInput): Promise<WorkerJob> {
       const data = await requestJson<{ job: WorkerJob }>('POST', '/internal/runtime/dispatch', {
         context: input.context,
-        roleDefinitionId: input.roleDefinitionId,
+        teamMemberId: input.teamMemberId,
         workerId: input.workerId,
         workerIdOrKind: input.workerIdOrKind,
         role: input.role,
@@ -228,50 +231,93 @@ export function createRemoteRuntimeDispatchPort(
       return data.job
     },
 
-    async listRoleDefinitions(context): Promise<RoleDefinition[]> {
+    async listTeamMembers(context): Promise<TeamMember[]> {
       const q = encodeURIComponent(context.memoryThreadId)
-      const data = await requestJson<{ roleDefinitions: RoleDefinition[] }>(
+      const data = await requestJson<{ teamMembers: TeamMember[]; teamRevision: number }>(
         'GET',
-        `/internal/runtime/role-definitions?memoryThreadId=${q}`,
+        `/internal/runtime/team?memoryThreadId=${q}`,
       )
-      return data.roleDefinitions
+      return data.teamMembers
     },
 
-    async createRoleDefinition(input): Promise<RoleDefinition> {
-      const data = await requestJson<{ roleDefinition: RoleDefinition }>(
+    async getTeamRevision(context): Promise<number> {
+      const q = encodeURIComponent(context.memoryThreadId)
+      const data = await requestJson<{ teamMembers: TeamMember[]; teamRevision: number }>(
+        'GET',
+        `/internal/runtime/team?memoryThreadId=${q}`,
+      )
+      return data.teamRevision
+    },
+
+    async createTeamMember(input): Promise<TeamMember> {
+      const data = await requestJson<{ teamMember: TeamMember }>(
         'POST',
-        '/internal/runtime/role-definitions',
+        '/internal/runtime/team/members',
         input,
       )
-      return data.roleDefinition
+      return data.teamMember
     },
 
-    async updateRoleDefinition(input): Promise<RoleDefinition> {
-      const id = encodeURIComponent(input.roleDefinitionId)
-      const data = await requestJson<{ roleDefinition: RoleDefinition }>(
+    async updateTeamMember(input): Promise<TeamMember> {
+      const id = encodeURIComponent(input.teamMemberId)
+      const data = await requestJson<{ teamMember: TeamMember }>(
         'PATCH',
-        `/internal/runtime/role-definitions/${id}`,
+        `/internal/runtime/team/members/${id}`,
         { context: input.context, patch: input.patch },
       )
-      return data.roleDefinition
+      return data.teamMember
     },
 
-    async archiveRoleDefinition(input): Promise<RoleDefinition> {
-      const id = encodeURIComponent(input.roleDefinitionId)
-      const data = await requestJson<{ roleDefinition: RoleDefinition }>(
+    async archiveTeamMember(input): Promise<TeamMember> {
+      const id = encodeURIComponent(input.teamMemberId)
+      const data = await requestJson<{ teamMember: TeamMember }>(
         'DELETE',
-        `/internal/runtime/role-definitions/${id}`,
+        `/internal/runtime/team/members/${id}`,
         { context: input.context, expectedRevision: input.expectedRevision },
       )
-      return data.roleDefinition
+      return data.teamMember
     },
 
-    async resetRoleSession(input): Promise<{ deleted: boolean }> {
-      const id = encodeURIComponent(input.roleDefinitionId)
+    async resetTeamMemberSession(input): Promise<{ deleted: boolean }> {
+      const id = encodeURIComponent(input.teamMemberId)
       return requestJson<{ deleted: boolean }>(
         'POST',
-        `/internal/runtime/role-definitions/${id}/reset-session`,
+        `/internal/runtime/team/members/${id}/reset-session`,
         { context: input.context },
+      )
+    },
+
+    async listTeamTemplates() {
+      const data = await requestJson<{ templates: TeamTemplate[] }>(
+        'GET',
+        '/internal/runtime/team-templates',
+      )
+      return data.templates
+    },
+
+    async saveTeamTemplate(input) {
+      const data = await requestJson<{ template: TeamTemplate }>(
+        'POST',
+        '/internal/runtime/team-templates',
+        input,
+      )
+      return data.template
+    },
+
+    async deleteTeamTemplate(templateId) {
+      const id = encodeURIComponent(templateId)
+      const data = await requestJson<{ template: TeamTemplate }>(
+        'DELETE',
+        `/internal/runtime/team-templates/${id}`,
+      )
+      return data.template
+    },
+
+    async applyTeamTemplate(input) {
+      return requestJson<{ members: TeamMember[]; teamRevision: number }>(
+        'POST',
+        '/internal/runtime/team/apply-template',
+        input,
       )
     },
 
@@ -287,7 +333,20 @@ export function createRemoteRuntimeDispatchPort(
           ? options.afterSequence
           : 0
       let ownerEpoch: string | null = null
-      const deadlineMs = resolveWorkerJobTimeoutMs()
+      const deadlineMs =
+        deps.eventTimeoutMs !== undefined
+          ? resolveWorkerJobTimeoutMs(deps.eventTimeoutMs)
+          : (() => {
+              const workerTimeouts = loadSettings().workerTimeouts
+              return Math.min(
+                MAX_TIMER_DELAY_MS,
+                Math.floor(
+                  (resolveWorkerJobTimeoutMs(workerTimeouts.jobTimeoutMs) +
+                    workerTimeouts.queueTimeoutMs) *
+                    1.2,
+                ),
+              )
+            })()
       const startedAt = Date.now()
       const deadlineAt = startedAt + deadlineMs
       let authFailures = 0

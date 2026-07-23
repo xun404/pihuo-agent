@@ -46,6 +46,9 @@ export type MessageKey =
   | 'chat.inspector'
   | 'chat.inspectorClose'
   | 'chat.leader'
+  | 'chat.team'
+  | 'chat.defaultTeam'
+  | 'chat.teamNeedsMapping'
   | 'chat.model'
   | 'chat.manageModels'
   | 'chat.noModelConfigured'
@@ -124,7 +127,6 @@ export type MessageKey =
   | 'jobs.cancel'
   | 'jobs.dispatch'
   | 'jobs.dispatchPlaceholder'
-  | 'jobs.dispatchRole'
   | 'jobs.empty'
   | 'jobs.modelDisabledHint'
   | 'jobs.needSession'
@@ -138,6 +140,8 @@ export type MessageKey =
   | 'prompt.ok'
   | 'prompt.projectPath'
   | 'prompt.selectFolder'
+  | 'layout.resizeSidebar'
+  | 'layout.resizeInspector'
   | 'right.approvals'
   | 'right.files'
   | 'right.git'
@@ -147,11 +151,6 @@ export type MessageKey =
   | 'roles.acpDefault'
   | 'roles.add'
   | 'roles.archive'
-  | 'roles.copy'
-  | 'roles.copySuffix'
-  | 'roles.dispatch'
-  | 'roles.dispatched'
-  | 'roles.dispatchPlaceholder'
   | 'roles.edit'
   | 'roles.empty'
   | 'roles.inheritsWorker'
@@ -164,13 +163,41 @@ export type MessageKey =
   | 'roles.noWorkers'
   | 'roles.openJobs'
   | 'roles.resetSession'
+  | 'roles.confirmResetSession'
+  | 'roles.confirmArchive'
   | 'roles.resetBlocked'
   | 'roles.save'
   | 'roles.saved'
   | 'roles.sessionReset'
   | 'roles.type'
+  | 'roles.useDefaultPrompt'
   | 'roles.worker'
   | 'roles.workerMissing'
+  | 'roles.factWorker'
+  | 'roles.factModel'
+  | 'roles.archived'
+  | 'team.templates'
+  | 'team.templatesHint'
+  | 'team.savedTemplates'
+  | 'team.newTemplate'
+  | 'team.templateName'
+  | 'team.templateDesc'
+  | 'team.saveCurrent'
+  | 'team.deleteTemplate'
+  | 'team.saveMeta'
+  | 'team.overwriteFromCurrent'
+  | 'team.checkMappings'
+  | 'team.replaceCurrent'
+  | 'team.close'
+  | 'team.mappingSection'
+  | 'team.chooseWorker'
+  | 'team.inheritModel'
+  | 'team.modelPlaceholder'
+  | 'team.openJobsBlock'
+  | 'team.savedToast'
+  | 'team.updatedToast'
+  | 'team.deletedToast'
+  | 'team.replacedToast'
   | 'role.coder'
   | 'role.general'
   | 'role.plan'
@@ -268,7 +295,27 @@ export type MessageKey =
   | 'settings.runtime.leaderMaxSteps'
   | 'settings.runtime.leaderMaxStepsDesc'
   | 'settings.runtime.leaderMaxStepsError'
+  | 'settings.runtime.npmRegistry'
+  | 'settings.runtime.npmRegistryDesc'
+  | 'settings.runtime.npmRegistryUrl'
+  | 'settings.runtime.npmRegistryPh'
+  | 'settings.runtime.npmRegistryErrorHttps'
+  | 'settings.runtime.npmRegistryErrorSpace'
   | 'settings.runtime.saveSuccess'
+  | 'settings.runtime.workerTimeouts'
+  | 'settings.runtime.workerTimeoutsDesc'
+  | 'settings.runtime.workerTimeoutsSave'
+  | 'settings.runtime.minutesUnit'
+  | 'settings.runtime.stepsUnit'
+  | 'settings.runtime.workerJobTimeout'
+  | 'settings.runtime.workerJobTimeoutDesc'
+  | 'settings.runtime.workerJobTimeoutError'
+  | 'settings.runtime.workerApprovalTimeout'
+  | 'settings.runtime.workerApprovalTimeoutDesc'
+  | 'settings.runtime.workerApprovalTimeoutError'
+  | 'settings.runtime.workerQueueTimeout'
+  | 'settings.runtime.workerQueueTimeoutDesc'
+  | 'settings.runtime.workerQueueTimeoutError'
   | 'settings.prompts.leader'
   | 'settings.prompts.leaderHint'
   | 'settings.prompts.roles'
@@ -326,7 +373,10 @@ export type MessageKey =
   | 'workers.busy'
   | 'workers.cancel'
   | 'workers.empty'
+  | 'workers.manualRegistration'
   | 'workers.manualRegistrationHint'
+  | 'workers.registerModeAuto'
+  | 'workers.registerModeManual'
   | 'workers.formArgs'
   | 'workers.formCommand'
   | 'workers.customLaunchKind'
@@ -386,6 +436,7 @@ export type MessageKey =
   | 'workers.registryDetailCommand'
   | 'workers.registryDetailDeclared'
   | 'workers.registryDetailDistribution'
+  | 'workers.registryDetailIntegrity'
   | 'workers.registryDetailLicense'
   | 'workers.registryDetailManifest'
   | 'workers.registryDetailObserved'
@@ -394,6 +445,9 @@ export type MessageKey =
   | 'workers.registryDetailSource'
   | 'workers.registryDetailTitle'
   | 'workers.registryDetailWebsite'
+  | 'workers.registryDeclaredMissing'
+  | 'workers.registryDigestMatch'
+  | 'workers.registryDigestMismatch'
   | 'workers.registryEmpty'
   | 'workers.registryHint'
   | 'workers.registryInstalled'
@@ -495,6 +549,11 @@ const zh: Dict = {
   'chat.inspector': '打开 Inspector',
   'chat.inspectorClose': '关闭 Inspector',
   'chat.leader': 'Supervisor',
+  'chat.team': '协作组',
+  'chat.defaultTeam': '默认编组',
+  'chat.teamNeedsMapping': '需要先在协作组面板修复映射',
+  'layout.resizeSidebar': '调整左侧栏宽度',
+  'layout.resizeInspector': '调整右侧栏宽度',
   'chat.model': '模型',
   'chat.manageModels': '管理模型',
   'chat.noModelConfigured': '未配置 Key',
@@ -576,8 +635,7 @@ const zh: Dict = {
   'jobs.cancel': '取消',
   'jobs.dispatch': '派发任务',
   'jobs.dispatchPlaceholder': '描述要委派给 Worker 的任务…',
-  'jobs.dispatchRole': '角色',
-  'jobs.empty': '暂无任务。可通过角色定义派发，或由 Leader 调用 dispatch-role。',
+  'jobs.empty': '暂无任务。可通过协作组成员派发，或由 Leader 调用 dispatch-team-member。',
   'jobs.modelDisabledHint':
     '模型不可用：请到 Workers 面板为该 Worker 选择可用模型后再重试（勿使用「默认」）。',
   'jobs.needSession': '请先打开一个 Session 再派发。',
@@ -595,35 +653,60 @@ const zh: Dict = {
   'right.files': '文件',
   'right.git': 'Git',
   'right.jobs': 'Jobs',
-  'right.roles': '角色定义',
-  'right.rolesHint': '角色属于当前 Chat；同一 Worker 可绑定多个角色，并使用独立会话。',
+  'right.roles': '协作组',
+  'right.rolesHint': '协作组属于当前会话。同一 Worker 可绑定多个成员，各自拥有独立会话与提示词。',
   'roles.acpDefault': 'ACP 默认模型',
-  'roles.add': '添加角色',
+  'roles.add': '添加成员',
   'roles.archive': '归档',
-  'roles.copy': '复制',
-  'roles.copySuffix': '副本',
-  'roles.dispatch': '派发',
-  'roles.dispatched': '任务已通过角色派发。',
-  'roles.dispatchPlaceholder': '通过此角色发起任务…',
+  'roles.archived': '成员已归档。',
   'roles.edit': '编辑',
-  'roles.empty': '当前 Chat 尚未定义角色。',
+  'roles.empty': '当前会话的协作组还没有成员。',
   'roles.inheritsWorker': '继承 Worker：{model}',
-  'roles.instructions': '角色指令',
+  'roles.instructions': '成员提示词',
   'roles.idle': '空闲',
   'roles.model': '模型覆盖（可选）',
   'roles.modelInherit': '留空以继承 Worker 默认模型',
-  'roles.name': '角色名称',
-  'roles.needSession': '请先打开一个 Chat。',
+  'roles.name': '成员名称',
+  'roles.needSession': '请先打开一个会话。',
   'roles.noWorkers': '暂无可用 Worker，请先到 Agent Worker 面板安装或注册。',
   'roles.openJobs': '{count} 个进行中任务',
   'roles.resetSession': '重置会话',
-  'roles.resetBlocked': '请先完成或取消此角色的进行中任务。',
-  'roles.save': '保存角色',
-  'roles.saved': '角色定义已保存。',
-  'roles.sessionReset': '角色会话已重置。',
+  'roles.confirmResetSession':
+    '确定重置「{name}」的会话吗？该成员在 Worker 侧的上下文将被清空，且不可撤销。',
+  'roles.confirmArchive': '确定归档成员「{name}」吗？归档后将从当前协作组中移除。',
+  'roles.resetBlocked': '请先完成或取消此成员的进行中任务。',
+  'roles.save': '保存成员',
+  'roles.saved': '成员已保存。',
+  'roles.sessionReset': '成员会话已重置。',
   'roles.type': '语义类型',
+  'roles.useDefaultPrompt': '使用角色默认提示词',
   'roles.worker': '绑定 Worker',
   'roles.workerMissing': 'Worker 不可用',
+  'roles.factWorker': '状态',
+  'roles.factModel': '模型',
+  'team.templates': '编组模板',
+  'team.templatesHint':
+    '模板保存成员提示词、首选 Worker、角色和模型。应用模板会整组替换当前协作组。',
+  'team.savedTemplates': '已保存模板',
+  'team.newTemplate': '新建模板',
+  'team.templateName': '名称',
+  'team.templateDesc': '说明（可选）',
+  'team.saveCurrent': '保存为模板',
+  'team.deleteTemplate': '删除',
+  'team.saveMeta': '保存信息',
+  'team.overwriteFromCurrent': '用当前组覆盖',
+  'team.checkMappings': '检查映射',
+  'team.replaceCurrent': '应用并替换',
+  'team.close': '关闭',
+  'team.mappingSection': '成员映射',
+  'team.chooseWorker': '选择替代 Worker',
+  'team.inheritModel': '继承 Worker 默认模型',
+  'team.modelPlaceholder': '留空继承 Worker 默认模型',
+  'team.openJobsBlock': '有 {count} 个未结束任务，当前不能替换协作组。',
+  'team.savedToast': '编组模板已保存。',
+  'team.updatedToast': '编组模板已更新。',
+  'team.deletedToast': '编组模板已删除。',
+  'team.replacedToast': '已替换当前协作组。',
   'role.coder': '编码',
   'role.general': '通用',
   'role.plan': '规划',
@@ -720,17 +803,38 @@ const zh: Dict = {
   'settings.providerBuiltin': '内置',
   'settings.providerCustom': '自定义供应商',
   'settings.providerKey': '{provider} API Key',
-  'settings.runtime.leaderMaxSteps': 'Leader 最大步骤',
-  'settings.runtime.leaderMaxStepsDesc': '单次任务预算，默认 500',
+  'settings.runtime.leaderMaxSteps': 'Leader 步数预算',
+  'settings.runtime.leaderMaxStepsDesc': '单次任务可执行的最大步数，默认 500',
   'settings.runtime.leaderMaxStepsError': '请输入 10 到 1000 之间的整数',
+  'settings.runtime.npmRegistry': 'npm 镜像',
+  'settings.runtime.npmRegistryDesc': 'npx 拉包使用的 registry；留空用系统默认。',
+  'settings.runtime.npmRegistryUrl': 'Registry URL',
+  'settings.runtime.npmRegistryPh': 'https://registry.npmmirror.com',
+  'settings.runtime.npmRegistryErrorHttps': '必须以 https:// 开头',
+  'settings.runtime.npmRegistryErrorSpace': '不能包含空格等非法字符',
   'settings.runtime.saveSuccess': '运行设置已保存',
+  'settings.runtime.workerTimeouts': '运行时',
+  'settings.runtime.workerTimeoutsDesc': 'Leader 步数预算与 Worker 超时（分钟）。',
+  'settings.runtime.workerTimeoutsSave': '保存',
+  'settings.runtime.minutesUnit': '分钟',
+  'settings.runtime.stepsUnit': '步',
+  'settings.runtime.workerJobTimeout': 'Worker 任务超时',
+  'settings.runtime.workerJobTimeoutDesc': '进入运行状态后的总执行时间，默认 10 分钟。',
+  'settings.runtime.workerJobTimeoutError': '请输入 1 到 120 之间的整数',
+  'settings.runtime.workerApprovalTimeout': '人工审批超时',
+  'settings.runtime.workerApprovalTimeoutDesc': '等待用户处理 ACP 权限请求的时间，默认 2 分钟。',
+  'settings.runtime.workerApprovalTimeoutError': '请输入 1 到 60 之间的整数',
+  'settings.runtime.workerQueueTimeout': 'Worker 排队超时',
+  'settings.runtime.workerQueueTimeoutDesc': '等待并发槽或 ACP Session 容量的时间，默认 10 分钟。',
+  'settings.runtime.workerQueueTimeoutError': '请输入 1 到 120 之间的整数',
   'settings.prompts.leader': 'Leader',
   'settings.prompts.leaderHint': '此内容会附加在内置协议和工具约束之后，从下一轮对话开始生效。',
   'settings.prompts.roles': '角色默认提示词',
-  'settings.prompts.rolesHint': '用于新 Worker 默认角色和新建角色，不会覆盖已有 Session。',
+  'settings.prompts.rolesHint':
+    '用于新会话的协作组成员，以及成员编辑器中的“使用角色默认提示词”；不会覆盖已有成员。',
   'settings.prompts.reset': '恢复默认',
-  'settings.prompts.save': '保存提示词',
-  'settings.prompts.saved': '提示词已保存，将用于后续新建角色和下一轮 Leader 对话。',
+  'settings.prompts.save': '保存',
+  'settings.prompts.saved': '提示词已保存，将用于后续新建协作组成员和下一轮 Leader 对话。',
   'settings.storageRoot': '配置目录',
   'settings.storageData': '数据目录',
   'settings.storageCache': '缓存目录',
@@ -782,7 +886,11 @@ const zh: Dict = {
   'workers.busy': '忙碌',
   'workers.cancel': '取消',
   'workers.empty': '尚未安装或注册 Worker。请从 Registry 手动安装，或注册自定义 ACP。',
-  'workers.manualRegistrationHint': 'Worker 仅在此面板由用户显式安装或注册。',
+  'workers.manualRegistration': '手动注册',
+  'workers.manualRegistrationHint':
+    '填写自定义 ACP 启动方式与命令；不经 Registry 准备，由本机直接启动。',
+  'workers.registerModeAuto': '自动注册',
+  'workers.registerModeManual': '手动注册',
   'workers.formArgs': '参数（空格分隔）',
   'workers.formCommand': '命令',
   'workers.customLaunchKind': '自定义 ACP 启动方式',
@@ -845,17 +953,21 @@ const zh: Dict = {
   'workers.registryDetailCommand': '启动命令投影',
   'workers.registryDetailDeclared': '声明 SHA-256',
   'workers.registryDetailDistribution': '分发方式',
+  'workers.registryDetailIntegrity': '完整性',
   'workers.registryDetailLicense': '许可证',
-  'workers.registryDetailManifest': 'Manifest digest',
-  'workers.registryDetailObserved': '实际 SHA-256',
+  'workers.registryDetailManifest': 'Manifest',
+  'workers.registryDetailObserved': '实测 SHA-256',
   'workers.registryDetailRepository': '代码仓库',
   'workers.registryDetailRunner': '本机前置条件',
   'workers.registryDetailSource': '包 / 下载来源',
   'workers.registryDetailTitle': 'Registry Agent 详情与信任确认',
   'workers.registryDetailWebsite': '网站',
+  'workers.registryDeclaredMissing': '未声明',
+  'workers.registryDigestMatch': '一致',
+  'workers.registryDigestMismatch': '不一致',
   'workers.registryEmpty': '没有匹配的 Agent',
   'workers.registryHint':
-    '搜索 ACP Registry 全量 Agent；选择后由 Owner 按受信目录准备并生成启动命令。手工 custom Worker 使用独立入口。',
+    '从 ACP Registry 搜索并选择 Agent；由 Owner 按受信目录准备并生成启动命令。',
   'workers.registryInstalled': '已安装',
   'workers.registryLoading': '正在加载 ACP Registry…',
   'workers.registryLocalInstall': '需本机安装',
@@ -868,7 +980,7 @@ const zh: Dict = {
     '准备过程可能访问所选包或下载来源；认证需求会在 ACP initialize 后协商。',
   'workers.registryNoShaWarning': '没有声明 SHA-256；必须显式信任当前 manifest 才能准备。',
   'workers.registryNotInstalled': '未安装',
-  'workers.registryObservedPending': '准备完成后可见',
+  'workers.registryObservedPending': '准备后可见',
   'workers.registryPrepareCancel': '取消准备',
   'workers.registryPrepareCancelled': '准备已取消',
   'workers.registryPrepareComplete': '准备完成',
@@ -960,6 +1072,11 @@ const en: Dict = {
   'chat.inspector': 'Open Inspector',
   'chat.inspectorClose': 'Close Inspector',
   'chat.leader': 'Supervisor',
+  'chat.team': 'Crew',
+  'chat.defaultTeam': 'Default crew',
+  'chat.teamNeedsMapping': 'Fix mappings in the Crew panel first',
+  'layout.resizeSidebar': 'Resize left sidebar',
+  'layout.resizeInspector': 'Resize inspector',
   'chat.model': 'Model',
   'chat.manageModels': 'Manage models',
   'chat.noModelConfigured': 'No key configured',
@@ -1046,8 +1163,8 @@ const en: Dict = {
   'jobs.cancel': 'Cancel',
   'jobs.dispatch': 'Dispatch',
   'jobs.dispatchPlaceholder': 'Describe the task for the worker…',
-  'jobs.dispatchRole': 'Role',
-  'jobs.empty': 'No jobs yet. Dispatch through a role, or let the Leader call dispatch-role.',
+  'jobs.empty':
+    'No jobs yet. Dispatch through a crew member, or let the Leader call dispatch-team-member.',
   'jobs.modelDisabledHint':
     'Model unavailable: open Workers, select a working model for this worker, then retry (do not use Default).',
   'jobs.needSession': 'Open a session before dispatching.',
@@ -1065,36 +1182,62 @@ const en: Dict = {
   'right.files': 'Files',
   'right.git': 'Git',
   'right.jobs': 'Jobs',
-  'right.roles': 'Role definitions',
+  'right.roles': 'Crew',
   'right.rolesHint':
-    'Roles belong to this chat. One Worker may back multiple roles with isolated sessions.',
+    'The crew belongs to this session. One Worker may back multiple members with isolated sessions and prompts.',
   'roles.acpDefault': 'ACP default model',
-  'roles.add': 'Add role',
+  'roles.add': 'Add member',
   'roles.archive': 'Archive',
-  'roles.copy': 'Copy',
-  'roles.copySuffix': 'copy',
-  'roles.dispatch': 'Dispatch',
-  'roles.dispatched': 'Task dispatched through the role.',
-  'roles.dispatchPlaceholder': 'Start a task through this role…',
+  'roles.archived': 'Member archived.',
   'roles.edit': 'Edit',
-  'roles.empty': 'No roles are defined for this chat.',
+  'roles.empty': 'This session crew has no members yet.',
   'roles.inheritsWorker': 'Inherits Worker: {model}',
-  'roles.instructions': 'Role instructions',
+  'roles.instructions': 'Member prompt',
   'roles.idle': 'Idle',
   'roles.model': 'Model override (optional)',
   'roles.modelInherit': 'Leave empty to inherit the Worker default model',
-  'roles.name': 'Role name',
-  'roles.needSession': 'Open a chat first.',
+  'roles.name': 'Member name',
+  'roles.needSession': 'Open a session first.',
   'roles.noWorkers': 'No Worker is available. Install or register one in Agent Worker settings.',
   'roles.openJobs': '{count} open jobs',
   'roles.resetSession': 'Reset session',
-  'roles.resetBlocked': 'Finish or cancel this role’s open jobs first.',
-  'roles.save': 'Save role',
-  'roles.saved': 'Role definition saved.',
-  'roles.sessionReset': 'Role session reset.',
+  'roles.confirmResetSession':
+    'Reset the session for “{name}”? This clears the member’s Worker-side context and cannot be undone.',
+  'roles.confirmArchive':
+    'Archive member “{name}”? It will be removed from the current crew.',
+  'roles.resetBlocked': 'Finish or cancel this member’s open jobs first.',
+  'roles.save': 'Save member',
+  'roles.saved': 'Member saved.',
+  'roles.sessionReset': 'Member session reset.',
   'roles.type': 'Semantic type',
+  'roles.useDefaultPrompt': 'Use role default prompt',
   'roles.worker': 'Worker binding',
   'roles.workerMissing': 'Worker unavailable',
+  'roles.factWorker': 'Status',
+  'roles.factModel': 'Model',
+  'team.templates': 'Crew templates',
+  'team.templatesHint':
+    'Templates preserve member prompts, preferred Workers, roles, and models. Applying replaces the whole crew.',
+  'team.savedTemplates': 'Saved templates',
+  'team.newTemplate': 'New template',
+  'team.templateName': 'Name',
+  'team.templateDesc': 'Description (optional)',
+  'team.saveCurrent': 'Save as template',
+  'team.deleteTemplate': 'Delete',
+  'team.saveMeta': 'Save info',
+  'team.overwriteFromCurrent': 'Overwrite from crew',
+  'team.checkMappings': 'Check mappings',
+  'team.replaceCurrent': 'Apply & replace',
+  'team.close': 'Close',
+  'team.mappingSection': 'Member mappings',
+  'team.chooseWorker': 'Choose substitute Worker',
+  'team.inheritModel': 'Inherit Worker default model',
+  'team.modelPlaceholder': 'Leave blank to inherit Worker model',
+  'team.openJobsBlock': '{count} open jobs block crew replacement.',
+  'team.savedToast': 'Crew template saved.',
+  'team.updatedToast': 'Crew template updated.',
+  'team.deletedToast': 'Crew template deleted.',
+  'team.replacedToast': 'Current crew replaced.',
   'role.coder': 'Coder',
   'role.general': 'General',
   'role.plan': 'Plan',
@@ -1196,19 +1339,42 @@ const en: Dict = {
   'settings.providerBuiltin': 'Built-in',
   'settings.providerCustom': 'Custom providers',
   'settings.providerKey': '{provider} API key',
-  'settings.runtime.leaderMaxSteps': 'Leader max steps',
-  'settings.runtime.leaderMaxStepsDesc': 'Per-task budget, default 500',
+  'settings.runtime.leaderMaxSteps': 'Leader step budget',
+  'settings.runtime.leaderMaxStepsDesc': 'Max steps per task, default 500',
   'settings.runtime.leaderMaxStepsError': 'Please enter an integer between 10 and 1000',
+  'settings.runtime.npmRegistry': 'npm registry',
+  'settings.runtime.npmRegistryDesc': 'Registry for npx package installs. Leave empty for system default.',
+  'settings.runtime.npmRegistryUrl': 'Registry URL',
+  'settings.runtime.npmRegistryPh': 'https://registry.npmmirror.com',
+  'settings.runtime.npmRegistryErrorHttps': 'Must start with https://',
+  'settings.runtime.npmRegistryErrorSpace': 'Must not contain spaces or illegal characters',
   'settings.runtime.saveSuccess': 'Runtime settings saved',
+  'settings.runtime.workerTimeouts': 'Runtime',
+  'settings.runtime.workerTimeoutsDesc': 'Leader step budget and Worker timeouts (minutes).',
+  'settings.runtime.workerTimeoutsSave': 'Save',
+  'settings.runtime.minutesUnit': 'min',
+  'settings.runtime.stepsUnit': 'steps',
+  'settings.runtime.workerJobTimeout': 'Worker task timeout',
+  'settings.runtime.workerJobTimeoutDesc':
+    'Total time after entering running state; default 10 minutes.',
+  'settings.runtime.workerJobTimeoutError': 'Enter an integer from 1 to 120',
+  'settings.runtime.workerApprovalTimeout': 'Approval timeout',
+  'settings.runtime.workerApprovalTimeoutDesc':
+    'Time to handle an ACP permission request; default 2 minutes.',
+  'settings.runtime.workerApprovalTimeoutError': 'Enter an integer from 1 to 60',
+  'settings.runtime.workerQueueTimeout': 'Worker queue timeout',
+  'settings.runtime.workerQueueTimeoutDesc':
+    'Time waiting for concurrency or ACP Session capacity; default 10 minutes.',
+  'settings.runtime.workerQueueTimeoutError': 'Enter an integer from 1 to 120',
   'settings.prompts.leader': 'Leader',
   'settings.prompts.leaderHint':
     'Appended after the protected protocol and tool contract; applies from the next turn.',
   'settings.prompts.roles': 'Default role prompts',
   'settings.prompts.rolesHint':
-    'Used for new Worker defaults and new roles without overwriting existing Sessions.',
+    'Used for new session crew members and the explicit “Use role default prompt” action. Existing members are never overwritten.',
   'settings.prompts.reset': 'Restore default',
-  'settings.prompts.save': 'Save prompts',
-  'settings.prompts.saved': 'Prompts saved for future roles and the next Leader turn.',
+  'settings.prompts.save': 'Save',
+  'settings.prompts.saved': 'Prompts saved for future crew members and the next Leader turn.',
   'settings.storageRoot': 'Config',
   'settings.storageData': 'Data',
   'settings.storageCache': 'Cache',
@@ -1261,7 +1427,11 @@ const en: Dict = {
   'workers.busy': 'Busy',
   'workers.cancel': 'Cancel',
   'workers.empty': 'No Worker is installed. Install one from Registry or register a custom ACP.',
-  'workers.manualRegistrationHint': 'Workers are installed or registered explicitly in this panel.',
+  'workers.manualRegistration': 'Manual registration',
+  'workers.manualRegistrationHint':
+    'Enter a custom ACP launch method and command. Skips Registry preparation and starts the process locally.',
+  'workers.registerModeAuto': 'From registry',
+  'workers.registerModeManual': 'Manual',
   'workers.formArgs': 'Args (space-separated)',
   'workers.formCommand': 'Command',
   'workers.customLaunchKind': 'Custom ACP launch method',
@@ -1324,17 +1494,21 @@ const en: Dict = {
   'workers.registryDetailCommand': 'Launch command projection',
   'workers.registryDetailDeclared': 'Declared SHA-256',
   'workers.registryDetailDistribution': 'Distribution',
+  'workers.registryDetailIntegrity': 'Integrity',
   'workers.registryDetailLicense': 'License',
-  'workers.registryDetailManifest': 'Manifest digest',
+  'workers.registryDetailManifest': 'Manifest',
   'workers.registryDetailObserved': 'Observed SHA-256',
   'workers.registryDetailRepository': 'Repository',
   'workers.registryDetailRunner': 'Local prerequisite',
   'workers.registryDetailSource': 'Package / download source',
   'workers.registryDetailTitle': 'Registry agent details and trust',
   'workers.registryDetailWebsite': 'Website',
+  'workers.registryDeclaredMissing': 'Not declared',
+  'workers.registryDigestMatch': 'Match',
+  'workers.registryDigestMismatch': 'Mismatch',
   'workers.registryEmpty': 'No matching agents',
   'workers.registryHint':
-    'Search the full ACP Registry. The Owner prepares the selected agent and materializes its trusted launch command. Manual custom workers use a separate path.',
+    'Search the full ACP Registry. The Owner prepares the selected agent and materializes its trusted launch command.',
   'workers.registryInstalled': 'Installed',
   'workers.registryLoading': 'Loading ACP Registry…',
   'workers.registryLocalInstall': 'local install',
@@ -1348,7 +1522,7 @@ const en: Dict = {
   'workers.registryNoShaWarning':
     'No declared SHA-256; explicit trust for the current manifest is required before preparation.',
   'workers.registryNotInstalled': 'Not installed',
-  'workers.registryObservedPending': 'Available after preparation',
+  'workers.registryObservedPending': 'After preparation',
   'workers.registryPrepareCancel': 'Cancel preparation',
   'workers.registryPrepareCancelled': 'Preparation cancelled',
   'workers.registryPrepareComplete': 'Preparation complete',

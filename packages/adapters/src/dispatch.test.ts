@@ -16,6 +16,7 @@ function worker(
     enabled: true,
     scope: 'global',
     description: 'test',
+    defaultRoleType: 'general',
     health: 'unknown',
     ...partial,
   }

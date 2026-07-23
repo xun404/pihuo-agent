@@ -59,11 +59,14 @@ import {
   mergeProvidersWithCustom,
   normalizeThinkingIntensity,
   normalizeThinkingIntensityList,
+  parseWorkerTimeoutSettings,
+  parseNpmRegistryInput,
   resolveSupportedThinkingIntensities,
   resolveRouterDataPaths,
   isConfigurableSecretEnvKey,
   type CustomProviderSettings,
   type ThinkingIntensity,
+  type WorkerTimeoutSettings,
 } from '@swarmdesk-agent/core'
 import {
   isValidPromptSettings,
@@ -136,7 +139,10 @@ function secretsEnv(): NodeJS.ProcessEnv {
   // Drop shell-ambient provider keys before inject — otherwise fill-if-empty /
   // dual OPENCODE_* names keep a stale CLI key after the user saved a new one.
   for (const k of Object.keys(env)) {
-    if (/_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) && !k.startsWith('SWARMDESK_AGENT_')) {
+    if (
+      /_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) &&
+      !k.startsWith('SWARMDESK_AGENT_')
+    ) {
       delete env[k]
     }
   }
@@ -341,10 +347,7 @@ async function retireOwnedLegacyApi(): Promise<boolean> {
     if (supervisorPpid) {
       const supervisorCommand = processCommand(supervisorPpid)
       if (isWatchSupervisor(supervisorCommand)) {
-        console.warn(
-          '[electron] retiring API watch supervisor before listener',
-          supervisorPpid,
-        )
+        console.warn('[electron] retiring API watch supervisor before listener', supervisorPpid)
         await terminateProcessTree(supervisorPpid)
       }
     }
@@ -638,6 +641,8 @@ function registerIpc(): void {
         thinkingIntensity?: ThinkingIntensity
         leaderMaxSteps?: number
         prompts?: PromptSettings
+        workerTimeouts?: WorkerTimeoutSettings
+        npmRegistry?: string | null
         secrets?: Record<string, string | null>
         customProviders?: CustomProviderSettings[]
       },
@@ -670,6 +675,10 @@ function registerIpc(): void {
         }
       }
       const prev = loadSettings()
+      let nextNpmRegistry: string | undefined = prev.npmRegistry
+      if (payload.npmRegistry !== undefined) {
+        nextNpmRegistry = parseNpmRegistryInput(payload.npmRegistry)
+      }
       const next = saveSettings({
         leaderModel: payload.leaderModel?.trim() || prev.leaderModel,
         thinkingIntensity:
@@ -678,6 +687,12 @@ function registerIpc(): void {
             : prev.thinkingIntensity,
         leaderMaxSteps: payload.leaderMaxSteps ?? prev.leaderMaxSteps,
         prompts: normalizePromptSettings(payload.prompts ?? prev.prompts),
+        workerTimeouts:
+          payload.workerTimeouts !== undefined
+            ? parseWorkerTimeoutSettings(payload.workerTimeouts)
+            : prev.workerTimeouts,
+        npmRegistry:
+          payload.npmRegistry !== undefined ? (nextNpmRegistry ?? '') : prev.npmRegistry,
         customProviders:
           payload.customProviders !== undefined
             ? payload.customProviders.map((c) => ({
@@ -924,7 +939,12 @@ app.whenReady().then(async () => {
     if (PACKAGED_SMOKE_USER_DATA) {
       try {
         // Windows may still hold files under userData (EPERM); never fail the smoke on cleanup.
-        rmSync(PACKAGED_SMOKE_USER_DATA, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+        rmSync(PACKAGED_SMOKE_USER_DATA, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        })
       } catch (error) {
         console.warn('[packaged-smoke] userData cleanup skipped', String(error))
       }

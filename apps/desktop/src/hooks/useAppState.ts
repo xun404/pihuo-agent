@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AppSnapshot,
   ApprovalDecision,
-  CreateRoleDefinitionInput,
+  CreateTeamMemberInput,
   LeaderMode,
   Locale,
   Session,
   SessionApprovalPolicy,
-  UpdateRoleDefinitionInput,
-  WorkerDefaultRole,
+  UpdateTeamMemberInput,
+  WorkerRole,
 } from '@swarmdesk-agent/shared'
 import { api } from '../lib/api'
 
@@ -16,7 +16,8 @@ const empty: AppSnapshot = {
   projects: [],
   sessions: [],
   workers: [],
-  roleDefinitions: [],
+  teamMembers: [],
+  teamTemplates: [],
   approvals: [],
   activeProjectId: null,
   activeSessionId: null,
@@ -95,6 +96,7 @@ export function useAppState() {
     mode: LeaderMode = 'build',
     explicitProjectId?: string,
     memoryThreadId?: string,
+    teamTemplateId?: string,
   ) => {
     const projectId = explicitProjectId ?? snapshot.activeProjectId ?? snapshot.projects[0]?.id
     // Surface a stable code for UI handling; user-facing copy lives in i18n.
@@ -104,6 +106,7 @@ export function useAppState() {
       title,
       mode,
       memoryThreadId,
+      ...(teamTemplateId?.trim() ? { teamTemplateId: teamTemplateId.trim() } : {}),
     })
     if (snap) applySnapshot(snap, ++applyGenRef.current)
     else await refresh()
@@ -124,41 +127,37 @@ export function useAppState() {
     return result.worker
   }
 
-  const createRoleDefinition = async (
+  const createTeamMember = async (
     chatSessionId: string,
-    body: Omit<CreateRoleDefinitionInput, 'chatSessionId'>,
+    body: Omit<CreateTeamMemberInput, 'chatSessionId'>,
   ) => {
-    const result = await api.createRoleDefinition(chatSessionId, body)
+    const result = await api.createTeamMember(chatSessionId, body)
     applySnapshot(result.snapshot, ++applyGenRef.current)
-    return result.roleDefinition
+    return result.teamMember
   }
 
-  const updateRoleDefinition = async (
+  const updateTeamMember = async (
     chatSessionId: string,
-    roleDefinitionId: string,
-    body: UpdateRoleDefinitionInput,
+    teamMemberId: string,
+    body: UpdateTeamMemberInput,
   ) => {
-    const result = await api.updateRoleDefinition(chatSessionId, roleDefinitionId, body)
+    const result = await api.updateTeamMember(chatSessionId, teamMemberId, body)
     applySnapshot(result.snapshot, ++applyGenRef.current)
-    return result.roleDefinition
+    return result.teamMember
   }
 
-  const archiveRoleDefinition = async (
+  const archiveTeamMember = async (
     chatSessionId: string,
-    roleDefinitionId: string,
+    teamMemberId: string,
     expectedRevision: number,
   ) => {
-    const result = await api.archiveRoleDefinition(
-      chatSessionId,
-      roleDefinitionId,
-      expectedRevision,
-    )
+    const result = await api.archiveTeamMember(chatSessionId, teamMemberId, expectedRevision)
     applySnapshot(result.snapshot, ++applyGenRef.current)
-    return result.roleDefinition
+    return result.teamMember
   }
 
-  const resetRoleSession = async (chatSessionId: string, roleDefinitionId: string) =>
-    api.resetRoleSession(chatSessionId, roleDefinitionId)
+  const resetTeamMemberSession = async (chatSessionId: string, teamMemberId: string) =>
+    api.resetTeamMemberSession(chatSessionId, teamMemberId)
 
   const activateSession = async (session: Session) => {
     // Clear any pending new session when selecting an existing one
@@ -272,8 +271,8 @@ export function useAppState() {
     await refresh()
   }
 
-  const setWorkerDefaultRole = async (id: string, role: WorkerDefaultRole) => {
-    const result = await api.setWorkerDefaultRole(id, role)
+  const setWorkerDefaultRoleType = async (id: string, roleType: WorkerRole) => {
+    const result = await api.setWorkerDefaultRoleType(id, roleType)
     applySnapshot(result.snapshot, ++applyGenRef.current)
     return result.worker
   }
@@ -407,7 +406,7 @@ export function useAppState() {
     deleteProject,
     deleteSession,
     toggleWorker,
-    setWorkerDefaultRole,
+    setWorkerDefaultRoleType,
     healthWorker,
     healthAllWorkers,
     setWorkerModel,
@@ -415,10 +414,10 @@ export function useAppState() {
     setLocale,
     resolveApproval,
     registerCustomAcpWorker,
-    createRoleDefinition,
-    updateRoleDefinition,
-    archiveRoleDefinition,
-    resetRoleSession,
+    createTeamMember,
+    updateTeamMember,
+    archiveTeamMember,
+    resetTeamMemberSession,
     setSessionApprovalPolicy,
     resetAcpContext,
     resolvingState,

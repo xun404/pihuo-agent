@@ -4,8 +4,9 @@ import type {
   CustomAcpLaunchKind,
   CustomAcpRegistrationInput,
   PromptSettings,
+  WorkerTimeoutSettings,
   WorkerRegistration,
-  WorkerDefaultRole,
+  WorkerRole,
 } from '@swarmdesk-agent/shared'
 import { normalizePromptSettings } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
@@ -94,8 +95,9 @@ import type { Locale } from '../i18n/locales'
 import { formatContextWindow, parseContextWindow } from '../lib/context-window'
 import { useToast } from './Toast'
 import { WorkerRegistryCombobox } from './WorkerRegistryCombobox'
-import { WorkerDefaultRoleEditor } from './WorkerDefaultRoleEditor'
+import { WorkerDefaultRoleTypeEditor } from './WorkerDefaultRoleTypeEditor'
 import { PromptSettingsEditor } from './PromptSettingsEditor'
+import { WorkerTimeoutSettingsEditor } from './WorkerTimeoutSettingsEditor'
 import {
   createWorkerDraftFromRegistry,
   resolveWorkerRegistrationRoute,
@@ -114,7 +116,7 @@ interface Props {
   initialTab?: TabId
   workers: WorkerRegistration[]
   onToggleWorker: (id: string, enabled: boolean) => void
-  onSetWorkerDefaultRole: (id: string, role: WorkerDefaultRole) => Promise<unknown>
+  onSetWorkerDefaultRoleType: (id: string, roleType: WorkerRole) => Promise<unknown>
   onHealthAllWorkers: () => void | Promise<unknown>
   onRegisterCustomAcpWorker: (body: CustomAcpRegistrationInput) => Promise<unknown>
   onRefreshSnapshot: () => void
@@ -189,7 +191,7 @@ export function SettingsPanel({
   initialTab,
   workers,
   onToggleWorker,
-  onSetWorkerDefaultRole,
+  onSetWorkerDefaultRoleType,
   onHealthAllWorkers,
   onRegisterCustomAcpWorker,
   onRefreshSnapshot,
@@ -210,6 +212,8 @@ export function SettingsPanel({
     if (initialTab) setTab(initialTab)
   }, [initialTab])
   const [regOpen, setRegOpen] = useState(false)
+  /** Strong exclusive path: auto = ACP Registry; manual = custom launch. */
+  const [regMode, setRegMode] = useState<'auto' | 'manual'>('auto')
   const [regName, setRegName] = useState('')
   const [regCommand, setRegCommand] = useState('')
   const [regArgs, setRegArgs] = useState('')
@@ -226,7 +230,6 @@ export function SettingsPanel({
     operation: RegistryOperationSnapshot<RegistryPrepareResult>
     registration: Omit<Parameters<typeof api.registerRegistryWorker>[0], 'installationId'>
   } | null>(null)
-  const [regEnabled, setRegEnabled] = useState(true)
   const [regBusy, setRegBusy] = useState(false)
   const [terminalAuth, setTerminalAuth] = useState<{
     workerId: string
@@ -248,11 +251,20 @@ export function SettingsPanel({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [promptSaving, setPromptSaving] = useState(false)
+  const [workerTimeoutSaving, setWorkerTimeoutSaving] = useState(false)
   const [data, setData] = useState<SettingsPayload | null>(null)
   const [leaderModel, setLeaderModel] = useState('')
   const [promptSettings, setPromptSettings] = useState<PromptSettings>(() =>
     normalizePromptSettings(undefined),
   )
+  const [workerTimeouts, setWorkerTimeouts] = useState<WorkerTimeoutSettings>({
+    jobTimeoutMs: 600_000,
+    approvalTimeoutMs: 120_000,
+    queueTimeoutMs: 600_000,
+  })
+  const [npmRegistryDraft, setNpmRegistryDraft] = useState('')
+  const [npmRegistrySaving, setNpmRegistrySaving] = useState(false)
+  const [npmRegistryError, setNpmRegistryError] = useState<string | null>(null)
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({})
 
   const [customModel, setCustomModel] = useState(false)
@@ -334,6 +346,9 @@ export function SettingsPanel({
       setData(s)
       setLeaderModel(s.settings.leaderModel)
       setPromptSettings(normalizePromptSettings(s.settings.prompts))
+      setWorkerTimeouts(s.settings.workerTimeouts)
+      setNpmRegistryDraft(s.settings.npmRegistry ?? '')
+      setNpmRegistryError(null)
       setDraftKeys({})
       const customs = s.customProviders ?? s.settings.customProviders ?? []
       setCustomProviders(customs)
@@ -904,14 +919,90 @@ export function SettingsPanel({
     try {
       const normalized = normalizePromptSettings(prompts)
       const saved = await saveSettings({ prompts: normalized })
-      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      if (saved.ok === false) return
       setPromptSettings(normalizePromptSettings(saved.settings?.prompts ?? normalized))
-      toastSuccess(t('settings.prompts.saved'))
-    } catch (error) {
-      toastError(error instanceof Error ? error.message : String(error))
+    } catch {
+      // Silent auto-save (no toast).
     } finally {
       setPromptSaving(false)
     }
+  }
+
+  const saveWorkerTimeouts = async (next: WorkerTimeoutSettings) => {
+    setWorkerTimeoutSaving(true)
+    try {
+      const saved = await saveSettings({ workerTimeouts: next })
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      setWorkerTimeouts(saved.settings?.workerTimeouts ?? next)
+    } catch {
+      // Silent auto-save; keep last good value from props reload path.
+    } finally {
+      setWorkerTimeoutSaving(false)
+    }
+  }
+
+  const npmRegistrySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (npmRegistrySaveTimer.current) clearTimeout(npmRegistrySaveTimer.current)
+    }
+  }, [])
+
+  const persistNpmRegistry = async (raw: string) => {
+    const { validateNpmRegistryDraft } = await import('../lib/npm-registry-url.js')
+    const validated = validateNpmRegistryDraft(raw)
+    if (!validated.ok) {
+      setNpmRegistryError(
+        validated.reason === 'space'
+          ? t('settings.runtime.npmRegistryErrorSpace')
+          : t('settings.runtime.npmRegistryErrorHttps'),
+      )
+      return
+    }
+    setNpmRegistryError(null)
+    const nextValue = validated.value ?? ''
+    const current = data?.settings.npmRegistry ?? ''
+    if (nextValue === current) return
+    setNpmRegistrySaving(true)
+    try {
+      const saved = await saveSettings({ npmRegistry: nextValue })
+      if (saved.ok === false) return
+      const stored = saved.settings?.npmRegistry ?? ''
+      setNpmRegistryDraft(stored)
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              settings: { ...prev.settings, npmRegistry: stored || undefined },
+            }
+          : prev,
+      )
+    } catch {
+      // Silent auto-save.
+    } finally {
+      setNpmRegistrySaving(false)
+    }
+  }
+
+  const onNpmRegistryChange = (raw: string) => {
+    setNpmRegistryDraft(raw)
+    if (npmRegistrySaveTimer.current) clearTimeout(npmRegistrySaveTimer.current)
+    void import('../lib/npm-registry-url.js').then(({ validateNpmRegistryDraft }) => {
+      const validated = validateNpmRegistryDraft(raw)
+      if (!validated.ok) {
+        setNpmRegistryError(
+          validated.reason === 'space'
+            ? t('settings.runtime.npmRegistryErrorSpace')
+            : t('settings.runtime.npmRegistryErrorHttps'),
+        )
+        return
+      }
+      setNpmRegistryError(null)
+      npmRegistrySaveTimer.current = setTimeout(() => {
+        void persistNpmRegistry(raw)
+      }, 400)
+    })
   }
 
   const navItems: { id: TabId; label: string }[] = [
@@ -928,12 +1019,33 @@ export function SettingsPanel({
     () => workerRegistry.find((o) => o.id === regSelectedId) ?? null,
     [workerRegistry, regSelectedId],
   )
-  const registrationRoute = resolveWorkerRegistrationRoute(
-    regSelectedId,
-    selectedRegistryOption,
-    regManifestDigest,
-  )
+  // Manual mode never falls through to Registry ownership, even if stale ids linger.
+  const registrationRoute =
+    regMode === 'manual'
+      ? ({ kind: 'custom' } as const)
+      : resolveWorkerRegistrationRoute(regSelectedId, selectedRegistryOption, regManifestDigest)
   const isRegistryPath = registrationRoute.kind !== 'custom'
+
+  const switchRegisterMode = (mode: 'auto' | 'manual') => {
+    if (mode === regMode) return
+    setRegMode(mode)
+    setPendingRegistryPrepare(null)
+    setRegPrepareStatus(null)
+    setRegBusy(false)
+    if (mode === 'manual') {
+      setRegSelectedId(null)
+      setRegManifestDigest('')
+      setRegVersion('')
+      setRegTrustNoSha(false)
+      setRegDistribution('npx')
+    } else {
+      setRegCommand('')
+      setRegArgs('')
+      setRegCustomLaunchKind('system')
+      setRegEnv({})
+      setRegDescription('')
+    }
+  }
 
   const startAgentAuthentication = async (workerId: string, methodId: string) => {
     if (agentAuthControllerRef.current) return
@@ -1034,6 +1146,7 @@ export function SettingsPanel({
     setRegTrustNoSha(false)
     setRegPrepareStatus(null)
     setPendingRegistryPrepare(null)
+    setRegMode('auto')
     setRegOpen(false)
     onRefreshSnapshot?.()
     toastSuccess(t('settings.saved'))
@@ -1093,7 +1206,7 @@ export function SettingsPanel({
             distribution: dist,
             manifestDigest: regManifestDigest,
             name: regName.trim(),
-            enabled: regEnabled,
+            enabled: true,
           },
         })
         operationStarted = true
@@ -1110,7 +1223,7 @@ export function SettingsPanel({
             : { command: regCommand.trim() }),
           args,
           env: Object.keys(regEnv).length > 0 ? regEnv : undefined,
-          enabled: regEnabled,
+          enabled: true,
           description: regDescription.trim() || undefined,
         })
       }
@@ -1188,34 +1301,61 @@ export function SettingsPanel({
                 <option value="mod-enter">{t('settings.sendShortcutModEnter')}</option>
               </select>
             </div>
-            <div className="settings-row card-row">
-              <div className="lbl-block">
-                <div className="lbl">{t('settings.runtime.leaderMaxSteps')}</div>
-                <div className="sub">{t('settings.runtime.leaderMaxStepsDesc')}</div>
+          </div>
+          <WorkerTimeoutSettingsEditor
+            value={workerTimeouts}
+            saving={workerTimeoutSaving}
+            onSave={saveWorkerTimeouts}
+            leaderMaxSteps={leaderMaxSteps ?? 500}
+            leaderMaxStepsSaving={saving}
+            onSaveLeaderMaxSteps={async (steps) => {
+              setSaving(true)
+              setLeaderMaxStepsError(null)
+              setLeaderMaxStepsDraft(String(steps))
+              try {
+                const saved = await saveSettings({ leaderMaxSteps: steps })
+                if (saved.ok === false) return
+                setLeaderMaxSteps(saved.leaderMaxSteps ?? saved.settings?.leaderMaxSteps ?? steps)
+              } catch {
+                // Silent auto-save.
+              } finally {
+                setSaving(false)
+              }
+            }}
+          />
+          <div className="settings-form-card settings-runtime-card">
+            <header className="settings-card-head">
+              <div className="settings-card-titles">
+                <h3 className="settings-card-title">{t('settings.runtime.npmRegistry')}</h3>
+                <p className="settings-card-desc">{t('settings.runtime.npmRegistryDesc')}</p>
               </div>
-              <input
-                type="number"
-                className="field-input settings-select"
-                style={{ width: 100 }}
-                min={10}
-                max={1000}
-                value={leaderMaxStepsDraft}
-                onChange={(e) => handleStepsChange(e.target.value)}
-                onBlur={() => {
-                  if (leaderMaxStepsError == null && leaderMaxStepsDraft.trim()) {
-                    void onSaveRuntime()
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && leaderMaxStepsError == null) {
-                    e.preventDefault()
-                    void onSaveRuntime()
-                  }
-                }}
-                aria-label={t('settings.runtime.leaderMaxSteps')}
-              />
+            </header>
+            <div className="settings-runtime-rows">
+              <div className="settings-row-block" style={{ padding: '12px 0' }}>
+                <label className="settings-field" style={{ margin: 0 }}>
+                  <span className="field-label">{t('settings.runtime.npmRegistryUrl')}</span>
+                  <input
+                    type="url"
+                    className="settings-input ui-font"
+                    value={npmRegistryDraft}
+                    placeholder={t('settings.runtime.npmRegistryPh')}
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={npmRegistrySaving}
+                    onChange={(e) => onNpmRegistryChange(e.target.value)}
+                    onBlur={() => {
+                      if (npmRegistrySaveTimer.current) {
+                        clearTimeout(npmRegistrySaveTimer.current)
+                        npmRegistrySaveTimer.current = null
+                      }
+                      void persistNpmRegistry(npmRegistryDraft)
+                    }}
+                    aria-label={t('settings.runtime.npmRegistry')}
+                  />
+                </label>
+                {npmRegistryError && <p className="settings-error">{npmRegistryError}</p>}
+              </div>
             </div>
-            {leaderMaxStepsError && <p className="settings-error">{leaderMaxStepsError}</p>}
           </div>
         </div>
       )}
@@ -1867,7 +2007,12 @@ export function SettingsPanel({
                   <button
                     type="button"
                     className="settings-btn-soft"
-                    onClick={() => setRegOpen((v) => !v)}
+                    onClick={() =>
+                      setRegOpen((v) => {
+                        if (!v) setRegMode('auto')
+                        return !v
+                      })
+                    }
                   >
                     {t('workers.register')}
                   </button>
@@ -1887,139 +2032,141 @@ export function SettingsPanel({
               </p>
 
               {workers.length === 0 && <p className="settings-muted">{t('workers.empty')}</p>}
-              {workers.map((w) => (
-                <div key={w.id} className="worker-settings-item">
-                  <div className="w-row worker-list-row worker-settings-row">
-                    <span
-                      className={`worker-logo ${workerLogoClass(w.kind)}`}
-                      title={w.name}
-                      aria-hidden
-                    >
-                      <WorkerBrandLogo kind={w.kind} size={14} />
-                    </span>
-                    <div className="info">
-                      <div className="n">
-                        {w.name}
-                        {w.health === 'healthy' && (
-                          <span className="tag-on" style={{ marginLeft: 6 }}>
-                            {t('workers.health.healthy')}
-                          </span>
-                        )}
-                        {w.readiness && (
-                          <span style={{ marginLeft: 6, verticalAlign: 'middle' }}>
+              <div className="worker-card-list">
+                {workers.map((w) => (
+                  <article key={w.id} className="worker-card">
+                    <div className="worker-card-main">
+                      <span
+                        className={`worker-logo ${workerLogoClass(w.kind)}`}
+                        title={w.name}
+                        aria-hidden
+                      >
+                        <WorkerBrandLogo kind={w.kind} size={14} />
+                      </span>
+                      <div className="worker-card-info">
+                        <div className="worker-card-title">
+                          <span className="worker-card-name">{w.name}</span>
+                          {w.health === 'healthy' && (
+                            <span className="tag-on">{t('workers.health.healthy')}</span>
+                          )}
+                          {w.readiness && (
                             <WorkerReadinessBadge
                               status={w.readiness.status}
                               code={w.readiness.code}
                               nextAction={w.readiness.nextAction}
                               locale={locale === 'zh' ? 'zh' : 'en'}
                             />
-                          </span>
-                        )}
+                          )}
+                        </div>
+                        <div className="worker-card-source mono">
+                          {w.source?.type === 'registry'
+                            ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
+                            : `${w.command} ${(w.args ?? []).join(' ')}`}
+                        </div>
                       </div>
-                      <div className="s mono">
-                        {w.source?.type === 'registry'
-                          ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
-                          : `${w.command} ${(w.args ?? []).join(' ')}`}
-                      </div>
-                    </div>
-                    {w.readiness?.status === 'auth_required' &&
-                      (() => {
-                        const terminalMethod = w.capabilitySummary?.authMethods?.find(
-                          (candidate) => candidate.type === 'terminal',
-                        )
-                        const agentMethod = w.capabilitySummary?.authMethods?.find(
-                          (candidate) => candidate.type === 'agent',
-                        )
-                        const envMethod = w.capabilitySummary?.authMethods?.find(
-                          (candidate) => candidate.type === 'env_var',
-                        )
-                        const active =
-                          agentAuthOperation?.workerId === w.id ? agentAuthOperation.snapshot : null
-                        return (
-                          <div className="worker-settings-auth-actions">
-                            {terminalMethod && (
-                              <button
-                                type="button"
-                                className="settings-btn-soft worker-settings-auth-btn"
-                                onClick={() =>
-                                  setTerminalAuth({
-                                    workerId: w.id,
-                                    workerName: w.name,
-                                    methodId: terminalMethod.id,
-                                  })
-                                }
-                              >
-                                {t('workers.terminalOpen')}
-                              </button>
-                            )}
-                            {agentMethod && !active && (
-                              <button
-                                type="button"
-                                className="settings-btn-soft worker-settings-auth-btn"
-                                disabled={Boolean(agentAuthOperation)}
-                                onClick={() => void startAgentAuthentication(w.id, agentMethod.id)}
-                              >
-                                {t('workers.authAgent')}
-                              </button>
-                            )}
-                            {active && (
-                              <>
-                                <span className="settings-field-hint">
-                                  {active.status === 'queued'
-                                    ? t('workers.authQueued')
-                                    : t('workers.authRunning')}
-                                </span>
+                      {w.readiness?.status === 'auth_required' &&
+                        (() => {
+                          const terminalMethod = w.capabilitySummary?.authMethods?.find(
+                            (candidate) => candidate.type === 'terminal',
+                          )
+                          const agentMethod = w.capabilitySummary?.authMethods?.find(
+                            (candidate) => candidate.type === 'agent',
+                          )
+                          const envMethod = w.capabilitySummary?.authMethods?.find(
+                            (candidate) => candidate.type === 'env_var',
+                          )
+                          const active =
+                            agentAuthOperation?.workerId === w.id
+                              ? agentAuthOperation.snapshot
+                              : null
+                          return (
+                            <div className="worker-settings-auth-actions">
+                              {terminalMethod && (
                                 <button
                                   type="button"
-                                  className="settings-btn-soft"
-                                  onClick={() => void cancelAgentAuthentication()}
+                                  className="settings-btn-soft worker-settings-auth-btn"
+                                  onClick={() =>
+                                    setTerminalAuth({
+                                      workerId: w.id,
+                                      workerName: w.name,
+                                      methodId: terminalMethod.id,
+                                    })
+                                  }
                                 >
-                                  {t('workers.authCancel')}
+                                  {t('workers.terminalOpen')}
                                 </button>
-                              </>
-                            )}
-                            {Boolean(envMethod?.envVarNames?.length) && (
-                              <button
-                                type="button"
-                                className="settings-btn-soft worker-settings-auth-btn"
-                                disabled={secretBusy}
-                                onClick={() =>
-                                  setSecretEditor({
-                                    workerId: w.id,
-                                    workerName: w.name,
-                                    envVarNames: [...envMethod!.envVarNames!],
-                                  })
-                                }
-                              >
-                                {t('workers.authConfigureSecrets')}
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })()}
-                    <button
-                      type="button"
-                      className={`switch toggle${w.enabled ? ' on' : ''}`}
-                      role="switch"
-                      aria-checked={w.enabled}
-                      aria-label={t('workers.formEnabled')}
-                      onClick={() => onToggleWorker?.(w.id, !w.enabled)}
+                              )}
+                              {agentMethod && !active && (
+                                <button
+                                  type="button"
+                                  className="settings-btn-soft worker-settings-auth-btn"
+                                  disabled={Boolean(agentAuthOperation)}
+                                  onClick={() =>
+                                    void startAgentAuthentication(w.id, agentMethod.id)
+                                  }
+                                >
+                                  {t('workers.authAgent')}
+                                </button>
+                              )}
+                              {active && (
+                                <>
+                                  <span className="settings-field-hint">
+                                    {active.status === 'queued'
+                                      ? t('workers.authQueued')
+                                      : t('workers.authRunning')}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="settings-btn-soft"
+                                    onClick={() => void cancelAgentAuthentication()}
+                                  >
+                                    {t('workers.authCancel')}
+                                  </button>
+                                </>
+                              )}
+                              {Boolean(envMethod?.envVarNames?.length) && (
+                                <button
+                                  type="button"
+                                  className="settings-btn-soft worker-settings-auth-btn"
+                                  disabled={secretBusy}
+                                  onClick={() =>
+                                    setSecretEditor({
+                                      workerId: w.id,
+                                      workerName: w.name,
+                                      envVarNames: [...envMethod!.envVarNames!],
+                                    })
+                                  }
+                                >
+                                  {t('workers.authConfigureSecrets')}
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      <button
+                        type="button"
+                        className={`switch toggle${w.enabled ? ' on' : ''}`}
+                        role="switch"
+                        aria-checked={w.enabled}
+                        aria-label={t('workers.formEnabled')}
+                        onClick={() => onToggleWorker?.(w.id, !w.enabled)}
+                      />
+                    </div>
+                    <WorkerDefaultRoleTypeEditor
+                      worker={w}
+                      rolePrompts={data?.settings.prompts.roles}
+                      onSave={async (roleType) => {
+                        try {
+                          await onSetWorkerDefaultRoleType(w.id, roleType)
+                          toastSuccess(t('roles.saved'))
+                        } catch (error) {
+                          toastError(error instanceof Error ? error.message : String(error))
+                        }
+                      }}
                     />
-                  </div>
-                  <WorkerDefaultRoleEditor
-                    worker={w}
-                    rolePrompts={data?.settings.prompts.roles}
-                    onSave={async (role) => {
-                      try {
-                        await onSetWorkerDefaultRole(w.id, role)
-                        toastSuccess(t('roles.saved'))
-                      } catch (error) {
-                        toastError(error instanceof Error ? error.message : String(error))
-                      }
-                    }}
-                  />
-                </div>
-              ))}
+                  </article>
+                ))}
+              </div>
               {secretEditor && (
                 <form
                   className="worker-secret-editor"
@@ -2058,131 +2205,185 @@ export function SettingsPanel({
                 <div className="worker-list-head">
                   <div className="model-list-label">{t('workers.registerTitle')}</div>
                 </div>
-                <div className="settings-field">
-                  <div className="registry-catalog-toolbar">
-                    <label>{t('workers.registryAgent')}</label>
-                    <button
-                      type="button"
-                      className="settings-btn-soft"
-                      disabled={workerRegistryLoading || workerRegistryChecking}
-                      onClick={() => void checkRegistryUpdates()}
-                    >
-                      {workerRegistryChecking
-                        ? t('workers.registryCheckingUpdates')
-                        : t('workers.registryCheckUpdates')}
-                    </button>
-                  </div>
-                  <WorkerRegistryCombobox
-                    options={workerRegistry}
-                    selectedId={regSelectedId}
-                    loading={workerRegistryLoading}
-                    error={workerRegistryError}
-                    placeholder={t('workers.registrySearch')}
-                    loadingLabel={t('workers.registryLoading')}
-                    emptyLabel={t('workers.registryEmpty')}
-                    localInstallLabel={t('workers.registryLocalInstall')}
-                    onSelect={(option) => {
-                      if (!option) {
-                        setRegSelectedId(null)
-                        setRegManifestDigest('')
-                        setRegVersion('')
-                        return
-                      }
-                      const draft = createWorkerDraftFromRegistry(option)
-                      setRegSelectedId(draft.selectedId)
-                      setRegName(draft.name)
-                      setRegCommand(draft.command)
-                      setRegArgs(draft.args)
-                      setRegEnv(draft.env)
-                      setRegDescription(draft.description)
-                      setRegVersion(option.version)
-                      setRegManifestDigest(option.manifestDigest ?? '')
-                      setRegDistribution(option.distribution)
-                      setRegTrustNoSha(false)
-                    }}
-                  />
-                  {workerRegistryCatalog && (
-                    <div className="registry-catalog-meta">
-                      <span>
-                        {t('workers.registrySource')}: {workerRegistrySource}
-                      </span>
-                      <span>
-                        {t('workers.registryUpdatedAt')}: {workerRegistryFetchedAt}
-                      </span>
-                      <span>
-                        {t('workers.registryAgentCount')}: {workerRegistryAgentCount}
-                      </span>
-                    </div>
-                  )}
-                  <span className="settings-field-hint">{t('workers.registryHint')}</span>
+                <p className="settings-field-hint" style={{ margin: 0 }}>
+                  {regMode === 'auto'
+                    ? t('workers.registryHint')
+                    : t('workers.manualRegistrationHint')}
+                </p>
+
+                <div
+                  className="seg-control worker-register-mode-seg"
+                  role="tablist"
+                  aria-label={t('workers.registerTitle')}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={regMode === 'auto'}
+                    className={regMode === 'auto' ? 'active' : undefined}
+                    onClick={() => switchRegisterMode('auto')}
+                  >
+                    {t('workers.registerModeAuto')}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={regMode === 'manual'}
+                    className={regMode === 'manual' ? 'active' : undefined}
+                    onClick={() => switchRegisterMode('manual')}
+                  >
+                    {t('workers.registerModeManual')}
+                  </button>
                 </div>
-                {selectedRegistryOption && (
-                  <div className="settings-field registry-prepare-panel">
-                    <RegistryAgentDetail
-                      option={selectedRegistryOption}
-                      distribution={regDistribution}
-                      trustNoSha={regTrustNoSha}
-                      onDistributionChange={(distribution) => {
-                        setRegDistribution(distribution)
-                        setRegTrustNoSha(false)
-                      }}
-                      onTrustNoShaChange={setRegTrustNoSha}
-                    />
-                    {selectedRegistryOption && !regManifestDigest && (
-                      <p className="settings-error" role="alert">
-                        {t('workers.registryManifestUnavailable')}
-                      </p>
-                    )}
-                    {regPrepareStatus && (
-                      <p className="settings-muted" style={{ marginTop: 8 }}>
-                        {regPrepareStatus}
-                      </p>
-                    )}
-                    {pendingRegistryPrepare && (
-                      <WorkerPrepareProgress
-                        initial={pendingRegistryPrepare.operation}
-                        onSucceeded={(result) => {
-                          void finishRegistryRegistration(result)
-                        }}
-                        onFailed={(operation) => {
-                          setRegBusy(false)
-                          if (operation.status === 'failed') {
-                            toastError(
-                              operation.code
-                                ? `${operation.code}: ${operation.error ?? ''}`.trim()
-                                : (operation.error ?? t('workers.registryPrepareFailed')),
-                            )
+
+                {regMode === 'auto' ? (
+                  <>
+                    <div className="settings-field worker-register-agent-field">
+                      <div className="worker-register-field-head">
+                        <span className="field-label">{t('workers.registryAgent')}</span>
+                        <button
+                          type="button"
+                          className="worker-register-update-link"
+                          disabled={workerRegistryLoading || workerRegistryChecking}
+                          onClick={() => void checkRegistryUpdates()}
+                        >
+                          {workerRegistryChecking
+                            ? t('workers.registryCheckingUpdates')
+                            : t('workers.registryCheckUpdates')}
+                        </button>
+                      </div>
+                      <WorkerRegistryCombobox
+                        options={workerRegistry}
+                        selectedId={regSelectedId}
+                        loading={workerRegistryLoading}
+                        error={workerRegistryError}
+                        placeholder={t('workers.registrySearch')}
+                        loadingLabel={t('workers.registryLoading')}
+                        emptyLabel={t('workers.registryEmpty')}
+                        localInstallLabel={t('workers.registryLocalInstall')}
+                        onSelect={(option) => {
+                          if (!option) {
+                            setRegSelectedId(null)
+                            setRegManifestDigest('')
+                            setRegVersion('')
+                            return
                           }
-                        }}
-                        onCancel={() => setRegBusy(false)}
-                        onRetry={() => {
-                          setPendingRegistryPrepare(null)
-                          void saveWorker()
+                          const draft = createWorkerDraftFromRegistry(option)
+                          setRegSelectedId(draft.selectedId)
+                          setRegName(draft.name)
+                          setRegCommand(draft.command)
+                          setRegArgs(draft.args)
+                          setRegEnv(draft.env)
+                          setRegDescription(draft.description)
+                          setRegVersion(option.version)
+                          setRegManifestDigest(option.manifestDigest ?? '')
+                          setRegDistribution(option.distribution)
+                          setRegTrustNoSha(false)
                         }}
                       />
+                      {workerRegistryCatalog && (
+                        <p className="settings-field-hint mono">
+                          {t('workers.registrySource')}: {workerRegistrySource}
+                          {' · '}
+                          {t('workers.registryUpdatedAt')}: {workerRegistryFetchedAt}
+                          {' · '}
+                          {t('workers.registryAgentCount')}: {workerRegistryAgentCount}
+                        </p>
+                      )}
+                    </div>
+
+                    {selectedRegistryOption && (
+                      <div className="registry-prepare-panel">
+                        <RegistryAgentDetail
+                          option={selectedRegistryOption}
+                          distribution={regDistribution}
+                          trustNoSha={regTrustNoSha}
+                          observedSha256={
+                            pendingRegistryPrepare?.operation.result &&
+                            typeof pendingRegistryPrepare.operation.result === 'object' &&
+                            'observedSha256' in pendingRegistryPrepare.operation.result
+                              ? (
+                                  pendingRegistryPrepare.operation.result as {
+                                    observedSha256?: string
+                                  }
+                                ).observedSha256
+                              : undefined
+                          }
+                          onDistributionChange={(distribution) => {
+                            setRegDistribution(distribution)
+                            setRegTrustNoSha(false)
+                          }}
+                          onTrustNoShaChange={setRegTrustNoSha}
+                        />
+                        {selectedRegistryOption && !regManifestDigest && (
+                          <p className="settings-error" role="alert">
+                            {t('workers.registryManifestUnavailable')}
+                          </p>
+                        )}
+                        {regPrepareStatus && (
+                          <p className="settings-muted">{regPrepareStatus}</p>
+                        )}
+                        {pendingRegistryPrepare && (
+                          <WorkerPrepareProgress
+                            initial={pendingRegistryPrepare.operation}
+                            onSucceeded={(result) => {
+                              void finishRegistryRegistration(result)
+                            }}
+                            onFailed={(operation) => {
+                              setRegBusy(false)
+                              if (operation.status === 'failed') {
+                                toastError(
+                                  operation.code
+                                    ? `${operation.code}: ${operation.error ?? ''}`.trim()
+                                    : (operation.error ?? t('workers.registryPrepareFailed')),
+                                )
+                              }
+                            }}
+                            onCancel={() => setRegBusy(false)}
+                            onRetry={() => {
+                              setPendingRegistryPrepare(null)
+                              void saveWorker()
+                            }}
+                          />
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
-                {isRegistryPath && !selectedRegistryOption && (
-                  <p className="settings-error" role="alert">
-                    {t('workers.registrySelectionUnavailable')}
-                  </p>
-                )}
-                <div className="settings-field">
-                  <label>{t('workers.formName')}</label>
-                  <input
-                    className="settings-input"
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                  />
-                </div>
-                {/* Registry path: command is Owner-materialized; keep custom fields for manual only */}
-                {!isRegistryPath && (
+
+                    {isRegistryPath && !selectedRegistryOption && (
+                      <p className="settings-error" role="alert">
+                        {t('workers.registrySelectionUnavailable')}
+                      </p>
+                    )}
+
+                    <div className="settings-field">
+                      <label htmlFor="worker-reg-name">{t('workers.formName')}</label>
+                      <input
+                        id="worker-reg-name"
+                        className="settings-input ui-font"
+                        value={regName}
+                        onChange={(e) => setRegName(e.target.value)}
+                      />
+                    </div>
+                    <p className="settings-field-hint" style={{ margin: 0 }}>
+                      {t('workers.registryOwnerManagedHint')}
+                    </p>
+                  </>
+                ) : (
                   <>
                     <div className="settings-field">
-                      <label>{t('workers.customLaunchKind')}</label>
+                      <label htmlFor="worker-reg-name-manual">{t('workers.formName')}</label>
+                      <input
+                        id="worker-reg-name-manual"
+                        className="settings-input ui-font"
+                        value={regName}
+                        onChange={(e) => setRegName(e.target.value)}
+                      />
+                    </div>
+                    <div className="settings-field">
+                      <label htmlFor="worker-reg-launch">{t('workers.customLaunchKind')}</label>
                       <select
-                        className="field-select"
+                        id="worker-reg-launch"
+                        className="settings-input ui-font"
                         value={regCustomLaunchKind}
                         onChange={(event) =>
                           setRegCustomLaunchKind(event.target.value as CustomAcpLaunchKind)
@@ -2195,12 +2396,13 @@ export function SettingsPanel({
                       </select>
                     </div>
                     <div className="settings-field">
-                      <label>
+                      <label htmlFor="worker-reg-command">
                         {regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
                           ? t('workers.customPackageSpec')
                           : t('workers.formCommand')}
                       </label>
                       <input
+                        id="worker-reg-command"
                         className="settings-input mono"
                         value={regCommand}
                         onChange={(e) => setRegCommand(e.target.value)}
@@ -2214,8 +2416,9 @@ export function SettingsPanel({
                       />
                     </div>
                     <div className="settings-field">
-                      <label>{t('workers.formArgs')}</label>
+                      <label htmlFor="worker-reg-args">{t('workers.formArgs')}</label>
                       <input
+                        id="worker-reg-args"
                         className="settings-input mono"
                         value={regArgs}
                         onChange={(e) => setRegArgs(e.target.value)}
@@ -2223,21 +2426,7 @@ export function SettingsPanel({
                     </div>
                   </>
                 )}
-                {isRegistryPath && (
-                  <p className="settings-field-hint">{t('workers.registryOwnerManagedHint')}</p>
-                )}
-                <div className="settings-row card-row">
-                  <div className="lbl-block">
-                    <div className="lbl">{t('workers.formEnabled')}</div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`switch${regEnabled ? ' on' : ''}`}
-                    role="switch"
-                    aria-checked={regEnabled}
-                    onClick={() => setRegEnabled((v) => !v)}
-                  />
-                </div>
+
                 <div className="model-edit-actions">
                   <button type="button" className="btn-ghost" onClick={() => setRegOpen(false)}>
                     {t('workers.cancel')}
@@ -2248,9 +2437,9 @@ export function SettingsPanel({
                     disabled={
                       regBusy ||
                       !regName.trim() ||
-                      (registrationRoute.kind === 'custom'
+                      (regMode === 'manual'
                         ? !regCommand.trim()
-                        : registrationRoute.kind === 'registry_unavailable')
+                        : registrationRoute.kind !== 'registry')
                     }
                     onClick={() => void saveWorker()}
                   >

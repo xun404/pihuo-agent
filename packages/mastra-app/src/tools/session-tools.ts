@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import { getSharedStore } from '@swarmdesk-agent/core'
-import { getWorkerScheduler } from '../scheduler.js'
+import { getWorkerScheduler, workerTimeoutSnapshotFromJob } from '../scheduler.js'
 import { getRuntimeDispatchPort } from '../runtime-dispatch-port.js'
 import type { RuntimeDispatchPort } from '../runtime-dispatch-port.js'
 import type { WorkerJob, WorkerKind, WorkerRole, WorkerRunEvent } from '@swarmdesk-agent/shared'
@@ -56,8 +56,8 @@ export function jobToToolResult(job: WorkerJob) {
     status: job.status,
     workerName: job.workerName,
     workerId: job.workerId,
-    roleDefinitionId: job.roleDefinitionId,
-    roleName: job.roleName,
+    teamMemberId: job.teamMemberId,
+    teamMemberName: job.teamMemberName,
     role: job.role,
     cwd: job.cwd,
     task: job.task,
@@ -118,9 +118,16 @@ class WorkerJobWaitTimeoutError extends Error {
   }
 }
 
+let workerObservationTimeoutMsForTests: number | undefined
+
+/** @internal Test seam for bounding a never-ending event stream without weakening production limits. */
+export function setWorkerObservationTimeoutForTests(timeoutMs?: number): void {
+  workerObservationTimeoutMsForTests = timeoutMs
+}
+
 async function waitForTerminalWithDeadline(
   port: RuntimeDispatchPort,
-  jobId: string,
+  job: WorkerJob,
   externalSignal: AbortSignal | undefined,
   onEvent?: (event: WorkerRunEvent) => void,
 ): Promise<WorkerRunEvent | null> {
@@ -128,14 +135,25 @@ async function waitForTerminalWithDeadline(
   const signal = externalSignal
     ? AbortSignal.any([externalSignal, observer.signal])
     : observer.signal
-  const timeoutMs = Math.min(MAX_TIMER_DELAY_MS, Math.floor(resolveWorkerJobTimeoutMs() * 1.2))
+  const workerTimeouts = workerTimeoutSnapshotFromJob(job)
+  const timeoutMs =
+    workerObservationTimeoutMsForTests === undefined
+      ? Math.min(
+          MAX_TIMER_DELAY_MS,
+          Math.floor(
+            (resolveWorkerJobTimeoutMs(workerTimeouts.jobTimeoutMs) +
+              workerTimeouts.queueTimeoutMs) *
+              1.2,
+          ),
+        )
+      : Math.max(1, Math.floor(workerObservationTimeoutMsForTests))
   try {
     return await raceWithTimeout(
-      waitForTerminalEvent(port, jobId, signal, onEvent),
+      waitForTerminalEvent(port, job.id, signal, onEvent),
       timeoutMs,
       () => {
         observer.abort()
-        return new WorkerJobWaitTimeoutError(jobId)
+        return new WorkerJobWaitTimeoutError(job.id)
       },
     )
   } finally {
@@ -162,7 +180,7 @@ const jobStatusSchema = z.enum([
   'timed_out',
 ])
 
-const roleDefinitionOutputSchema = z.object({
+const teamMemberOutputSchema = z.object({
   id: z.string(),
   chatSessionId: z.string(),
   workerId: z.string(),
@@ -177,7 +195,24 @@ const roleDefinitionOutputSchema = z.object({
   archivedAt: z.string().optional(),
 })
 
-function boundRoleContext(context: unknown) {
+const teamTemplateMemberSchema = z.object({
+  preferredWorkerId: z.string(),
+  name: z.string(),
+  roleType: roleSchema,
+  instructions: z.string(),
+  model: z.string().optional(),
+})
+
+const teamTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  members: z.array(teamTemplateMemberSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+function boundTeamContext(context: unknown) {
   const { routerSessionId, routerProjectId, routerProjectRoot, memoryThreadId } =
     resolveDispatchContext(context as any)
   return {
@@ -218,7 +253,7 @@ export const listProjectsTool = createTool({
 export const listWorkersTool = createTool({
   id: 'list-workers',
   description:
-    'Read the globally installed Registry/custom ACP Worker roster so the current Chat can choose a Worker when creating a role definition. This tool cannot install, authenticate, update, or remove Workers.',
+    'Read the globally installed Registry/custom ACP Worker roster so the current Chat can choose a Worker for a Team member. This tool cannot install, authenticate, update, or remove Workers.',
   inputSchema: z.object({
     enabledOnly: z.boolean().optional().default(true),
   }),
@@ -364,23 +399,32 @@ export const getActiveContextTool = createTool({
   },
 })
 
-export const listRoleDefinitionsTool = createTool({
-  id: 'list-role-definitions',
+export const listTeamTool = createTool({
+  id: 'list-team',
   description:
-    'List role definitions for the current Chat. Roles are Chat-scoped personas bound to installed ACP Workers; each role has an independent ACP session.',
+    'List the current Chat Team and its optimistic revision. Team members are bound to installed ACP Workers and each owns an independent ACP session.',
   inputSchema: z.object({}),
-  outputSchema: z.object({ roleDefinitions: z.array(roleDefinitionOutputSchema) }),
+  outputSchema: z.object({
+    teamRevision: z.number(),
+    teamMembers: z.array(teamMemberOutputSchema),
+  }),
   execute: async (_input, context) => {
     const port = getRuntimeDispatchPort()
-    if (!port.listRoleDefinitions) throw new Error('Role-definition runtime is unavailable')
-    return { roleDefinitions: await port.listRoleDefinitions(boundRoleContext(context)) }
+    if (!port.listTeamMembers || !port.getTeamRevision) {
+      throw new Error('Team runtime is unavailable')
+    }
+    const bound = boundTeamContext(context)
+    return {
+      teamRevision: await port.getTeamRevision(bound),
+      teamMembers: await port.listTeamMembers(bound),
+    }
   },
 })
 
-export const createRoleDefinitionTool = createTool({
-  id: 'create-role-definition',
+export const addTeamMemberTool = createTool({
+  id: 'add-team-member',
   description:
-    'Create a role definition in the current Chat using an already installed Worker. Omit model to inherit the Worker default model.',
+    'Add a Team member to the current Chat using an installed Worker. Omit model to inherit the Worker default model.',
   inputSchema: z.object({
     workerId: z.string(),
     name: z.string(),
@@ -389,25 +433,25 @@ export const createRoleDefinitionTool = createTool({
     model: z.string().optional(),
     enabled: z.boolean().optional(),
   }),
-  outputSchema: z.object({ roleDefinition: roleDefinitionOutputSchema }),
+  outputSchema: z.object({ teamMember: teamMemberOutputSchema }),
   execute: async (input, context) => {
     const port = getRuntimeDispatchPort()
-    if (!port.createRoleDefinition) throw new Error('Role-definition runtime is unavailable')
+    if (!port.createTeamMember) throw new Error('Team runtime is unavailable')
     return {
-      roleDefinition: await port.createRoleDefinition({
-        context: boundRoleContext(context),
+      teamMember: await port.createTeamMember({
+        context: boundTeamContext(context),
         input,
       }),
     }
   },
 })
 
-export const updateRoleDefinitionTool = createTool({
-  id: 'update-role-definition',
+export const updateTeamMemberTool = createTool({
+  id: 'update-team-member',
   description:
-    'Update a role definition in the current Chat. Changing Worker, type, instructions, or model increments its execution revision and starts a distinct ACP session on next dispatch.',
+    'Update a Team member in the current Chat. Changing Worker, type, instructions, or model increments its execution revision and starts a distinct ACP session on next dispatch.',
   inputSchema: z.object({
-    roleDefinitionId: z.string(),
+    teamMemberId: z.string(),
     workerId: z.string().optional(),
     name: z.string().optional(),
     roleType: roleSchema.optional(),
@@ -416,50 +460,119 @@ export const updateRoleDefinitionTool = createTool({
     enabled: z.boolean().optional(),
     expectedRevision: z.number().optional(),
   }),
-  outputSchema: z.object({ roleDefinition: roleDefinitionOutputSchema }),
-  execute: async ({ roleDefinitionId, ...patch }, context) => {
+  outputSchema: z.object({ teamMember: teamMemberOutputSchema }),
+  execute: async ({ teamMemberId, ...patch }, context) => {
     const port = getRuntimeDispatchPort()
-    if (!port.updateRoleDefinition) throw new Error('Role-definition runtime is unavailable')
+    if (!port.updateTeamMember) throw new Error('Team runtime is unavailable')
     return {
-      roleDefinition: await port.updateRoleDefinition({
-        context: boundRoleContext(context),
-        roleDefinitionId,
+      teamMember: await port.updateTeamMember({
+        context: boundTeamContext(context),
+        teamMemberId,
         patch,
       }),
     }
   },
 })
 
-export const archiveRoleDefinitionTool = createTool({
-  id: 'archive-role-definition',
-  description: 'Archive a role definition in the current Chat so it can no longer be dispatched.',
+export const archiveTeamMemberTool = createTool({
+  id: 'archive-team-member',
+  description: 'Archive a Team member in the current Chat so it can no longer be dispatched.',
   inputSchema: z.object({
-    roleDefinitionId: z.string(),
+    teamMemberId: z.string(),
     expectedRevision: z.number().optional(),
   }),
-  outputSchema: z.object({ roleDefinition: roleDefinitionOutputSchema }),
+  outputSchema: z.object({ teamMember: teamMemberOutputSchema }),
   execute: async (input, context) => {
     const port = getRuntimeDispatchPort()
-    if (!port.archiveRoleDefinition) throw new Error('Role-definition runtime is unavailable')
+    if (!port.archiveTeamMember) throw new Error('Team runtime is unavailable')
     return {
-      roleDefinition: await port.archiveRoleDefinition({
-        context: boundRoleContext(context),
+      teamMember: await port.archiveTeamMember({
+        context: boundTeamContext(context),
         ...input,
       }),
     }
   },
 })
 
-export const resetRoleSessionTool = createTool({
-  id: 'reset-role-session',
-  description:
-    'Reset only the ACP session context owned by one role definition in the current Chat.',
-  inputSchema: z.object({ roleDefinitionId: z.string() }),
+export const resetTeamMemberSessionTool = createTool({
+  id: 'reset-team-member-session',
+  description: 'Reset only the ACP session context owned by one Team member in this Chat.',
+  inputSchema: z.object({ teamMemberId: z.string() }),
   outputSchema: z.object({ deleted: z.boolean() }),
   execute: async (input, context) => {
     const port = getRuntimeDispatchPort()
-    if (!port.resetRoleSession) throw new Error('Role-definition runtime is unavailable')
-    return port.resetRoleSession({ context: boundRoleContext(context), ...input })
+    if (!port.resetTeamMemberSession) throw new Error('Team runtime is unavailable')
+    return port.resetTeamMemberSession({ context: boundTeamContext(context), ...input })
+  },
+})
+
+export const listTeamTemplatesTool = createTool({
+  id: 'list-team-templates',
+  description: 'List reusable global Team templates available to every Project and Chat.',
+  inputSchema: z.object({}),
+  outputSchema: z.object({ templates: z.array(teamTemplateSchema) }),
+  execute: async () => {
+    const port = getRuntimeDispatchPort()
+    if (!port.listTeamTemplates) throw new Error('Team template runtime is unavailable')
+    return { templates: await port.listTeamTemplates() }
+  },
+})
+
+export const saveTeamTemplateTool = createTool({
+  id: 'save-team-template',
+  description:
+    'Save the current Chat Team as a new reusable global template, including each member prompt, preferred Worker, role type, and model override.',
+  inputSchema: z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+  }),
+  outputSchema: z.object({ template: teamTemplateSchema }),
+  execute: async (input, context) => {
+    const port = getRuntimeDispatchPort()
+    if (!port.saveTeamTemplate) throw new Error('Team template runtime is unavailable')
+    return {
+      template: await port.saveTeamTemplate({ context: boundTeamContext(context), ...input }),
+    }
+  },
+})
+
+export const deleteTeamTemplateTool = createTool({
+  id: 'delete-team-template',
+  description: 'Delete one reusable global Team template. This does not change any Chat Team.',
+  inputSchema: z.object({ templateId: z.string() }),
+  outputSchema: z.object({ template: teamTemplateSchema }),
+  execute: async ({ templateId }) => {
+    const port = getRuntimeDispatchPort()
+    if (!port.deleteTeamTemplate) throw new Error('Team template runtime is unavailable')
+    return { template: await port.deleteTeamTemplate(templateId) }
+  },
+})
+
+export const applyTeamTemplateTool = createTool({
+  id: 'apply-team-template',
+  description:
+    'Replace the current Chat Team with a saved template. First call list-team and list-team-templates. Replacement is blocked while any Team job is open; missing Workers or models require explicit mappings.',
+  inputSchema: z.object({
+    templateId: z.string(),
+    expectedTeamRevision: z.number().int().positive(),
+    mappings: z
+      .array(
+        z.object({
+          memberIndex: z.number().int().nonnegative(),
+          workerId: z.string(),
+          model: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
+  }),
+  outputSchema: z.object({
+    members: z.array(teamMemberOutputSchema),
+    teamRevision: z.number(),
+  }),
+  execute: async (input, context) => {
+    const port = getRuntimeDispatchPort()
+    if (!port.applyTeamTemplate) throw new Error('Team template runtime is unavailable')
+    return port.applyTeamTemplate({ context: boundTeamContext(context), ...input })
   },
 })
 
@@ -468,12 +581,12 @@ export const resetRoleSessionTool = createTool({
  * Default waits for terminal status so the Leader can relay worker output in the same turn.
  * Pass wait=false only for long fire-and-forget work (then poll get-job).
  */
-export const dispatchRoleTool = createTool({
-  id: 'dispatch-role',
+export const dispatchTeamMemberTool = createTool({
+  id: 'dispatch-team-member',
   description:
-    'Delegate a task through one role definition from list-role-definitions. The role selects its bound Worker, instructions, model inheritance/override, and independent ACP session. By default waits for completion. Never invent results: only trust status=succeeded + output.',
+    'Delegate a task through one Team member from list-team. The member selects its Worker, prompt, model inheritance/override, and independent ACP session. By default waits for completion. Never invent results: only trust status=succeeded + output.',
   inputSchema: z.object({
-    roleDefinitionId: z.string().describe('Exact role id from list-role-definitions'),
+    teamMemberId: z.string().describe('Exact member id from list-team'),
     task: z.string().describe('Clear task prompt for the coding agent'),
     cwd: z
       .string()
@@ -492,8 +605,8 @@ export const dispatchRoleTool = createTool({
     status: jobStatusSchema,
     workerName: z.string(),
     workerId: z.string().optional(),
-    roleDefinitionId: z.string().optional(),
-    roleName: z.string().optional(),
+    teamMemberId: z.string().optional(),
+    teamMemberName: z.string().optional(),
     role: z.string().optional(),
     cwd: z.string(),
     task: z.string(),
@@ -502,8 +615,8 @@ export const dispatchRoleTool = createTool({
     error: z.string().optional(),
   }),
   execute: async (input, context) => {
-    const { roleDefinitionId, task, cwd, wait } = input as {
-      roleDefinitionId: string
+    const { teamMemberId, task, cwd, wait } = input as {
+      teamMemberId: string
       task: string
       cwd?: string
       wait?: boolean
@@ -518,7 +631,7 @@ export const dispatchRoleTool = createTool({
         jobId: '',
         status: 'failed' as const,
         workerName: '',
-        roleDefinitionId,
+        teamMemberId,
         cwd: cwd ?? routerProjectRoot ?? '',
         task,
         message: cwdAuth.error,
@@ -541,7 +654,7 @@ export const dispatchRoleTool = createTool({
       )
       if (!result.ok) {
         if (result.timedOut) writerTimedOut = true
-        console.error(`[dispatchRoleTool] ${phase} writer failed`, result.error)
+        console.error(`[dispatchTeamMemberTool] ${phase} writer failed`, result.error)
       }
       return result.ok
     }
@@ -574,7 +687,7 @@ export const dispatchRoleTool = createTool({
         memoryThreadId,
       },
       task,
-      roleDefinitionId,
+      teamMemberId,
       cwd: workdir,
       source: 'leader',
       wait: false,
@@ -689,7 +802,7 @@ export const dispatchRoleTool = createTool({
         try {
           const terminalEvent = await waitForTerminalWithDeadline(
             port,
-            jid,
+            job,
             abortSignal,
             (event) => {
               pushEvent(event)
@@ -734,7 +847,7 @@ export const dispatchRoleTool = createTool({
       // Non-streaming sync wait via port.events (Local or Remote)
       if (sync) {
         try {
-          const terminalEvent = await waitForTerminalWithDeadline(port, job.id, abortSignal)
+          const terminalEvent = await waitForTerminalWithDeadline(port, job, abortSignal)
           if (!terminalEvent) {
             return {
               ...jobToToolResult(job),
@@ -786,7 +899,7 @@ export const dispatchRoleTool = createTool({
 export const getJobTool = createTool({
   id: 'get-job',
   description:
-    'Get status and output of a worker job by id (from dispatch-role) for the bound session.',
+    'Get status and output of a worker job by id (from dispatch-team-member) for the bound session.',
   inputSchema: z.object({
     jobId: z.string(),
   }),

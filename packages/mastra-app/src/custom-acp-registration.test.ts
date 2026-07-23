@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import { LocalStore } from '@swarmdesk-agent/core'
-import { DEFAULT_PROMPT_SETTINGS } from '@swarmdesk-agent/shared'
 import { registerCustomAcpWorker } from './custom-acp-registration.js'
 
 const dirs: string[] = []
@@ -127,20 +126,13 @@ test('auth-required custom ACP passes protocol registration but remains non-disp
   assert.equal(store.listWorkers().length, 1)
 })
 
-test('custom ACP registration uses the current general role prompt', async () => {
+test('custom ACP registration starts with the general default role type only', async () => {
   const { dir, store } = makeStore()
   const worker = await registerCustomAcpWorker(
     { name: 'Prompted Agent', launchKind: 'system', command: 'prompted-agent' },
     {
       store,
       cwd: dir,
-      promptSettings: {
-        ...DEFAULT_PROMPT_SETTINGS,
-        roles: {
-          ...DEFAULT_PROMPT_SETTINGS.roles,
-          general: '使用当前配置的通用角色提示词。',
-        },
-      },
       resolveExecutable: (command) => `/resolved/${command}`,
       probe: async () => ({
         readiness: { status: 'ready', checkedAt: '2026-07-22T00:00:00.000Z' },
@@ -150,5 +142,6 @@ test('custom ACP registration uses the current general role prompt', async () =>
     },
   )
 
-  assert.equal(worker.defaultRole?.instructions, '使用当前配置的通用角色提示词。')
+  assert.equal(worker.defaultRoleType, 'general')
+  assert.equal('defaultRole' in worker, false)
 })

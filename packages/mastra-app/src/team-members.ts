@@ -7,7 +7,7 @@ export type RoleModelEvaluator = (
 ) => { ok: boolean; errorCode?: string; error?: string }
 
 /** Validate only explicit role overrides; an empty model means inheritance. */
-export function assertRoleModelAccepted(
+export function assertTeamMemberModelAccepted(
   workerId: string,
   model: string | null | undefined,
   cwd?: string,

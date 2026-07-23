@@ -16,7 +16,6 @@ import {
   removeWorkerReference,
   upsertInstallation,
   getWorkerModelCatalogStore,
-  loadSettings,
   type AcpAgentInstallationRecord,
   type LocalStore,
   WorkerStoreConflictError,
@@ -34,9 +33,6 @@ import {
   type SpawnedAcpSetupInput,
 } from '@swarmdesk-agent/adapters'
 import {
-  defaultWorkerRole,
-  normalizePromptSettings,
-  type PromptSettings,
   type WorkerRegistration,
   type WorkerReadiness,
   type AcpRegistryDistributionKind,
@@ -555,18 +551,14 @@ export async function apiPrepareRegistry(
   }
 }
 
-export async function apiRegisterRegistry(
-  body: RegistryRegisterBody,
-  options: { promptSettings?: PromptSettings } = {},
-) {
+export async function apiRegisterRegistry(body: RegistryRegisterBody) {
   const worker = await registerRegistryWorker({
     body,
     existingWorkers: store().listWorkers(),
   })
-  const promptSettings = normalizePromptSettings(options.promptSettings ?? loadSettings().prompts)
   const saved = store().upsertWorker({
     ...worker,
-    defaultRole: defaultWorkerRole(worker.name, promptSettings.roles.general),
+    defaultRoleType: 'general',
   })
   return { worker: saved, snapshot: store().snapshot() }
 }
@@ -1067,11 +1059,11 @@ export function apiDeleteWorker(
   if (
     store()
       .snapshot()
-      .roleDefinitions.some((role) => role.workerId === input.workerId && !role.archivedAt)
+      .teamMembers.some((role) => role.workerId === input.workerId && !role.archivedAt)
   ) {
     throw new RegistryApiError(
       'WORKER_REFERENCED_BY_ROLE',
-      'Archive every active role definition that uses this Worker before deleting it',
+      'Archive every active Team member that uses this Worker before deleting it',
       409,
     )
   }

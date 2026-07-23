@@ -26,6 +26,8 @@ interface Window {
         leaderModel?: string
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
         prompts?: import('@swarmdesk-agent/shared').PromptSettings
+        workerTimeouts?: import('@swarmdesk-agent/shared').WorkerTimeoutSettings
+        npmRegistry?: string | null
         secrets?: Record<string, string | null>
         customProviders?: {
           id: string

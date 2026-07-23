@@ -9,7 +9,7 @@ afterEach(() => {
   clearDesktopToken()
 })
 
-test('role-definition client keeps opaque Chat and role ids in encoded path segments', async () => {
+test('Team client keeps opaque Chat and member ids in encoded path segments', async () => {
   const requests: Array<{ pathname: string; search: string; method: string; body?: unknown }> = []
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input))
@@ -19,30 +19,31 @@ test('role-definition client keeps opaque Chat and role ids in encoded path segm
       method: String(init?.method ?? 'GET'),
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
     })
-    return Response.json({ roleDefinitions: [], roleDefinition: {} })
+    return Response.json({ teamMembers: [], teamMember: {} })
   }
 
   const chatSessionId = 'chat/one?x=1'
-  const roleDefinitionId = 'role/two#fragment'
-  await api.listRoleDefinitions(chatSessionId, true)
-  await api.createRoleDefinition(chatSessionId, {
+  const teamMemberId = 'role/two#fragment'
+  await api.listTeamMembers(chatSessionId, true)
+  await api.createTeamMember(chatSessionId, {
     workerId: 'worker-a',
     name: 'Implementer',
     roleType: 'coder',
     instructions: 'Implement changes.',
   })
-  await api.updateRoleDefinition(chatSessionId, roleDefinitionId, {
+  await api.updateTeamMember(chatSessionId, teamMemberId, {
     model: 'provider/model',
     expectedRevision: 1,
   })
-  await api.archiveRoleDefinition(chatSessionId, roleDefinitionId, 2)
+  await api.archiveTeamMember(chatSessionId, teamMemberId, 2)
 
-  const base = `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions`
-  const item = `${base}/${encodePathSegment(roleDefinitionId)}`
+  const base = `/api/sessions/${encodePathSegment(chatSessionId)}/team`
+  const members = `${base}/members`
+  const item = `${members}/${encodePathSegment(teamMemberId)}`
   assert.deepEqual(requests, [
     { pathname: base, search: '?includeArchived=1', method: 'GET', body: undefined },
     {
-      pathname: base,
+      pathname: members,
       search: '',
       method: 'POST',
       body: {
@@ -67,7 +68,7 @@ test('role-definition client keeps opaque Chat and role ids in encoded path segm
   ])
 })
 
-test('Worker default-role client uses PUT with an encoded Worker id', async () => {
+test('Worker default role type client uses PUT with an encoded Worker id', async () => {
   let request: { pathname: string; method: string; body?: unknown } | undefined
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input))
@@ -79,19 +80,40 @@ test('Worker default-role client uses PUT with an encoded Worker id', async () =
     return Response.json({ worker: {}, snapshot: {} })
   }
 
-  await api.setWorkerDefaultRole('worker/one?x=1', {
-    name: '实现者',
-    roleType: 'coder',
-    instructions: '实现并验证任务。',
+  await api.setWorkerDefaultRoleType('worker/one?x=1', 'coder')
+
+  assert.deepEqual(request, {
+    pathname: `/api/workers/${encodePathSegment('worker/one?x=1')}/default-role-type`,
+    method: 'PUT',
+    body: { roleType: 'coder' },
+  })
+})
+
+test('Session creation forwards a selected Team template id', async () => {
+  let request: { pathname: string; method: string; body?: unknown } | undefined
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input))
+    request = {
+      pathname: url.pathname,
+      method: String(init?.method ?? 'GET'),
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    }
+    return Response.json({ session: {}, snapshot: {} })
+  }
+
+  await api.createSession({
+    projectId: 'project-1',
+    mode: 'build',
+    teamTemplateId: 'template-1',
   })
 
   assert.deepEqual(request, {
-    pathname: `/api/workers/${encodePathSegment('worker/one?x=1')}/default-role`,
-    method: 'PUT',
+    pathname: '/api/sessions',
+    method: 'POST',
     body: {
-      name: '实现者',
-      roleType: 'coder',
-      instructions: '实现并验证任务。',
+      projectId: 'project-1',
+      mode: 'build',
+      teamTemplateId: 'template-1',
     },
   })
 })

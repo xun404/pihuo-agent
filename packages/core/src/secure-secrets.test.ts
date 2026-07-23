@@ -150,6 +150,23 @@ describe('secure-secrets', () => {
     }
   })
 
+  it('persists complete Worker timeout settings without losing unrelated settings', () => {
+    const prev = loadSettings()
+    const workerTimeouts = {
+      jobTimeoutMs: 1_200_000,
+      approvalTimeoutMs: 180_000,
+      queueTimeoutMs: 900_000,
+    }
+    try {
+      const next = saveSettings({ workerTimeouts })
+      assert.deepEqual(next.workerTimeouts, workerTimeouts)
+      assert.equal(next.leaderModel, prev.leaderModel)
+      assert.deepEqual(loadSettings().workerTimeouts, workerTimeouts)
+    } finally {
+      saveSettings(prev)
+    }
+  })
+
   it('persists the custom provider enabled flag used by Desktop settings', () => {
     const prev = loadSettings()
     const provider: CustomProviderSettings = {

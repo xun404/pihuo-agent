@@ -35,12 +35,15 @@ import {
   normalizeMastraProviderId,
 } from './provider-ids.js'
 import { resolveLeaderMaxSteps, parseLeaderMaxStepsInput } from './leader-max-steps.js'
+import { normalizeNpmRegistry } from './npm-registry.js'
+import {
+  parseWorkerTimeoutSettings,
+  resolveWorkerTimeoutSettings,
+  type WorkerTimeoutSettings,
+} from './worker-timeouts.js'
 import { resolveProviderEnv, PROVIDER_ENV_OVERRIDES } from './provider-env-resolver.js'
 import { DEFAULT_LEADER_MODEL } from './models-catalog.js'
-import {
-  normalizePromptSettings,
-  type PromptSettings,
-} from '@swarmdesk-agent/shared'
+import { normalizePromptSettings, type PromptSettings } from '@swarmdesk-agent/shared'
 
 export type SecretsMap = Record<string, string>
 
@@ -92,6 +95,13 @@ export interface AppSettings {
   leaderMaxSteps?: number
   /** Editable Leader behavior prompt and role defaults. */
   prompts: PromptSettings
+  /** Worker task, approval, and queue deadlines. */
+  workerTimeouts: WorkerTimeoutSettings
+  /**
+   * Optional npm registry for Worker `npx` launches (NPM_CONFIG_REGISTRY).
+   * Empty / omitted → system default (~/.npmrc or ambient env).
+   */
+  npmRegistry?: string
   /** Non-secret prefs */
   updatedAt?: string
 }
@@ -339,6 +349,8 @@ function defaultAppSettings(): AppSettings {
     customProviders: [],
     leaderMaxSteps: 500,
     prompts: normalizePromptSettings(undefined),
+    workerTimeouts: resolveWorkerTimeoutSettings(undefined),
+    npmRegistry: undefined,
   }
 }
 
@@ -371,6 +383,14 @@ function loadSettingsStrict(): AppSettings {
     customProviders,
     leaderMaxSteps: resolveLeaderMaxSteps(raw.leaderMaxSteps),
     prompts: normalizePromptSettings(raw.prompts),
+    workerTimeouts: resolveWorkerTimeoutSettings(raw.workerTimeouts),
+    npmRegistry: (() => {
+      try {
+        return normalizeNpmRegistry(raw.npmRegistry)
+      } catch {
+        return undefined
+      }
+    })(),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
   }
 }
@@ -399,7 +419,19 @@ export function saveSettings(settings: Partial<AppSettings>): AppSettings {
         ? parseLeaderMaxStepsInput(settings.leaderMaxSteps)
         : (prev.leaderMaxSteps ?? resolveLeaderMaxSteps(undefined)),
     prompts: normalizePromptSettings(settings.prompts ?? prev.prompts),
+    workerTimeouts:
+      settings.workerTimeouts !== undefined
+        ? parseWorkerTimeoutSettings(settings.workerTimeouts)
+        : prev.workerTimeouts,
+    npmRegistry:
+      settings.npmRegistry !== undefined
+        ? normalizeNpmRegistry(settings.npmRegistry)
+        : prev.npmRegistry,
     updatedAt: new Date().toISOString(),
+  }
+  // Explicit clear: empty string / null becomes undefined (omit override)
+  if (settings.npmRegistry !== undefined && next.npmRegistry === undefined) {
+    delete next.npmRegistry
   }
   atomicWritePrivateFile(settingsPath(), JSON.stringify(next, null, 2))
   return next

@@ -1,13 +1,15 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import {
-  DEFAULT_PROMPT_SETTINGS,
   PROMPT_ROLE_ORDER,
+  defaultPromptSettings,
   normalizePromptSettings,
+  promptsMatchLocaleDefaults,
+  type PromptLocale,
   type PromptSettings,
   type WorkerRole,
 } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
-import { roleMessageKey } from '../i18n/locales'
+import { roleMessageKey, type Locale } from '../i18n/locales'
 
 interface Props {
   prompts: PromptSettings
@@ -16,85 +18,184 @@ interface Props {
   onSave: (prompts: PromptSettings) => Promise<void>
 }
 
-export function PromptSettingsEditor({ prompts, saving, onChange, onSave }: Props) {
-  const { t } = useI18n()
-  const valid =
+const AUTO_SAVE_MS = 500
+
+function toPromptLocale(locale: Locale): PromptLocale {
+  return locale === 'en' ? 'en' : 'zh'
+}
+
+function previewLine(text: string, max = 56): string {
+  const one = text.replace(/\s+/g, ' ').trim()
+  if (!one) return '—'
+  return one.length > max ? `${one.slice(0, max)}…` : one
+}
+
+function isDirty(current: string, fallback: string): boolean {
+  return current.trim() !== fallback.trim()
+}
+
+function isValidPrompts(prompts: PromptSettings): boolean {
+  return (
     Boolean(prompts.leader.trim()) &&
     PROMPT_ROLE_ORDER.every((role) => Boolean(prompts.roles[role].trim()))
+  )
+}
+
+function promptsEqual(a: PromptSettings, b: PromptSettings): boolean {
+  if (a.leader !== b.leader) return false
+  return PROMPT_ROLE_ORDER.every((role) => a.roles[role] === b.roles[role])
+}
+
+export function PromptSettingsEditor({ prompts, saving, onChange, onSave }: Props) {
+  const { t, locale } = useI18n()
+  const promptLocale = toPromptLocale(locale)
+  const defaults = defaultPromptSettings(promptLocale)
+  const promptsRef = useRef(prompts)
+  const lastSavedRef = useRef(prompts)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const localeRef = useRef(promptLocale)
+  promptsRef.current = prompts
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  // If user has not customized prompts (still built-in for previous locale),
+  // switch built-in text when UI language changes.
+  useEffect(() => {
+    if (localeRef.current === promptLocale) return
+    const previousLocale = localeRef.current
+    localeRef.current = promptLocale
+    if (promptsMatchLocaleDefaults(promptsRef.current, previousLocale)) {
+      const next = defaultPromptSettings(promptLocale)
+      onChange(next)
+      promptsRef.current = next
+      lastSavedRef.current = next
+      void onSave(next)
+    }
+  }, [promptLocale, onChange, onSave])
+
+  const scheduleSave = (next: PromptSettings) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      if (!isValidPrompts(next)) return
+      const normalized = normalizePromptSettings(next, promptLocale)
+      if (promptsEqual(normalized, lastSavedRef.current)) return
+      lastSavedRef.current = normalized
+      void onSave(normalized)
+    }, AUTO_SAVE_MS)
+  }
+
+  const commit = (next: PromptSettings) => {
+    onChange(next)
+    promptsRef.current = next
+    scheduleSave(next)
+  }
 
   const updateRole = (role: WorkerRole, value: string) => {
-    onChange({ ...prompts, roles: { ...prompts.roles, [role]: value } })
+    commit({ ...prompts, roles: { ...prompts.roles, [role]: value } })
   }
+
+  const flushSave = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    const next = promptsRef.current
+    if (!isValidPrompts(next)) return
+    const normalized = normalizePromptSettings(next, promptLocale)
+    if (promptsEqual(normalized, lastSavedRef.current)) return
+    lastSavedRef.current = normalized
+    void onSave(normalized)
+  }
+
+  const leaderDirty = isDirty(prompts.leader, defaults.leader)
 
   return (
     <div className="prompt-settings-editor">
-      <section className="prompt-settings-section">
-        <div className="prompt-settings-section-head">
-          <div>
+      <section className="prompt-card">
+        <header className="prompt-card-head prompt-card-head-static">
+          <div className="prompt-card-titles">
             <h3>{t('settings.prompts.leader')}</h3>
             <p>{t('settings.prompts.leaderHint')}</p>
           </div>
-          <button
-            type="button"
-            className="settings-btn-soft"
-            onClick={() => onChange({ ...prompts, leader: DEFAULT_PROMPT_SETTINGS.leader })}
-          >
-            {t('settings.prompts.reset')}
-          </button>
-        </div>
-        <textarea
-          className="settings-input prompt-settings-textarea"
-          value={prompts.leader}
-          aria-label={t('settings.prompts.leader')}
-          onChange={(event) => onChange({ ...prompts, leader: event.target.value })}
-        />
-      </section>
-
-      <section className="prompt-settings-section">
-        <div className="prompt-settings-section-head prompt-settings-roles-head">
-          <div>
-            <h3>{t('settings.prompts.roles')}</h3>
-            <p>{t('settings.prompts.rolesHint')}</p>
-          </div>
-        </div>
-        <div className="prompt-settings-role-list">
-          {PROMPT_ROLE_ORDER.map((role) => (
-            <div className="prompt-settings-role" key={role}>
-              <div className="prompt-settings-role-head">
-                <label htmlFor={`prompt-role-${role}`}>{t(roleMessageKey(role))}</label>
+        </header>
+        <div className="prompt-card-body">
+          <div className="prompt-field">
+            <textarea
+              className="settings-input ui-font prompt-settings-textarea"
+              value={prompts.leader}
+              aria-label={t('settings.prompts.leader')}
+              disabled={saving}
+              onChange={(event) => commit({ ...prompts, leader: event.target.value })}
+              onBlur={flushSave}
+            />
+            {leaderDirty && (
+              <div className="prompt-field-footer">
                 <button
                   type="button"
-                  className="settings-btn-soft"
-                  onClick={() => updateRole(role, DEFAULT_PROMPT_SETTINGS.roles[role])}
+                  className="prompt-reset-link"
+                  onClick={() => commit({ ...prompts, leader: defaults.leader })}
                 >
                   {t('settings.prompts.reset')}
                 </button>
               </div>
-              <textarea
-                id={`prompt-role-${role}`}
-                className="settings-input prompt-settings-textarea"
-                value={prompts.roles[role]}
-                onChange={(event) => updateRole(role, event.target.value)}
-              />
-            </div>
-          ))}
+            )}
+          </div>
         </div>
       </section>
 
-      <div className="prompt-settings-actions">
-        <button
-          type="button"
-          className="settings-save-btn"
-          disabled={saving || !valid}
-          onClick={() => {
-            const normalized = normalizePromptSettings(prompts)
-            onChange(normalized)
-            void onSave(normalized)
-          }}
-        >
-          {saving ? t('app.loading') : t('settings.prompts.save')}
-        </button>
-      </div>
+      <section className="prompt-card">
+        <header className="prompt-card-head prompt-card-head-static">
+          <div className="prompt-card-titles">
+            <h3>{t('settings.prompts.roles')}</h3>
+            <p>{t('settings.prompts.rolesHint')}</p>
+          </div>
+        </header>
+        <div className="prompt-role-list">
+          {PROMPT_ROLE_ORDER.map((role) => {
+            const roleDirty = isDirty(prompts.roles[role], defaults.roles[role])
+            return (
+              <details className="prompt-role-item" key={role}>
+                <summary className="prompt-role-summary">
+                  <span className="prompt-role-label">{t(roleMessageKey(role))}</span>
+                  <span className="prompt-role-preview" title={prompts.roles[role]}>
+                    {previewLine(prompts.roles[role])}
+                  </span>
+                  {roleDirty && <span className="prompt-role-dirty" aria-hidden />}
+                  <span className="prompt-role-chevron" aria-hidden />
+                </summary>
+                <div className="prompt-role-body">
+                  <div className="prompt-field">
+                    <textarea
+                      id={`prompt-role-${role}`}
+                      className="settings-input ui-font prompt-settings-textarea"
+                      value={prompts.roles[role]}
+                      aria-label={t(roleMessageKey(role))}
+                      disabled={saving}
+                      onChange={(event) => updateRole(role, event.target.value)}
+                      onBlur={flushSave}
+                    />
+                    {roleDirty && (
+                      <div className="prompt-field-footer">
+                        <button
+                          type="button"
+                          className="prompt-reset-link"
+                          onClick={() => updateRole(role, defaults.roles[role])}
+                        >
+                          {t('settings.prompts.reset')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      </section>
     </div>
   )
 }

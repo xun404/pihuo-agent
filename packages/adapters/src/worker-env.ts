@@ -58,9 +58,31 @@ const AMBIENT_ALLOWLIST_EXACT = new Set([
   'NODE_EXTRA_CA_CERTS',
   'REQUESTS_CA_BUNDLE',
   'CURL_CA_BUNDLE',
+  // npm / npx registry (system default when app override unset)
+  'NPM_CONFIG_REGISTRY',
 ])
 
 const AMBIENT_ALLOWLIST_PREFIX = ['LC_']
+
+/** App-level override applied to every Worker spawn (from settings.npmRegistry). */
+let configuredNpmRegistry: string | undefined
+
+/**
+ * Configure process-wide defaults for Worker env construction.
+ * Call on API boot and after settings save (no API restart required).
+ */
+export function configureWorkerEnvDefaults(opts: { npmRegistry?: string | null }): void {
+  const raw = opts.npmRegistry
+  if (raw == null || (typeof raw === 'string' && !raw.trim())) {
+    configuredNpmRegistry = undefined
+    return
+  }
+  configuredNpmRegistry = String(raw).trim()
+}
+
+export function getConfiguredNpmRegistry(): string | undefined {
+  return configuredNpmRegistry
+}
 
 /** Owner-process capabilities and control flags are never valid Worker input. */
 const NEVER_FORWARD_EXACT = new Set([
@@ -171,6 +193,12 @@ export interface BuildEffectiveWorkerEnvOpts {
    * Injected only into this spawn env — never written to process.env.
    */
   workerSecrets?: Readonly<Record<string, string | undefined>>
+  /**
+   * Optional NPM registry override for this spawn (NPM_CONFIG_REGISTRY).
+   * When omitted, uses configureWorkerEnvDefaults() value if set;
+   * otherwise ambient NPM_CONFIG_REGISTRY or npm system default (~/.npmrc).
+   */
+  npmRegistry?: string | null
 }
 
 /**
@@ -251,6 +279,15 @@ export function buildEffectiveWorkerEnv(
     if (mustNeverForward(k) || (looksLikeSecretKey(k) && !allowedCreds.has(k))) {
       delete out[k]
     }
+  }
+
+  // 6. NPM registry: explicit opt > process-wide settings override > ambient (already applied)
+  const registryOverride =
+    opts.npmRegistry !== undefined && opts.npmRegistry !== null
+      ? String(opts.npmRegistry).trim()
+      : configuredNpmRegistry
+  if (registryOverride) {
+    out.NPM_CONFIG_REGISTRY = registryOverride
   }
 
   return out

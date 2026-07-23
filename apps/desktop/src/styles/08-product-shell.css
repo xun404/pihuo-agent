@@ -12,6 +12,9 @@ body,
   color: var(--text-1);
   background: var(--bg-main);
   -webkit-font-smoothing: antialiased;
+  /* 桌面端默认不可选中：避免侧栏/工具条/标签被拖蓝 */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 button,
@@ -25,6 +28,32 @@ button {
   cursor: pointer;
   border: none;
   background: none;
+}
+
+/*
+ * 可复制区域：输入控件 + 聊天正文/代码 + 显式标记。
+ * 使用 text（非 all），避免点一下整块被全选。
+ */
+input,
+textarea,
+select,
+[contenteditable='true'],
+[contenteditable=''],
+.user-select-text,
+.md-content,
+.md-content *,
+.msg .sup-text,
+.msg .user-bubble,
+.msg pre,
+.msg code,
+.thinking-block-body,
+.thinking-block-body *,
+.worker-card .line .tx,
+.worker-card .line .tx *,
+.xterm,
+.xterm * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .app-root {
@@ -73,12 +102,61 @@ button {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   background: var(--bg-main);
+  position: relative;
 }
 .shell.with-inspector {
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--drawer-w);
   gap: 0 var(--sp-2);
   padding: 0 var(--sp-2) var(--sp-2) 0;
   align-items: stretch;
+}
+
+/* 左右边栏拖拽调整宽度 */
+.panel-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 30;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+.panel-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.panel-resizer:hover::after,
+.panel-resizer:active::after,
+body.is-resizing-panels .panel-resizer:active::after {
+  background: color-mix(in srgb, var(--blue) 55%, transparent);
+}
+.panel-resizer-left {
+  left: calc(var(--sidebar-w) - 3px);
+}
+.panel-resizer-right {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+}
+.inspector-host.drawer {
+  position: relative;
+}
+body.is-resizing-panels {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+body.is-resizing-panels * {
+  cursor: col-resize !important;
 }
 /* 右侧栏：顶/右/下同距；左侧栏仍全高贴边 */
 .shell.with-inspector > .inspector-host.drawer,
@@ -302,6 +380,10 @@ button {
   overflow: auto;
   display: flex;
   flex-direction: column;
+}
+/* 常规页多卡纵向节奏：外观卡与 Worker 超时卡对齐 */
+.settings-general > .settings-form-card + .settings-form-card {
+  margin-top: var(--sp-4);
 }
 /* 模型设置：标题+描述不滚；下方 model-layout 可滚 */
 .settings-model-page {
@@ -692,6 +774,12 @@ button {
 .inspector-panel-head .settings-btn-soft {
   flex-shrink: 0;
   margin-left: auto;
+}
+/* 协作组工具栏内按钮不强制挤到最右 */
+.crew-panel-actions .settings-btn-soft,
+.crew-panel-actions .settings-save-btn {
+  margin-left: 0;
+  flex-shrink: 0;
 }
 
 /* Kill any leftover IDE density from older classes */

@@ -7,6 +7,19 @@ describe('settingsMutationRequiresApiRestart', () => {
     assert.equal(settingsMutationRequiresApiRestart({ prompts: {} }), false)
   })
 
+  it('does not restart the API for a Worker timeout-only save', () => {
+    assert.equal(
+      settingsMutationRequiresApiRestart({
+        workerTimeouts: {
+          jobTimeoutMs: 600_000,
+          approvalTimeoutMs: 120_000,
+          queueTimeoutMs: 600_000,
+        },
+      }),
+      false,
+    )
+  })
+
   it('preserves restarts for runtime, provider, and secret mutations', () => {
     assert.equal(settingsMutationRequiresApiRestart({ leaderModel: 'openai/gpt-5.6' }), true)
     assert.equal(settingsMutationRequiresApiRestart({ customProviders: [] }), true)

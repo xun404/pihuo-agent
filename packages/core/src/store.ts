@@ -32,12 +32,17 @@ import type {
   SessionApprovalPolicy,
   WorkerSource,
   WorkerRuntimeProfile,
-  WorkerDefaultRole,
-  RoleDefinition,
-  CreateRoleDefinitionInput,
-  UpdateRoleDefinitionInput,
+  TeamMember,
+  CreateTeamMemberInput,
+  UpdateTeamMemberInput,
+  TeamTemplate,
+  TeamTemplateMember,
+  CreateTeamTemplateInput,
+  UpdateTeamTemplateInput,
+  PromptSettings,
 } from '@swarmdesk-agent/shared'
 import {
+  DEFAULT_PROMPT_SETTINGS,
   DEFAULT_SESSION_TITLE,
   isPlaceholderSessionTitle,
   JOB_HISTORY_LIMIT,
@@ -45,7 +50,7 @@ import {
   isJobOpen,
   normalizeWorkerHealth,
   normalizeWorkerRoles,
-  normalizeWorkerDefaultRole,
+  normalizeWorkerDefaultRoleType,
   WORKER_ROLES,
   isValidSessionApprovalPolicy,
 } from '@swarmdesk-agent/shared'
@@ -150,7 +155,8 @@ function emptySnapshot(): AppSnapshot {
     projects: [],
     sessions: [],
     workers: [],
-    roleDefinitions: [],
+    teamMembers: [],
+    teamTemplates: [],
     approvals: [],
     jobs: [],
     activeProjectId: null,
@@ -177,7 +183,9 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
       ...w,
       primaryRole: n.primaryRole,
       roles: n.roles,
-      defaultRole: normalizeWorkerDefaultRole(w as WorkerRegistration),
+      defaultRoleType: normalizeWorkerDefaultRoleType(
+        (w as Partial<WorkerRegistration>).defaultRoleType,
+      ),
       capabilities: w.capabilities ?? [],
       enabled: w.enabled ?? true,
       scope: w.scope ?? 'global',
@@ -207,10 +215,15 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
       // unread error/done lamps after upgrade.
       lastReadAt: (s as Partial<Session>).lastReadAt ?? s.updatedAt,
       roleReviewState: (s as Partial<Session>).roleReviewState ?? 'prompted',
+      teamRevision:
+        Number.isInteger((s as Partial<Session>).teamRevision) &&
+        ((s as Partial<Session>).teamRevision ?? 0) > 0
+          ? (s as Partial<Session>).teamRevision!
+          : 1,
     })) as Session[]
   const sessionIds = new Set(sessions.map((session) => session.id))
   const workerIds = new Set(workers.map((worker) => worker.id))
-  const roleDefinitions = (raw.roleDefinitions ?? []).filter(
+  const teamMembers = (raw.teamMembers ?? []).filter(
     (role) => sessionIds.has(role.chatSessionId) && workerIds.has(role.workerId),
   )
   let activeProjectId = raw.activeProjectId ?? null
@@ -235,7 +248,8 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
     projects,
     sessions,
     workers,
-    roleDefinitions,
+    teamMembers,
+    teamTemplates: Array.isArray(raw.teamTemplates) ? raw.teamTemplates : [],
     approvals: Array.isArray(raw.approvals)
       ? raw.approvals.map(migrateApprovalItem).filter((item): item is ApprovalItem => item !== null)
       : [],
@@ -432,7 +446,7 @@ export class LocalStore {
         ...w,
         primaryRole: n.primaryRole,
         roles: n.roles,
-        defaultRole: normalizeWorkerDefaultRole(w),
+        defaultRoleType: normalizeWorkerDefaultRoleType(w.defaultRoleType),
       })
     })
   }
@@ -444,36 +458,37 @@ export class LocalStore {
     })
   }
 
-  listRoleDefinitions(
+  listTeamMembers(
     chatSessionId?: string,
     options: { includeArchived?: boolean } = {},
-  ): RoleDefinition[] {
-    let roles = this.data.roleDefinitions
+  ): TeamMember[] {
+    let roles = this.data.teamMembers
     if (chatSessionId) roles = roles.filter((role) => role.chatSessionId === chatSessionId)
     if (!options.includeArchived) roles = roles.filter((role) => !role.archivedAt)
     return structuredClone(roles)
   }
 
-  getRoleDefinition(chatSessionId: string, roleDefinitionId: string): RoleDefinition | undefined {
-    const role = this.data.roleDefinitions.find(
-      (candidate) => candidate.id === roleDefinitionId && candidate.chatSessionId === chatSessionId,
+  getTeamMember(chatSessionId: string, teamMemberId: string): TeamMember | undefined {
+    const role = this.data.teamMembers.find(
+      (candidate) => candidate.id === teamMemberId && candidate.chatSessionId === chatSessionId,
     )
     return role ? structuredClone(role) : undefined
   }
 
-  createRoleDefinition(input: CreateRoleDefinitionInput): RoleDefinition {
+  createTeamMember(input: CreateTeamMemberInput): TeamMember {
     const name = input.name.trim()
-    if (!name) throw new Error('Role definition name required')
-    let role!: RoleDefinition
+    if (!name) throw new Error('Team member name required')
+    let role!: TeamMember
     this.commit((draft) => {
-      if (!draft.sessions.some((session) => session.id === input.chatSessionId)) {
+      const session = draft.sessions.find((candidate) => candidate.id === input.chatSessionId)
+      if (!session) {
         throw new Error(`Session not found: ${input.chatSessionId}`)
       }
       if (!draft.workers.some((worker) => worker.id === input.workerId && worker.enabled)) {
         throw new Error(`Worker not found: ${input.workerId}`)
       }
       const instructions = input.instructions.trim()
-      if (!instructions) throw new Error('Role definition instructions required')
+      if (!instructions) throw new Error('Team member instructions required')
       const timestamp = now()
       role = {
         id: createId('role'),
@@ -488,28 +503,28 @@ export class LocalStore {
         createdAt: timestamp,
         updatedAt: timestamp,
       }
-      draft.roleDefinitions.unshift(role)
+      draft.teamMembers.unshift(role)
+      session.teamRevision += 1
     })
     return structuredClone(role)
   }
 
-  updateRoleDefinition(
+  updateTeamMember(
     chatSessionId: string,
-    roleDefinitionId: string,
-    patch: UpdateRoleDefinitionInput,
-  ): RoleDefinition {
-    let updated!: RoleDefinition
+    teamMemberId: string,
+    patch: UpdateTeamMemberInput,
+  ): TeamMember {
+    let updated!: TeamMember
     this.commit((draft) => {
-      const role = draft.roleDefinitions.find(
-        (candidate) =>
-          candidate.id === roleDefinitionId && candidate.chatSessionId === chatSessionId,
+      const role = draft.teamMembers.find(
+        (candidate) => candidate.id === teamMemberId && candidate.chatSessionId === chatSessionId,
       )
       if (!role || role.archivedAt) {
-        throw new Error(`Role definition not found: ${roleDefinitionId}`)
+        throw new Error(`Team member not found: ${teamMemberId}`)
       }
       if (patch.expectedRevision !== undefined && patch.expectedRevision !== role.revision) {
         throw new Error(
-          `Role definition revision conflict: expected ${patch.expectedRevision}, got ${role.revision}`,
+          `Team member revision conflict: expected ${patch.expectedRevision}, got ${role.revision}`,
         )
       }
       if (
@@ -520,10 +535,10 @@ export class LocalStore {
       }
 
       const nextName = patch.name === undefined ? role.name : patch.name.trim()
-      if (!nextName) throw new Error('Role definition name required')
+      if (!nextName) throw new Error('Team member name required')
       const nextInstructions =
         patch.instructions === undefined ? role.instructions : patch.instructions.trim()
-      if (!nextInstructions) throw new Error('Role definition instructions required')
+      if (!nextInstructions) throw new Error('Team member instructions required')
       const nextModel =
         patch.model === undefined
           ? role.model
@@ -544,35 +559,181 @@ export class LocalStore {
       role.enabled = patch.enabled ?? role.enabled
       if (executionChanged) role.revision += 1
       role.updatedAt = now()
+      const session = draft.sessions.find((candidate) => candidate.id === chatSessionId)
+      if (session) session.teamRevision += 1
       updated = role
     })
     return structuredClone(updated)
   }
 
-  archiveRoleDefinition(
+  archiveTeamMember(
     chatSessionId: string,
-    roleDefinitionId: string,
+    teamMemberId: string,
     expectedRevision?: number,
-  ): RoleDefinition {
-    let archived!: RoleDefinition
+  ): TeamMember {
+    let archived!: TeamMember
     this.commit((draft) => {
-      const role = draft.roleDefinitions.find(
-        (candidate) =>
-          candidate.id === roleDefinitionId && candidate.chatSessionId === chatSessionId,
+      const role = draft.teamMembers.find(
+        (candidate) => candidate.id === teamMemberId && candidate.chatSessionId === chatSessionId,
       )
-      if (!role) throw new Error(`Role definition not found: ${roleDefinitionId}`)
+      if (!role) throw new Error(`Team member not found: ${teamMemberId}`)
       if (expectedRevision !== undefined && expectedRevision !== role.revision) {
         throw new Error(
-          `Role definition revision conflict: expected ${expectedRevision}, got ${role.revision}`,
+          `Team member revision conflict: expected ${expectedRevision}, got ${role.revision}`,
         )
       }
       const timestamp = now()
       role.enabled = false
       role.archivedAt ??= timestamp
       role.updatedAt = timestamp
+      const session = draft.sessions.find((candidate) => candidate.id === chatSessionId)
+      if (session) session.teamRevision += 1
       archived = role
     })
     return structuredClone(archived)
+  }
+
+  listTeamTemplates(): TeamTemplate[] {
+    return structuredClone(this.data.teamTemplates)
+  }
+
+  getTeamTemplate(templateId: string): TeamTemplate | undefined {
+    const template = this.data.teamTemplates.find((candidate) => candidate.id === templateId)
+    return template ? structuredClone(template) : undefined
+  }
+
+  createTeamTemplate(input: CreateTeamTemplateInput): TeamTemplate {
+    let created!: TeamTemplate
+    this.commit((draft) => {
+      const timestamp = now()
+      created = {
+        id: createId('team_template'),
+        name: this.normalizeTeamTemplateName(input.name),
+        description: input.description?.trim() || undefined,
+        members: this.normalizeTeamTemplateMembers(input.members),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      draft.teamTemplates.unshift(created)
+    })
+    return structuredClone(created)
+  }
+
+  updateTeamTemplate(templateId: string, input: UpdateTeamTemplateInput): TeamTemplate {
+    let updated!: TeamTemplate
+    this.commit((draft) => {
+      const template = draft.teamTemplates.find((candidate) => candidate.id === templateId)
+      if (!template) throw new Error(`Team template not found: ${templateId}`)
+      if (input.name !== undefined) template.name = this.normalizeTeamTemplateName(input.name)
+      if (input.description !== undefined) {
+        template.description = input.description?.trim() || undefined
+      }
+      if (input.members !== undefined) {
+        template.members = this.normalizeTeamTemplateMembers(input.members)
+      }
+      template.updatedAt = now()
+      updated = template
+    })
+    return structuredClone(updated)
+  }
+
+  deleteTeamTemplate(templateId: string): TeamTemplate {
+    let deleted!: TeamTemplate
+    this.commit((draft) => {
+      const index = draft.teamTemplates.findIndex((candidate) => candidate.id === templateId)
+      if (index < 0) throw new Error(`Team template not found: ${templateId}`)
+      deleted = draft.teamTemplates[index]!
+      draft.teamTemplates.splice(index, 1)
+    })
+    return structuredClone(deleted)
+  }
+
+  replaceTeamMembers(input: {
+    chatSessionId: string
+    expectedTeamRevision: number
+    members: Array<Omit<CreateTeamMemberInput, 'chatSessionId'>>
+  }): { session: Session; members: TeamMember[] } {
+    let session!: Session
+    let members!: TeamMember[]
+    this.commit((draft) => {
+      session = draft.sessions.find((candidate) => candidate.id === input.chatSessionId)!
+      if (!session) throw new Error(`Session not found: ${input.chatSessionId}`)
+      if (session.teamRevision !== input.expectedTeamRevision) {
+        throw new Error(
+          `Team revision conflict: expected ${input.expectedTeamRevision}, got ${session.teamRevision}`,
+        )
+      }
+      if (input.members.length === 0) throw new Error('Team requires at least one member')
+      const timestamp = now()
+      for (const member of draft.teamMembers) {
+        if (member.chatSessionId !== input.chatSessionId || member.archivedAt) continue
+        member.enabled = false
+        member.archivedAt = timestamp
+        member.updatedAt = timestamp
+      }
+      members = input.members.map((member) => {
+        const worker = draft.workers.find(
+          (candidate) => candidate.id === member.workerId && candidate.enabled,
+        )
+        if (!worker) throw new Error(`Worker not found: ${member.workerId}`)
+        const name = member.name.trim()
+        const instructions = member.instructions.trim()
+        if (!name) throw new Error('Team member name required')
+        if (!instructions) throw new Error('Team member instructions required')
+        if (!WORKER_ROLES.includes(member.roleType)) {
+          throw new Error(`Invalid Team member role type: ${member.roleType}`)
+        }
+        return {
+          id: createId('team_member'),
+          chatSessionId: input.chatSessionId,
+          workerId: member.workerId,
+          name,
+          roleType: member.roleType,
+          instructions,
+          model: member.model?.trim() || undefined,
+          enabled: member.enabled ?? true,
+          revision: 1,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }
+      })
+      draft.teamMembers = [...members, ...draft.teamMembers]
+      session.teamRevision += 1
+      session.updatedAt = timestamp
+    })
+    return structuredClone({ session, members })
+  }
+
+  private normalizeTeamTemplateName(value: string): string {
+    const name = value.trim()
+    if (!name) throw new Error('Team template name required')
+    if (name.length > 120) throw new Error('Team template name too long')
+    return name
+  }
+
+  private normalizeTeamTemplateMembers(input: TeamTemplateMember[]): TeamTemplateMember[] {
+    if (!Array.isArray(input) || input.length === 0) {
+      throw new Error('Team template requires at least one member')
+    }
+    if (input.length > 50) throw new Error('Team template has too many members')
+    return input.map((member) => {
+      const name = member.name.trim()
+      const preferredWorkerId = member.preferredWorkerId.trim()
+      const instructions = member.instructions.trim()
+      if (!name) throw new Error('Team template member name required')
+      if (!preferredWorkerId) throw new Error('Team template preferred Worker required')
+      if (!instructions) throw new Error('Team template member instructions required')
+      if (!WORKER_ROLES.includes(member.roleType)) {
+        throw new Error(`Invalid Team template role type: ${member.roleType}`)
+      }
+      return {
+        name,
+        preferredWorkerId,
+        roleType: member.roleType,
+        instructions,
+        model: member.model?.trim() || undefined,
+      }
+    })
   }
 
   getActive(): { project: Project | null; session: Session | null } {
@@ -643,9 +804,7 @@ export class LocalStore {
           .map((session) => session.id),
       )
       d.sessions = d.sessions.filter((s) => s.projectId !== projectId)
-      d.roleDefinitions = d.roleDefinitions.filter(
-        (role) => !deletedSessionIds.has(role.chatSessionId),
-      )
+      d.teamMembers = d.teamMembers.filter((role) => !deletedSessionIds.has(role.chatSessionId))
       if (d.activeProjectId === projectId) {
         d.activeProjectId = d.projects[0]?.id ?? null
       }
@@ -662,7 +821,7 @@ export class LocalStore {
   deleteSession(sessionId: string): void {
     this.commit((d) => {
       d.sessions = d.sessions.filter((s) => s.id !== sessionId)
-      d.roleDefinitions = d.roleDefinitions.filter((role) => role.chatSessionId !== sessionId)
+      d.teamMembers = d.teamMembers.filter((role) => role.chatSessionId !== sessionId)
       if (d.activeSessionId === sessionId) {
         d.activeSessionId = d.sessions[0]?.id ?? null
       }
@@ -781,6 +940,8 @@ export class LocalStore {
     title?: string
     mode?: LeaderMode
     memoryThreadId?: string
+    rolePrompts?: Readonly<PromptSettings['roles']>
+    initialTeamMembers?: Array<Omit<CreateTeamMemberInput, 'chatSessionId'>>
   }): Session {
     let session!: Session
     this.commit((d) => {
@@ -801,6 +962,7 @@ export class LocalStore {
         activeWorkerIds: [...project.workerIds],
         memoryThreadId: input.memoryThreadId || createId('thread'),
         approvalPolicy: 'manual',
+        teamRevision: 1,
         roleReviewState: 'pending',
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -808,24 +970,51 @@ export class LocalStore {
         lastReadAt: timestamp,
       }
       d.sessions.unshift(session)
-      const bootstrappedRoles: RoleDefinition[] = d.workers
-        .filter((worker) => worker.enabled)
-        .map((worker) => {
-          const template = normalizeWorkerDefaultRole(worker)
-          return {
-            id: createId('role'),
-            chatSessionId: session.id,
-            workerId: worker.id,
-            name: template.name,
-            roleType: template.roleType,
-            instructions: template.instructions,
-            enabled: true,
-            revision: 1,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          }
-        })
-      d.roleDefinitions = [...bootstrappedRoles, ...(d.roleDefinitions ?? [])]
+      const rolePrompts = input.rolePrompts ?? DEFAULT_PROMPT_SETTINGS.roles
+      if (input.initialTeamMembers && input.initialTeamMembers.length === 0) {
+        throw new Error('Team requires at least one member')
+      }
+      const initialMembers: Array<Omit<CreateTeamMemberInput, 'chatSessionId'>> =
+        input.initialTeamMembers ??
+        d.workers
+          .filter((worker) => worker.enabled)
+          .map((worker) => {
+            const roleType = normalizeWorkerDefaultRoleType(worker.defaultRoleType)
+            return {
+              workerId: worker.id,
+              name: worker.name,
+              roleType,
+              instructions: rolePrompts[roleType],
+              enabled: true,
+            }
+          })
+      const seededRoles: TeamMember[] = initialMembers.map((member) => {
+        const worker = d.workers.find(
+          (candidate) => candidate.id === member.workerId && candidate.enabled,
+        )
+        if (!worker) throw new Error(`Worker not found: ${member.workerId}`)
+        const name = member.name.trim()
+        const instructions = member.instructions.trim()
+        if (!name) throw new Error('Team member name required')
+        if (!instructions) throw new Error('Team member instructions required')
+        if (!WORKER_ROLES.includes(member.roleType)) {
+          throw new Error(`Invalid Team member role type: ${member.roleType}`)
+        }
+        return {
+          id: createId('team_member'),
+          chatSessionId: session.id,
+          workerId: member.workerId,
+          name,
+          roleType: member.roleType,
+          instructions,
+          model: member.model?.trim() || undefined,
+          enabled: member.enabled ?? true,
+          revision: 1,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }
+      })
+      d.teamMembers = [...seededRoles, ...(d.teamMembers ?? [])]
       d.activeSessionId = session.id
       d.activeProjectId = project.id
     })
@@ -957,10 +1146,9 @@ export class LocalStore {
         ...existing,
         ...worker,
         ...normalizeWorkerRoles(worker),
-        defaultRole: normalizeWorkerDefaultRole({
-          name: worker.name,
-          defaultRole: worker.defaultRole ?? existing?.defaultRole,
-        }),
+        defaultRoleType: normalizeWorkerDefaultRoleType(
+          worker.defaultRoleType ?? existing?.defaultRoleType,
+        ),
       }
       if (worker.availableModels == null && existing?.availableModels?.length) {
         normalized.availableModels = existing.availableModels
@@ -996,7 +1184,7 @@ export class LocalStore {
       normalized = {
         ...replacement,
         ...normalizeWorkerRoles(replacement),
-        defaultRole: normalizeWorkerDefaultRole(replacement),
+        defaultRoleType: normalizeWorkerDefaultRoleType(replacement.defaultRoleType),
       }
       d.workers[idx] = normalized
     })
@@ -1014,10 +1202,8 @@ export class LocalStore {
       if (idx < 0 || !isDeepStrictEqual(d.workers[idx], expected)) {
         throw new WorkerStoreConflictError(expected.id)
       }
-      if (
-        (d.roleDefinitions ?? []).some((role) => role.workerId === expected.id && !role.archivedAt)
-      ) {
-        throw new Error(`Worker is referenced by active role definitions: ${expected.id}`)
+      if ((d.teamMembers ?? []).some((role) => role.workerId === expected.id && !role.archivedAt)) {
+        throw new Error(`Worker is referenced by active Team members: ${expected.id}`)
       }
       removed = d.workers[idx]!
       d.workers.splice(idx, 1)
@@ -1045,10 +1231,8 @@ export class LocalStore {
     this.commit((d) => {
       const idx = d.workers.findIndex((x) => x.id === workerId)
       if (idx < 0) throw new Error(`Worker not found: ${workerId}`)
-      if (
-        (d.roleDefinitions ?? []).some((role) => role.workerId === workerId && !role.archivedAt)
-      ) {
-        throw new Error(`Worker is referenced by active role definitions: ${workerId}`)
+      if ((d.teamMembers ?? []).some((role) => role.workerId === workerId && !role.archivedAt)) {
+        throw new Error(`Worker is referenced by active Team members: ${workerId}`)
       }
       removed = d.workers[idx]!
       d.workers.splice(idx, 1)
@@ -1074,20 +1258,13 @@ export class LocalStore {
     return structuredClone(worker)
   }
 
-  setWorkerDefaultRole(workerId: string, input: WorkerDefaultRole): WorkerRegistration {
-    const name = input.name.trim()
-    const instructions = input.instructions.trim()
-    if (!name) throw new Error('Default role name required')
-    if (!instructions) throw new Error('Default role instructions required')
-    if (!WORKER_ROLES.includes(input.roleType)) {
-      throw new Error(`Invalid default role type: ${input.roleType}`)
-    }
-
+  setWorkerDefaultRoleType(workerId: string, roleType: WorkerRole): WorkerRegistration {
+    if (!WORKER_ROLES.includes(roleType)) throw new Error(`Invalid default role type: ${roleType}`)
     let worker!: WorkerRegistration
     this.commit((draft) => {
       const current = draft.workers.find((candidate) => candidate.id === workerId)
       if (!current) throw new Error(`Worker not found: ${workerId}`)
-      current.defaultRole = { name, roleType: input.roleType, instructions }
+      current.defaultRoleType = roleType
       worker = current
     })
     return structuredClone(worker)
@@ -1385,6 +1562,7 @@ export class LocalStore {
         | 'message'
         | 'output'
         | 'error'
+        | 'errorCode'
         | 'startedAt'
         | 'finishedAt'
         | 'approvalIds'

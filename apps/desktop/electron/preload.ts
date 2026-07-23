@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { PromptSettings } from '@swarmdesk-agent/shared'
+import type { PromptSettings, WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
 
 contextBridge.exposeInMainWorld('routerAgents', {
   platform: process.platform,
@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('routerAgents', {
       thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'max'
       leaderMaxSteps?: number
       prompts?: PromptSettings
+      workerTimeouts?: WorkerTimeoutSettings
+      npmRegistry?: string | null
       secrets?: Record<string, string | null>
       customProviders?: {
         id: string

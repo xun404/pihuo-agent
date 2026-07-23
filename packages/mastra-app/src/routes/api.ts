@@ -7,6 +7,7 @@ import {
   commitAndSwitch,
   listProjectFiles,
   getSharedStore,
+  loadSettings,
   getWorkerModelCatalogStore,
   globalActivityLog,
 } from '@swarmdesk-agent/core'
@@ -27,7 +28,7 @@ import {
   registryCatalogApiPublicError,
 } from '../acp-registry-api.js'
 import { getWorkerModels, evaluateWorkerModelPin, applyWorkerModelPin } from '../worker-models.js'
-import { assertRoleModelAccepted } from '../role-definitions.js'
+import { assertTeamMemberModelAccepted } from '../team-members.js'
 import { checkOneWorker, checkWorkersBatch } from '../workers-health.js'
 import { getWorkerScheduler } from '../scheduler.js'
 import type {
@@ -35,12 +36,15 @@ import type {
   LeaderMode,
   Locale,
   WorkerRole,
-  WorkerDefaultRole,
-  CreateRoleDefinitionInput,
-  UpdateRoleDefinitionInput,
+  CreateTeamMemberInput,
+  UpdateTeamMemberInput,
+  CreateTeamTemplateInput,
+  UpdateTeamTemplateInput,
+  ApplyTeamTemplateInput,
 } from '@swarmdesk-agent/shared'
 import { basename } from 'node:path'
 import { asAcpHttpFailure } from '../acp-http-error.js'
+import { getTeamTemplateService, TeamTemplateServiceError } from '../team-template-service.js'
 import {
   deleteRouterProjectResource,
   deleteRouterSessionResource,
@@ -177,12 +181,40 @@ export const apiRoutes = [
         projectId: string
         title: string
         mode?: LeaderMode
+        teamTemplateId?: string
       }
       if (!body.projectId || !body.title) {
         return c.json({ error: 'projectId and title required' }, 400)
       }
-      const session = store().createSession(body)
-      return c.json({ session })
+      try {
+        const initialTeamMembers = body.teamTemplateId
+          ? getTeamTemplateService().resolveForProject({
+              projectId: body.projectId,
+              templateId: body.teamTemplateId,
+            })
+          : undefined
+        const session = store().createSession({
+          projectId: body.projectId,
+          title: body.title,
+          mode: body.mode,
+          rolePrompts: loadSettings().prompts.roles,
+          initialTeamMembers,
+        })
+        return c.json({ session, snapshot: store().snapshot() })
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        if (e instanceof TeamTemplateServiceError) {
+          const status =
+            e.code === 'TEAM_TEMPLATE_NOT_FOUND' || e.code === 'PROJECT_NOT_FOUND'
+              ? 404
+              : e.code === 'TEAM_TEMPLATE_MAPPING_REQUIRED'
+                ? 409
+                : 400
+          return c.json({ error: message, code: e.code }, status)
+        }
+        const status = message.includes('not found') ? 400 : 500
+        return c.json({ error: message }, status)
+      }
     },
   }),
 
@@ -227,7 +259,7 @@ export const apiRoutes = [
     },
   }),
 
-  registerApiRoute('/api/sessions/:sessionId/role-definitions', {
+  registerApiRoute('/api/sessions/:sessionId/team', {
     method: 'GET',
     handler: async (c) => {
       const sessionId = c.req.param('sessionId')
@@ -239,18 +271,18 @@ export const apiRoutes = [
         return c.json({ error: `Session not found: ${sessionId}` }, 404)
       }
       return c.json({
-        roleDefinitions: store().listRoleDefinitions(sessionId, {
+        teamMembers: store().listTeamMembers(sessionId, {
           includeArchived: c.req.query('includeArchived') === '1',
         }),
       })
     },
   }),
 
-  registerApiRoute('/api/sessions/:sessionId/role-definitions', {
+  registerApiRoute('/api/sessions/:sessionId/team/members', {
     method: 'POST',
     handler: async (c) => {
       const sessionId = c.req.param('sessionId')
-      const body = (await c.req.json()) as Omit<CreateRoleDefinitionInput, 'chatSessionId'>
+      const body = (await c.req.json()) as Omit<CreateTeamMemberInput, 'chatSessionId'>
       try {
         const session = store()
           .listSessions()
@@ -260,12 +292,12 @@ export const apiRoutes = [
               .listProjects()
               .find((project) => project.id === session.projectId)?.rootPath
           : undefined
-        assertRoleModelAccepted(body.workerId, body.model, projectRoot)
-        const roleDefinition = store().createRoleDefinition({
+        assertTeamMemberModelAccepted(body.workerId, body.model, projectRoot)
+        const teamMember = store().createTeamMember({
           ...body,
           chatSessionId: sessionId,
         })
-        return c.json({ roleDefinition, snapshot: store().snapshot() }, 201)
+        return c.json({ teamMember, snapshot: store().snapshot() }, 201)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         return c.json({ error: message }, message.includes('not found') ? 404 : 400)
@@ -273,15 +305,15 @@ export const apiRoutes = [
     },
   }),
 
-  registerApiRoute('/api/sessions/:sessionId/role-definitions/:roleDefinitionId', {
+  registerApiRoute('/api/sessions/:sessionId/team/members/:teamMemberId', {
     method: 'PATCH',
     handler: async (c) => {
-      const body = (await c.req.json()) as UpdateRoleDefinitionInput
+      const body = (await c.req.json()) as UpdateTeamMemberInput
       try {
         const sessionId = c.req.param('sessionId')
-        const roleDefinitionId = c.req.param('roleDefinitionId')
-        const current = store().getRoleDefinition(sessionId, roleDefinitionId)
-        if (!current) throw new Error(`Role definition not found: ${roleDefinitionId}`)
+        const teamMemberId = c.req.param('teamMemberId')
+        const current = store().getTeamMember(sessionId, teamMemberId)
+        if (!current) throw new Error(`Team member not found: ${teamMemberId}`)
         const session = store()
           .listSessions()
           .find((candidate) => candidate.id === sessionId)
@@ -291,14 +323,14 @@ export const apiRoutes = [
               .find((project) => project.id === session.projectId)?.rootPath
           : undefined
         if (body.workerId !== undefined || body.model !== undefined) {
-          assertRoleModelAccepted(
+          assertTeamMemberModelAccepted(
             body.workerId ?? current.workerId,
             body.model === undefined ? current.model : body.model,
             projectRoot,
           )
         }
-        const roleDefinition = store().updateRoleDefinition(sessionId, roleDefinitionId, body)
-        return c.json({ roleDefinition, snapshot: store().snapshot() })
+        const teamMember = store().updateTeamMember(sessionId, teamMemberId, body)
+        return c.json({ teamMember, snapshot: store().snapshot() })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         const status = message.includes('revision conflict')
@@ -311,17 +343,17 @@ export const apiRoutes = [
     },
   }),
 
-  registerApiRoute('/api/sessions/:sessionId/role-definitions/:roleDefinitionId', {
+  registerApiRoute('/api/sessions/:sessionId/team/members/:teamMemberId', {
     method: 'DELETE',
     handler: async (c) => {
       const body = (await c.req.json().catch(() => ({}))) as { expectedRevision?: number }
       try {
-        const roleDefinition = store().archiveRoleDefinition(
+        const teamMember = store().archiveTeamMember(
           c.req.param('sessionId'),
-          c.req.param('roleDefinitionId'),
+          c.req.param('teamMemberId'),
           body.expectedRevision,
         )
-        return c.json({ roleDefinition, snapshot: store().snapshot() })
+        return c.json({ teamMember, snapshot: store().snapshot() })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         const status = message.includes('revision conflict')
@@ -334,17 +366,109 @@ export const apiRoutes = [
     },
   }),
 
-  registerApiRoute('/api/sessions/:sessionId/role-definitions/:roleDefinitionId/reset-session', {
+  registerApiRoute('/api/sessions/:sessionId/team/members/:teamMemberId/reset-session', {
     method: 'POST',
     handler: async (c) => {
       const sessionId = c.req.param('sessionId')
-      const roleDefinitionId = c.req.param('roleDefinitionId')
+      const teamMemberId = c.req.param('teamMemberId')
       const role = store()
-        .listRoleDefinitions(sessionId, { includeArchived: true })
-        .find((candidate) => candidate.id === roleDefinitionId)
-      if (!role) return c.json({ error: 'Role definition not found' }, 404)
-      const result = getAcpSessionManager().deleteContextsByRole(sessionId, roleDefinitionId)
+        .listTeamMembers(sessionId, { includeArchived: true })
+        .find((candidate) => candidate.id === teamMemberId)
+      if (!role) return c.json({ error: 'Team member not found' }, 404)
+      const result = getAcpSessionManager().deleteContextsByTeamMember(sessionId, teamMemberId)
       return c.json({ deleted: result.deleted > 0 })
+    },
+  }),
+
+  registerApiRoute('/api/team-templates', {
+    method: 'GET',
+    handler: async (c) => c.json({ templates: store().listTeamTemplates() }),
+  }),
+
+  registerApiRoute('/api/team-templates', {
+    method: 'POST',
+    handler: async (c) => {
+      try {
+        const template = store().createTeamTemplate((await c.req.json()) as CreateTeamTemplateInput)
+        return c.json({ template }, 201)
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : String(error) }, 400)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/team-templates/:templateId', {
+    method: 'PUT',
+    handler: async (c) => {
+      try {
+        const template = store().updateTeamTemplate(
+          c.req.param('templateId'),
+          (await c.req.json()) as UpdateTeamTemplateInput,
+        )
+        return c.json({ template })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return c.json({ error: message }, message.includes('not found') ? 404 : 400)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/team-templates/:templateId', {
+    method: 'DELETE',
+    handler: async (c) => {
+      try {
+        return c.json({ template: store().deleteTeamTemplate(c.req.param('templateId')) })
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : String(error) }, 404)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:sessionId/team/preview-template', {
+    method: 'POST',
+    handler: async (c) => {
+      try {
+        const body = (await c.req.json()) as Pick<ApplyTeamTemplateInput, 'templateId' | 'mappings'>
+        return c.json(
+          getTeamTemplateService().preview({
+            sessionId: c.req.param('sessionId'),
+            templateId: body.templateId,
+            mappings: body.mappings,
+          }),
+        )
+      } catch (error) {
+        const status = error instanceof TeamTemplateServiceError ? 409 : 400
+        return c.json(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            code: error instanceof TeamTemplateServiceError ? error.code : undefined,
+          },
+          status,
+        )
+      }
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:sessionId/team/apply-template', {
+    method: 'POST',
+    handler: async (c) => {
+      try {
+        const body = (await c.req.json()) as ApplyTeamTemplateInput
+        const result = await getTeamTemplateService().apply({
+          ...body,
+          sessionId: c.req.param('sessionId'),
+        })
+        return c.json({ ...result, snapshot: store().snapshot() })
+      } catch (error) {
+        const status = error instanceof TeamTemplateServiceError ? 409 : 400
+        return c.json(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            code: error instanceof TeamTemplateServiceError ? error.code : undefined,
+          },
+          status,
+        )
+      }
     },
   }),
 
@@ -558,13 +682,13 @@ export const apiRoutes = [
     },
   }),
 
-  registerApiRoute('/api/workers/:id/default-role', {
+  registerApiRoute('/api/workers/:id/default-role-type', {
     method: 'PUT',
     handler: async (c) => {
       const id = c.req.param('id')
       try {
-        const body = (await c.req.json()) as WorkerDefaultRole
-        const worker = store().setWorkerDefaultRole(id, body)
+        const body = (await c.req.json()) as { roleType: WorkerRole }
+        const worker = store().setWorkerDefaultRoleType(id, body.roleType)
         return c.json({ worker, snapshot: store().snapshot() })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -1044,6 +1168,7 @@ export const apiRoutes = [
         projectId: project.id,
         title: locale === 'en' ? 'Implement session sidebar' : '实现 Session 侧栏',
         mode: 'build',
+        rolePrompts: loadSettings().prompts.roles,
       })
       return c.json({ project, session, snapshot: store().snapshot() })
     },

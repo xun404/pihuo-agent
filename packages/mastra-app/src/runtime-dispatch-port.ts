@@ -1,9 +1,11 @@
 import type {
   ApprovalItem,
   JobSource,
-  RoleDefinition,
-  CreateRoleDefinitionInput,
-  UpdateRoleDefinitionInput,
+  TeamMember,
+  TeamTemplate,
+  TeamTemplateMemberMapping,
+  CreateTeamMemberInput,
+  UpdateTeamMemberInput,
   WorkerJob,
   WorkerRole,
   WorkerRunEvent,
@@ -23,7 +25,7 @@ export interface RouterSessionContext {
 
 export interface TrustedDispatchInput {
   context: RouterSessionContext
-  roleDefinitionId?: string
+  teamMemberId?: string
   workerId?: string
   workerIdOrKind?: string
   role?: WorkerRole
@@ -34,9 +36,9 @@ export interface TrustedDispatchInput {
   onEvent?: (event: WorkerRunEvent) => void
 }
 
-export interface RoleDefinitionMutationInput {
+export interface TeamMemberMutationInput {
   context: RouterSessionContext
-  roleDefinitionId: string
+  teamMemberId: string
 }
 
 export interface ResolveApprovalPortInput {
@@ -76,22 +78,36 @@ export function validateRuntimeApprovalResolveInput(
 export interface RuntimeDispatchPort {
   resolveSessionContext(memoryThreadId: string): Promise<RouterSessionContext | null>
   dispatch(input: TrustedDispatchInput): Promise<WorkerJob>
-  listRoleDefinitions?(context: RouterSessionContext): Promise<RoleDefinition[]>
-  createRoleDefinition?(input: {
+  listTeamMembers?(context: RouterSessionContext): Promise<TeamMember[]>
+  getTeamRevision?(context: RouterSessionContext): Promise<number>
+  createTeamMember?(input: {
     context: RouterSessionContext
-    input: Omit<CreateRoleDefinitionInput, 'chatSessionId'>
-  }): Promise<RoleDefinition>
-  updateRoleDefinition?(
-    input: RoleDefinitionMutationInput & {
-      patch: UpdateRoleDefinitionInput
+    input: Omit<CreateTeamMemberInput, 'chatSessionId'>
+  }): Promise<TeamMember>
+  updateTeamMember?(
+    input: TeamMemberMutationInput & {
+      patch: UpdateTeamMemberInput
     },
-  ): Promise<RoleDefinition>
-  archiveRoleDefinition?(
-    input: RoleDefinitionMutationInput & {
+  ): Promise<TeamMember>
+  archiveTeamMember?(
+    input: TeamMemberMutationInput & {
       expectedRevision?: number
     },
-  ): Promise<RoleDefinition>
-  resetRoleSession?(input: RoleDefinitionMutationInput): Promise<{ deleted: boolean }>
+  ): Promise<TeamMember>
+  resetTeamMemberSession?(input: TeamMemberMutationInput): Promise<{ deleted: boolean }>
+  listTeamTemplates?(): Promise<TeamTemplate[]>
+  saveTeamTemplate?(input: {
+    context: RouterSessionContext
+    name: string
+    description?: string
+  }): Promise<TeamTemplate>
+  deleteTeamTemplate?(templateId: string): Promise<TeamTemplate>
+  applyTeamTemplate?(input: {
+    context: RouterSessionContext
+    templateId: string
+    expectedTeamRevision: number
+    mappings?: TeamTemplateMemberMapping[]
+  }): Promise<{ members: TeamMember[]; teamRevision: number }>
   events(
     jobId: string,
     signal?: AbortSignal,
@@ -121,16 +137,20 @@ export interface LocalRuntimeDispatchDeps {
     LocalStore,
     | 'listSessions'
     | 'listProjects'
-    | 'listRoleDefinitions'
-    | 'createRoleDefinition'
-    | 'updateRoleDefinition'
-    | 'archiveRoleDefinition'
+    | 'listTeamMembers'
+    | 'createTeamMember'
+    | 'updateTeamMember'
+    | 'archiveTeamMember'
+    | 'listTeamTemplates'
+    | 'createTeamTemplate'
+    | 'deleteTeamTemplate'
     | 'countOpenJobs'
     | 'listJobs'
   >
   scheduler: LocalDispatchScheduler
   events: Pick<WorkerEventEmitter, 'subscribe' | 'isTerminal'>
   assertRoleModel?: (workerId: string, model: string | null | undefined, cwd?: string) => void
+  applyTeamTemplate?: RuntimeDispatchPort['applyTeamTemplate']
 }
 
 export function createLocalRuntimeDispatchPort(
@@ -167,7 +187,7 @@ export function createLocalRuntimeDispatchPort(
       const workerIdOrKind = input.workerIdOrKind ?? input.workerId
       const { job } = await deps.scheduler.enqueue({
         task: input.task,
-        roleDefinitionId: input.roleDefinitionId,
+        teamMemberId: input.teamMemberId,
         role: input.role,
         workerIdOrKind,
         cwd: input.cwd ?? input.context.routerProjectRoot,
@@ -181,30 +201,38 @@ export function createLocalRuntimeDispatchPort(
       return job
     },
 
-    async listRoleDefinitions(context: RouterSessionContext): Promise<RoleDefinition[]> {
+    async listTeamMembers(context: RouterSessionContext): Promise<TeamMember[]> {
       assertContext(context)
-      return deps.store.listRoleDefinitions(context.routerSessionId)
+      return deps.store.listTeamMembers(context.routerSessionId)
     },
 
-    async createRoleDefinition(input): Promise<RoleDefinition> {
+    async getTeamRevision(context: RouterSessionContext): Promise<number> {
+      assertContext(context)
+      return (
+        deps.store.listSessions().find((session) => session.id === context.routerSessionId)
+          ?.teamRevision ?? 1
+      )
+    },
+
+    async createTeamMember(input): Promise<TeamMember> {
       assertContext(input.context)
       deps.assertRoleModel?.(
         input.input.workerId,
         input.input.model,
         input.context.routerProjectRoot,
       )
-      return deps.store.createRoleDefinition({
+      return deps.store.createTeamMember({
         ...input.input,
         chatSessionId: input.context.routerSessionId,
       })
     },
 
-    async updateRoleDefinition(input): Promise<RoleDefinition> {
+    async updateTeamMember(input): Promise<TeamMember> {
       assertContext(input.context)
       const current = deps.store
-        .listRoleDefinitions(input.context.routerSessionId)
-        .find((role) => role.id === input.roleDefinitionId)
-      if (!current) throw new Error(`Role definition not found: ${input.roleDefinitionId}`)
+        .listTeamMembers(input.context.routerSessionId)
+        .find((role) => role.id === input.teamMemberId)
+      if (!current) throw new Error(`Team member not found: ${input.teamMemberId}`)
       if (input.patch.workerId !== undefined || input.patch.model !== undefined) {
         deps.assertRoleModel?.(
           input.patch.workerId ?? current.workerId,
@@ -212,28 +240,28 @@ export function createLocalRuntimeDispatchPort(
           input.context.routerProjectRoot,
         )
       }
-      return deps.store.updateRoleDefinition(
+      return deps.store.updateTeamMember(
         input.context.routerSessionId,
-        input.roleDefinitionId,
+        input.teamMemberId,
         input.patch,
       )
     },
 
-    async archiveRoleDefinition(input): Promise<RoleDefinition> {
+    async archiveTeamMember(input): Promise<TeamMember> {
       assertContext(input.context)
-      return deps.store.archiveRoleDefinition(
+      return deps.store.archiveTeamMember(
         input.context.routerSessionId,
-        input.roleDefinitionId,
+        input.teamMemberId,
         input.expectedRevision,
       )
     },
 
-    async resetRoleSession(input): Promise<{ deleted: boolean }> {
+    async resetTeamMemberSession(input): Promise<{ deleted: boolean }> {
       assertContext(input.context)
       const role = deps.store
-        .listRoleDefinitions(input.context.routerSessionId, { includeArchived: true })
-        .find((candidate) => candidate.id === input.roleDefinitionId)
-      if (!role) throw new Error(`Role definition not found: ${input.roleDefinitionId}`)
+        .listTeamMembers(input.context.routerSessionId, { includeArchived: true })
+        .find((candidate) => candidate.id === input.teamMemberId)
+      if (!role) throw new Error(`Team member not found: ${input.teamMemberId}`)
       if (deps.store.countOpenJobs({ sessionId: input.context.routerSessionId }) > 0) {
         const hasOpenRoleJob = deps.store
           .listJobs({
@@ -241,17 +269,48 @@ export function createLocalRuntimeDispatchPort(
             status: ['queued', 'running', 'pending_approval'],
             limit: 500,
           })
-          .some((job) => job.roleDefinitionId === input.roleDefinitionId)
+          .some((job) => job.teamMemberId === input.teamMemberId)
         if (hasOpenRoleJob) {
           throw new Error('ROLE_CONTEXT_HAS_OPEN_JOBS')
         }
       }
-      const result = getAcpSessionManager().deleteContextsByRole(
+      const result = getAcpSessionManager().deleteContextsByTeamMember(
         input.context.routerSessionId,
-        input.roleDefinitionId,
+        input.teamMemberId,
       )
       return { deleted: result.deleted > 0 }
     },
+
+    async listTeamTemplates(): Promise<TeamTemplate[]> {
+      return deps.store.listTeamTemplates()
+    },
+
+    async saveTeamTemplate(input): Promise<TeamTemplate> {
+      assertContext(input.context)
+      const members = deps.store.listTeamMembers(input.context.routerSessionId)
+      if (members.length === 0) throw new Error('Team requires at least one member')
+      return deps.store.createTeamTemplate({
+        name: input.name,
+        description: input.description,
+        members: members.map((member) => ({
+          preferredWorkerId: member.workerId,
+          name: member.name,
+          roleType: member.roleType,
+          instructions: member.instructions,
+          model: member.model,
+        })),
+      })
+    },
+
+    async deleteTeamTemplate(templateId): Promise<TeamTemplate> {
+      return deps.store.deleteTeamTemplate(templateId)
+    },
+
+    ...(deps.applyTeamTemplate
+      ? {
+          applyTeamTemplate: deps.applyTeamTemplate,
+        }
+      : {}),
 
     async *events(
       jobId: string,

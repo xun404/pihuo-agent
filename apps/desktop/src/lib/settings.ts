@@ -1,6 +1,6 @@
 import { api, clearDesktopToken, ensureDesktopToken } from './api'
 import type { AppSnapshot } from '@swarmdesk-agent/shared'
-import type { PromptSettings } from '@swarmdesk-agent/shared'
+import type { PromptSettings, WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
 
 export type ApiStyle = 'openai' | 'anthropic' | 'google' | 'custom'
 
@@ -78,6 +78,9 @@ export interface SettingsPayload {
     thinkingIntensity?: ThinkingIntensity
     leaderMaxSteps?: number
     prompts: PromptSettings
+    workerTimeouts: WorkerTimeoutSettings
+    /** Optional NPM registry for Worker npx; empty = system default */
+    npmRegistry?: string
     updatedAt?: string
     customProviders?: CustomProvider[]
   }
@@ -93,6 +96,8 @@ export type SaveSettingsPayload = {
   thinkingIntensity?: ThinkingIntensity
   leaderMaxSteps?: number
   prompts?: PromptSettings
+  workerTimeouts?: WorkerTimeoutSettings
+  npmRegistry?: string | null
   secrets?: Record<string, string | null>
   customProviders?: CustomProvider[]
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type {
   LeaderMode,
@@ -22,6 +22,14 @@ import type { Locale } from './i18n/locales'
 import { ThemeProvider } from './theme/ThemeProvider'
 import { ToastProvider, useToast } from './components/Toast'
 import { confirmAction, pickProjectDirectory } from './lib/native-dialogs'
+import {
+  clampDrawerWidth,
+  clampSidebarWidth,
+  loadDrawerWidth,
+  loadSidebarWidth,
+  saveDrawerWidth,
+  saveSidebarWidth,
+} from './lib/panel-widths'
 
 /** Settings ↔ workspace view transition (aligned with Modal timing). */
 const VIEW_EASE = [0.4, 0, 0.2, 1] as const
@@ -47,16 +55,16 @@ function AppShell({
   deleteSession,
   renameSession,
   toggleWorker,
-  setWorkerDefaultRole,
+  setWorkerDefaultRoleType,
   healthAllWorkers,
   resolveApproval,
   resetAcpContext,
   resolvingState,
   registerCustomAcpWorker,
-  createRoleDefinition,
-  updateRoleDefinition,
-  archiveRoleDefinition,
-  resetRoleSession,
+  createTeamMember,
+  updateTeamMember,
+  archiveTeamMember,
+  resetTeamMemberSession,
   refresh,
   setSessionApprovalPolicy,
 }: ReturnType<typeof useAppState>) {
@@ -72,7 +80,13 @@ function AppShell({
     'general' | 'model' | 'workers' | 'about' | undefined
   >()
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth())
+  const [drawerWidth, setDrawerWidth] = useState(() => loadDrawerWidth())
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
+  const sidebarWidthRef = useRef(sidebarWidth)
+  const drawerWidthRef = useRef(drawerWidth)
+  sidebarWidthRef.current = sidebarWidth
+  drawerWidthRef.current = drawerWidth
   /**
    * First-message composer on the empty Chat state: store the text and
    * preset, then deselect active session so the empty-state composer shows.
@@ -149,6 +163,53 @@ function AppShell({
     return () => window.removeEventListener('swarmdesk-agent:open-settings', onOpen)
   }, [])
 
+  const beginSidebarResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startW = sidebarWidthRef.current
+    const target = event.currentTarget
+    target.setPointerCapture(event.pointerId)
+    document.body.classList.add('is-resizing-panels')
+
+    const onMove = (ev: PointerEvent) => {
+      setSidebarWidth(clampSidebarWidth(startW + (ev.clientX - startX)))
+    }
+    const onUp = () => {
+      document.body.classList.remove('is-resizing-panels')
+      target.removeEventListener('pointermove', onMove)
+      target.removeEventListener('pointerup', onUp)
+      target.removeEventListener('pointercancel', onUp)
+      setSidebarWidth((current) => saveSidebarWidth(current))
+    }
+    target.addEventListener('pointermove', onMove)
+    target.addEventListener('pointerup', onUp)
+    target.addEventListener('pointercancel', onUp)
+  }, [])
+
+  const beginDrawerResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startW = drawerWidthRef.current
+    const target = event.currentTarget
+    target.setPointerCapture(event.pointerId)
+    document.body.classList.add('is-resizing-panels')
+
+    const onMove = (ev: PointerEvent) => {
+      // Dragging the left edge of the drawer: move left → wider.
+      setDrawerWidth(clampDrawerWidth(startW - (ev.clientX - startX)))
+    }
+    const onUp = () => {
+      document.body.classList.remove('is-resizing-panels')
+      target.removeEventListener('pointermove', onMove)
+      target.removeEventListener('pointerup', onUp)
+      target.removeEventListener('pointercancel', onUp)
+      setDrawerWidth((current) => saveDrawerWidth(current))
+    }
+    target.addEventListener('pointermove', onMove)
+    target.addEventListener('pointerup', onUp)
+    target.addEventListener('pointercancel', onUp)
+  }, [])
+
   /**
    * Open the native folder picker and activate the chosen project. Used by
    * both the sidebar "open project" entry and the empty-state "open folder"
@@ -176,32 +237,44 @@ function AppShell({
    */
   const onComposeFirstMessage = (
     text: string,
-    preset?: { mode: LeaderMode; approvalPolicy: SessionApprovalPolicy },
-  ) => {
+    preset?: {
+      mode: LeaderMode
+      approvalPolicy: SessionApprovalPolicy
+      teamTemplateId?: string
+    },
+  ): Promise<boolean> => {
     const trimmed = text.trim()
-    if (!trimmed) return
-    void (async () => {
+    if (!trimmed) return Promise.resolve(false)
+    return (async () => {
       setCreatingFromComposer(true)
       try {
         let projectId = activeProject?.id ?? snapshot.activeProjectId ?? undefined
         if (!projectId) {
           const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
-          if (!path) return
+          if (!path) return false
           const project = await openProject(path)
           projectId = project.id
         }
         // Clear any pending local-only session (sidebar button flow)
         clearPendingSession()
         const mode = preset?.mode ?? 'build'
-        const session = await createSession(undefined, mode, projectId)
+        const session = await createSession(
+          undefined,
+          mode,
+          projectId,
+          undefined,
+          preset?.teamTemplateId,
+        )
         if (preset && preset.approvalPolicy !== 'manual') {
           await setSessionApprovalPolicy(session.id, preset.approvalPolicy)
         }
         // Bind the text to the newly-created session id so ONLY its ChatPanel
         // consumes it — the previously-active panel must not race in first.
         setPendingComposerForSession({ sessionId: session.id, text: trimmed, autoSend: true })
+        return true
       } catch (e) {
         toastError(e instanceof Error ? e.message : String(e))
+        return false
       } finally {
         setCreatingFromComposer(false)
       }
@@ -295,7 +368,7 @@ function AppShell({
                 initialTab={settingsTab}
                 workers={snapshot.workers}
                 onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
-                onSetWorkerDefaultRole={(id, role) => setWorkerDefaultRole(id, role)}
+                onSetWorkerDefaultRoleType={(id, role) => setWorkerDefaultRoleType(id, role)}
                 onHealthAllWorkers={() => healthAllWorkers()}
                 onRegisterCustomAcpWorker={(body) => registerCustomAcpWorker(body)}
                 onRefreshSnapshot={() => void refresh()}
@@ -310,14 +383,26 @@ function AppShell({
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
               transition={viewTransition}
             >
-              <div className={`shell${inspectorOpen ? ' with-inspector' : ''}`}>
+              <div
+                className={`shell${inspectorOpen ? ' with-inspector' : ''}`}
+                style={
+                  {
+                    '--sidebar-w': `${sidebarWidth}px`,
+                    '--drawer-w': `${drawerWidth}px`,
+                  } as CSSProperties
+                }
+              >
                 <LeftSidebar
                   projects={snapshot.projects}
                   sessions={snapshot.sessions}
                   activeProjectId={snapshot.activeProjectId}
-                  activeSessionId={snapshot.activeSessionId}
+                  // HomeChat / pending new session: no server session yet — clear highlight.
+                  activeSessionId={pendingNewSession ? null : snapshot.activeSessionId}
                   busySessionIds={busySessionIds}
-                  onSelectSession={(s) => void activateSession(s)}
+                  onSelectSession={(s) => {
+                    clearPendingSession()
+                    void activateSession(s)
+                  }}
                   onSelectProject={(p) =>
                     void activateProject(p.id).catch((e) => toastError(String(e)))
                   }
@@ -331,6 +416,16 @@ function AppShell({
                     setSettingsOpen(true)
                     setInspectorOpen(false)
                   }}
+                />
+                <div
+                  className="panel-resizer panel-resizer-left"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={t('layout.resizeSidebar')}
+                  aria-valuenow={sidebarWidth}
+                  aria-valuemin={180}
+                  aria-valuemax={360}
+                  onPointerDown={beginSidebarResize}
                 />
 
                 <div className="main-column">
@@ -361,6 +456,7 @@ function AppShell({
                     snapshotApprovals={snapshot.approvals}
                     snapshotJobs={snapshot.jobs ?? EMPTY_JOBS}
                     snapshotWorkers={snapshot.workers}
+                    snapshotTeamTemplates={snapshot.teamTemplates}
                     onResolveApproval={(id, optionId, decision, surface) =>
                       void resolveApproval(id, decision, optionId, surface).catch((e) =>
                         toastError(String(e)),
@@ -385,30 +481,40 @@ function AppShell({
 
                 {inspectorOpen && (
                   <div className="inspector-host drawer">
+                    <div
+                      className="panel-resizer panel-resizer-right"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={t('layout.resizeInspector')}
+                      aria-valuenow={drawerWidth}
+                      aria-valuemin={260}
+                      aria-valuemax={480}
+                      onPointerDown={beginDrawerResize}
+                    />
                     <div className="drawer-panel">
                       <RightPanel
                         workers={snapshot.workers}
-                        roleDefinitions={snapshot.roleDefinitions.filter(
+                        teamMembers={snapshot.teamMembers.filter(
                           (role) => role.chatSessionId === activeSession?.id && !role.archivedAt,
                         )}
                         approvals={snapshot.approvals ?? []}
                         projectId={activeProject?.id ?? null}
                         sessionId={activeSession?.id ?? null}
-                        onCreateRoleDefinition={async (body) => {
+                        onCreateTeamMember={async (body) => {
                           if (!activeSession) throw new Error('Chat session is required')
-                          await createRoleDefinition(activeSession.id, body)
+                          await createTeamMember(activeSession.id, body)
                         }}
-                        onUpdateRoleDefinition={async (id, body) => {
+                        onUpdateTeamMember={async (id, body) => {
                           if (!activeSession) throw new Error('Chat session is required')
-                          await updateRoleDefinition(activeSession.id, id, body)
+                          await updateTeamMember(activeSession.id, id, body)
                         }}
-                        onArchiveRoleDefinition={async (id, expectedRevision) => {
+                        onArchiveTeamMember={async (id, expectedRevision) => {
                           if (!activeSession) throw new Error('Chat session is required')
-                          await archiveRoleDefinition(activeSession.id, id, expectedRevision)
+                          await archiveTeamMember(activeSession.id, id, expectedRevision)
                         }}
-                        onResetRoleSession={async (id) => {
+                        onResetTeamMemberSession={async (id) => {
                           if (!activeSession) throw new Error('Chat session is required')
-                          await resetRoleSession(activeSession.id, id)
+                          await resetTeamMemberSession(activeSession.id, id)
                         }}
                         onResolveApproval={(id, optionId, decision, surface) =>
                           void resolveApproval(id, decision, optionId, surface).catch((e) =>

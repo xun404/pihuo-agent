@@ -130,6 +130,49 @@
   flex-shrink: 0;
   line-height: 1;
 }
+/* HomeChat 协作组选择：与 mode/model chip 同一套菜单交互 */
+.home-team-menu-wrap {
+  position: relative;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.home-team-menu.pop-menu.mode-menu {
+  left: 0;
+  right: auto;
+  min-width: 200px;
+  max-width: min(320px, 70vw);
+}
+.home-team-menu .pop-row {
+  align-items: flex-start;
+  gap: 8px;
+}
+.home-team-menu .pop-row.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.home-team-menu .pop-row .check {
+  margin-top: 2px;
+}
+.home-team-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+.home-team-option-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+}
+.home-team-option-reason {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
 
 /* 上下文占用：模型左侧圆环（中间无 icon）
    小尺寸 + 浅色，避免抢视觉；>80% 浅橙 */
@@ -610,4 +653,3 @@ html[data-theme='dark'] .send.stop {
   background: var(--bg-surface);
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
 }
-

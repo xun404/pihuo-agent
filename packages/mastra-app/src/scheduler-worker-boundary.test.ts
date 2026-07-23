@@ -141,8 +141,8 @@ test('runJob passes only the selected Worker secret through the singleton Manage
     const manager = getAcpSessionManager()
     const captured: Array<{
       workerId: string
-      roleDefinitionId?: string
-      roleRevision?: number
+      teamMemberId?: string
+      teamMemberRevision?: number
       buildConfig: SessionEntryConfig
       enqueueConfig?: SessionEntryConfig
       task?: string
@@ -153,8 +153,8 @@ test('runJob passes only the selected Worker secret through the singleton Manage
         buildReuseKey(input: {
           routerSessionId: string
           workerId: string
-          roleDefinitionId?: string
-          roleRevision?: number
+          teamMemberId?: string
+          teamMemberRevision?: number
           cwd: string
           config: SessionEntryConfig
         }): unknown
@@ -167,8 +167,8 @@ test('runJob passes only the selected Worker secret through the singleton Manage
       })
       captured.push({
         workerId: input.workerId,
-        roleDefinitionId: input.roleDefinitionId,
-        roleRevision: input.roleRevision,
+        teamMemberId: input.teamMemberId,
+        teamMemberRevision: input.teamMemberRevision,
         buildConfig: input.config,
         fingerprintInput,
       })
@@ -222,10 +222,10 @@ test('runJob passes only the selected Worker secret through the singleton Manage
       workerId: 'worker-a',
       workerName: 'worker-a',
       role: 'coder',
-      roleDefinitionId: 'role-implementer',
-      roleName: 'Implementer',
+      teamMemberId: 'role-implementer',
+      teamMemberName: 'Implementer',
       roleType: 'coder',
-      roleRevision: 4,
+      teamMemberRevision: 4,
       instructionsSnapshot: 'Implement carefully.',
       effectivePrompt: 'Implement carefully.\n\nTask:\nAdd role dispatch.',
       task: 'Add role dispatch.',
@@ -248,8 +248,8 @@ test('runJob passes only the selected Worker secret through the singleton Manage
       assert.equal(JSON.stringify(capture.buildConfig).includes(expected), false)
       assert.equal(JSON.stringify(capture.buildConfig).includes(rejected), false)
     }
-    assert.equal(captured[2]?.roleDefinitionId, 'role-implementer')
-    assert.equal(captured[2]?.roleRevision, 4)
+    assert.equal(captured[2]?.teamMemberId, 'role-implementer')
+    assert.equal(captured[2]?.teamMemberRevision, 4)
     assert.equal(captured[2]?.task, 'Implement carefully.\n\nTask:\nAdd role dispatch.')
 
     const jobsAndActivity = JSON.stringify({

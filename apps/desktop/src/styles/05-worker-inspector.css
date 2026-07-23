@@ -71,6 +71,539 @@
   line-height: var(--lh-snug);
   padding: 2px 2px 6px;
 }
+.section-hint.is-warn {
+  color: var(--accent);
+}
+
+/* 协作组工具栏 + 模板/成员操作 */
+.crew-panel {
+  gap: var(--sp-3);
+}
+.crew-panel-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.crew-panel-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.crew-panel-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
+.crew-panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.crew-panel-actions .team-template-trigger {
+  margin-left: 0;
+}
+.crew-add-btn {
+  height: var(--h-sm);
+  min-height: var(--h-sm);
+  padding: 0 12px;
+  font-size: var(--fs-xs);
+}
+.role-fork-session-btn {
+  width: 100%;
+  justify-content: center;
+  margin: 0 0 8px;
+  height: var(--h-sm);
+  box-sizing: border-box;
+}
+
+/* —— 协作组成员卡（窄栏信息卡） —— */
+.role-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.role-card {
+  position: relative;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 92%, var(--bg-hover)) 0%,
+      var(--bg-surface) 48%
+    );
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.role-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+}
+.role-card.is-busy::before {
+  background: var(--blue);
+}
+.role-card.is-missing::before {
+  background: var(--danger);
+}
+.role-card:hover {
+  border-color: color-mix(in srgb, var(--border) 80%, var(--blue) 20%);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Header: avatar · identity · status */
+.role-card-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px 12px 0 14px;
+}
+.role-card-avatar.worker-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  margin-top: 1px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 6%, transparent);
+}
+.role-card-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 1px;
+}
+.role-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.role-card-name {
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-tight);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.role-card-type {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--blue) 10%, var(--bg-hover));
+  color: color-mix(in srgb, var(--blue) 55%, var(--text-2));
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+.role-card-binding {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.role-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 92px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--bg-hover);
+  color: var(--text-3);
+}
+.role-card-status.is-idle {
+  background: color-mix(in srgb, var(--green) 10%, var(--bg-hover));
+  color: color-mix(in srgb, var(--green) 70%, var(--text-2));
+}
+.role-card-status.is-busy {
+  background: color-mix(in srgb, var(--blue) 12%, var(--bg-hover));
+  color: color-mix(in srgb, var(--blue) 75%, var(--text-1));
+}
+.role-card-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
+  opacity: 0.85;
+}
+.role-card-status.is-busy .role-card-status-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+  animation: role-card-pulse 1.4s var(--ease-inout) infinite;
+}
+@keyframes role-card-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Body: facts + prompt */
+.role-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 0 14px;
+}
+.role-card-facts {
+  display: grid;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-input) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 80%, transparent);
+}
+.role-card-fact {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.role-card-fact-k {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-label);
+  color: var(--text-3);
+  line-height: 1;
+}
+.role-card-fact-v {
+  min-width: 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-2);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.role-card-fact-v.mono {
+  font-family: var(--mono);
+  color: var(--text-1);
+}
+.role-card-health {
+  text-transform: lowercase;
+}
+.role-card-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 2px 0 10px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.role-card-prompt-label {
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-label);
+  color: var(--text-3);
+  line-height: 1;
+}
+.role-card-instructions {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+  /* 约 3 行可视高度，超出可滚动 */
+  max-height: calc(var(--fs-xs) * var(--lh-snug) * 3);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  word-break: break-word;
+  white-space: pre-wrap;
+  scrollbar-width: thin;
+}
+.role-card-instructions::-webkit-scrollbar {
+  width: 6px;
+}
+.role-card-instructions::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--r-pill);
+}
+.role-card-instructions::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Footer: lightweight text actions */
+.role-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 8px 8px 12px;
+  margin-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border-soft) 90%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 28%, transparent);
+}
+.role-card-action {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.role-card-action:hover:not(:disabled) {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+.role-card-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.role-card-action.is-danger {
+  margin-left: auto;
+  color: color-mix(in srgb, var(--danger) 72%, var(--text-2));
+}
+.role-card-action.is-danger:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .role-card-status.is-busy .role-card-status-dot {
+    animation: none;
+  }
+}
+
+/* 添加 / 编辑成员浮层 */
+.role-form-modal {
+  width: min(480px, 100%);
+  max-height: min(90vh, 720px);
+  overflow: auto;
+}
+.role-form-fields {
+  display: grid;
+  gap: 12px;
+}
+.role-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 520px) {
+  .role-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.role-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.role-form-field > label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+}
+.role-form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.role-form-label-row label {
+  margin: 0;
+}
+.role-form-label-row .settings-btn-soft {
+  height: var(--h-xs);
+  min-height: var(--h-xs);
+  padding: 0 8px;
+  font-size: var(--fs-2xs);
+}
+/* 提高优先级：盖过 06-settings 里后加载的 .settings-input { height: h-lg } */
+textarea.settings-input.role-form-instructions {
+  /* 默认 5 行可视高度（与 rows={5} 对齐） */
+  box-sizing: border-box;
+  height: calc(20px + 1em * var(--lh-relaxed) * 5);
+  min-height: calc(20px + 1em * var(--lh-relaxed) * 5);
+  max-height: none;
+  padding: 10px 12px;
+  line-height: var(--lh-relaxed);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: block;
+  align-items: stretch;
+  resize: vertical;
+  font-family: var(--font);
+  overflow: auto;
+  text-overflow: clip;
+}
+.role-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* 编组模板模态 */
+.team-template-modal {
+  width: min(520px, 100%);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+}
+.team-template-hint {
+  margin: 0 0 14px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
+.team-template-section {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.team-template-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.team-template-field > label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+}
+.team-template-section-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+}
+.team-template-actions,
+.team-template-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.team-template-actions {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.team-template-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+.team-template-warn {
+  margin: 0 0 12px;
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  line-height: var(--lh-snug);
+}
+.team-mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.team-mapping-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-input) 40%, var(--bg-surface));
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.team-mapping-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.team-mapping-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.team-mapping-type {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--bg-hover);
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+}
+.team-mapping-prompt {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  font-size: var(--fs-xs);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.team-mapping-controls {
+  display: grid;
+  gap: 8px;
+}
+.team-mapping-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.team-mapping-dot {
+  opacity: 0.7;
+}
 .w-row {
   display: flex;
   align-items: center;
@@ -146,4 +679,3 @@
   flex-wrap: wrap;
   gap: 6px;
 }
-

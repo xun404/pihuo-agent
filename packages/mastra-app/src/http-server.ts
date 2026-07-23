@@ -37,14 +37,18 @@ import {
   normalizeLeaderModelForMastra,
   normalizeMastraModelId,
   parseLeaderMaxStepsInput,
+  parseWorkerTimeoutSettings,
+  parseNpmRegistryInput,
   isConfigurableSecretEnvKey,
   getLeaderModelCatalog,
   getLeaderFeaturedCatalog,
   resolveRouterDataPaths,
   type CustomProviderSettings,
   type ThinkingIntensity,
+  type WorkerTimeoutSettings,
 } from '@swarmdesk-agent/core'
 import {
+  configureWorkerEnvDefaults,
   parseHealthDepth,
   formatPublicError,
   type SessionEntryConfig,
@@ -81,15 +85,17 @@ import {
   terminalAuthAttemptPublicStatus,
 } from './acp-auth-terminal.js'
 import { getWorkerModels, evaluateWorkerModelPin, applyWorkerModelPin } from './worker-models.js'
-import { assertRoleModelAccepted } from './role-definitions.js'
+import { assertTeamMemberModelAccepted } from './team-members.js'
 import type {
   ApprovalDecision,
   LeaderMode,
   Locale,
   WorkerRole,
-  WorkerDefaultRole,
-  CreateRoleDefinitionInput,
-  UpdateRoleDefinitionInput,
+  CreateTeamMemberInput,
+  UpdateTeamMemberInput,
+  CreateTeamTemplateInput,
+  UpdateTeamTemplateInput,
+  ApplyTeamTemplateInput,
   CustomAcpRegistrationInput,
   PromptSettings,
 } from '@swarmdesk-agent/shared'
@@ -145,6 +151,7 @@ import { HttpJsonBodyError, readJsonBody as readJson } from './http-json-body.js
 import { resolveHttpPort, resolveMemoryLastMessages } from './runtime-config.js'
 import { CustomAcpRegistrationError, registerCustomAcpWorker } from './custom-acp-registration.js'
 import { shouldMarkRoleReviewPrompted } from './role-review-prompt.js'
+import { getTeamTemplateService, TeamTemplateServiceError } from './team-template-service.js'
 
 const port = resolveHttpPort()
 const runtimeWorkspaceRoot = pathResolve(
@@ -305,7 +312,7 @@ const server = createServer(async (req, res) => {
             }
             workerId?: string
             workerIdOrKind?: string
-            roleDefinitionId?: string
+            teamMemberId?: string
             role?: WorkerRole
             task?: string
             cwd?: string
@@ -354,7 +361,7 @@ const server = createServer(async (req, res) => {
             context: resolved,
             workerId: body.workerId,
             workerIdOrKind: body.workerIdOrKind,
-            roleDefinitionId: body.roleDefinitionId,
+            teamMemberId: body.teamMemberId,
             role: body.role,
             task: body.task,
             cwd: cwdAuth.cwd,
@@ -365,48 +372,48 @@ const server = createServer(async (req, res) => {
           return
         }
 
-        if (method === 'GET' && path === '/internal/runtime/role-definitions') {
+        if (method === 'GET' && path === '/internal/runtime/team') {
           const memoryThreadId = url.searchParams.get('memoryThreadId') ?? ''
           const context = await dispatchPort.resolveSessionContext(memoryThreadId)
           if (!context) {
             send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
             return
           }
-          const roleDefinitions = dispatchPort.listRoleDefinitions
-            ? await dispatchPort.listRoleDefinitions(context)
+          const teamMembers = dispatchPort.listTeamMembers
+            ? await dispatchPort.listTeamMembers(context)
             : []
-          send(res, 200, { roleDefinitions })
+          const teamRevision = dispatchPort.getTeamRevision
+            ? await dispatchPort.getTeamRevision(context)
+            : 1
+          send(res, 200, { teamMembers, teamRevision })
           return
         }
 
-        if (method === 'POST' && path === '/internal/runtime/role-definitions') {
+        if (method === 'POST' && path === '/internal/runtime/team/members') {
           const body = (await readJson(req)) as {
             context?: { memoryThreadId?: string }
-            input?: Omit<CreateRoleDefinitionInput, 'chatSessionId'>
+            input?: Omit<CreateTeamMemberInput, 'chatSessionId'>
           }
           const context = await dispatchPort.resolveSessionContext(
             body.context?.memoryThreadId ?? '',
           )
-          if (!context || !body.input || !dispatchPort.createRoleDefinition) {
+          if (!context || !body.input || !dispatchPort.createTeamMember) {
             send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
             return
           }
-          const roleDefinition = await dispatchPort.createRoleDefinition({
+          const teamMember = await dispatchPort.createTeamMember({
             context,
             input: body.input,
           })
-          send(res, 201, { roleDefinition })
+          send(res, 201, { teamMember })
           return
         }
 
-        const internalRoleMatch = match(
-          path,
-          '/internal/runtime/role-definitions/:roleDefinitionId',
-        )
-        if ((method === 'PATCH' || method === 'DELETE') && internalRoleMatch) {
+        const internalTeamMemberMatch = match(path, '/internal/runtime/team/members/:teamMemberId')
+        if ((method === 'PATCH' || method === 'DELETE') && internalTeamMemberMatch) {
           const body = (await readJson(req)) as {
             context?: { memoryThreadId?: string }
-            patch?: UpdateRoleDefinitionInput
+            patch?: UpdateTeamMemberInput
             expectedRevision?: number
           }
           const context = await dispatchPort.resolveSessionContext(
@@ -416,49 +423,119 @@ const server = createServer(async (req, res) => {
             send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
             return
           }
-          if (method === 'PATCH' && dispatchPort.updateRoleDefinition && body.patch) {
-            const roleDefinition = await dispatchPort.updateRoleDefinition({
+          if (method === 'PATCH' && dispatchPort.updateTeamMember && body.patch) {
+            const teamMember = await dispatchPort.updateTeamMember({
               context,
-              roleDefinitionId: internalRoleMatch.roleDefinitionId!,
+              teamMemberId: internalTeamMemberMatch.teamMemberId!,
               patch: body.patch,
             })
-            send(res, 200, { roleDefinition })
+            send(res, 200, { teamMember })
             return
           }
-          if (method === 'DELETE' && dispatchPort.archiveRoleDefinition) {
-            const roleDefinition = await dispatchPort.archiveRoleDefinition({
+          if (method === 'DELETE' && dispatchPort.archiveTeamMember) {
+            const teamMember = await dispatchPort.archiveTeamMember({
               context,
-              roleDefinitionId: internalRoleMatch.roleDefinitionId!,
+              teamMemberId: internalTeamMemberMatch.teamMemberId!,
               expectedRevision: body.expectedRevision,
             })
-            send(res, 200, { roleDefinition })
+            send(res, 200, { teamMember })
             return
           }
-          send(res, 400, { error: 'invalid role-definition mutation' })
+          send(res, 400, { error: 'invalid Team member mutation' })
           return
         }
 
-        const internalRoleResetMatch = match(
+        const internalTeamMemberResetMatch = match(
           path,
-          '/internal/runtime/role-definitions/:roleDefinitionId/reset-session',
+          '/internal/runtime/team/members/:teamMemberId/reset-session',
         )
-        if (method === 'POST' && internalRoleResetMatch) {
+        if (method === 'POST' && internalTeamMemberResetMatch) {
           const body = (await readJson(req)) as { context?: { memoryThreadId?: string } }
           const context = await dispatchPort.resolveSessionContext(
             body.context?.memoryThreadId ?? '',
           )
-          if (!context || !dispatchPort.resetRoleSession) {
+          if (!context || !dispatchPort.resetTeamMemberSession) {
             send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
             return
           }
           send(
             res,
             200,
-            await dispatchPort.resetRoleSession({
+            await dispatchPort.resetTeamMemberSession({
               context,
-              roleDefinitionId: internalRoleResetMatch.roleDefinitionId!,
+              teamMemberId: internalTeamMemberResetMatch.teamMemberId!,
             }),
           )
+          return
+        }
+
+        if (method === 'GET' && path === '/internal/runtime/team-templates') {
+          const templates = dispatchPort.listTeamTemplates
+            ? await dispatchPort.listTeamTemplates()
+            : []
+          send(res, 200, { templates })
+          return
+        }
+
+        if (method === 'POST' && path === '/internal/runtime/team-templates') {
+          const body = (await readJson(req)) as {
+            context?: { memoryThreadId?: string }
+            name?: string
+            description?: string
+          }
+          const context = await dispatchPort.resolveSessionContext(
+            body.context?.memoryThreadId ?? '',
+          )
+          if (!context || !body.name || !dispatchPort.saveTeamTemplate) {
+            send(res, 403, { error: 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED' })
+            return
+          }
+          const template = await dispatchPort.saveTeamTemplate({
+            context,
+            name: body.name,
+            description: body.description,
+          })
+          send(res, 201, { template })
+          return
+        }
+
+        const internalTemplateMatch = match(path, '/internal/runtime/team-templates/:templateId')
+        if (method === 'DELETE' && internalTemplateMatch) {
+          if (!dispatchPort.deleteTeamTemplate) {
+            send(res, 503, { error: 'Team template runtime is unavailable' })
+            return
+          }
+          const template = await dispatchPort.deleteTeamTemplate(internalTemplateMatch.templateId!)
+          send(res, 200, { template })
+          return
+        }
+
+        if (method === 'POST' && path === '/internal/runtime/team/apply-template') {
+          const body = (await readJson(req)) as {
+            context?: { memoryThreadId?: string }
+            templateId?: string
+            expectedTeamRevision?: number
+            mappings?: ApplyTeamTemplateInput['mappings']
+          }
+          const context = await dispatchPort.resolveSessionContext(
+            body.context?.memoryThreadId ?? '',
+          )
+          if (
+            !context ||
+            !body.templateId ||
+            !Number.isInteger(body.expectedTeamRevision) ||
+            !dispatchPort.applyTeamTemplate
+          ) {
+            send(res, 400, { error: 'invalid Team template application' })
+            return
+          }
+          const result = await dispatchPort.applyTeamTemplate({
+            context,
+            templateId: body.templateId,
+            expectedTeamRevision: body.expectedTeamRevision!,
+            mappings: body.mappings,
+          })
+          send(res, 200, result)
           return
         }
 
@@ -809,7 +886,7 @@ const server = createServer(async (req, res) => {
             requestContext.set('roleReviewPending', roleReviewPending)
             requestContext.set(
               'bootstrappedRoleCount',
-              store.listRoleDefinitions(routerSession.id).length,
+              store.listTeamMembers(routerSession.id).length,
             )
             const routerProject = store.listProjects().find((p) => p.id === routerSession.projectId)
             if (routerProject) {
@@ -1111,7 +1188,7 @@ const server = createServer(async (req, res) => {
 
       if (method === 'POST' && path === '/api/jobs') {
         const body = (await readJson(req)) as {
-          roleDefinitionId?: string
+          teamMemberId?: string
           role?: WorkerRole
           workerIdOrKind?: string
           task: string
@@ -1434,6 +1511,7 @@ const server = createServer(async (req, res) => {
           projectId: project.id,
           title: locale === 'en' ? 'Implement session sidebar' : '实现 Session 侧栏',
           mode: 'build',
+          rolePrompts: loadSettings().prompts.roles,
         })
         send(res, 200, { project, session, snapshot: store.snapshot() })
         return
@@ -1872,11 +1950,11 @@ const server = createServer(async (req, res) => {
         return
       }
 
-      const defaultRoleMatch = match(path, '/api/workers/:id/default-role')
+      const defaultRoleMatch = match(path, '/api/workers/:id/default-role-type')
       if (method === 'PUT' && defaultRoleMatch) {
         try {
-          const body = (await readJson(req)) as WorkerDefaultRole
-          const worker = store.setWorkerDefaultRole(defaultRoleMatch.id!, body)
+          const body = (await readJson(req)) as { roleType: WorkerRole }
+          const worker = store.setWorkerDefaultRoleType(defaultRoleMatch.id!, body.roleType)
           send(res, 200, { worker, snapshot: store.snapshot() })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
@@ -2124,6 +2202,7 @@ const server = createServer(async (req, res) => {
           title?: string
           mode?: LeaderMode
           memoryThreadId?: string
+          teamTemplateId?: string
         }
         if (!body.projectId) {
           send(res, 400, { error: 'projectId required' })
@@ -2131,13 +2210,37 @@ const server = createServer(async (req, res) => {
         }
         // title is optional: when omitted the session is created with a placeholder
         // and auto-named by the Leader after the first task completes.
-        const session = store.createSession({
-          projectId: body.projectId,
-          title: body.title,
-          mode: body.mode,
-          memoryThreadId: body.memoryThreadId,
-        })
-        send(res, 200, { session, snapshot: store.snapshot() })
+        try {
+          const initialTeamMembers = body.teamTemplateId
+            ? getTeamTemplateService().resolveForProject({
+                projectId: body.projectId,
+                templateId: body.teamTemplateId,
+              })
+            : undefined
+          const session = store.createSession({
+            projectId: body.projectId,
+            title: body.title,
+            mode: body.mode,
+            memoryThreadId: body.memoryThreadId,
+            rolePrompts: loadSettings().prompts.roles,
+            initialTeamMembers,
+          })
+          send(res, 200, { session, snapshot: store.snapshot() })
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e)
+          if (e instanceof TeamTemplateServiceError) {
+            const status =
+              e.code === 'TEAM_TEMPLATE_NOT_FOUND' || e.code === 'PROJECT_NOT_FOUND'
+                ? 404
+                : e.code === 'TEAM_TEMPLATE_MAPPING_REQUIRED'
+                  ? 409
+                  : 400
+            send(res, status, { error: message, code: e.code })
+            return
+          }
+          const status = message.includes('not found') ? 400 : 500
+          send(res, status, { error: message })
+        }
         return
       }
 
@@ -2260,35 +2363,36 @@ const server = createServer(async (req, res) => {
         return
       }
 
-      const roleDefinitionsMatch = match(path, '/api/sessions/:sessionId/role-definitions')
-      if (method === 'GET' && roleDefinitionsMatch) {
-        const sessionId = roleDefinitionsMatch.sessionId!
+      const teamMatch = match(path, '/api/sessions/:sessionId/team')
+      if (method === 'GET' && teamMatch) {
+        const sessionId = teamMatch.sessionId!
         if (!store.listSessions().some((session) => session.id === sessionId)) {
           send(res, 404, { error: `Session not found: ${sessionId}` })
           return
         }
         send(res, 200, {
-          roleDefinitions: store.listRoleDefinitions(sessionId, {
+          teamMembers: store.listTeamMembers(sessionId, {
             includeArchived: url.searchParams.get('includeArchived') === '1',
           }),
         })
         return
       }
-      if (method === 'POST' && roleDefinitionsMatch) {
-        const body = (await readJson(req)) as Omit<CreateRoleDefinitionInput, 'chatSessionId'>
+      const teamMembersMatch = match(path, '/api/sessions/:sessionId/team/members')
+      if (method === 'POST' && teamMembersMatch) {
+        const body = (await readJson(req)) as Omit<CreateTeamMemberInput, 'chatSessionId'>
         try {
           const session = store
             .listSessions()
-            .find((candidate) => candidate.id === roleDefinitionsMatch.sessionId)
+            .find((candidate) => candidate.id === teamMembersMatch.sessionId)
           const projectRoot = session
             ? store.listProjects().find((project) => project.id === session.projectId)?.rootPath
             : undefined
-          assertRoleModelAccepted(body.workerId, body.model, projectRoot)
-          const roleDefinition = store.createRoleDefinition({
+          assertTeamMemberModelAccepted(body.workerId, body.model, projectRoot)
+          const teamMember = store.createTeamMember({
             ...body,
-            chatSessionId: roleDefinitionsMatch.sessionId!,
+            chatSessionId: teamMembersMatch.sessionId!,
           })
-          send(res, 201, { roleDefinition, snapshot: store.snapshot() })
+          send(res, 201, { teamMember, snapshot: store.snapshot() })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           send(res, message.includes('not found') ? 404 : 400, { error: message })
@@ -2296,24 +2400,21 @@ const server = createServer(async (req, res) => {
         return
       }
 
-      const roleDefinitionMatch = match(
+      const teamMemberMatch = match(path, '/api/sessions/:sessionId/team/members/:teamMemberId')
+      const teamMemberSessionResetMatch = match(
         path,
-        '/api/sessions/:sessionId/role-definitions/:roleDefinitionId',
+        '/api/sessions/:sessionId/team/members/:teamMemberId/reset-session',
       )
-      const roleSessionResetMatch = match(
-        path,
-        '/api/sessions/:sessionId/role-definitions/:roleDefinitionId/reset-session',
-      )
-      if (method === 'POST' && roleSessionResetMatch) {
+      if (method === 'POST' && teamMemberSessionResetMatch) {
         const roleDispatchPort = getRuntimeDispatchPort()
         const session = store
           .listSessions()
-          .find((candidate) => candidate.id === roleSessionResetMatch.sessionId)
+          .find((candidate) => candidate.id === teamMemberSessionResetMatch.sessionId)
         const role = store
-          .listRoleDefinitions(roleSessionResetMatch.sessionId!, { includeArchived: true })
-          .find((candidate) => candidate.id === roleSessionResetMatch.roleDefinitionId)
-        if (!session || !role || !roleDispatchPort.resetRoleSession) {
-          send(res, 404, { error: 'Role definition not found' })
+          .listTeamMembers(teamMemberSessionResetMatch.sessionId!, { includeArchived: true })
+          .find((candidate) => candidate.id === teamMemberSessionResetMatch.teamMemberId)
+        if (!session || !role || !roleDispatchPort.resetTeamMemberSession) {
+          send(res, 404, { error: 'Team member not found' })
           return
         }
         const context = await roleDispatchPort.resolveSessionContext(session.memoryThreadId)
@@ -2324,41 +2425,40 @@ const server = createServer(async (req, res) => {
         send(
           res,
           200,
-          await roleDispatchPort.resetRoleSession({
+          await roleDispatchPort.resetTeamMemberSession({
             context,
-            roleDefinitionId: role.id,
+            teamMemberId: role.id,
           }),
         )
         return
       }
-      if (method === 'PATCH' && roleDefinitionMatch) {
-        const body = (await readJson(req)) as UpdateRoleDefinitionInput
+      if (method === 'PATCH' && teamMemberMatch) {
+        const body = (await readJson(req)) as UpdateTeamMemberInput
         try {
-          const current = store.getRoleDefinition(
-            roleDefinitionMatch.sessionId!,
-            roleDefinitionMatch.roleDefinitionId!,
+          const current = store.getTeamMember(
+            teamMemberMatch.sessionId!,
+            teamMemberMatch.teamMemberId!,
           )
-          if (!current)
-            throw new Error(`Role definition not found: ${roleDefinitionMatch.roleDefinitionId}`)
+          if (!current) throw new Error(`Team member not found: ${teamMemberMatch.teamMemberId}`)
           const session = store
             .listSessions()
-            .find((candidate) => candidate.id === roleDefinitionMatch.sessionId)
+            .find((candidate) => candidate.id === teamMemberMatch.sessionId)
           const projectRoot = session
             ? store.listProjects().find((project) => project.id === session.projectId)?.rootPath
             : undefined
           if (body.workerId !== undefined || body.model !== undefined) {
-            assertRoleModelAccepted(
+            assertTeamMemberModelAccepted(
               body.workerId ?? current.workerId,
               body.model === undefined ? current.model : body.model,
               projectRoot,
             )
           }
-          const roleDefinition = store.updateRoleDefinition(
-            roleDefinitionMatch.sessionId!,
-            roleDefinitionMatch.roleDefinitionId!,
+          const teamMember = store.updateTeamMember(
+            teamMemberMatch.sessionId!,
+            teamMemberMatch.teamMemberId!,
             body,
           )
-          send(res, 200, { roleDefinition, snapshot: store.snapshot() })
+          send(res, 200, { teamMember, snapshot: store.snapshot() })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           const status = message.includes('revision conflict')
@@ -2370,15 +2470,15 @@ const server = createServer(async (req, res) => {
         }
         return
       }
-      if (method === 'DELETE' && roleDefinitionMatch) {
+      if (method === 'DELETE' && teamMemberMatch) {
         const body = (await readJson(req).catch(() => ({}))) as { expectedRevision?: number }
         try {
-          const roleDefinition = store.archiveRoleDefinition(
-            roleDefinitionMatch.sessionId!,
-            roleDefinitionMatch.roleDefinitionId!,
+          const teamMember = store.archiveTeamMember(
+            teamMemberMatch.sessionId!,
+            teamMemberMatch.teamMemberId!,
             body.expectedRevision,
           )
-          send(res, 200, { roleDefinition, snapshot: store.snapshot() })
+          send(res, 200, { teamMember, snapshot: store.snapshot() })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           const status = message.includes('revision conflict')
@@ -2387,6 +2487,85 @@ const server = createServer(async (req, res) => {
               ? 404
               : 400
           send(res, status, { error: message })
+        }
+        return
+      }
+
+      if (path === '/api/team-templates' && method === 'GET') {
+        send(res, 200, { templates: store.listTeamTemplates() })
+        return
+      }
+      if (path === '/api/team-templates' && method === 'POST') {
+        try {
+          const template = store.createTeamTemplate(
+            (await readJson(req)) as CreateTeamTemplateInput,
+          )
+          send(res, 201, { template })
+        } catch (error) {
+          send(res, 400, { error: error instanceof Error ? error.message : String(error) })
+        }
+        return
+      }
+      const teamTemplateMatch = match(path, '/api/team-templates/:templateId')
+      if (method === 'PUT' && teamTemplateMatch) {
+        try {
+          const template = store.updateTeamTemplate(
+            teamTemplateMatch.templateId!,
+            (await readJson(req)) as UpdateTeamTemplateInput,
+          )
+          send(res, 200, { template })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          send(res, message.includes('not found') ? 404 : 400, { error: message })
+        }
+        return
+      }
+      if (method === 'DELETE' && teamTemplateMatch) {
+        try {
+          send(res, 200, { template: store.deleteTeamTemplate(teamTemplateMatch.templateId!) })
+        } catch (error) {
+          send(res, 404, { error: error instanceof Error ? error.message : String(error) })
+        }
+        return
+      }
+      const previewTemplateMatch = match(path, '/api/sessions/:sessionId/team/preview-template')
+      if (method === 'POST' && previewTemplateMatch) {
+        try {
+          const body = (await readJson(req)) as Pick<
+            ApplyTeamTemplateInput,
+            'templateId' | 'mappings'
+          >
+          send(
+            res,
+            200,
+            getTeamTemplateService().preview({
+              sessionId: previewTemplateMatch.sessionId!,
+              templateId: body.templateId,
+              mappings: body.mappings,
+            }),
+          )
+        } catch (error) {
+          send(res, error instanceof TeamTemplateServiceError ? 409 : 400, {
+            error: error instanceof Error ? error.message : String(error),
+            code: error instanceof TeamTemplateServiceError ? error.code : undefined,
+          })
+        }
+        return
+      }
+      const applyTemplateMatch = match(path, '/api/sessions/:sessionId/team/apply-template')
+      if (method === 'POST' && applyTemplateMatch) {
+        try {
+          const body = (await readJson(req)) as ApplyTeamTemplateInput
+          const result = await getTeamTemplateService().apply({
+            ...body,
+            sessionId: applyTemplateMatch.sessionId!,
+          })
+          send(res, 200, { ...result, snapshot: store.snapshot() })
+        } catch (error) {
+          send(res, error instanceof TeamTemplateServiceError ? 409 : 400, {
+            error: error instanceof Error ? error.message : String(error),
+            code: error instanceof TeamTemplateServiceError ? error.code : undefined,
+          })
         }
         return
       }
@@ -2500,6 +2679,8 @@ const server = createServer(async (req, res) => {
           thinkingIntensity?: ThinkingIntensity
           leaderMaxSteps?: number
           prompts?: PromptSettings
+          workerTimeouts?: WorkerTimeoutSettings
+          npmRegistry?: string | null
           secrets?: Record<string, string | null>
           customProviders?: CustomProviderSettings[]
         }
@@ -2521,6 +2702,17 @@ const server = createServer(async (req, res) => {
           return
         }
         const prev = loadSettings()
+        let nextNpmRegistry: string | undefined = prev.npmRegistry
+        if (body.npmRegistry !== undefined) {
+          try {
+            nextNpmRegistry = parseNpmRegistryInput(body.npmRegistry)
+          } catch (e) {
+            send(res, 400, {
+              error: e instanceof Error ? e.message : 'Invalid npmRegistry',
+            })
+            return
+          }
+        }
         const nextSettings = saveSettings({
           leaderModel: body.leaderModel?.trim() || prev.leaderModel,
           thinkingIntensity:
@@ -2529,6 +2721,12 @@ const server = createServer(async (req, res) => {
               : prev.thinkingIntensity,
           leaderMaxSteps: body.leaderMaxSteps ?? prev.leaderMaxSteps,
           prompts: normalizePromptSettings(body.prompts ?? prev.prompts),
+          workerTimeouts:
+            body.workerTimeouts !== undefined
+              ? parseWorkerTimeoutSettings(body.workerTimeouts)
+              : prev.workerTimeouts,
+          // empty string clears override (saveSettings normalizes blank → omit)
+          npmRegistry: body.npmRegistry !== undefined ? (nextNpmRegistry ?? '') : prev.npmRegistry,
           customProviders:
             body.customProviders !== undefined
               ? body.customProviders.map((c) => ({
@@ -2540,6 +2738,7 @@ const server = createServer(async (req, res) => {
                 }))
               : prev.customProviders,
         })
+        configureWorkerEnvDefaults({ npmRegistry: nextSettings.npmRegistry ?? null })
         process.env.LEADER_MODEL = nextSettings.leaderModel
         if (nextSettings.thinkingIntensity) {
           process.env.THINKING_INTENSITY = nextSettings.thinkingIntensity
@@ -2797,6 +2996,9 @@ server.on('upgrade', (req, socket, head) => {
     }
   })()
 })
+
+// Apply Worker spawn defaults (npm registry, …) before accepting traffic.
+configureWorkerEnvDefaults({ npmRegistry: loadSettings().npmRegistry ?? null })
 
 server.listen(port, '127.0.0.1', () => {
   scheduleAutoWorkerHealth()

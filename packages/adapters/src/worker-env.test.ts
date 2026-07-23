@@ -1,6 +1,10 @@
-import { describe, it } from 'node:test'
+import { afterEach, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildEffectiveWorkerEnv, credentialKeysForModel } from './worker-env.js'
+import {
+  buildEffectiveWorkerEnv,
+  configureWorkerEnvDefaults,
+  credentialKeysForModel,
+} from './worker-env.js'
 
 describe('buildEffectiveWorkerEnv', () => {
   const ambient = {
@@ -117,6 +121,51 @@ describe('buildEffectiveWorkerEnv', () => {
       workerEnv: { PATH: '/custom/bin:/usr/bin' },
     })
     assert.equal(env.PATH, '/custom/bin:/usr/bin')
+  })
+
+  afterEach(() => {
+    configureWorkerEnvDefaults({ npmRegistry: null })
+  })
+
+  it('forwards ambient NPM_CONFIG_REGISTRY as system default', () => {
+    const env = buildEffectiveWorkerEnv({
+      ambientEnv: {
+        ...ambient,
+        NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org',
+      },
+    })
+    assert.equal(env.NPM_CONFIG_REGISTRY, 'https://registry.npmjs.org')
+  })
+
+  it('settings override wins over ambient NPM_CONFIG_REGISTRY', () => {
+    configureWorkerEnvDefaults({ npmRegistry: 'https://registry.npmmirror.com' })
+    const env = buildEffectiveWorkerEnv({
+      ambientEnv: {
+        ...ambient,
+        NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org',
+      },
+    })
+    assert.equal(env.NPM_CONFIG_REGISTRY, 'https://registry.npmmirror.com')
+  })
+
+  it('per-call npmRegistry wins over process defaults', () => {
+    configureWorkerEnvDefaults({ npmRegistry: 'https://registry.npmmirror.com' })
+    const env = buildEffectiveWorkerEnv({
+      ambientEnv: ambient,
+      npmRegistry: 'https://example.invalid/npm',
+    })
+    assert.equal(env.NPM_CONFIG_REGISTRY, 'https://example.invalid/npm')
+  })
+
+  it('clearing settings override falls back to ambient or omit', () => {
+    configureWorkerEnvDefaults({ npmRegistry: 'https://registry.npmmirror.com' })
+    configureWorkerEnvDefaults({ npmRegistry: '' })
+    const withAmbient = buildEffectiveWorkerEnv({
+      ambientEnv: { ...ambient, NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org' },
+    })
+    assert.equal(withAmbient.NPM_CONFIG_REGISTRY, 'https://registry.npmjs.org')
+    const bare = buildEffectiveWorkerEnv({ ambientEnv: ambient })
+    assert.equal(bare.NPM_CONFIG_REGISTRY, undefined)
   })
 })
 

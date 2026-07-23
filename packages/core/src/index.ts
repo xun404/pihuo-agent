@@ -203,6 +203,17 @@ export {
 } from './worker-secrets.js'
 export { normalizeApiStyle, type ApiStyle } from './models-catalog.js'
 export {
+  DEFAULT_WORKER_TIMEOUT_SETTINGS,
+  parseWorkerTimeoutSettings,
+  resolveWorkerTimeoutSettings,
+  type WorkerTimeoutSettings,
+} from './worker-timeouts.js'
+export {
+  NPM_REGISTRY_MAX_LENGTH,
+  normalizeNpmRegistry,
+  parseNpmRegistryInput,
+} from './npm-registry.js'
+export {
   THINKING_INTENSITIES,
   DEFAULT_THINKING_INTENSITY,
   isThinkingIntensity,

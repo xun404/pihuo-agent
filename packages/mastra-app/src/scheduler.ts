@@ -32,9 +32,12 @@ import {
   mapAcpPermissionToEnqueue,
   globalApprovalWaiters,
   decidePermission,
+  loadSettings,
   loadWorkerSecretsSnapshotForSpawn,
+  resolveWorkerTimeoutSettings,
   type AcpToolKind,
   type ApprovalWaitOutcome,
+  type WorkerTimeoutSettings,
 } from '@swarmdesk-agent/core'
 import {
   isHealthReportFresh,
@@ -45,19 +48,14 @@ import {
   type ApprovalLocation,
   type JobSource,
   type JobStatus,
-  type RoleDefinition,
+  type TeamMember,
   type SessionApprovalPolicy,
   type WorkerJob,
   type WorkerRegistration,
   type WorkerRole,
   type WorkerRunEvent,
 } from '@swarmdesk-agent/shared'
-import {
-  emitWorkerEvent,
-  getWorkerEventEmitter,
-  MAX_TIMER_DELAY_MS,
-  resolveWorkerJobTimeoutMs,
-} from './worker-events.js'
+import { emitWorkerEvent, getWorkerEventEmitter, MAX_TIMER_DELAY_MS } from './worker-events.js'
 import { getWorkerCatalogForDispatch } from './worker-models.js'
 
 function store() {
@@ -149,8 +147,8 @@ export function finalizeApprovalTimeout(input: {
 
 export interface ScheduleRequest {
   task: string
-  /** Preferred dispatch identity: a Chat-scoped role definition. */
-  roleDefinitionId?: string
+  /** Preferred dispatch identity: a Chat-scoped Team member. */
+  teamMemberId?: string
   role?: WorkerRole
   workerIdOrKind?: string
   cwd?: string
@@ -171,16 +169,16 @@ export interface ScheduleResult {
   output?: string
 }
 
-export function buildRoleDispatchSnapshot(
-  role: RoleDefinition,
+export function buildTeamMemberDispatchSnapshot(
+  role: TeamMember,
   worker: WorkerRegistration,
   task: string,
 ): Pick<
   WorkerJob,
-  | 'roleDefinitionId'
-  | 'roleName'
+  | 'teamMemberId'
+  | 'teamMemberName'
   | 'roleType'
-  | 'roleRevision'
+  | 'teamMemberRevision'
   | 'effectiveModel'
   | 'instructionsSnapshot'
   | 'effectivePrompt'
@@ -188,10 +186,10 @@ export function buildRoleDispatchSnapshot(
   const instructions = role.instructions.trim()
   const normalizedTask = task.trim()
   return {
-    roleDefinitionId: role.id,
-    roleName: role.name,
+    teamMemberId: role.id,
+    teamMemberName: role.name,
     roleType: role.roleType,
-    roleRevision: role.revision,
+    teamMemberRevision: role.revision,
     effectiveModel: role.model?.trim() || worker.model?.trim() || undefined,
     instructionsSnapshot: instructions,
     effectivePrompt: instructions ? `${instructions}\n\nTask:\n${normalizedTask}` : normalizedTask,
@@ -202,6 +200,17 @@ type RuntimeEntry = {
   abort: AbortController
   config?: AcpSpawnConfig
   timeout?: ReturnType<typeof setTimeout>
+}
+
+export function workerTimeoutSnapshotFromJob(
+  job: Pick<WorkerJob, 'meta'>,
+  fallback: WorkerTimeoutSettings = resolveWorkerTimeoutSettings(loadSettings().workerTimeouts),
+): WorkerTimeoutSettings {
+  return resolveWorkerTimeoutSettings(job.meta?.workerTimeouts, {
+    WORKER_JOB_TIMEOUT_MS: String(fallback.jobTimeoutMs),
+    APPROVAL_TIMEOUT_MS: String(fallback.approvalTimeoutMs),
+    WORKER_QUEUE_TIMEOUT_MS: String(fallback.queueTimeoutMs),
+  })
 }
 
 function envInt(name: string, fallback: number): number {
@@ -335,9 +344,10 @@ export class WorkerScheduler {
   private maxGlobal = envInt('WORKER_MAX_GLOBAL', 2)
   private maxPerWorker = envInt('WORKER_MAX_PER_WORKER', 1)
   private maxPerSession = envInt('WORKER_MAX_PER_SESSION', 2)
-  private jobTimeoutMs = resolveWorkerJobTimeoutMs()
   private runtime = new Map<string, RuntimeEntry>()
   private capacityRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private queueTimeoutTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private blockedSessionIds = new Set<string>()
   private ticking = false
   private lifecycle: 'accepting' | 'shutting_down' | 'closed' = 'accepting'
   private shutdownPromise: Promise<void> | null = null
@@ -527,6 +537,16 @@ export class WorkerScheduler {
     return store().getJob(id)
   }
 
+  async withSessionAdmission<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+    if (this.blockedSessionIds.has(sessionId)) throw new Error('TEAM_REPLACEMENT_IN_PROGRESS')
+    this.blockedSessionIds.add(sessionId)
+    try {
+      return await operation()
+    } finally {
+      this.blockedSessionIds.delete(sessionId)
+    }
+  }
+
   busyWorkerIds(): Set<string> {
     const ids = new Set<string>()
     for (const j of store().listJobs({
@@ -551,39 +571,38 @@ export class WorkerScheduler {
 
     const active = store().getActive()
     const sessionId = req.sessionId ?? active.session?.id ?? createId('sess-orphan')
+    if (this.blockedSessionIds.has(sessionId)) throw new Error('TEAM_REPLACEMENT_IN_PROGRESS')
     const projectId = req.projectId ?? active.project?.id ?? active.session?.projectId ?? 'unknown'
     const cwd = req.cwd ?? active.project?.rootPath ?? process.cwd()
     const threadId = req.threadId ?? active.session?.memoryThreadId
     const source = req.source ?? 'api'
 
-    const roleDefinition = req.roleDefinitionId
-      ? store().getRoleDefinition(sessionId, req.roleDefinitionId)
+    const teamMember = req.teamMemberId
+      ? store().getTeamMember(sessionId, req.teamMemberId)
       : undefined
-    if (
-      req.roleDefinitionId &&
-      (!roleDefinition || !roleDefinition.enabled || roleDefinition.archivedAt)
-    ) {
-      throw new Error(`Role definition not found or disabled: ${req.roleDefinitionId}`)
+    if (req.teamMemberId && (!teamMember || !teamMember.enabled || teamMember.archivedAt)) {
+      throw new Error(`Team member not found or disabled: ${req.teamMemberId}`)
     }
-    const roleWorker = roleDefinition
+    const roleWorker = teamMember
       ? store()
           .listWorkers()
-          .find((worker) => worker.id === roleDefinition.workerId)
+          .find((worker) => worker.id === teamMember.workerId)
       : undefined
-    if (roleDefinition && !roleWorker) {
-      throw new Error(`Worker not found: ${roleDefinition.workerId}`)
+    if (teamMember && !roleWorker) {
+      throw new Error(`Worker not found: ${teamMember.workerId}`)
     }
     const roleSnapshot =
-      roleDefinition && roleWorker
-        ? buildRoleDispatchSnapshot(roleDefinition, roleWorker, task)
+      teamMember && roleWorker
+        ? buildTeamMemberDispatchSnapshot(teamMember, roleWorker, task)
         : undefined
 
     const resolved = await this.resolveWorker({
-      role: roleDefinition?.roleType ?? req.role,
-      workerIdOrKind: roleDefinition?.workerId ?? req.workerIdOrKind,
+      role: teamMember?.roleType ?? req.role,
+      workerIdOrKind: teamMember?.workerId ?? req.workerIdOrKind,
       preferHealthy: req.preferHealthy !== false,
       cwd,
     })
+    if (this.blockedSessionIds.has(sessionId)) throw new Error('TEAM_REPLACEMENT_IN_PROGRESS')
     if (this.lifecycle !== 'accepting') {
       throw new Error(this.lifecycle === 'closed' ? 'RUNTIME_CLOSED' : 'RUNTIME_SHUTTING_DOWN')
     }
@@ -595,7 +614,7 @@ export class WorkerScheduler {
         threadId,
         workerId: resolved.worker?.id ?? 'none',
         workerName: resolved.worker?.name ?? req.workerIdOrKind ?? req.role ?? 'unknown',
-        role: roleDefinition?.roleType ?? req.role,
+        role: teamMember?.roleType ?? req.role,
         ...roleSnapshot,
         task,
         cwd,
@@ -626,20 +645,24 @@ export class WorkerScheduler {
     }
 
     const worker = resolved.worker
+    const workerTimeouts = resolveWorkerTimeoutSettings(loadSettings().workerTimeouts)
     const job = store().createJob({
       sessionId,
       projectId,
       threadId,
       workerId: worker.id,
       workerName: worker.name,
-      role: roleDefinition?.roleType ?? req.role,
+      role: teamMember?.roleType ?? req.role,
       ...roleSnapshot,
       task,
       cwd,
       source,
       status: 'queued',
       message: `Queued for ${worker.name}`,
-      meta: { forced: Boolean(roleDefinition || req.workerIdOrKind?.trim()) },
+      meta: {
+        forced: Boolean(teamMember || req.workerIdOrKind?.trim()),
+        workerTimeouts,
+      },
     })
 
     // Register onEvent before tick so started/delta are never missed
@@ -647,6 +670,8 @@ export class WorkerScheduler {
       const emitter = getWorkerEventEmitter()
       emitter.subscribe(job.id, req.onEvent)
     }
+
+    this.scheduleQueueTimeout(job)
 
     // kick loop
     void this.tick()
@@ -716,9 +741,9 @@ export class WorkerScheduler {
     if (!prev) throw new Error(`Job not found: ${jobId}`)
     return this.enqueue({
       task: prev.task,
-      roleDefinitionId: prev.roleDefinitionId,
-      role: prev.roleDefinitionId ? undefined : prev.role,
-      workerIdOrKind: prev.roleDefinitionId ? undefined : prev.workerId,
+      teamMemberId: prev.teamMemberId,
+      role: prev.teamMemberId ? undefined : prev.role,
+      workerIdOrKind: prev.teamMemberId ? undefined : prev.workerId,
       cwd: prev.cwd,
       sessionId: prev.sessionId,
       projectId: prev.projectId,
@@ -862,6 +887,52 @@ export class WorkerScheduler {
     }, delayMs)
     timer.unref?.()
     this.capacityRetryTimers.set(jobId, timer)
+  }
+
+  private clearQueueTimeout(jobId: string): void {
+    const timer = this.queueTimeoutTimers.get(jobId)
+    if (!timer) return
+    clearTimeout(timer)
+    this.queueTimeoutTimers.delete(jobId)
+  }
+
+  private scheduleQueueTimeout(job: WorkerJob): void {
+    this.clearQueueTimeout(job.id)
+    const { queueTimeoutMs } = workerTimeoutSnapshotFromJob(job)
+    const deadlineMs = Date.parse(job.createdAt) + queueTimeoutMs
+    const delayMs = Math.max(1, deadlineMs - Date.now())
+    const timer = setTimeout(() => {
+      this.queueTimeoutTimers.delete(job.id)
+      this.expireQueuedJobs(Date.now())
+    }, delayMs)
+    timer.unref?.()
+    this.queueTimeoutTimers.set(job.id, timer)
+  }
+
+  private expireQueuedJobs(nowMs = Date.now()): void {
+    for (const job of store().listJobs({ status: 'queued', limit: 500 })) {
+      const { queueTimeoutMs } = workerTimeoutSnapshotFromJob(job)
+      if (nowMs < Date.parse(job.createdAt) + queueTimeoutMs) continue
+      this.runtime.get(job.id)?.abort.abort()
+      this.terminalize(
+        job.id,
+        {
+          status: 'timed_out',
+          error: `Timed out after waiting ${queueTimeoutMs}ms`,
+          message: `Timed out after waiting ${queueTimeoutMs}ms`,
+          errorCode: 'WORKER_QUEUE_TIMEOUT',
+        },
+        {
+          type: 'timed_out',
+          jobId: job.id,
+          error: `Timed out after waiting ${queueTimeoutMs}ms`,
+          errorCode: 'WORKER_QUEUE_TIMEOUT',
+          truncated: false,
+          workerName: job.workerName,
+          role: job.role,
+        } as WorkerRunEvent,
+      )
+    }
   }
 
   private async resolveWorker(opts: {
@@ -1031,6 +1102,7 @@ export class WorkerScheduler {
     if (this.lifecycle !== 'accepting' || this.ticking) return
     this.ticking = true
     try {
+      this.expireQueuedJobs()
       const queued = store()
         .listJobs({ status: 'queued', limit: 50 })
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -1097,6 +1169,7 @@ export class WorkerScheduler {
     if (this.lifecycle !== 'accepting') return
     const job = store().getJob(jobId)
     if (!job || job.status !== 'queued') return
+    const workerTimeouts = workerTimeoutSnapshotFromJob(job)
     if (!this.canAdmit(job)) return
 
     // Claim: only one runner wins if status still queued
@@ -1141,7 +1214,7 @@ export class WorkerScheduler {
     const workerSecrets = workerSecretSnapshot.secrets
     const eligibilityCandidates = resolveEligibilityCandidates(worker, catalog) ?? []
     // Role model is snapshotted at enqueue time; absent means ACP default for legacy jobs.
-    const pin = job.roleDefinitionId
+    const pin = job.teamMemberId
       ? job.effectiveModel?.trim() || undefined
       : worker.model?.trim() || undefined
     // Always re-merge evidence at dispatch (env + catalog providers). Empty catalog = fail-closed
@@ -1297,14 +1370,19 @@ export class WorkerScheduler {
     const reuseKey = sessionMgr.buildReuseKey({
       routerSessionId: job.sessionId,
       workerId: worker.id,
-      roleDefinitionId: job.roleDefinitionId,
-      roleRevision: job.roleRevision,
+      teamMemberId: job.teamMemberId,
+      teamMemberRevision: job.teamMemberRevision,
       cwd: job.cwd,
       config: sessionConfig,
     })
     const reuseKeyDigest = sessionMgr.digestReuseKey(reuseKey)
     sessionMgr.setSessionProject(job.sessionId, job.projectId)
 
+    const latestQueued = store().getJob(jobId)
+    if (!latestQueued || latestQueued.status !== 'queued') {
+      this.runtime.delete(jobId)
+      return
+    }
     if (!sessionMgr.canAccept(reuseKey)) {
       this.runtime.delete(jobId)
       const delayMs = capacityRetryDelay('capacity_exhausted')!
@@ -1315,6 +1393,7 @@ export class WorkerScheduler {
       this.scheduleCapacityRetry(jobId, delayMs)
       return
     }
+    this.clearQueueTimeout(jobId)
     store().updateJob(jobId, {
       status: 'running',
       startedAt: new Date().toISOString(),
@@ -1334,13 +1413,13 @@ export class WorkerScheduler {
         jobId,
         {
           status: 'timed_out',
-          error: `Timed out after ${this.jobTimeoutMs}ms`,
-          message: `Timed out after ${this.jobTimeoutMs}ms`,
+          error: `Timed out after ${workerTimeouts.jobTimeoutMs}ms`,
+          message: `Timed out after ${workerTimeouts.jobTimeoutMs}ms`,
         },
         {
           type: 'timed_out',
           jobId,
-          error: `Timed out after ${this.jobTimeoutMs}ms`,
+          error: `Timed out after ${workerTimeouts.jobTimeoutMs}ms`,
           truncated: false,
           workerName: worker.name,
           workerKind: worker.kind,
@@ -1350,7 +1429,7 @@ export class WorkerScheduler {
         { retainRuntime: true },
       )
       abort.abort()
-    }, this.jobTimeoutMs)
+    }, workerTimeouts.jobTimeoutMs)
     const currentRt = this.runtime.get(jobId)
     if (currentRt) currentRt.timeout = timeout
 
@@ -1382,7 +1461,7 @@ export class WorkerScheduler {
               workerName: worker.name,
               workerKind: worker.kind,
               role: job.role,
-              model: job.roleDefinitionId ? job.effectiveModel : worker.model?.trim() || undefined,
+              model: job.teamMemberId ? job.effectiveModel : worker.model?.trim() || undefined,
               reusedSession: disposition !== 'new',
               sessionDisposition: disposition,
             } as WorkerRunEvent)
@@ -1476,7 +1555,7 @@ export class WorkerScheduler {
               },
             })
 
-            const timeoutMs = resolveApprovalTimeoutMs()
+            const timeoutMs = workerTimeouts.approvalTimeoutMs
             let timer: ReturnType<typeof setTimeout> | undefined
             const outcome = await Promise.race([
               waiterPromise.then((r) => {
@@ -1720,6 +1799,7 @@ export class WorkerScheduler {
     event?: WorkerRunEvent,
     opts?: { retainRuntime?: boolean },
   ): WorkerJob | undefined {
+    this.clearQueueTimeout(jobId)
     const retryTimer = this.capacityRetryTimers.get(jobId)
     if (retryTimer) {
       clearTimeout(retryTimer)

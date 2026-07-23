@@ -210,6 +210,8 @@ export {
 export { cleanupRemoteAcpSession, type AcpRemoteCleanupConfig } from './acp-remote-cleanup.js'
 export {
   buildEffectiveWorkerEnv,
+  configureWorkerEnvDefaults,
+  getConfiguredNpmRegistry,
   credentialKeysForModel,
   type BuildEffectiveWorkerEnvOpts,
 } from './worker-env.js'

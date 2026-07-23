@@ -39,6 +39,7 @@ describe('LocalStore durability and ownership boundary', () => {
       enabled: true,
       scope: 'global',
       description: 'test',
+      defaultRoleType: 'coder',
       health: 'unknown',
       availableModels: [{ modelId: 'provider/model-a', name: 'Model A' }],
     }

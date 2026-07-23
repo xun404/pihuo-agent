@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { evaluateTeamTemplateAvailability } from '@swarmdesk-agent/shared'
 import type {
   ApprovalItem,
   LeaderMode,
   Project,
   Session,
   SessionApprovalPolicy,
+  TeamTemplate,
   WorkerJob,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
@@ -13,13 +15,10 @@ import { api } from '../lib/api'
 import { ChatPanel } from './ChatPanel'
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
-import { ComposerToolbar, type ModelOption } from './ComposerToolbar'
+import { ComposerToolbar, type ModelOption, type TeamTemplateOption } from './ComposerToolbar'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
-import {
-  THINKING_INTENSITY_OPTIONS,
-  type ThinkingIntensity,
-} from '../lib/settings'
+import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
@@ -58,6 +57,7 @@ interface Props {
   snapshotApprovals: ApprovalItem[]
   snapshotJobs: WorkerJob[]
   snapshotWorkers: WorkerRegistration[]
+  snapshotTeamTemplates: TeamTemplate[]
   resolving?: Record<string, boolean>
   onResolveApproval?: (
     approvalId: string,
@@ -74,8 +74,12 @@ interface Props {
    *  preselected mode / approval policy from the toolbar. */
   onComposeFirstMessage?: (
     text: string,
-    preset: { mode: LeaderMode; approvalPolicy: SessionApprovalPolicy },
-  ) => void
+    preset: {
+      mode: LeaderMode
+      approvalPolicy: SessionApprovalPolicy
+      teamTemplateId?: string
+    },
+  ) => Promise<boolean>
   /** Click handler for the "open folder" chip on the empty-state composer (scene 1, no project). */
   onPickFolder?: () => void
   /** Pre-fill text to inject into a specific session's composer (once). */
@@ -117,6 +121,7 @@ export function ChatWorkspace({
   snapshotApprovals,
   snapshotJobs,
   snapshotWorkers,
+  snapshotTeamTemplates,
   resolving = {},
   onResolveApproval,
   onResetContext,
@@ -138,6 +143,7 @@ export function ChatWorkspace({
   const [aliveIds, setAliveIds] = useState<string[]>([])
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({})
   const [firstMessage, setFirstMessage] = useState('')
+  const [selectedTeamTemplateId, setSelectedTeamTemplateId] = useState('')
   // —— Empty-state ComposerToolbar presets (mode / approval / model / thinking) ——
   // Loaded from settings once; selections here are passed to onComposeFirstMessage
   // so the new session inherits them.
@@ -196,6 +202,30 @@ export function ChatWorkspace({
     void loadPresetModels()
   }, [loadPresetModels])
 
+  const teamTemplateOptions = useMemo<TeamTemplateOption[]>(
+    () =>
+      snapshotTeamTemplates.map((template) => {
+        const availability = evaluateTeamTemplateAvailability({
+          template,
+          workers: snapshotWorkers,
+          projectId: project?.id,
+        })
+        return {
+          id: template.id,
+          name: template.name,
+          disabled: !availability.ready,
+          reason: availability.ready ? undefined : t('chat.teamNeedsMapping'),
+        }
+      }),
+    [project?.id, snapshotTeamTemplates, snapshotWorkers, t],
+  )
+
+  useEffect(() => {
+    if (!selectedTeamTemplateId) return
+    const selected = teamTemplateOptions.find((option) => option.id === selectedTeamTemplateId)
+    if (!selected || selected.disabled) setSelectedTeamTemplateId('')
+  }, [selectedTeamTemplateId, teamTemplateOptions])
+
   const [hintKey, setHintKey] = useState<MessageKey>(() => EMPTY_HINT_KEYS[0]!)
   // remember the last hint so we don't pick it twice in a row
   const lastHintIdxRef = useRef(0)
@@ -207,6 +237,7 @@ export function ChatWorkspace({
     const currentSessionId = session?.id ?? null
     const enteredEmpty = currentSessionId === null
     if (enteredEmpty) {
+      setSelectedTeamTemplateId('')
       // pick a random index != lastHintIdxRef (when pool > 1)
       let next = lastHintIdxRef.current
       if (EMPTY_HINT_KEYS.length > 1) {
@@ -274,6 +305,16 @@ export function ChatWorkspace({
   // persisted), so the chat shows an empty "home" placeholder forever. Instead we
   // render the panels hidden and overlay the empty composer on top.
   const showEmptyComposer = !session || pendingNewSession
+  const submitFirstMessage = async () => {
+    const text = firstMessage.trim()
+    if (!text || creatingFromComposer || !serverUp || !onComposeFirstMessage) return
+    const sent = await onComposeFirstMessage(text, {
+      mode: presetMode,
+      approvalPolicy: presetPolicy,
+      teamTemplateId: selectedTeamTemplateId || undefined,
+    })
+    if (sent) setFirstMessage('')
+  }
 
   const emptyComposer = showEmptyComposer ? (
     <main className="main home-main home-overlay">
@@ -300,14 +341,7 @@ export function ChatWorkspace({
             className="composer-card home-composer"
             onSubmit={(e) => {
               e.preventDefault()
-              const text = firstMessage.trim()
-              if (!text || creatingFromComposer || !serverUp) return
-              onComposeFirstMessage(text, {
-                mode: presetMode,
-                approvalPolicy: presetPolicy,
-              })
-              // Clear immediately so a follow-up "新建任务" doesn't show stale text.
-              setFirstMessage('')
+              void submitFirstMessage()
             }}
           >
             <div className="context-bar">
@@ -348,15 +382,7 @@ export function ChatWorkspace({
               onKeyDown={(e) => {
                 if (isComposerSendKey(e, sendShortcut, composing())) {
                   e.preventDefault()
-                  const text = firstMessage.trim()
-                  if (text && !creatingFromComposer && serverUp) {
-                    onComposeFirstMessage(text, {
-                      mode: presetMode,
-                      approvalPolicy: presetPolicy,
-                    })
-                    // Clear immediately so a follow-up "新建任务" doesn't show stale text.
-                    setFirstMessage('')
-                  }
+                  void submitFirstMessage()
                 }
               }}
               onCompositionStart={onCompositionStart}
@@ -379,6 +405,9 @@ export function ChatWorkspace({
                 onModelChange={setPresetModel}
                 onThinkingChange={setPresetThinking}
                 onOpenSettings={onOpenSettings}
+                teamTemplateOptions={teamTemplateOptions}
+                selectedTeamTemplateId={selectedTeamTemplateId}
+                onTeamTemplateChange={setSelectedTeamTemplateId}
               />
               <button
                 type="submit"

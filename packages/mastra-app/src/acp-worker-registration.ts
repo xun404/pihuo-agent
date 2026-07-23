@@ -583,6 +583,7 @@ export async function registerRegistryWorker(input: {
     enabled: input.body.enabled !== false,
     scope: 'global',
     description: agent.description,
+    defaultRoleType: 'general',
     health: 'unknown',
     source,
     runtimeProfile: 'generic-acp',

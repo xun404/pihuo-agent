@@ -23,7 +23,8 @@ import {
   setRuntimeDispatchPort,
   resetRuntimeDispatchPortForTests,
 } from './runtime-dispatch-port.js'
-import { assertRoleModelAccepted } from './role-definitions.js'
+import { assertTeamMemberModelAccepted } from './team-members.js'
+import { getTeamTemplateService } from './team-template-service.js'
 import { createRemoteRuntimeDispatchPort } from './remote-runtime-dispatch-port.js'
 import { getWorkerScheduler } from './scheduler.js'
 import { getWorkerEventEmitter } from './worker-events.js'
@@ -255,7 +256,14 @@ export function initializeAcpRuntime(options: AcpRuntimeOptions = {}): AcpRuntim
       store: getSharedStore(),
       scheduler,
       events: getWorkerEventEmitter(),
-      assertRoleModel: assertRoleModelAccepted,
+      assertRoleModel: assertTeamMemberModelAccepted,
+      applyTeamTemplate: (input) =>
+        getTeamTemplateService().apply({
+          sessionId: input.context.routerSessionId,
+          templateId: input.templateId,
+          expectedTeamRevision: input.expectedTeamRevision,
+          mappings: input.mappings,
+        }),
     }),
   )
 

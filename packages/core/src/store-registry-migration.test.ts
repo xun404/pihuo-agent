@@ -112,6 +112,7 @@ describe('LocalStore Registry source migration', () => {
       enabled: true,
       scope: 'global',
       description: 'registry',
+      defaultRoleType: 'general',
       health: 'unknown',
       source: {
         type: 'registry',

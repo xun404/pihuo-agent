@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { RoleDefinition, WorkerRegistration } from '@swarmdesk-agent/shared'
-import { buildRoleDispatchSnapshot } from './scheduler.js'
+import type { TeamMember, WorkerRegistration } from '@swarmdesk-agent/shared'
+import { buildTeamMemberDispatchSnapshot } from './scheduler.js'
 
 const worker: WorkerRegistration = {
   id: 'worker-a',
@@ -19,7 +19,7 @@ const worker: WorkerRegistration = {
   model: 'worker-default-model',
 }
 
-const role: RoleDefinition = {
+const role: TeamMember = {
   id: 'role-implementer',
   chatSessionId: 'chat-a',
   workerId: worker.id,
@@ -33,11 +33,11 @@ const role: RoleDefinition = {
 }
 
 test('role dispatch snapshots identity, instructions, revision, and inherited Worker model', () => {
-  assert.deepEqual(buildRoleDispatchSnapshot(role, worker, 'Add the feature.'), {
-    roleDefinitionId: 'role-implementer',
-    roleName: 'Implementer',
+  assert.deepEqual(buildTeamMemberDispatchSnapshot(role, worker, 'Add the feature.'), {
+    teamMemberId: 'role-implementer',
+    teamMemberName: 'Implementer',
     roleType: 'coder',
-    roleRevision: 3,
+    teamMemberRevision: 3,
     effectiveModel: 'worker-default-model',
     instructionsSnapshot: 'Implement carefully and verify the result.',
     effectivePrompt: 'Implement carefully and verify the result.\n\nTask:\nAdd the feature.',
@@ -45,7 +45,7 @@ test('role dispatch snapshots identity, instructions, revision, and inherited Wo
 })
 
 test('role model override wins over the Worker default model', () => {
-  const snapshot = buildRoleDispatchSnapshot(
+  const snapshot = buildTeamMemberDispatchSnapshot(
     { ...role, model: 'role-specific-model' },
     worker,
     'Review the feature.',

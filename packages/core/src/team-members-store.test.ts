@@ -6,21 +6,22 @@ import { join } from 'node:path'
 import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 import { LocalStore } from './store.js'
 
-describe('LocalStore role definitions', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'ra-role-definitions-'))
+describe('LocalStore Team members', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ra-team-members-'))
   const store = new LocalStore(join(dir, 'state.json'))
 
   after(() => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('starts without implicit workers or role definitions', () => {
+  it('starts without implicit workers, Team members, or templates', () => {
     const snapshot = store.snapshot()
     assert.deepEqual(snapshot.workers, [])
-    assert.deepEqual(snapshot.roleDefinitions, [])
+    assert.deepEqual(snapshot.teamMembers, [])
+    assert.deepEqual(snapshot.teamTemplates, [])
   })
 
-  it('keeps role definitions chat-scoped and revisions execution semantics', () => {
+  it('keeps Team members Chat-scoped with execution revisions', () => {
     const worker: WorkerRegistration = {
       id: 'worker-custom-acp',
       name: 'Custom ACP',
@@ -33,6 +34,7 @@ describe('LocalStore role definitions', () => {
       enabled: false,
       scope: 'global',
       description: 'Custom ACP worker',
+      defaultRoleType: 'general',
       health: 'healthy',
       model: 'worker-default-model',
       source: { type: 'custom' },
@@ -45,7 +47,7 @@ describe('LocalStore role definitions', () => {
     const secondChat = store.createSession({ projectId: project.id, title: 'Second chat' })
     const enabledWorker = store.setWorkerEnabled(worker.id, true)
 
-    const role = store.createRoleDefinition({
+    const role = store.createTeamMember({
       chatSessionId: firstChat.id,
       workerId: worker.id,
       name: 'Implementer',
@@ -56,16 +58,16 @@ describe('LocalStore role definitions', () => {
     assert.equal(role.revision, 1)
     assert.equal(role.enabled, true)
     assert.equal(role.model, undefined)
-    assert.deepEqual(store.listRoleDefinitions(firstChat.id), [role])
-    assert.deepEqual(store.listRoleDefinitions(secondChat.id), [])
+    assert.deepEqual(store.listTeamMembers(firstChat.id), [role])
+    assert.deepEqual(store.listTeamMembers(secondChat.id), [])
 
-    const renamed = store.updateRoleDefinition(firstChat.id, role.id, {
+    const renamed = store.updateTeamMember(firstChat.id, role.id, {
       name: 'Senior implementer',
       expectedRevision: 1,
     })
     assert.equal(renamed.revision, 1)
 
-    const revised = store.updateRoleDefinition(firstChat.id, role.id, {
+    const revised = store.updateTeamMember(firstChat.id, role.id, {
       instructions: 'Implement and verify the requested change.',
       model: 'role-specific-model',
       expectedRevision: 1,
@@ -75,39 +77,39 @@ describe('LocalStore role definitions', () => {
 
     assert.throws(
       () =>
-        store.updateRoleDefinition(secondChat.id, role.id, {
+        store.updateTeamMember(secondChat.id, role.id, {
           name: 'Cross-chat mutation',
           expectedRevision: 2,
         }),
-      /Role definition not found/,
+      /Team member not found/,
     )
     assert.throws(
       () =>
-        store.updateRoleDefinition(firstChat.id, role.id, {
+        store.updateTeamMember(firstChat.id, role.id, {
           name: 'Stale mutation',
           expectedRevision: 1,
         }),
-      /Role definition revision conflict/,
+      /Team member revision conflict/,
     )
 
     assert.throws(
       () => store.removeWorker(worker.id),
-      /Worker is referenced by active role definitions/,
+      /Worker is referenced by active Team members/,
     )
     assert.throws(
       () => store.compareAndRemoveWorker(enabledWorker),
-      /Worker is referenced by active role definitions/,
+      /Worker is referenced by active Team members/,
     )
 
-    const archived = store.archiveRoleDefinition(firstChat.id, role.id, 2)
+    const archived = store.archiveTeamMember(firstChat.id, role.id, 2)
     assert.equal(archived.enabled, false)
     assert.ok(archived.archivedAt)
-    assert.deepEqual(store.listRoleDefinitions(firstChat.id), [])
-    assert.deepEqual(store.listRoleDefinitions(firstChat.id, { includeArchived: true }), [archived])
+    assert.deepEqual(store.listTeamMembers(firstChat.id), [])
+    assert.deepEqual(store.listTeamMembers(firstChat.id, { includeArchived: true }), [archived])
 
     assert.equal(store.removeWorker(worker.id).id, worker.id)
 
     store.deleteSession(firstChat.id)
-    assert.deepEqual(store.listRoleDefinitions(firstChat.id, { includeArchived: true }), [])
+    assert.deepEqual(store.listTeamMembers(firstChat.id, { includeArchived: true }), [])
   })
 })

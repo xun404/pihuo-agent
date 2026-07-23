@@ -1,5 +1,5 @@
 import {
-  normalizeWorkerDefaultRole,
+  normalizeWorkerDefaultRoleType,
   type PromptSettings,
   type WorkerRegistration,
   type WorkerRole,
@@ -13,13 +13,16 @@ export interface RolePromptDraft {
   model: string
 }
 
-export function roleDraftFromWorker(worker: WorkerRegistration): RolePromptDraft {
-  const role = normalizeWorkerDefaultRole(worker)
+export function roleDraftFromWorker(
+  worker: WorkerRegistration,
+  rolePrompts: Readonly<PromptSettings['roles']>,
+): RolePromptDraft {
+  const roleType = normalizeWorkerDefaultRoleType(worker.defaultRoleType)
   return {
-    name: role.name,
+    name: worker.name,
     workerId: worker.id,
-    roleType: role.roleType,
-    instructions: role.instructions,
+    roleType,
+    instructions: rolePrompts[roleType],
     model: '',
   }
 }
@@ -27,7 +30,13 @@ export function roleDraftFromWorker(worker: WorkerRegistration): RolePromptDraft
 export function roleDraftWithType<T extends { roleType: WorkerRole; instructions: string }>(
   draft: T,
   roleType: WorkerRole,
-  rolePrompts: Readonly<PromptSettings['roles']>,
+  _rolePrompts?: Readonly<PromptSettings['roles']>,
 ): T {
-  return { ...draft, roleType, instructions: rolePrompts[roleType] }
+  return { ...draft, roleType }
+}
+
+export function roleDraftWithDefaultPrompt<
+  T extends { roleType: WorkerRole; instructions: string },
+>(draft: T, rolePrompts: Readonly<PromptSettings['roles']>): T {
+  return { ...draft, instructions: rolePrompts[draft.roleType] }
 }

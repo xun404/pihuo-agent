@@ -795,37 +795,290 @@
 .worker-settings-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   max-width: 640px;
   width: 100%;
 }
 .worker-list-card,
 .worker-register-card {
   max-width: 640px;
+}
+.worker-list-card {
   gap: var(--sp-3);
 }
-.worker-settings-item {
+/* 注册卡：与 form-card 同节奏；overflow 可见保证 combobox 浮层不被裁切 */
+.settings-form-card.worker-register-card {
+  gap: var(--sp-3);
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+.worker-register-card .model-list-label {
+  margin-bottom: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+}
+.worker-register-card .settings-field {
+  position: relative;
+  margin-bottom: 0;
+  gap: 0;
+  overflow: visible;
+  z-index: 0;
+}
+/* 展开时抬高整块 Agent 字段 stacking context，避免后面的名称/命令表单盖住列表 */
+.worker-register-agent-field {
+  z-index: 1;
+}
+.settings-form-card.worker-register-card:has(.worker-registry-combobox.is-open)
+  .worker-register-agent-field {
+  z-index: 50;
+}
+.worker-register-field-head {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: 6px;
+  min-height: var(--h-sm);
 }
-.worker-default-role-editor {
-  margin-left: 34px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--r-md);
-  background: var(--bg-input);
-}
-.worker-default-role-editor > summary {
-  color: var(--text-2);
-  cursor: pointer;
+.worker-register-field-head .field-label {
+  margin: 0;
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
 }
-.worker-default-role-editor > form {
-  display: grid;
+/* 检查更新：弱文字链 */
+.worker-register-update-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  margin: 0;
+  height: auto;
+  min-height: 0;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.worker-register-update-link:hover:not(:disabled) {
+  color: var(--blue);
+}
+.worker-register-update-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.worker-register-card .settings-field-hint.mono {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+/* 自动 / 手动注册：强互斥分段，与 settings seg-control 统一 */
+.worker-register-mode-seg {
+  display: flex;
+  width: 100%;
+  height: var(--h-md, 36px);
+}
+.worker-register-mode-seg button {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.worker-register-mode-seg button:not(.active):hover {
+  color: var(--text-1);
+}
+.registry-prepare-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+}
+
+/* 一体 Worker 卡：上 Worker 元信息，下默认角色（同卡分区，不缩进另起岛） */
+.worker-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.worker-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+}
+.worker-card-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 52px;
+}
+.worker-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.worker-card-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.worker-card-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+}
+.worker-card-source {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-card-main .switch,
+.worker-card-main .toggle {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+.worker-card-main .worker-settings-auth-actions {
+  flex-shrink: 0;
+}
+
+/* 默认角色 = 卡底分区：顶部分割线，与 Worker 主区同宽对齐 */
+.worker-card-role {
+  border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-input) 72%, var(--bg-surface));
+  margin: 0;
+}
+.worker-card-role-summary {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  padding-top: 10px;
+  padding: 10px 14px;
+  min-height: 40px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.worker-card-role-summary::-webkit-details-marker {
+  display: none;
+}
+.worker-card-role-kicker {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-3);
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
+}
+.worker-card-role-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: var(--text-2);
+  overflow: hidden;
+}
+.worker-card-role-name {
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-card-role-sep {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.worker-card-role-type {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.worker-card-role-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  position: relative;
+  color: var(--text-3);
+}
+.worker-card-role-chevron::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.worker-card-role[open] .worker-card-role-chevron::before {
+  top: 6px;
+  transform: rotate(225deg);
+}
+.worker-card-role[open] .worker-card-role-summary {
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+}
+.worker-card-role-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px 12px;
+}
+.worker-card-role-form .settings-field {
+  margin-bottom: 0;
+  gap: 4px;
+}
+.worker-card-role-form .settings-field > span:first-child,
+.worker-card-role-form .settings-field > label {
+  margin-bottom: 0;
+}
+.worker-role-prompt-field {
+  gap: 6px;
+}
+.worker-role-prompt-preview {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-surface) 70%, var(--bg-input));
+  color: var(--text-1);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-relaxed);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow: auto;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent);
+}
+.worker-card-role-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+@media (max-width: 560px) {
+  .worker-card-role-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .worker-default-role-instructions {
   min-height: 76px;
@@ -833,78 +1086,151 @@
   padding-top: 8px;
   padding-bottom: 8px;
   resize: vertical;
+  white-space: normal;
+  line-height: var(--lh-relaxed);
+}
+.worker-card-role-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.worker-card-role-footer .settings-field-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 140px;
+}
+.worker-card-role-footer .settings-save-btn {
+  margin-left: auto;
+}
+
+/* 兼容旧类名（若测试/快照仍引用） */
+.worker-settings-item {
+  display: flex;
+  flex-direction: column;
+}
+.worker-default-role-editor {
+  /* legacy alias — prefer .worker-card-role */
+  margin: 0;
 }
 .worker-default-role-actions {
   display: flex;
   justify-content: flex-end;
 }
+/* combobox：输入框 flex 布局；列表 portal 到 body 避免被表单盖住 */
 .worker-registry-combobox {
   position: relative;
   width: 100%;
 }
 .worker-registry-input-wrap {
-  position: relative;
   display: flex;
   align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--h-lg);
+  min-height: var(--h-lg);
+  padding: 0 6px 0 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-input);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
-.worker-registry-input-wrap.open .worker-registry-input {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 2px var(--blue-soft);
+.worker-registry-input-wrap.open,
+.worker-registry-input-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--blue) 50%, var(--border));
+  box-shadow: 0 0 0 3px var(--blue-soft);
 }
-.worker-registry-input {
-  padding-right: 36px;
+/* 覆盖 .settings-input 单行样式；边框/焦点由 wrap 承担 */
+input.settings-input.worker-registry-input {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0 var(--sp-3);
+  border: 0 !important;
+  border-radius: var(--r-md);
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  line-height: var(--h-lg);
+  font-family: var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-items: unset;
 }
-.worker-registry-toggle {
-  position: absolute;
-  right: 1px;
-  top: 1px;
-  bottom: 1px;
-  width: 34px;
+.worker-registry-clear {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin: 0 4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-left: 1px solid var(--border-soft);
-  border-radius: 0 var(--r-md) var(--r-md) 0;
-  background: transparent;
-  color: var(--text-3);
   cursor: pointer;
 }
-.worker-registry-toggle:hover {
+.worker-registry-clear:hover {
   color: var(--text-1);
   background: var(--bg-hover);
 }
-.worker-registry-input-wrap.open .worker-registry-toggle .i {
-  transform: rotate(180deg);
-}
+/* 默认（SSR/无 portal）回退：相对 combobox 绝对定位 */
 .worker-registry-list {
   position: absolute;
-  z-index: 30;
+  z-index: 50;
   left: 0;
   right: 0;
-  top: calc(100% + 6px);
-  max-height: 320px;
+  top: calc(100% + 4px);
+  width: 100%;
+  max-height: min(280px, 42vh);
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 5px;
+  padding: 4px 0;
+  margin: 0;
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--bg-surface);
   box-shadow: var(--shadow-lg);
+  box-sizing: border-box;
+}
+/* portal 到 body：fixed，坐标由 JS 写入 */
+.worker-registry-list-portal {
+  position: fixed;
+  z-index: 10000;
+  right: auto;
+  top: 0;
+  left: 0;
+  width: auto;
 }
 .worker-registry-option {
   width: 100%;
-  min-height: 52px;
+  min-height: 36px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 8px var(--sp-3);
   border: 0;
-  border-radius: var(--r-md);
-  background: transparent;
+  border-radius: 0;
+  background: var(--bg-surface);
   color: var(--text-1);
+  font: inherit;
+  font-family: var(--font);
   text-align: left;
   cursor: pointer;
+  box-sizing: border-box;
 }
 .worker-registry-option.highlighted,
 .worker-registry-option:hover {
@@ -913,52 +1239,50 @@
 .worker-registry-option.selected {
   background: var(--blue-soft);
 }
-.worker-registry-option-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
 .worker-registry-option-name {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   color: var(--text-1);
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .worker-registry-option-id {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 30%;
   overflow: hidden;
   color: var(--text-3);
   font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .worker-registry-option-meta {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-end;
-  flex-direction: column;
-  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
   color: var(--text-3);
-  font-family: var(--mono);
   font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
 }
 .worker-registry-status {
-  padding: 12px 10px;
+  padding: 10px var(--sp-3);
   color: var(--text-3);
   font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
 }
 .worker-registry-status.error {
   color: var(--danger);
 }
-.worker-registry-result-count {
-  padding: 4px 10px 6px;
-  color: var(--text-3);
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
-  text-align: right;
-}
+/* Agent 详情：嵌套块，对齐 worker-card / settings 内嵌面板 */
 .registry-agent-detail {
   display: flex;
   flex-direction: column;
@@ -971,23 +1295,47 @@
 .registry-agent-detail-header {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 10px;
+  min-width: 0;
 }
-.registry-agent-detail-header > span:last-child {
+.registry-agent-detail-identity {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 2px;
 }
-.registry-agent-detail-header .mono {
+.registry-agent-detail-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.registry-agent-detail-id {
   color: var(--text-3);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.registry-agent-detail-sep {
+  margin: 0 4px;
+  opacity: 0.7;
+}
+.registry-agent-detail-desc {
+  margin: 0;
   font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
 }
 .registry-agent-generic-icon {
   display: inline-flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   align-items: center;
   justify-content: center;
   border-radius: var(--r-md);
@@ -999,35 +1347,166 @@
 }
 .registry-agent-facts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px var(--sp-3);
+  grid-template-columns: 1fr;
+  gap: 8px;
   margin: 0;
 }
 .registry-agent-facts > div {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: start;
   min-width: 0;
 }
 .registry-agent-facts dt {
+  margin: 0;
   color: var(--text-3);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
 }
 .registry-agent-facts dd {
   overflow-wrap: anywhere;
-  margin: 2px 0 0;
-  color: var(--text-2);
+  margin: 0;
+  color: var(--text-1);
   font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
 }
 .registry-agent-facts a {
   color: var(--blue);
+}
+/* 完整性：Manifest 全分发；声明/实测 SHA 仅 binary */
+.registry-agent-integrity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-surface) 70%, var(--bg-input));
+}
+.registry-agent-integrity-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
+}
+.registry-agent-integrity-facts {
+  gap: 6px;
+}
+.registry-agent-integrity-facts > div {
+  grid-template-columns: 108px minmax(0, 1fr);
+}
+.registry-digest {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-1);
+  letter-spacing: 0.01em;
+  cursor: help;
+}
+.registry-digest-pending {
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+}
+.registry-digest-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.registry-digest-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  letter-spacing: var(--ls-label);
+}
+.registry-digest-badge.is-match {
+  color: color-mix(in srgb, var(--green, #1a7f4b) 90%, var(--text-1));
+  background: color-mix(in srgb, var(--green, #1a7f4b) 12%, transparent);
+}
+.registry-digest-badge.is-mismatch {
+  color: color-mix(in srgb, var(--danger) 90%, var(--text-1));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.registry-agent-dist-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+}
+.registry-agent-dist-field > label {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  margin-bottom: 6px;
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
 }
 .registry-agent-trust-warning {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  padding: var(--sp-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border-soft));
   border-radius: var(--r-md);
-  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, var(--bg-surface));
+  color: color-mix(in srgb, var(--danger) 85%, var(--text-1));
   font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+}
+/* 复选框与文案基线对齐 */
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.settings-check input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+.settings-check > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-top: 0;
+  line-height: var(--lh-snug);
+}
+.registry-agent-trust-warning .settings-check {
+  align-items: flex-start;
+}
+.registry-agent-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.registry-agent-notices p {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
 }
 .worker-prepare-progress {
   display: flex;
@@ -1678,6 +2157,17 @@
   width: 100%;
   font-size: var(--fs-base);
 }
+/* 多行提示词：勿被上方单行 height 压成 1 行 */
+textarea.settings-input.role-form-instructions {
+  height: calc(20px + 1em * var(--lh-relaxed) * 5);
+  min-height: calc(20px + 1em * var(--lh-relaxed) * 5);
+  padding: 10px 12px;
+  line-height: var(--lh-relaxed);
+  white-space: pre-wrap;
+  overflow: auto;
+  resize: vertical;
+  display: block;
+}
 .settings-input:focus {
   outline: none;
   border-color: color-mix(in srgb, var(--blue) 50%, var(--border));
@@ -1748,8 +2238,13 @@
 .settings-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: var(--sp-4);
+  gap: 4px;
+  margin-bottom: var(--sp-2);
+}
+/* 角色编辑 / 模板等模态内更紧凑 */
+.role-form-fields .settings-field,
+.team-template-modal .settings-field {
+  margin-bottom: 0;
 }
 .settings-field > span:first-child,
 .settings-field label {
@@ -2472,70 +2967,210 @@
   padding: 8px 0;
 }
 
-/* Prompt defaults — editable behavior layer above protected ACP/tool contracts. */
+/* Prompt defaults — Leader 主卡 + 角色一体手风琴卡（与 worker-card 同族） */
 .settings-prompts-page {
-  width: min(860px, 100%);
+  width: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
 }
 .prompt-settings-editor {
-  display: grid;
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+  flex: 1;
 }
-.prompt-settings-section {
-  padding: 16px;
+.prompt-card {
   border: 1px solid var(--border-soft);
   border-radius: var(--r-lg);
   background: var(--bg-surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
 }
-.prompt-settings-section-head,
-.prompt-settings-role-head,
-.prompt-settings-actions {
+.prompt-card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-3);
+  padding: 14px 16px 12px;
 }
-.prompt-settings-section-head h3,
-.prompt-settings-role-head label {
+.prompt-card-head-static {
+  border-bottom: 1px solid var(--border-soft);
+}
+.prompt-card-titles {
+  min-width: 0;
+  flex: 1;
+}
+.prompt-card-titles h3 {
   margin: 0;
   color: var(--text-1);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
 }
-.prompt-settings-section-head p {
+.prompt-card-titles p {
   margin: 4px 0 0;
   color: var(--text-3);
   font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
 }
-.prompt-settings-roles-head {
-  margin-bottom: 14px;
+.prompt-card-head .settings-save-btn {
+  flex-shrink: 0;
+  margin-top: 0;
+  align-self: center;
 }
-.prompt-settings-role-list {
-  display: grid;
-  gap: 12px;
+.prompt-card-body {
+  padding: 12px 16px 14px;
 }
-.prompt-settings-role-head {
-  margin-bottom: 6px;
+.prompt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .prompt-settings-textarea {
+  box-sizing: border-box;
   width: 100%;
-  min-height: 104px;
-  margin-top: 10px;
+  min-height: 112px;
+  height: auto;
   padding: 10px 12px;
   resize: vertical;
-  line-height: 1.55;
+  line-height: var(--lh-relaxed);
+  white-space: normal;
+  font-family: var(--font);
+  overflow: auto;
 }
-.prompt-settings-role .prompt-settings-textarea {
-  min-height: 88px;
-  margin-top: 0;
+.prompt-role-item .prompt-settings-textarea {
+  min-height: 96px;
 }
-.prompt-settings-actions {
+/* 弱操作：输入框下方文本链接，不与主按钮抢视线 */
+.prompt-field-footer {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
-  padding-bottom: 4px;
+  min-height: 20px;
+}
+.prompt-reset-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  cursor: pointer;
+  text-decoration: none;
+}
+.prompt-reset-link:hover {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prompt-reset-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* 角色手风琴列表 */
+.prompt-role-list {
+  display: flex;
+  flex-direction: column;
+}
+.prompt-role-item {
+  border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-input) 55%, var(--bg-surface));
+  margin: 0;
+}
+.prompt-role-item:first-child {
+  border-top: none;
+}
+.prompt-role-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.prompt-role-summary::-webkit-details-marker {
+  display: none;
+}
+.prompt-role-label {
+  flex-shrink: 0;
+  min-width: 2.5em;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+}
+.prompt-role-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 相对打包默认有改动时的小圆点，提示可展开编辑 / 可恢复 */
+.prompt-role-dirty {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.prompt-role-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  position: relative;
+  color: var(--text-3);
+}
+.prompt-role-chevron::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.prompt-role-item[open] .prompt-role-chevron::before {
+  top: 6px;
+  transform: rotate(225deg);
+}
+.prompt-role-item[open] .prompt-role-summary {
+  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+  border-bottom: 1px solid var(--border-soft);
+}
+.prompt-role-item[open] .prompt-role-preview {
+  color: var(--text-2);
+}
+.prompt-role-body {
+  padding: 10px 16px 12px;
+  background: var(--bg-surface);
 }
 
 @media (max-width: 760px) {
-  .prompt-settings-section-head {
+  .prompt-card-head {
     align-items: flex-start;
+  }
+  .prompt-card-head .settings-save-btn {
+    align-self: flex-start;
+  }
+  .prompt-role-label {
+    min-width: 2em;
   }
 }
 .approval-title {

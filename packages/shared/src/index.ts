@@ -267,12 +267,18 @@ export interface PromptSettings {
   roles: Record<WorkerRole, string>
 }
 
-export const DEFAULT_PROMPT_SETTINGS: Readonly<{
-  leader: string
-  roles: Readonly<Record<WorkerRole, string>>
-}> = {
-  leader:
-    '准确理解用户目标，优先复用合适的角色完成任务，并清楚说明关键决策、风险和验证结果。',
+/** Non-secret user-facing deadlines for scheduled Worker jobs. */
+export interface WorkerTimeoutSettings {
+  jobTimeoutMs: number
+  approvalTimeoutMs: number
+  queueTimeoutMs: number
+}
+
+/** Locale used only for built-in default prompt text (UI language). */
+export type PromptLocale = 'zh' | 'en'
+
+const DEFAULT_PROMPT_SETTINGS_ZH = {
+  leader: '准确理解用户目标，优先复用合适的角色完成任务，并清楚说明关键决策、风险和验证结果。',
   roles: {
     general: '作为通用执行角色，完成 Leader 委派的任务并返回清晰、可验证的结果。',
     plan: '作为规划角色，分析目标、约束和代码现状，输出可执行且可验证的步骤；除非明确要求，不直接实施。',
@@ -281,9 +287,63 @@ export const DEFAULT_PROMPT_SETTINGS: Readonly<{
     test: '作为测试角色，设计并执行与风险匹配的测试，报告可复现的失败、覆盖范围和验证结果。',
     research: '作为研究角色，收集并核验相关事实，区分证据与推断，返回来源、结论和未决问题。',
   },
+} as const satisfies {
+  leader: string
+  roles: Readonly<Record<WorkerRole, string>>
 }
 
-export function normalizePromptSettings(input: unknown): PromptSettings {
+const DEFAULT_PROMPT_SETTINGS_EN = {
+  leader:
+    'Understand the user goal accurately, prefer reusing the right roles to complete the work, and clearly explain key decisions, risks, and verification results.',
+  roles: {
+    general:
+      'As a general execution role, complete tasks delegated by the Leader and return clear, verifiable results.',
+    plan: 'As a planning role, analyze goals, constraints, and the current codebase; produce executable and verifiable steps. Do not implement unless explicitly asked.',
+    coder:
+      'As an implementation role, modify code according to the task, follow the existing architecture, run relevant verification, and return results.',
+    review:
+      'As a review role, prioritize correctness, security, compatibility, and testing gaps; report actionable issues ordered by severity.',
+    test: 'As a testing role, design and run risk-matched tests; report reproducible failures, coverage, and verification outcomes.',
+    research:
+      'As a research role, gather and verify relevant facts, separate evidence from inference, and return sources, conclusions, and open questions.',
+  },
+} as const satisfies {
+  leader: string
+  roles: Readonly<Record<WorkerRole, string>>
+}
+
+/** Built-in defaults (Chinese). Prefer `defaultPromptSettings(locale)` for locale-aware UI. */
+export const DEFAULT_PROMPT_SETTINGS: Readonly<{
+  leader: string
+  roles: Readonly<Record<WorkerRole, string>>
+}> = DEFAULT_PROMPT_SETTINGS_ZH
+
+/** Fresh copy of built-in prompt defaults for the given UI locale. */
+export function defaultPromptSettings(locale: PromptLocale = 'zh'): PromptSettings {
+  const source = locale === 'en' ? DEFAULT_PROMPT_SETTINGS_EN : DEFAULT_PROMPT_SETTINGS_ZH
+  return {
+    leader: source.leader,
+    roles: { ...source.roles },
+  }
+}
+
+/** True when prompts equal the built-in defaults for the given locale. */
+export function promptsMatchLocaleDefaults(
+  prompts: PromptSettings,
+  locale: PromptLocale = 'zh',
+): boolean {
+  const defaults = defaultPromptSettings(locale)
+  if (prompts.leader.trim() !== defaults.leader.trim()) return false
+  return WORKER_ROLES.every(
+    (role) => prompts.roles[role].trim() === defaults.roles[role].trim(),
+  )
+}
+
+export function normalizePromptSettings(
+  input: unknown,
+  locale: PromptLocale = 'zh',
+): PromptSettings {
+  const defaults = defaultPromptSettings(locale)
   const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
   const rawLeader = (raw as { leader?: unknown }).leader
   const rawRolesValue = (raw as { roles?: unknown }).roles
@@ -297,13 +357,13 @@ export function normalizePromptSettings(input: unknown): PromptSettings {
     normalizedRoles[role] =
       typeof candidate === 'string' && candidate.trim()
         ? candidate.trim()
-        : DEFAULT_PROMPT_SETTINGS.roles[role]
+        : defaults.roles[role]
   }
   return {
     leader:
       typeof rawLeader === 'string' && rawLeader.trim()
         ? rawLeader.trim()
-        : DEFAULT_PROMPT_SETTINGS.leader,
+        : defaults.leader,
     roles: normalizedRoles,
   }
 }
@@ -321,30 +381,19 @@ export function isValidPromptSettings(input: unknown): input is PromptSettings {
   )
 }
 
-export interface WorkerDefaultRole {
-  name: string
-  roleType: WorkerRole
-  instructions: string
-}
-
 export const DEFAULT_GENERAL_ROLE_INSTRUCTIONS = DEFAULT_PROMPT_SETTINGS.roles.general
 
-export function defaultWorkerRole(
-  name: string,
-  instructions: string = DEFAULT_GENERAL_ROLE_INSTRUCTIONS,
-): WorkerDefaultRole {
-  return {
-    name: name.trim(),
-    roleType: 'general',
-    instructions: instructions.trim() || DEFAULT_GENERAL_ROLE_INSTRUCTIONS,
-  }
+export function normalizeWorkerDefaultRoleType(value: unknown): WorkerRole {
+  return typeof value === 'string' && WORKER_ROLES.includes(value as WorkerRole)
+    ? (value as WorkerRole)
+    : 'general'
 }
 
 /**
- * A Chat-scoped persona bound to an installed ACP Worker.
- * Multiple roles may bind the same Worker while retaining independent ACP sessions.
+ * A Chat-scoped Team member bound to an installed ACP Worker.
+ * Multiple members may bind the same Worker while retaining independent ACP sessions.
  */
-export interface RoleDefinition {
+export interface TeamMember {
   id: string
   chatSessionId: string
   workerId: string
@@ -361,7 +410,7 @@ export interface RoleDefinition {
   archivedAt?: string
 }
 
-export interface CreateRoleDefinitionInput {
+export interface CreateTeamMemberInput {
   chatSessionId: string
   workerId: string
   name: string
@@ -371,7 +420,7 @@ export interface CreateRoleDefinitionInput {
   enabled?: boolean
 }
 
-export interface UpdateRoleDefinitionInput {
+export interface UpdateTeamMemberInput {
   workerId?: string
   name?: string
   roleType?: WorkerRole
@@ -379,6 +428,108 @@ export interface UpdateRoleDefinitionInput {
   model?: string | null
   enabled?: boolean
   expectedRevision?: number
+}
+
+export interface TeamTemplateMember {
+  name: string
+  preferredWorkerId: string
+  roleType: WorkerRole
+  instructions: string
+  model?: string
+}
+
+export interface TeamTemplate {
+  id: string
+  name: string
+  description?: string
+  members: TeamTemplateMember[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateTeamTemplateInput {
+  name: string
+  description?: string
+  members: TeamTemplateMember[]
+}
+
+export interface UpdateTeamTemplateInput {
+  name?: string
+  description?: string | null
+  members?: TeamTemplateMember[]
+}
+
+export interface TeamTemplateMemberMapping {
+  memberIndex: number
+  workerId: string
+  model?: string | null
+}
+
+export interface ApplyTeamTemplateInput {
+  templateId: string
+  expectedTeamRevision: number
+  mappings?: TeamTemplateMemberMapping[]
+}
+
+export interface TeamTemplateApplicationMemberPreview {
+  memberIndex: number
+  name: string
+  roleType: WorkerRole
+  instructions: string
+  preferredWorkerId: string
+  workerId?: string
+  model?: string
+  issueCode?: 'WORKER_MAPPING_REQUIRED' | 'MODEL_MAPPING_REQUIRED'
+}
+
+export interface TeamTemplateApplicationPreview {
+  templateId: string
+  templateName: string
+  teamRevision: number
+  ready: boolean
+  members: TeamTemplateApplicationMemberPreview[]
+}
+
+export interface TeamTemplateAvailabilityIssue {
+  memberIndex: number
+  code: 'WORKER_MAPPING_REQUIRED' | 'MODEL_MAPPING_REQUIRED'
+}
+
+export interface TeamTemplateAvailability {
+  templateId: string
+  ready: boolean
+  issues: TeamTemplateAvailabilityIssue[]
+}
+
+export function evaluateTeamTemplateAvailability(input: {
+  template: TeamTemplate
+  workers: readonly WorkerRegistration[]
+  projectId?: string | null
+}): TeamTemplateAvailability {
+  const issues: TeamTemplateAvailabilityIssue[] = []
+  input.template.members.forEach((member, memberIndex) => {
+    const worker = input.workers.find((candidate) => candidate.id === member.preferredWorkerId)
+    const workerAvailable =
+      worker?.enabled === true &&
+      (worker.scope === 'global' ||
+        (Boolean(input.projectId) && worker.projectId === input.projectId))
+    if (!worker || !workerAvailable) {
+      issues.push({ memberIndex, code: 'WORKER_MAPPING_REQUIRED' })
+      return
+    }
+    if (
+      member.model &&
+      worker.availableModels?.length &&
+      !worker.availableModels.some((candidate) => candidate.modelId === member.model)
+    ) {
+      issues.push({ memberIndex, code: 'MODEL_MAPPING_REQUIRED' })
+    }
+  })
+  return {
+    templateId: input.template.id,
+    ready: issues.length === 0,
+    issues,
+  }
 }
 
 export type WorkerCapability = 'code-edit' | 'review' | 'research' | 'test' | 'general' | 'plan'
@@ -462,7 +613,9 @@ export interface Session {
   activeWorkerIds: string[]
   memoryThreadId: string
   approvalPolicy: SessionApprovalPolicy
-  /** New Sessions ask once whether the bootstrapped role definitions need adjustment. */
+  /** Increments once for every persisted Team mutation. */
+  teamRevision: number
+  /** New Sessions ask once whether the bootstrapped Team needs adjustment. */
   roleReviewState?: 'pending' | 'prompted'
   roleReviewPromptedAt?: string
   /** Last chat/stream error message for UI (survives reload) */
@@ -633,7 +786,7 @@ export interface WorkerRegistration {
   command: string
   args: string[]
   env?: Record<string, string>
-  /** @deprecated Execution compatibility metadata; Chat routing uses RoleDefinition.roleType. */
+  /** @deprecated Execution compatibility metadata; Chat routing uses TeamMember.roleType. */
   primaryRole: WorkerRole
   /** @deprecated Execution compatibility metadata; every ready Worker may back any Chat role. */
   roles: WorkerRole[]
@@ -643,8 +796,8 @@ export interface WorkerRegistration {
   scope: 'global' | 'project'
   projectId?: string
   description: string
-  /** Worker-owned template copied into each newly created Chat Session. */
-  defaultRole?: WorkerDefaultRole
+  /** Role whose global default prompt seeds this Worker in a new Chat Team. */
+  defaultRoleType: WorkerRole
   /** Shortcut = worst of cliHealth and acpSessionHealth (kept for compatibility) */
   health: WorkerHealthStatus
   /** Whether the CLI binary exists and can start */
@@ -760,11 +913,11 @@ export interface WorkerJob {
   workerId: string
   workerName: string
   role?: WorkerRole
-  /** Immutable role-definition snapshot captured at dispatch time. */
-  roleDefinitionId?: string
-  roleName?: string
+  /** Immutable Team-member snapshot captured at dispatch time. */
+  teamMemberId?: string
+  teamMemberName?: string
   roleType?: WorkerRole
-  roleRevision?: number
+  teamMemberRevision?: number
   effectiveModel?: string
   instructionsSnapshot?: string
   effectivePrompt?: string
@@ -976,7 +1129,8 @@ export interface AppSnapshot {
   projects: Project[]
   sessions: Session[]
   workers: WorkerRegistration[]
-  roleDefinitions: RoleDefinition[]
+  teamMembers: TeamMember[]
+  teamTemplates: TeamTemplate[]
   approvals: ApprovalItem[]
   /** Recent worker jobs (dispatch history + in-flight) */
   jobs?: WorkerJob[]
@@ -1004,19 +1158,6 @@ export function normalizeWorkerRoles<
   const primaryRole =
     worker.primaryRole && roles.includes(worker.primaryRole) ? worker.primaryRole : roles[0]!
   return { ...worker, primaryRole, roles }
-}
-
-/** Normalize persisted/legacy Workers to one complete editable default role template. */
-export function normalizeWorkerDefaultRole(
-  worker: Pick<WorkerRegistration, 'name' | 'defaultRole'>,
-): WorkerDefaultRole {
-  const fallback = defaultWorkerRole(worker.name)
-  const role = worker.defaultRole
-  if (!role) return fallback
-  const name = role.name?.trim()
-  const instructions = role.instructions?.trim()
-  if (!name || !instructions || !WORKER_ROLES.includes(role.roleType)) return fallback
-  return { name, roleType: role.roleType, instructions }
 }
 
 function commandStatusToLegacy(status: CommandHealthStatus): WorkerHealthStatus {

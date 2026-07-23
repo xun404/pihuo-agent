@@ -257,8 +257,8 @@ function canonicalizeCwd(raw: string): string {
 export interface SessionReuseKey {
   routerSessionId: string
   workerId: string
-  roleDefinitionId?: string
-  roleRevision?: number
+  teamMemberId?: string
+  teamMemberRevision?: number
   canonicalCwd: string
   executionFingerprint: string
 }
@@ -267,8 +267,8 @@ export function buildSessionReuseKey(
   params: {
     routerSessionId: string
     workerId: string
-    roleDefinitionId?: string
-    roleRevision?: number
+    teamMemberId?: string
+    teamMemberRevision?: number
     cwd: string
     config: SessionEntryConfig
   },
@@ -277,8 +277,8 @@ export function buildSessionReuseKey(
   return {
     routerSessionId: params.routerSessionId,
     workerId: params.workerId,
-    roleDefinitionId: params.roleDefinitionId,
-    roleRevision: params.roleRevision,
+    teamMemberId: params.teamMemberId,
+    teamMemberRevision: params.teamMemberRevision,
     canonicalCwd: canonicalizeCwd(params.cwd),
     executionFingerprint: computeExecutionFingerprint(params.config, fingerprintFn),
   }
@@ -292,10 +292,10 @@ export function computeKeyDigest(key: SessionReuseKey): string {
   const data = JSON.stringify({
     routerSessionId: key.routerSessionId,
     workerId: key.workerId,
-    ...(key.roleDefinitionId
+    ...(key.teamMemberId
       ? {
-          roleDefinitionId: key.roleDefinitionId,
-          roleRevision: key.roleRevision ?? null,
+          teamMemberId: key.teamMemberId,
+          teamMemberRevision: key.teamMemberRevision ?? null,
         }
       : {}),
     canonicalCwd: key.canonicalCwd,
@@ -617,8 +617,8 @@ export class AcpSessionManager {
   buildReuseKey(params: {
     routerSessionId: string
     workerId: string
-    roleDefinitionId?: string
-    roleRevision?: number
+    teamMemberId?: string
+    teamMemberRevision?: number
     cwd: string
     config: SessionEntryConfig
   }): SessionReuseKey {
@@ -1025,8 +1025,8 @@ export class AcpSessionManager {
           keyDigest: this.computeKeyDigest(key),
           routerSessionId: key.routerSessionId,
           workerId: key.workerId,
-          roleDefinitionId: key.roleDefinitionId,
-          roleRevision: key.roleRevision,
+          teamMemberId: key.teamMemberId,
+          teamMemberRevision: key.teamMemberRevision,
           installationId: config.installationId,
           manifestDigest: config.manifestDigest,
           canonicalCwd: key.canonicalCwd,
@@ -1452,12 +1452,12 @@ export class AcpSessionManager {
   }
 
   /** Reset every live/durable ACP context for one Chat-scoped role only. */
-  deleteContextsByRole(routerSessionId: string, roleDefinitionId: string): { deleted: number } {
+  deleteContextsByTeamMember(routerSessionId: string, teamMemberId: string): { deleted: number } {
     const digests = new Set<string>()
     for (const entry of this.entries.values()) {
       if (
         entry.key.routerSessionId === routerSessionId &&
-        entry.key.roleDefinitionId === roleDefinitionId
+        entry.key.teamMemberId === teamMemberId
       ) {
         digests.add(this.computeKeyDigest(entry.key))
       }
@@ -1467,7 +1467,7 @@ export class AcpSessionManager {
         this.catalogPort!.listByRouterSession(routerSessionId),
       )
       for (const record of records) {
-        if (record.roleDefinitionId === roleDefinitionId) digests.add(record.keyDigest)
+        if (record.teamMemberId === teamMemberId) digests.add(record.keyDigest)
       }
     }
 

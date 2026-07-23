@@ -346,13 +346,13 @@ describe('buildSessionReuseKey', () => {
   it('isolates different Chat roles bound to the same Worker', () => {
     const implementer = buildSessionReuseKey({
       ...baseParams,
-      roleDefinitionId: 'role-implementer',
-      roleRevision: 1,
+      teamMemberId: 'role-implementer',
+      teamMemberRevision: 1,
     })
     const reviewer = buildSessionReuseKey({
       ...baseParams,
-      roleDefinitionId: 'role-reviewer',
-      roleRevision: 1,
+      teamMemberId: 'role-reviewer',
+      teamMemberRevision: 1,
     })
 
     assert.notDeepEqual(implementer, reviewer)
@@ -362,13 +362,13 @@ describe('buildSessionReuseKey', () => {
   it('invalidates a role session when its execution revision changes', () => {
     const before = buildSessionReuseKey({
       ...baseParams,
-      roleDefinitionId: 'role-implementer',
-      roleRevision: 1,
+      teamMemberId: 'role-implementer',
+      teamMemberRevision: 1,
     })
     const after = buildSessionReuseKey({
       ...baseParams,
-      roleDefinitionId: 'role-implementer',
-      roleRevision: 2,
+      teamMemberId: 'role-implementer',
+      teamMemberRevision: 2,
     })
 
     assert.notDeepEqual(before, after)
@@ -2444,14 +2444,14 @@ describe('remote cleanup handoff', () => {
     const roleA = catalogRecord({
       keyDigest: 'digest-role-a',
       routerSessionId: 'session-role',
-      roleDefinitionId: 'role-a',
-      roleRevision: 2,
+      teamMemberId: 'role-a',
+      teamMemberRevision: 2,
     })
     const roleB = catalogRecord({
       keyDigest: 'digest-role-b',
       routerSessionId: 'session-role',
-      roleDefinitionId: 'role-b',
-      roleRevision: 1,
+      teamMemberId: 'role-b',
+      teamMemberRevision: 1,
     })
     const records = [roleA, roleB]
     const deleted: string[] = []
@@ -2465,7 +2465,7 @@ describe('remote cleanup handoff', () => {
     const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
     if (timer) clearInterval(timer)
 
-    assert.deepEqual(mgr.deleteContextsByRole('session-role', 'role-a'), { deleted: 1 })
+    assert.deepEqual(mgr.deleteContextsByTeamMember('session-role', 'role-a'), { deleted: 1 })
     assert.deepEqual(deleted, ['digest-role-a'])
   })
 

@@ -96,6 +96,7 @@ describe('RemoteRuntimeDispatchPort reconnect semantics', () => {
     const remote = createRemoteRuntimeDispatchPort({
       baseUrl: 'http://127.0.0.1:4111',
       token: 'test-token',
+      eventTimeoutMs: 5,
       fetchImpl: async (input) => {
         const url = new URL(String(input))
         if (url.pathname.includes('/events/')) {
@@ -126,6 +127,7 @@ describe('RemoteRuntimeDispatchPort reconnect semantics', () => {
     const remote = createRemoteRuntimeDispatchPort({
       baseUrl: 'http://127.0.0.1:4111',
       token: 'test-token',
+      eventTimeoutMs: 20,
       fetchImpl: async (input) => {
         const url = new URL(String(input))
         if (url.pathname.includes('/events/')) {
@@ -163,6 +165,7 @@ describe('RemoteRuntimeDispatchPort reconnect semantics', () => {
     const remote = createRemoteRuntimeDispatchPort({
       baseUrl: 'http://127.0.0.1:4111',
       token: 'test-token',
+      eventTimeoutMs: 20,
       fetchImpl: async (input) => {
         const url = new URL(String(input))
         if (url.pathname.includes('/events/')) {
@@ -190,6 +193,7 @@ describe('RemoteRuntimeDispatchPort reconnect semantics', () => {
     const remote = createRemoteRuntimeDispatchPort({
       baseUrl: 'http://127.0.0.1:4111',
       token: 'test-token',
+      eventTimeoutMs: 20,
       fetchImpl: async (input) => {
         const url = new URL(String(input))
         if (url.pathname.includes('/events/')) return new Response(new ReadableStream({}))
@@ -207,6 +211,7 @@ describe('RemoteRuntimeDispatchPort reconnect semantics', () => {
     const remote = createRemoteRuntimeDispatchPort({
       baseUrl: 'http://127.0.0.1:4111',
       token: 'test-token',
+      eventTimeoutMs: 20,
       fetchImpl: async (input) => {
         const url = new URL(String(input))
         if (url.pathname.includes('/events/')) return await new Promise<Response>(() => {})

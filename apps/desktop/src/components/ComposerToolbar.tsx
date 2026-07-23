@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { LeaderMode, SessionApprovalPolicy } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
@@ -38,6 +38,13 @@ export type ModelOption = {
   configured: boolean
   thinkingIntensities: ThinkingIntensity[]
   contextWindow?: number
+}
+
+export interface TeamTemplateOption {
+  id: string
+  name: string
+  disabled: boolean
+  reason?: string
 }
 
 const THINK_LABEL_KEY: Record<
@@ -106,6 +113,10 @@ export interface ComposerToolbarProps {
   onThinkingChange: (intensity: ThinkingIntensity) => void
   /** Open settings (for "manage models" / no-model-configured). */
   onOpenSettings?: (tab?: 'model') => void
+  /** Home-only saved Team selector. Omit or pass an empty list to hide it. */
+  teamTemplateOptions?: TeamTemplateOption[]
+  selectedTeamTemplateId?: string
+  onTeamTemplateChange?: (templateId: string) => void
 }
 
 export function ComposerToolbar({
@@ -123,16 +134,21 @@ export function ComposerToolbar({
   onModelChange,
   onThinkingChange,
   onOpenSettings,
+  teamTemplateOptions = [],
+  selectedTeamTemplateId = '',
+  onTeamTemplateChange,
 }: ComposerToolbarProps) {
   const { t } = useI18n()
 
   // —— local menu open/close state ——
   const [accessMenuOpen, setAccessMenuOpen] = useState(false)
+  const [teamMenuOpen, setTeamMenuOpen] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [modelSideOpen, setModelSideOpen] = useState(false)
   const [thinkMenuOpen, setThinkMenuOpen] = useState(false)
   const [ctxTipOpen, setCtxTipOpen] = useState(false)
   const accessWrapRef = useRef<HTMLDivElement>(null)
+  const teamWrapRef = useRef<HTMLDivElement>(null)
   const modelWrapRef = useRef<HTMLDivElement>(null)
   const thinkWrapRef = useRef<HTMLDivElement>(null)
 
@@ -213,15 +229,30 @@ export function ComposerToolbar({
     return [...map.entries()]
   }, [models])
 
+  const selectedTeamLabel =
+    teamTemplateOptions.find((option) => option.id === selectedTeamTemplateId)?.name ??
+    t('chat.defaultTeam')
+
   // —— Close popovers on outside click ——
   // Mirrors the original ChatPanel logic, but uses ComposerToolbar's own
   // state/refs (ChatPanel's copy became dead code after extraction).
   useEffect(() => {
-    if (!accessMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
+    if (!accessMenuOpen && !teamMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
     const onDoc = (e: MouseEvent) => {
       // access menu: close when clicking outside its wrapper
-      if (accessMenuOpen && accessWrapRef.current && !accessWrapRef.current.contains(e.target as Node)) {
+      if (
+        accessMenuOpen &&
+        accessWrapRef.current &&
+        !accessWrapRef.current.contains(e.target as Node)
+      ) {
         setAccessMenuOpen(false)
+      }
+      if (
+        teamMenuOpen &&
+        teamWrapRef.current &&
+        !teamWrapRef.current.contains(e.target as Node)
+      ) {
+        setTeamMenuOpen(false)
       }
       // model menu + its sub-panels + ctx tip all live inside model-wrap:
       // close them all when clicking outside model-wrap
@@ -238,13 +269,22 @@ export function ComposerToolbar({
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [accessMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
+  }, [accessMenuOpen, teamMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
 
   // —— Close all popovers when the window loses focus (Alt-Tab / app switch) ——
   useEffect(() => {
-    if (!accessMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen && !modelSideOpen) return
+    if (
+      !accessMenuOpen &&
+      !teamMenuOpen &&
+      !modelMenuOpen &&
+      !thinkMenuOpen &&
+      !ctxTipOpen &&
+      !modelSideOpen
+    )
+      return
     const onBlur = () => {
       setAccessMenuOpen(false)
+      setTeamMenuOpen(false)
       setModelMenuOpen(false)
       setModelSideOpen(false)
       setThinkMenuOpen(false)
@@ -252,7 +292,7 @@ export function ComposerToolbar({
     }
     window.addEventListener('blur', onBlur)
     return () => window.removeEventListener('blur', onBlur)
-  }, [accessMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
+  }, [accessMenuOpen, teamMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
 
   return (
     <>
@@ -262,6 +302,7 @@ export function ComposerToolbar({
           className={`chip menu${accessMode.accent ? ' access' : ''}`}
           onClick={() => {
             setAccessMenuOpen((v) => !v)
+            setTeamMenuOpen(false)
             setModelMenuOpen(false)
             setThinkMenuOpen(false)
           }}
@@ -308,6 +349,86 @@ export function ComposerToolbar({
           )}
         </AnimatePresence>
       </div>
+
+      {teamTemplateOptions.length > 0 && (
+        <div className="mode-menu-wrap home-team-menu-wrap" ref={teamWrapRef}>
+          <button
+            type="button"
+            className="chip menu"
+            aria-label={t('chat.team')}
+            aria-expanded={teamMenuOpen}
+            title={selectedTeamLabel}
+            onClick={() => {
+              setTeamMenuOpen((v) => !v)
+              setAccessMenuOpen(false)
+              setModelMenuOpen(false)
+              setThinkMenuOpen(false)
+            }}
+          >
+            {selectedTeamLabel}
+            <span className="caret">▾</span>
+          </button>
+          <AnimatePresence>
+            {teamMenuOpen && (
+              <motion.div
+                className="pop-menu mode-menu home-team-menu"
+                role="menu"
+                aria-label={t('chat.team')}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
+              >
+                <button
+                  type="button"
+                  className={`pop-row${selectedTeamTemplateId === '' ? ' on' : ''}`}
+                  role="menuitem"
+                  onClick={() => {
+                    onTeamTemplateChange?.('')
+                    setTeamMenuOpen(false)
+                  }}
+                >
+                  {t('chat.defaultTeam')}
+                  {selectedTeamTemplateId === '' && (
+                    <span className="check">
+                      <IconCheck size={14} />
+                    </span>
+                  )}
+                </button>
+                {teamTemplateOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`pop-row${selectedTeamTemplateId === option.id ? ' on' : ''}${
+                      option.disabled ? ' is-disabled' : ''
+                    }`}
+                    role="menuitem"
+                    disabled={option.disabled}
+                    title={option.reason}
+                    onClick={() => {
+                      if (option.disabled) return
+                      onTeamTemplateChange?.(option.id)
+                      setTeamMenuOpen(false)
+                    }}
+                  >
+                    <span className="home-team-option">
+                      <span className="home-team-option-name">{option.name}</span>
+                      {option.disabled && option.reason ? (
+                        <span className="home-team-option-reason">{option.reason}</span>
+                      ) : null}
+                    </span>
+                    {selectedTeamTemplateId === option.id && !option.disabled && (
+                      <span className="check">
+                        <IconCheck size={14} />
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       <div className="spacer" />
 

@@ -13,9 +13,32 @@ function safeHttpUrl(value: string | undefined): string | null {
   }
 }
 
-function shortDigest(value: string | undefined): string {
-  if (!value) return '—'
-  return value.length > 28 ? `${value.slice(0, 28)}…` : value
+/** Strip optional `sha256:` prefix for compare/display. */
+export function digestBare(value: string): string {
+  return value.trim().replace(/^sha256:/iu, '')
+}
+
+/**
+ * Compact digest: first 10 + last 8 hex chars (or full if short).
+ * Full value stays on `title` for hover / accessibility.
+ */
+export function formatDigestShort(value: string): string {
+  const bare = digestBare(value)
+  if (bare.length <= 22) return bare
+  return `${bare.slice(0, 10)}…${bare.slice(-8)}`
+}
+
+export function digestsEqual(a: string | undefined, b: string | undefined): boolean | null {
+  if (!a?.trim() || !b?.trim()) return null
+  return digestBare(a).toLowerCase() === digestBare(b).toLowerCase()
+}
+
+function DigestValue({ value }: { value: string }) {
+  return (
+    <code className="registry-digest mono" title={value}>
+      {formatDigestShort(value)}
+    </code>
+  )
 }
 
 export function RegistryAgentDetail(props: {
@@ -31,12 +54,15 @@ export function RegistryAgentDetail(props: {
   const detail = option.distributionDetails?.find(
     (candidate) => candidate.kind === props.distribution,
   )
+  const isBinary = props.distribution === 'binary'
   const binaryTarget =
     detail?.kind === 'binary'
       ? detail.targets.find((target) => target.target === option.platformTarget)
       : undefined
   const declaredSha256 = binaryTarget?.sha256
-  const missingSha = detail?.kind === 'binary' && Boolean(binaryTarget) && !declaredSha256
+  const missingSha = isBinary && Boolean(binaryTarget) && !declaredSha256
+  const showArtifactIntegrity = isBinary && Boolean(binaryTarget)
+  const shaMatch = digestsEqual(declaredSha256, props.observedSha256)
   const source =
     detail?.kind === 'binary'
       ? safeHttpUrl(binaryTarget?.archiveUrl)?.replace(/^https?:\/\//u, '')
@@ -68,14 +94,20 @@ export function RegistryAgentDetail(props: {
         <span className="registry-agent-generic-icon" aria-hidden>
           ACP
         </span>
-        <span>
-          <strong>{option.name}</strong>
-          <span className="mono">
-            {option.id} · {option.version}
+        <div className="registry-agent-detail-identity">
+          <strong className="registry-agent-detail-name">{option.name}</strong>
+          <span className="registry-agent-detail-id mono">
+            {option.id}
+            <span className="registry-agent-detail-sep" aria-hidden>
+              ·
+            </span>
+            {option.version}
           </span>
-        </span>
+        </div>
       </header>
-      {option.description && <p className="settings-field-hint">{option.description}</p>}
+      {option.description && (
+        <p className="registry-agent-detail-desc">{option.description}</p>
+      )}
 
       <dl className="registry-agent-facts">
         <div>
@@ -106,12 +138,84 @@ export function RegistryAgentDetail(props: {
             </dd>
           </div>
         )}
+        <div>
+          <dt>{t('workers.registryDetailSource')}</dt>
+          <dd>{source}</dd>
+        </div>
+        <div>
+          <dt>{t('workers.registryDetailCommand')}</dt>
+          <dd className="mono">{command}</dd>
+        </div>
+        <div>
+          <dt>{t('workers.registryDetailRunner')}</dt>
+          <dd>{runner}</dd>
+        </div>
       </dl>
 
-      <label className="settings-field">
-        <span>{t('workers.registryDetailDistribution')}</span>
+      {/*
+        Integrity digests:
+        - Manifest: catalog pin (all distributions)
+        - Declared / Observed SHA-256: binary archive only (npx/uvx have no artifact hash)
+      */}
+      <div className="registry-agent-integrity" aria-label={t('workers.registryDetailIntegrity')}>
+        <div className="registry-agent-integrity-title">{t('workers.registryDetailIntegrity')}</div>
+        <dl className="registry-agent-facts registry-agent-integrity-facts">
+          <div>
+            <dt>{t('workers.registryDetailManifest')}</dt>
+            <dd>
+              {option.manifestDigest ? (
+                <DigestValue value={option.manifestDigest} />
+              ) : (
+                <span className="registry-digest-pending">—</span>
+              )}
+            </dd>
+          </div>
+          {showArtifactIntegrity && (
+            <>
+              <div>
+                <dt>{t('workers.registryDetailDeclared')}</dt>
+                <dd>
+                  {declaredSha256 ? (
+                    <DigestValue value={declaredSha256} />
+                  ) : (
+                    <span className="registry-digest-pending">
+                      {t('workers.registryDeclaredMissing')}
+                    </span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('workers.registryDetailObserved')}</dt>
+                <dd className="registry-digest-row">
+                  {props.observedSha256 ? (
+                    <DigestValue value={props.observedSha256} />
+                  ) : (
+                    <span className="registry-digest-pending">
+                      {t('workers.registryObservedPending')}
+                    </span>
+                  )}
+                  {shaMatch === true && (
+                    <span className="registry-digest-badge is-match">
+                      {t('workers.registryDigestMatch')}
+                    </span>
+                  )}
+                  {shaMatch === false && (
+                    <span className="registry-digest-badge is-mismatch">
+                      {t('workers.registryDigestMismatch')}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            </>
+          )}
+        </dl>
+      </div>
+
+      <div className="registry-agent-dist-field">
+        <label htmlFor="registry-agent-distribution">{t('workers.registryDetailDistribution')}</label>
         <select
-          className="field-select"
+          id="registry-agent-distribution"
+          className="settings-input ui-font"
           value={props.distribution}
           onChange={(event) =>
             props.onDistributionChange(event.target.value as WorkerRegistryDistribution)
@@ -125,38 +229,7 @@ export function RegistryAgentDetail(props: {
             ),
           )}
         </select>
-      </label>
-
-      <dl className="registry-agent-facts registry-agent-trust-facts">
-        <div>
-          <dt>{t('workers.registryDetailSource')}</dt>
-          <dd>{source}</dd>
-        </div>
-        <div>
-          <dt>{t('workers.registryDetailCommand')}</dt>
-          <dd className="mono">{command}</dd>
-        </div>
-        <div>
-          <dt>{t('workers.registryDetailRunner')}</dt>
-          <dd>{runner}</dd>
-        </div>
-        <div>
-          <dt>{t('workers.registryDetailManifest')}</dt>
-          <dd className="mono">{shortDigest(option.manifestDigest)}</dd>
-        </div>
-        <div>
-          <dt>{t('workers.registryDetailDeclared')}</dt>
-          <dd className="mono">{shortDigest(declaredSha256)}</dd>
-        </div>
-        <div>
-          <dt>{t('workers.registryDetailObserved')}</dt>
-          <dd className="mono">
-            {props.observedSha256
-              ? shortDigest(props.observedSha256)
-              : t('workers.registryObservedPending')}
-          </dd>
-        </div>
-      </dl>
+      </div>
 
       {missingSha && (
         <div className="registry-agent-trust-warning">
@@ -171,8 +244,10 @@ export function RegistryAgentDetail(props: {
           </label>
         </div>
       )}
-      <p className="settings-field-hint">{t('workers.registryNetworkAuthNotice')}</p>
-      <p className="settings-field-hint">{t('workers.registrySandboxNotice')}</p>
+      <div className="registry-agent-notices">
+        <p>{t('workers.registryNetworkAuthNotice')}</p>
+        <p>{t('workers.registrySandboxNotice')}</p>
+      </div>
     </section>
   )
 }

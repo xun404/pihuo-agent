@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-test('role review prompt distinguishes bootstrapped and empty Sessions and only completes on stop', async () => {
+test('Team review prompt distinguishes bootstrapped and empty Sessions and only completes on stop', async () => {
   const sourceUrl = new URL('./role-review-prompt.ts', import.meta.url)
   const moduleUrl = new URL('./role-review-prompt.js', import.meta.url)
   assert.equal(existsSync(fileURLToPath(sourceUrl)), true, 'role-review prompt helper must exist')
@@ -21,11 +21,11 @@ test('role review prompt distinguishes bootstrapped and empty Sessions and only 
 
   assert.match(
     module.buildRoleReviewInstruction({ roleReviewPending: true, bootstrappedRoleCount: 2 }),
-    /已带入默认角色.*是否需要调整角色定义/u,
+    /Worker 默认角色创建 Team.*是否需要调整 Team/u,
   )
   assert.match(
     module.buildRoleReviewInstruction({ roleReviewPending: true, bootstrappedRoleCount: 0 }),
-    /当前没有可用默认角色.*是否需要配置角色定义/u,
+    /当前没有可用的默认 Team 成员.*是否需要配置 Team/u,
   )
   assert.equal(
     module.buildRoleReviewInstruction({ roleReviewPending: false, bootstrappedRoleCount: 2 }),

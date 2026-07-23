@@ -7,14 +7,19 @@ import type {
   Project,
   Session,
   SessionApprovalPolicy,
-  RoleDefinition,
-  CreateRoleDefinitionInput,
+  TeamMember,
+  TeamTemplate,
+  CreateTeamTemplateInput,
+  UpdateTeamTemplateInput,
+  ApplyTeamTemplateInput,
+  TeamTemplateMemberMapping,
+  CreateTeamMemberInput,
   CustomAcpRegistrationInput,
-  UpdateRoleDefinitionInput,
+  UpdateTeamMemberInput,
   WorkerRegistration,
-  WorkerDefaultRole,
   WorkerRole,
   PromptSettings,
+  WorkerTimeoutSettings,
 } from '@swarmdesk-agent/shared'
 import type { WorkerRegistryCatalog } from './worker-registry'
 
@@ -267,6 +272,7 @@ export const api = {
     title?: string
     mode?: LeaderMode
     memoryThreadId?: string
+    teamTemplateId?: string
   }) =>
     request<{ session: Session; snapshot: AppSnapshot }>('/api/sessions', {
       method: 'POST',
@@ -342,51 +348,71 @@ export const api = {
     request<{ ok: boolean; snapshot: AppSnapshot }>(`/api/projects/${encodePathSegment(id)}`, {
       method: 'DELETE',
     }),
-  listRoleDefinitions: (chatSessionId: string, includeArchived = false) =>
-    request<{ roleDefinitions: RoleDefinition[] }>(
-      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions${
+  listTeamMembers: (chatSessionId: string, includeArchived = false) =>
+    request<{ teamMembers: TeamMember[] }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/team${
         includeArchived ? '?includeArchived=1' : ''
       }`,
     ),
-  createRoleDefinition: (
-    chatSessionId: string,
-    body: Omit<CreateRoleDefinitionInput, 'chatSessionId'>,
-  ) =>
-    request<{ roleDefinition: RoleDefinition; snapshot: AppSnapshot }>(
-      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions`,
+  createTeamMember: (chatSessionId: string, body: Omit<CreateTeamMemberInput, 'chatSessionId'>) =>
+    request<{ teamMember: TeamMember; snapshot: AppSnapshot }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/team/members`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
-  updateRoleDefinition: (
-    chatSessionId: string,
-    roleDefinitionId: string,
-    body: UpdateRoleDefinitionInput,
-  ) =>
-    request<{ roleDefinition: RoleDefinition; snapshot: AppSnapshot }>(
-      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions/${encodePathSegment(
-        roleDefinitionId,
+  updateTeamMember: (chatSessionId: string, teamMemberId: string, body: UpdateTeamMemberInput) =>
+    request<{ teamMember: TeamMember; snapshot: AppSnapshot }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/team/members/${encodePathSegment(
+        teamMemberId,
       )}`,
       { method: 'PATCH', body: JSON.stringify(body) },
     ),
-  archiveRoleDefinition: (
-    chatSessionId: string,
-    roleDefinitionId: string,
-    expectedRevision?: number,
-  ) =>
-    request<{ roleDefinition: RoleDefinition; snapshot: AppSnapshot }>(
-      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions/${encodePathSegment(
-        roleDefinitionId,
+  archiveTeamMember: (chatSessionId: string, teamMemberId: string, expectedRevision?: number) =>
+    request<{ teamMember: TeamMember; snapshot: AppSnapshot }>(
+      `/api/sessions/${encodePathSegment(chatSessionId)}/team/members/${encodePathSegment(
+        teamMemberId,
       )}`,
       {
         method: 'DELETE',
         body: JSON.stringify(expectedRevision === undefined ? {} : { expectedRevision }),
       },
     ),
-  resetRoleSession: (chatSessionId: string, roleDefinitionId: string) =>
+  resetTeamMemberSession: (chatSessionId: string, teamMemberId: string) =>
     request<{ deleted: boolean }>(
-      `/api/sessions/${encodePathSegment(chatSessionId)}/role-definitions/${encodePathSegment(
-        roleDefinitionId,
+      `/api/sessions/${encodePathSegment(chatSessionId)}/team/members/${encodePathSegment(
+        teamMemberId,
       )}/reset-session`,
       { method: 'POST' },
+    ),
+  listTeamTemplates: () => request<{ templates: TeamTemplate[] }>('/api/team-templates'),
+  createTeamTemplate: (body: CreateTeamTemplateInput) =>
+    request<{ template: TeamTemplate }>('/api/team-templates', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateTeamTemplate: (templateId: string, body: UpdateTeamTemplateInput) =>
+    request<{ template: TeamTemplate }>(`/api/team-templates/${encodePathSegment(templateId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteTeamTemplate: (templateId: string) =>
+    request<{ template: TeamTemplate }>(`/api/team-templates/${encodePathSegment(templateId)}`, {
+      method: 'DELETE',
+    }),
+  previewTeamTemplateApplication: (
+    sessionId: string,
+    templateId: string,
+    mappings: TeamTemplateMemberMapping[] = [],
+  ) =>
+    request<import('@swarmdesk-agent/shared').TeamTemplateApplicationPreview>(
+      `/api/sessions/${encodePathSegment(sessionId)}/team/preview-template`,
+      { method: 'POST', body: JSON.stringify({ templateId, mappings }) },
+    ),
+  applyTeamTemplate: (sessionId: string, body: ApplyTeamTemplateInput) =>
+    request<{ members: TeamMember[]; teamRevision: number; snapshot: AppSnapshot }>(
+      `/api/sessions/${encodePathSegment(sessionId)}/team/apply-template`,
+      { method: 'POST', body: JSON.stringify(body) },
+      false,
+      60_000,
     ),
   listWorkers: () => request<{ workers: WorkerRegistration[] }>('/api/workers'),
   getWorkerRegistry: (signal?: AbortSignal) =>
@@ -520,12 +546,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ enabled }),
     }),
-  setWorkerDefaultRole: (id: string, body: WorkerDefaultRole) =>
+  setWorkerDefaultRoleType: (id: string, roleType: WorkerRole) =>
     request<{ worker: WorkerRegistration; snapshot: AppSnapshot }>(
-      `/api/workers/${encodePathSegment(id)}/default-role`,
+      `/api/workers/${encodePathSegment(id)}/default-role-type`,
       {
         method: 'PUT',
-        body: JSON.stringify(body),
+        body: JSON.stringify({ roleType }),
       },
     ),
   healthWorker: (id: string, depth: 'presence' | 'version' | 'acp' = 'version') =>
@@ -714,6 +740,7 @@ export const api = {
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
         leaderMaxSteps?: number
         prompts: PromptSettings
+        workerTimeouts: WorkerTimeoutSettings
         updatedAt?: string
         customProviders?: {
           id: string
@@ -770,6 +797,7 @@ export const api = {
     thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     leaderMaxSteps?: number
     prompts?: PromptSettings
+    workerTimeouts?: WorkerTimeoutSettings
     secrets?: Record<string, string | null>
     customProviders?: {
       id: string
@@ -795,6 +823,7 @@ export const api = {
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
         leaderMaxSteps?: number
         prompts: PromptSettings
+        workerTimeouts: WorkerTimeoutSettings
       }
       providers: {
         id: string
@@ -880,7 +909,7 @@ export const api = {
   },
   createJob: (body: {
     task: string
-    roleDefinitionId?: string
+    teamMemberId?: string
     role?: import('@swarmdesk-agent/shared').WorkerRole
     workerIdOrKind?: string
     cwd?: string

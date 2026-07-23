@@ -36,7 +36,7 @@ const option: WorkerRegistryOption = {
 }
 
 describe('WorkerRegistryCombobox', () => {
-  it('keeps one searchable combobox and shows full platform/distribution/install/auth summaries', () => {
+  it('keeps one searchable combobox with single-line option meta and no caret', () => {
     const html = renderToStaticMarkup(
       <I18nProvider serverLocale="en">
         <WorkerRegistryCombobox
@@ -56,14 +56,37 @@ describe('WorkerRegistryCombobox', () => {
 
     assert.equal((html.match(/role="combobox"/gu) ?? []).length, 1)
     assert.match(html, /role="listbox"/u)
-    assert.match(html, /linux-x86_64/u)
-    assert.match(html, /npx \/ uvx \/ binary/u)
-    assert.match(html, /Installed/u)
-    assert.match(html, /Authentication required/u)
+    assert.doesNotMatch(html, /worker-registry-caret|worker-registry-toggle/u)
+    assert.doesNotMatch(html, /worker-registry-clear/u)
+    assert.match(html, /worker-registry-option-meta/u)
+    // wireframe-v5: name · id · "version · dist · install · readiness" on one row
+    assert.match(html, /1\.2\.3 · npx \/ uvx \/ binary · Installed · Authentication required/u)
     assert.doesNotMatch(html, /untrusted\.example\/agent\.svg/u)
   })
 
-  it('renders every option and reports the visible and total Agent counts', () => {
+  it('shows a clear control when the search query is non-empty', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider serverLocale="en">
+        <WorkerRegistryCombobox
+          options={[option]}
+          selectedId={option.id}
+          loading={false}
+          error={null}
+          placeholder="Search agents"
+          loadingLabel="Loading"
+          emptyLabel="Empty"
+          localInstallLabel="Local install"
+          onSelect={() => {}}
+        />
+      </I18nProvider>,
+    )
+
+    // selected option syncs query to option.name → clear button visible
+    assert.match(html, /worker-registry-clear/u)
+    assert.match(html, /aria-label="Clear"/u)
+  })
+
+  it('renders every option without a result count header', () => {
     const options = Array.from({ length: 38 }, (_, index) => ({
       ...option,
       id: `fixture-agent-${index}`,
@@ -87,6 +110,7 @@ describe('WorkerRegistryCombobox', () => {
     )
 
     assert.equal((html.match(/role="option"/gu) ?? []).length, 38)
-    assert.match(html, /38 \/ 38/u)
+    assert.doesNotMatch(html, /worker-registry-result-count/u)
+    assert.doesNotMatch(html, /38 \/ 38/u)
   })
 })

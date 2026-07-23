@@ -30,7 +30,10 @@ test('closing the secret editor aborts an active submission', () => {
 })
 
 test('a Registry selection never falls through to editable custom registration', () => {
-  assert.match(source, /const registrationRoute = resolveWorkerRegistrationRoute\(/u)
+  assert.match(
+    source,
+    /regMode === 'manual'\s*\?\s*\(\{\s*kind:\s*'custom'\s*\} as const\)\s*:\s*resolveWorkerRegistrationRoute\(/u,
+  )
   assert.match(source, /const isRegistryPath = registrationRoute\.kind !== 'custom'/u)
   assert.doesNotMatch(
     source,
@@ -40,6 +43,10 @@ test('a Registry selection never falls through to editable custom registration',
   assert.match(source, /if \(registrationRoute\.kind === 'registry_unavailable'\)/u)
   assert.match(source, /if \(registrationRoute\.kind === 'registry'\)/u)
   assert.doesNotMatch(source, /if \(isRegistryPath && selectedRegistryOption\)/u)
+  // Strong exclusive auto/manual modes share one card; switching clears the other path.
+  assert.match(source, /const switchRegisterMode = \(mode: 'auto' \| 'manual'\)/u)
+  assert.match(source, /setRegSelectedId\(null\)/u)
+  assert.match(source, /setRegCommand\(''\)/u)
 })
 
 test('Registry catalog updates are explicit and show active local snapshot metadata', () => {
