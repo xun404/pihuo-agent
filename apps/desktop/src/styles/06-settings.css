@@ -3668,17 +3668,17 @@ button.prompt-role-summary {
 .worker-detail-role-card .worker-card-role {
   margin-top: 0;
 }
-/* Role form top row: select on left, save button on right */
-.worker-card-role-top {
+/* Role form header row: title on left, save button on right */
+.worker-card-role-head {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
-.worker-card-role-top .worker-role-select-field {
-  flex: 1;
-  min-width: 0;
+.worker-card-role-head .worker-detail-card-title {
+  margin: 0;
 }
-.worker-card-role-top .settings-save-btn {
+.worker-card-role-head .settings-save-btn {
   flex: none;
 }
 /* Emphasize important identity values (command, path) */

@@ -17,8 +17,13 @@ interface Props {
 }
 
 /**
- * Default-role editor for a worker. Renders inline (no collapse) inside a worker-detail card:
- * a save button (top-right) + role select + the role's prompt preview.
+ * Default-role editor for a worker. Renders inline inside a worker-detail card:
+ *
+ *   默认角色                         [保存]
+ *   角色
+ *   [select ▼]
+ *   角色提示词
+ *   [prompt preview]
  */
 export function WorkerDefaultRoleTypeEditor({
   worker,
@@ -48,25 +53,26 @@ export function WorkerDefaultRoleTypeEditor({
 
   return (
     <form className="worker-card-role-form" onSubmit={(event) => void submit(event)}>
-      <div className="worker-card-role-top">
-        <label className="settings-field worker-role-select-field">
-          <span>{t('roles.type')}</span>
-          <select
-            className="settings-input ui-font"
-            value={roleType}
-            onChange={(event) => setRoleType(event.target.value as WorkerRole)}
-          >
-            {WORKER_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {t(roleMessageKey(role))}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="worker-card-role-head">
+        <h4 className="worker-detail-card-title">{t('workers.defaultRole')}</h4>
         <button type="submit" className="settings-save-btn" disabled={saving}>
           {saving ? t('app.loading') : t('settings.save')}
         </button>
       </div>
+      <label className="settings-field">
+        <span>{t('roles.type')}</span>
+        <select
+          className="settings-input ui-font"
+          value={roleType}
+          onChange={(event) => setRoleType(event.target.value as WorkerRole)}
+        >
+          {WORKER_ROLES.map((role) => (
+            <option key={role} value={role}>
+              {t(roleMessageKey(role))}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="settings-field worker-role-prompt-field">
         <span>{t('roles.instructions')}</span>
         <div className="worker-role-prompt-preview" aria-label={t('roles.instructions')}>

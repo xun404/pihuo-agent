@@ -2504,11 +2504,6 @@ export function SettingsPanel({
 
                         {/* Role card (grid slot 4) */}
                         <div className="worker-detail-card worker-detail-role-card">
-                          <div className="worker-detail-role-head">
-                            <h4 className="worker-detail-card-title">
-                              {t('workers.defaultRole')}
-                            </h4>
-                          </div>
                           <WorkerDefaultRoleTypeEditor
                             worker={w}
                             rolePrompts={data?.settings.prompts.roles}
