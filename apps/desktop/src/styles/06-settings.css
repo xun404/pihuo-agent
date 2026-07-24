@@ -3665,6 +3665,15 @@ button.prompt-role-summary {
 .worker-detail-role-card .worker-card-role {
   margin-top: 0;
 }
+/* Delete link floats to the top-right of the role card */
+.worker-detail-role-card .worker-card-role {
+  position: relative;
+}
+.worker-detail-role-card .worker-card-delete-link {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
 /* Emphasize important identity values (command, path) */
 .worker-info-row .worker-info-value.is-emphasized {
   color: var(--text-1);
