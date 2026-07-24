@@ -3668,14 +3668,18 @@ button.prompt-role-summary {
 .worker-detail-role-card .worker-card-role {
   margin-top: 0;
 }
-/* Delete link floats to the top-right of the role card */
-.worker-detail-role-card .worker-card-role {
-  position: relative;
+/* Role form top row: select on left, save button on right */
+.worker-card-role-top {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
 }
-.worker-detail-role-card .worker-card-delete-link {
-  position: absolute;
-  top: 0;
-  right: 0;
+.worker-card-role-top .worker-role-select-field {
+  flex: 1;
+  min-width: 0;
+}
+.worker-card-role-top .settings-save-btn {
+  flex: none;
 }
 /* Emphasize important identity values (command, path) */
 .worker-info-row .worker-info-value.is-emphasized {

@@ -2241,6 +2241,14 @@ export function SettingsPanel({
                                 : cs?.agentVersion}
                             </span>
                           )}
+                          {w.readiness && (
+                            <WorkerReadinessBadge
+                              status={w.readiness.status}
+                              code={w.readiness.code}
+                              nextAction={w.readiness.nextAction}
+                              locale={locale === 'zh' ? 'zh' : 'en'}
+                            />
+                          )}
                           <button
                             type="button"
                             className={`switch toggle${w.enabled ? ' on' : ''}`}
@@ -2251,14 +2259,19 @@ export function SettingsPanel({
                           />
                         </div>
                         <div className="worker-detail-head-actions">
-                          {w.readiness && (
-                            <WorkerReadinessBadge
-                              status={w.readiness.status}
-                              code={w.readiness.code}
-                              nextAction={w.readiness.nextAction}
-                              locale={locale === 'zh' ? 'zh' : 'en'}
-                            />
-                          )}
+                          <button
+                            type="button"
+                            className="worker-card-delete-link"
+                            title={
+                              !w.enabled
+                                ? t('workers.deleteWorker')
+                                : t('workers.deleteDisabledHint')
+                            }
+                            disabled={w.enabled}
+                            onClick={() => void removeWorker(w.id, w.name)}
+                          >
+                            {t('workers.deleteWorker')}
+                          </button>
                         </div>
                       </div>
 
@@ -2491,13 +2504,14 @@ export function SettingsPanel({
 
                         {/* Role card (grid slot 4) */}
                         <div className="worker-detail-card worker-detail-role-card">
-                          <h4 className="worker-detail-card-title">
-                            {t('workers.defaultRole')}
-                          </h4>
+                          <div className="worker-detail-role-head">
+                            <h4 className="worker-detail-card-title">
+                              {t('workers.defaultRole')}
+                            </h4>
+                          </div>
                           <WorkerDefaultRoleTypeEditor
                             worker={w}
                             rolePrompts={data?.settings.prompts.roles}
-                            onDelete={() => void removeWorker(w.id, w.name)}
                             onSave={async (roleType) => {
                               try {
                                 await onSetWorkerDefaultRoleType(w.id, roleType)
