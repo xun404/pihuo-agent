@@ -3506,8 +3506,7 @@ button.prompt-role-summary {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: 16px 20px;
-  max-width: 640px;
+  padding: 20px 24px;
 }
 .worker-detail .settings-provider-head {
   display: flex;
@@ -3532,13 +3531,134 @@ button.prompt-role-summary {
   word-break: break-all;
 }
 
+/* Worker detail: 2-column card grid */
+.worker-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 4px;
+}
+.worker-detail-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  padding: 14px 16px;
+}
+.worker-detail-card-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
+}
+/* Info rows (label: value) */
+.worker-info-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+.worker-info-row .worker-info-label {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.worker-info-row .worker-info-value {
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  word-break: break-all;
+}
+.worker-info-row .worker-info-value.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+}
+/* Capability items */
+.worker-cap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.worker-cap-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+}
+.worker-cap-item .worker-cap-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+}
+.worker-cap-item .worker-cap-check.on {
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+  color: var(--green);
+}
+.worker-cap-item .worker-cap-check.off {
+  background: var(--bg-hover);
+  color: var(--text-3);
+}
+/* Health status rows */
+.worker-health-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: var(--fs-sm);
+}
+.worker-health-row .worker-health-label {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+}
+.worker-health-row .worker-health-value {
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-xs);
+}
+.worker-health-value.ok {
+  color: var(--green);
+}
+.worker-health-value.warn {
+  color: var(--warning, var(--danger));
+}
+.worker-health-value.bad {
+  color: var(--danger);
+}
+/* Auth card */
+.worker-auth-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.worker-auth-method {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+}
+.worker-auth-method .worker-auth-type {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  background: var(--bg-hover);
+}
+.worker-detail-footer {
+  margin-top: 4px;
+}
+
 /* Registration panel (right side when "+ register" is selected) */
 .worker-register-panel {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: 16px 20px;
-  max-width: 640px;
+  padding: 20px 24px;
 }
 
 /* Empty state placeholder */

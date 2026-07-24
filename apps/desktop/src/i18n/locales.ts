@@ -448,6 +448,22 @@ export type MessageKey =
   | 'workers.secretPlaceholder'
   | 'workers.registryUpdateChecking'
   | 'workers.registryUpdate'
+  | 'workers.sectionIdentity'
+  | 'workers.sectionHealth'
+  | 'workers.sectionCapability'
+  | 'workers.sectionAuth'
+  | 'workers.fieldCommand'
+  | 'workers.fieldSource'
+  | 'workers.fieldProtocol'
+  | 'workers.fieldPath'
+  | 'workers.healthCli'
+  | 'workers.healthAcp'
+  | 'workers.healthProbed'
+  | 'workers.healthModels'
+  | 'workers.capSessionLoad'
+  | 'workers.capSessionResume'
+  | 'workers.capSessionList'
+  | 'workers.capLogout'
   | 'workers.deleteErrorReferenced'
   | 'workers.deleteErrorGeneric'
   | 'workers.formName'
@@ -1023,6 +1039,22 @@ const zh: Dict = {
   'workers.secretPlaceholder': '输入密钥…',
   'workers.registryUpdateChecking': '检查更新中…',
   'workers.registryUpdate': '检查更新',
+  'workers.sectionIdentity': '身份信息',
+  'workers.sectionHealth': '健康状态',
+  'workers.sectionCapability': '能力矩阵',
+  'workers.sectionAuth': '认证方式',
+  'workers.fieldCommand': '命令',
+  'workers.fieldSource': '来源',
+  'workers.fieldProtocol': '协议',
+  'workers.fieldPath': '路径',
+  'workers.healthCli': 'CLI',
+  'workers.healthAcp': 'ACP',
+  'workers.healthProbed': '探测',
+  'workers.healthModels': '模型',
+  'workers.capSessionLoad': '会话加载',
+  'workers.capSessionResume': '会话恢复',
+  'workers.capSessionList': '会话列表',
+  'workers.capLogout': '登出',
   'workers.deleteConfirm': '确定删除「{name}」？该操作不可撤销。',
   'workers.deleteConfirmReferenced':
     '「{name}」正被 {count} 个团队成员使用。删除后这些成员将被自动归档，相关会话需重新组队。确定删除？',
@@ -1634,6 +1666,22 @@ const en: Dict = {
   'workers.secretPlaceholder': 'Enter secret…',
   'workers.registryUpdateChecking': 'Checking…',
   'workers.registryUpdate': 'Check for updates',
+  'workers.sectionIdentity': 'Identity',
+  'workers.sectionHealth': 'Health',
+  'workers.sectionCapability': 'Capabilities',
+  'workers.sectionAuth': 'Authentication',
+  'workers.fieldCommand': 'Command',
+  'workers.fieldSource': 'Source',
+  'workers.fieldProtocol': 'Protocol',
+  'workers.fieldPath': 'Path',
+  'workers.healthCli': 'CLI',
+  'workers.healthAcp': 'ACP',
+  'workers.healthProbed': 'Probed',
+  'workers.healthModels': 'Models',
+  'workers.capSessionLoad': 'Session load',
+  'workers.capSessionResume': 'Session resume',
+  'workers.capSessionList': 'Session list',
+  'workers.capLogout': 'Logout',
   'workers.deleteConfirm': 'Delete "{name}"? This cannot be undone.',
   'workers.deleteConfirmReferenced':
     '"{name}" is in use by {count} team member(s). Deleting it will auto-archive them — affected sessions will need re-teaming. Delete anyway?',

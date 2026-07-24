@@ -2203,26 +2203,42 @@ export function SettingsPanel({
                 (() => {
                   const w = workers.find((x) => x.id === railFocus.id)
                   if (!w) return <p className="settings-muted">{t('workers.empty')}</p>
+                  const cs = w.capabilitySummary
+                  const terminalMethod = cs?.authMethods?.find((m) => m.type === 'terminal')
+                  const agentMethod = cs?.authMethods?.find((m) => m.type === 'agent')
+                  const envMethod = cs?.authMethods?.find((m) => m.type === 'env_var')
+                  const authActive =
+                    agentAuthOperation?.workerId === w.id ? agentAuthOperation.snapshot : null
+                  const sourceStr = w.source ? (w.source as { type?: string }).type : undefined
+                  const sourceLabel =
+                    w.source?.type === 'registry'
+                      ? `registry · ${w.source.distribution}`
+                      : w.source?.type === 'custom'
+                        ? `custom · ${w.source.launchKind}`
+                        : sourceStr ?? '—'
+                  const pathLabel =
+                    w.launchSpec?.executable ?? w.command ?? '—'
                   return (
                     <div className="worker-detail">
+                      {/* Header */}
                       <div className="settings-provider-head">
                         <span
                           className={`worker-logo ${workerLogoClass(w.kind)}`}
                           title={w.name}
                           aria-hidden
                         >
-                          <WorkerBrandLogo kind={w.kind} size={18} />
+                          <WorkerBrandLogo kind={w.kind} size={20} />
                         </span>
                         <div className="worker-detail-titles">
                           <h3 className="settings-card-title">{w.name}</h3>
                           {(w.source?.type === 'registry'
                             ? w.source.registryVersion
-                            : w.capabilitySummary?.agentVersion) && (
+                            : cs?.agentVersion) && (
                             <span className="worker-card-version">
                               v
                               {w.source?.type === 'registry'
                                 ? w.source.registryVersion
-                                : w.capabilitySummary?.agentVersion}
+                                : cs?.agentVersion}
                             </span>
                           )}
                         </div>
@@ -2243,30 +2259,135 @@ export function SettingsPanel({
                           onClick={() => onToggleWorker?.(w.id, !w.enabled)}
                         />
                       </div>
-                      <div className="worker-detail-source mono">
-                        {w.source?.type === 'registry'
-                          ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
-                          : `${w.command} ${(w.args ?? []).join(' ')}`}
-                      </div>
-                      {w.readiness?.status === 'auth_required' &&
-                        (() => {
-                          const terminalMethod = w.capabilitySummary?.authMethods?.find(
-                            (candidate) => candidate.type === 'terminal',
-                          )
-                          const agentMethod = w.capabilitySummary?.authMethods?.find(
-                            (candidate) => candidate.type === 'agent',
-                          )
-                          const envMethod = w.capabilitySummary?.authMethods?.find(
-                            (candidate) => candidate.type === 'env_var',
-                          )
-                          const active =
-                            agentAuthOperation?.workerId === w.id ? agentAuthOperation.snapshot : null
-                          return (
-                            <div className="worker-settings-auth-actions">
+
+                      {/* 2-column card grid */}
+                      <div className="worker-detail-grid">
+                        {/* Identity card */}
+                        <div className="worker-detail-card">
+                          <h4 className="worker-detail-card-title">
+                            {t('workers.sectionIdentity')}
+                          </h4>
+                          <div className="worker-info-row">
+                            <span className="worker-info-label">{t('workers.fieldCommand')}</span>
+                            <span className="worker-info-value mono">
+                              {w.command} {(w.args ?? []).join(' ')}
+                            </span>
+                          </div>
+                          <div className="worker-info-row">
+                            <span className="worker-info-label">{t('workers.fieldSource')}</span>
+                            <span className="worker-info-value">{sourceLabel}</span>
+                          </div>
+                          <div className="worker-info-row">
+                            <span className="worker-info-label">{t('workers.fieldProtocol')}</span>
+                            <span className="worker-info-value">
+                              {cs?.protocolVersion ? `ACP ${cs.protocolVersion}` : '—'}
+                            </span>
+                          </div>
+                          <div className="worker-info-row">
+                            <span className="worker-info-label">{t('workers.fieldPath')}</span>
+                            <span className="worker-info-value mono">{pathLabel}</span>
+                          </div>
+                        </div>
+
+                        {/* Health card */}
+                        <div className="worker-detail-card">
+                          <h4 className="worker-detail-card-title">
+                            {t('workers.sectionHealth')}
+                          </h4>
+                          <div className="worker-health-row">
+                            <span className="worker-health-label">{t('workers.healthCli')}</span>
+                            <span
+                              className={`worker-health-value ${
+                                w.commandHealth?.status === 'healthy' ||
+                                w.cliHealth === 'healthy'
+                                  ? 'ok'
+                                  : w.cliHealth === 'unhealthy'
+                                    ? 'bad'
+                                    : 'warn'
+                              }`}
+                            >
+                              {w.commandHealth?.status ?? w.cliHealth ?? 'unknown'}
+                            </span>
+                          </div>
+                          <div className="worker-health-row">
+                            <span className="worker-health-label">{t('workers.healthAcp')}</span>
+                            <span
+                              className={`worker-health-value ${
+                                w.acpHealth?.status === 'ready'
+                                  ? 'ok'
+                                  : w.acpHealth?.status === 'degraded'
+                                    ? 'warn'
+                                    : w.acpHealth?.status === 'unavailable'
+                                      ? 'bad'
+                                      : ''
+                              }`}
+                            >
+                              {w.acpHealth?.status ?? 'unknown'}
+                            </span>
+                          </div>
+                          <div className="worker-health-row">
+                            <span className="worker-health-label">
+                              {t('workers.healthProbed')}
+                            </span>
+                            <span className="worker-health-value">
+                              {cs?.probedAt
+                                ? new Date(cs.probedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')
+                                : '—'}
+                            </span>
+                          </div>
+                          <div className="worker-health-row">
+                            <span className="worker-health-label">
+                              {t('workers.healthModels')}
+                            </span>
+                            <span className="worker-health-value">
+                              {w.availableModels?.length != null
+                                ? `${w.availableModels.length}`
+                                : w.modelCatalogState ?? '—'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Capability card */}
+                        <div className="worker-detail-card">
+                          <h4 className="worker-detail-card-title">
+                            {t('workers.sectionCapability')}
+                          </h4>
+                          <div className="worker-cap-list">
+                            {(
+                              [
+                                ['capSessionLoad', cs?.sessionLoad],
+                                ['capSessionResume', cs?.sessionResume],
+                                ['capSessionList', cs?.sessionList],
+                                ['capLogout', cs?.authLogout],
+                              ] as const
+                            ).map(([key, val]) => (
+                              <div key={key} className="worker-cap-item">
+                                <span className={`worker-cap-check ${val ? 'on' : 'off'}`}>
+                                  {val ? '✓' : '✗'}
+                                </span>
+                                {t(`workers.${key}`)}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Auth card */}
+                        <div className="worker-detail-card">
+                          <h4 className="worker-detail-card-title">
+                            {t('workers.sectionAuth')}
+                          </h4>
+                          {cs?.authMethods && cs.authMethods.length > 0 ? (
+                            <div className="worker-auth-list">
+                              {cs.authMethods.map((m) => (
+                                <div key={m.id} className="worker-auth-method">
+                                  <span>{m.name ?? m.id}</span>
+                                  <span className="worker-auth-type">{m.type}</span>
+                                </div>
+                              ))}
                               {terminalMethod && (
                                 <button
                                   type="button"
-                                  className="settings-btn-soft worker-settings-auth-btn"
+                                  className="settings-btn-soft btn-sm"
                                   onClick={() =>
                                     setTerminalAuth({
                                       workerId: w.id,
@@ -2278,26 +2399,26 @@ export function SettingsPanel({
                                   {t('workers.terminalOpen')}
                                 </button>
                               )}
-                              {agentMethod && !active && (
+                              {agentMethod && !authActive && (
                                 <button
                                   type="button"
-                                  className="settings-btn-soft worker-settings-auth-btn"
+                                  className="settings-btn-soft btn-sm"
                                   disabled={Boolean(agentAuthOperation)}
                                   onClick={() => void startAgentAuthentication(w.id, agentMethod.id)}
                                 >
                                   {t('workers.authAgent')}
                                 </button>
                               )}
-                              {active && (
+                              {authActive && (
                                 <>
                                   <span className="settings-field-hint">
-                                    {active.status === 'queued'
+                                    {authActive.status === 'queued'
                                       ? t('workers.authQueued')
                                       : t('workers.authRunning')}
                                   </span>
                                   <button
                                     type="button"
-                                    className="settings-btn-soft"
+                                    className="settings-btn-soft btn-sm"
                                     onClick={() => void cancelAgentAuthentication()}
                                   >
                                     {t('workers.authCancel')}
@@ -2307,7 +2428,7 @@ export function SettingsPanel({
                               {Boolean(envMethod?.envVarNames?.length) && (
                                 <button
                                   type="button"
-                                  className="settings-btn-soft worker-settings-auth-btn"
+                                  className="settings-btn-soft btn-sm"
                                   disabled={secretBusy}
                                   onClick={() =>
                                     setSecretEditor({
@@ -2321,57 +2442,70 @@ export function SettingsPanel({
                                 </button>
                               )}
                             </div>
-                          )
-                        })()}
-                      {secretEditor?.workerId === w.id && (
-                        <form
-                          className="worker-secret-editor"
-                          onSubmit={(event) => void saveWorkerSecrets(event)}
-                        >
-                          <h4 className="settings-card-title">
-                            {t('workers.secretTitle', { name: secretEditor.workerName })}
-                          </h4>
-                          {secretEditor.envVarNames.map((name) => (
-                            <div key={name} className="settings-field">
-                              <label className="field-label mono">{name}</label>
-                              <input
-                                className="settings-input mono"
-                                type="password"
-                                placeholder={t('workers.secretPlaceholder')}
-                                value={secretDraft[name] ?? ''}
-                                onChange={(e) =>
-                                  setSecretDraft((prev) => ({ ...prev, [name]: e.target.value }))
-                                }
-                              />
-                            </div>
-                          ))}
-                          <div className="model-edit-actions">
-                            <button
-                              type="button"
-                              className="btn-ghost"
-                              onClick={closeSecretEditor}
+                          ) : (
+                            <p className="settings-muted" style={{ fontSize: 'var(--fs-sm)' }}>
+                              —
+                            </p>
+                          )}
+                          {secretEditor?.workerId === w.id && (
+                            <form
+                              className="worker-secret-editor"
+                              onSubmit={(event) => void saveWorkerSecrets(event)}
                             >
-                              {t('prompt.cancel')}
-                            </button>
-                            <button type="submit" className="settings-save-btn" disabled={secretBusy}>
-                              {secretBusy ? t('app.loading') : t('settings.save')}
-                            </button>
-                          </div>
-                        </form>
-                      )}
-                      <WorkerDefaultRoleTypeEditor
-                        worker={w}
-                        rolePrompts={data?.settings.prompts.roles}
-                        onDelete={() => void removeWorker(w.id, w.name)}
-                        onSave={async (roleType) => {
-                          try {
-                            await onSetWorkerDefaultRoleType(w.id, roleType)
-                            toastSuccess(t('roles.saved'))
-                          } catch (error) {
-                            toastError(error instanceof Error ? error.message : String(error))
-                          }
-                        }}
-                      />
+                              <h4 className="settings-card-title">
+                                {t('workers.secretTitle', { name: secretEditor.workerName })}
+                              </h4>
+                              {secretEditor.envVarNames.map((name) => (
+                                <div key={name} className="settings-field">
+                                  <label className="field-label mono">{name}</label>
+                                  <input
+                                    className="settings-input mono"
+                                    type="password"
+                                    placeholder={t('workers.secretPlaceholder')}
+                                    value={secretDraft[name] ?? ''}
+                                    onChange={(e) =>
+                                      setSecretDraft((prev) => ({ ...prev, [name]: e.target.value }))
+                                    }
+                                  />
+                                </div>
+                              ))}
+                              <div className="model-edit-actions">
+                                <button
+                                  type="button"
+                                  className="btn-ghost"
+                                  onClick={closeSecretEditor}
+                                >
+                                  {t('prompt.cancel')}
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="settings-save-btn"
+                                  disabled={secretBusy}
+                                >
+                                  {secretBusy ? t('app.loading') : t('settings.save')}
+                                </button>
+                              </div>
+                            </form>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Footer: role editor */}
+                      <div className="worker-detail-footer">
+                        <WorkerDefaultRoleTypeEditor
+                          worker={w}
+                          rolePrompts={data?.settings.prompts.roles}
+                          onDelete={() => void removeWorker(w.id, w.name)}
+                          onSave={async (roleType) => {
+                            try {
+                              await onSetWorkerDefaultRoleType(w.id, roleType)
+                              toastSuccess(t('roles.saved'))
+                            } catch (error) {
+                              toastError(error instanceof Error ? error.message : String(error))
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
                   )
                 })()}
