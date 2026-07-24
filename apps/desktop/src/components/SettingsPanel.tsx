@@ -5,6 +5,7 @@ import type {
   CustomAcpRegistrationInput,
   CustomAcpPreview,
   PromptSettings,
+  TeamTemplate,
   WorkerTimeoutSettings,
   WorkerRegistration,
   WorkerRole,
@@ -86,6 +87,7 @@ function applyAppearanceChoice(
 import {
   IconChevronLeft,
   IconCpu,
+  IconCrew,
   IconInfo,
   IconFileEdit,
   IconSettings,
@@ -249,6 +251,35 @@ export function SettingsPanel({
   } | null>(null)
   // Generic confirmation dialog state (delete/destroy actions), replacing native OS confirms.
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
+  // Rail focus drives the workers-tab right panel: which agent/crew is selected, or special views.
+  const [railFocus, setRailFocus] = useState<
+    | { type: 'agent'; id: string }
+    | { type: 'crew'; id: string }
+    | { type: 'register' }
+    | null
+  >(null)
+  // Team templates loaded for the Crews rail section + crew detail panel.
+  const [teamTemplates, setTeamTemplates] = useState<TeamTemplate[]>([])
+  const [teamTemplatesLoading, setTeamTemplatesLoading] = useState(false)
+  useEffect(() => {
+    if (tab !== 'workers') return
+    let cancelled = false
+    setTeamTemplatesLoading(true)
+    api
+      .listTeamTemplates()
+      .then(({ templates }) => {
+        if (!cancelled) setTeamTemplates(templates)
+      })
+      .catch(() => {
+        /* keep empty list on error */
+      })
+      .finally(() => {
+        if (!cancelled) setTeamTemplatesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tab, onRefreshSnapshot])
   const [agentAuthOperation, setAgentAuthOperation] = useState<{
     workerId: string
     snapshot: RegistryOperationSnapshot<RegistryAuthenticateResult>
@@ -260,6 +291,7 @@ export function SettingsPanel({
     envVarNames: string[]
   } | null>(null)
   const [secretBusy, setSecretBusy] = useState(false)
+  const [secretDraft, setSecretDraft] = useState<Record<string, string>>({})
   const secretControllerRef = useRef<AbortController | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -2081,57 +2113,108 @@ export function SettingsPanel({
       )}
 
       {!loading && tab === 'workers' && (
-        <div className="settings-workers">
+        <div className="settings-model-page settings-workers-page">
           <h2 className="settings-page-title">{t('settings.navWorkers')}</h2>
           <p className="settings-page-desc">{t('settings.descWorkers')}</p>
-
-          <div className="worker-settings-stack">
-            <div className="settings-form-card worker-list-card">
-              <div className="worker-list-head">
-                <div className="model-list-label">{t('workers.registered')}</div>
-                <div className="worker-list-actions">
+          <div className="settings-model-layout">
+            {/* ── Left rail: Agents + Crews ── */}
+            <aside className="settings-provider-rail" aria-label={t('settings.navWorkers')}>
+              <div className="settings-rail-label">{t('workers.railAgents')}</div>
+              {workers.map((w) => {
+                const active = railFocus?.type === 'agent' && railFocus.id === w.id
+                return (
                   <button
+                    key={w.id}
                     type="button"
-                    className="settings-btn-soft"
-                    onClick={() =>
-                      setRegOpen((v) => {
-                        if (!v) setRegMode('auto')
-                        return !v
-                      })
-                    }
+                    className={`settings-rail-item${active ? ' active' : ''}`}
+                    onClick={() => setRailFocus({ type: 'agent', id: w.id })}
                   >
-                    {t('workers.register')}
+                    <span className={`settings-rail-icon worker-logo ${workerLogoClass(w.kind)}`} aria-hidden>
+                      <WorkerBrandLogo kind={w.kind} size={16} />
+                    </span>
+                    <span className="settings-rail-text">
+                      <span className="settings-rail-name">{w.name}</span>
+                    </span>
+                    <span
+                      className={`settings-rail-dot${w.enabled && w.health === 'healthy' ? ' on' : ''}`}
+                      title={w.enabled ? t('workers.health.healthy') : t('workers.health.unknown')}
+                    />
                   </button>
-                  {onHealthAllWorkers && (
-                    <button
-                      type="button"
-                      className="settings-btn-soft"
-                      onClick={() => void onHealthAllWorkers()}
-                    >
-                      {t('workers.healthAll')}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <p className="settings-field-hint" style={{ margin: '0 0 4px' }}>
-                {t('workers.manualRegistrationHint')}
-              </p>
+                )
+              })}
+              <button
+                type="button"
+                className={`settings-rail-add${railFocus?.type === 'register' ? ' active' : ''}`}
+                onClick={() => {
+                  setRegOpen(true)
+                  setRegMode('auto')
+                  setRailFocus({ type: 'register' })
+                }}
+              >
+                + {t('workers.register')}
+              </button>
 
-              {workers.length === 0 && <p className="settings-muted">{t('workers.empty')}</p>}
-              <div className="worker-card-list">
-                {workers.map((w) => (
-                  <article key={w.id} className="worker-card">
-                    <div className="worker-card-main">
-                      <span
-                        className={`worker-logo ${workerLogoClass(w.kind)}`}
-                        title={w.name}
-                        aria-hidden
-                      >
-                        <WorkerBrandLogo kind={w.kind} size={18} />
-                      </span>
-                      <div className="worker-card-info">
-                        <div className="worker-card-title">
-                          <span className="worker-card-name">{w.name}</span>
+              <div className="settings-rail-label" style={{ marginTop: 12 }}>
+                {t('workers.railCrews')}
+              </div>
+              {teamTemplates.map((tmpl) => {
+                const active = railFocus?.type === 'crew' && railFocus.id === tmpl.id
+                return (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    className={`settings-rail-item${active ? ' active' : ''}`}
+                    onClick={() => setRailFocus({ type: 'crew', id: tmpl.id })}
+                  >
+                    <span className="settings-rail-icon" aria-hidden>
+                      <IconCrew size={16} />
+                    </span>
+                    <span className="settings-rail-text">
+                      <span className="settings-rail-name">{tmpl.name}</span>
+                    </span>
+                    <span className="settings-rail-meta">{tmpl.members.length}</span>
+                  </button>
+                )
+              })}
+              <button
+                type="button"
+                className="settings-rail-add"
+                onClick={async () => {
+                  try {
+                    const { template } = await api.createTeamTemplate({
+                      name: t('workers.newCrewName'),
+                      members: [],
+                    })
+                    setTeamTemplates((prev) => [...prev, template])
+                    setRailFocus({ type: 'crew', id: template.id })
+                  } catch (e) {
+                    toastError(e instanceof Error ? e.message : String(e))
+                  }
+                }}
+              >
+                + {t('workers.newCrew')}
+              </button>
+            </aside>
+
+            {/* ── Right main panel ── */}
+            <div className="settings-model-main">
+              {/* Agent detail */}
+              {railFocus?.type === 'agent' &&
+                (() => {
+                  const w = workers.find((x) => x.id === railFocus.id)
+                  if (!w) return <p className="settings-muted">{t('workers.empty')}</p>
+                  return (
+                    <div className="worker-detail">
+                      <div className="settings-provider-head">
+                        <span
+                          className={`worker-logo ${workerLogoClass(w.kind)}`}
+                          title={w.name}
+                          aria-hidden
+                        >
+                          <WorkerBrandLogo kind={w.kind} size={18} />
+                        </span>
+                        <div className="worker-detail-titles">
+                          <h3 className="settings-card-title">{w.name}</h3>
                           {(w.source?.type === 'registry'
                             ? w.source.registryVersion
                             : w.capabilitySummary?.agentVersion) && (
@@ -2142,23 +2225,28 @@ export function SettingsPanel({
                                 : w.capabilitySummary?.agentVersion}
                             </span>
                           )}
-                          {w.health === 'healthy' && (
-                            <span className="tag-on">{t('workers.health.healthy')}</span>
-                          )}
-                          {w.readiness && (
-                            <WorkerReadinessBadge
-                              status={w.readiness.status}
-                              code={w.readiness.code}
-                              nextAction={w.readiness.nextAction}
-                              locale={locale === 'zh' ? 'zh' : 'en'}
-                            />
-                          )}
                         </div>
-                        <div className="worker-card-source mono">
-                          {w.source?.type === 'registry'
-                            ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
-                            : `${w.command} ${(w.args ?? []).join(' ')}`}
-                        </div>
+                        {w.readiness && (
+                          <WorkerReadinessBadge
+                            status={w.readiness.status}
+                            code={w.readiness.code}
+                            nextAction={w.readiness.nextAction}
+                            locale={locale === 'zh' ? 'zh' : 'en'}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          className={`switch toggle${w.enabled ? ' on' : ''}`}
+                          role="switch"
+                          aria-checked={w.enabled}
+                          aria-label={t('workers.formEnabled')}
+                          onClick={() => onToggleWorker?.(w.id, !w.enabled)}
+                        />
+                      </div>
+                      <div className="worker-detail-source mono">
+                        {w.source?.type === 'registry'
+                          ? `${w.source.registryId}@${w.source.registryVersion} · ${w.source.distribution}`
+                          : `${w.command} ${(w.args ?? []).join(' ')}`}
                       </div>
                       {w.readiness?.status === 'auth_required' &&
                         (() => {
@@ -2172,9 +2260,7 @@ export function SettingsPanel({
                             (candidate) => candidate.type === 'env_var',
                           )
                           const active =
-                            agentAuthOperation?.workerId === w.id
-                              ? agentAuthOperation.snapshot
-                              : null
+                            agentAuthOperation?.workerId === w.id ? agentAuthOperation.snapshot : null
                           return (
                             <div className="worker-settings-auth-actions">
                               {terminalMethod && (
@@ -2197,9 +2283,7 @@ export function SettingsPanel({
                                   type="button"
                                   className="settings-btn-soft worker-settings-auth-btn"
                                   disabled={Boolean(agentAuthOperation)}
-                                  onClick={() =>
-                                    void startAgentAuthentication(w.id, agentMethod.id)
-                                  }
+                                  onClick={() => void startAgentAuthentication(w.id, agentMethod.id)}
                                 >
                                   {t('workers.authAgent')}
                                 </button>
@@ -2239,341 +2323,316 @@ export function SettingsPanel({
                             </div>
                           )
                         })()}
-                      <button
-                        type="button"
-                        className={`switch toggle${w.enabled ? ' on' : ''}`}
-                        role="switch"
-                        aria-checked={w.enabled}
-                        aria-label={t('workers.formEnabled')}
-                        onClick={() => onToggleWorker?.(w.id, !w.enabled)}
-                      />
-                    </div>
-                    <WorkerDefaultRoleTypeEditor
-                      worker={w}
-                      rolePrompts={data?.settings.prompts.roles}
-                      onDelete={() => void removeWorker(w.id, w.name)}
-                      onSave={async (roleType) => {
-                        try {
-                          await onSetWorkerDefaultRoleType(w.id, roleType)
-                          toastSuccess(t('roles.saved'))
-                        } catch (error) {
-                          toastError(error instanceof Error ? error.message : String(error))
-                        }
-                      }}
-                    />
-                  </article>
-                ))}
-              </div>
-              {secretEditor && (
-                <form
-                  className="worker-secret-editor"
-                  onSubmit={(event) => void saveWorkerSecrets(event)}
-                >
-                  <div>
-                    <strong>{secretEditor.workerName}</strong>
-                    <p className="settings-field-hint">{t('workers.authSecretHint')}</p>
-                  </div>
-                  {secretEditor.envVarNames.map((envName) => (
-                    <label key={envName} className="settings-field">
-                      <span className="mono">{envName}</span>
-                      <input
-                        className="settings-input mono"
-                        type="password"
-                        name={envName}
-                        autoComplete="off"
-                        required
-                      />
-                    </label>
-                  ))}
-                  <div className="model-edit-actions">
-                    <button type="button" className="btn-ghost" onClick={closeSecretEditor}>
-                      {t('workers.cancel')}
-                    </button>
-                    <button type="submit" className="settings-save-btn" disabled={secretBusy}>
-                      {secretBusy ? t('app.loading') : t('workers.authSaveSecrets')}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-
-            {regOpen && (
-              <div className="settings-form-card worker-register-card">
-                <div className="worker-list-head">
-                  <div className="model-list-label">{t('workers.registerTitle')}</div>
-                </div>
-                <p className="settings-field-hint" style={{ margin: 0 }}>
-                  {regMode === 'auto'
-                    ? t('workers.registryHint')
-                    : t('workers.manualRegistrationHint')}
-                </p>
-
-                <div
-                  className="seg-control worker-register-mode-seg"
-                  role="tablist"
-                  aria-label={t('workers.registerTitle')}
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={regMode === 'auto'}
-                    className={regMode === 'auto' ? 'active' : undefined}
-                    onClick={() => switchRegisterMode('auto')}
-                  >
-                    {t('workers.registerModeAuto')}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={regMode === 'manual'}
-                    className={regMode === 'manual' ? 'active' : undefined}
-                    onClick={() => switchRegisterMode('manual')}
-                  >
-                    {t('workers.registerModeManual')}
-                  </button>
-                </div>
-
-                {regMode === 'auto' ? (
-                  <>
-                    <div className="settings-field worker-register-agent-field">
-                      <div className="worker-register-field-head">
-                        <span className="field-label">{t('workers.registryAgent')}</span>
-                        <button
-                          type="button"
-                          className="worker-register-update-link"
-                          disabled={workerRegistryLoading || workerRegistryChecking}
-                          onClick={() => void checkRegistryUpdates()}
+                      {secretEditor?.workerId === w.id && (
+                        <form
+                          className="worker-secret-editor"
+                          onSubmit={(event) => void saveWorkerSecrets(event)}
                         >
-                          {workerRegistryChecking
-                            ? t('workers.registryCheckingUpdates')
-                            : t('workers.registryCheckUpdates')}
-                        </button>
-                      </div>
-                      <WorkerRegistryCombobox
-                        options={workerRegistry}
-                        selectedId={regSelectedId}
-                        loading={workerRegistryLoading}
-                        error={workerRegistryError}
-                        placeholder={t('workers.registrySearch')}
-                        loadingLabel={t('workers.registryLoading')}
-                        emptyLabel={t('workers.registryEmpty')}
-                        localInstallLabel={t('workers.registryLocalInstall')}
-                        onSelect={(option) => {
-                          if (!option) {
-                            setRegSelectedId(null)
-                            setRegManifestDigest('')
-                            setRegVersion('')
-                            return
+                          <h4 className="settings-card-title">
+                            {t('workers.secretTitle', { name: secretEditor.workerName })}
+                          </h4>
+                          {secretEditor.envVarNames.map((name) => (
+                            <div key={name} className="settings-field">
+                              <label className="field-label mono">{name}</label>
+                              <input
+                                className="settings-input mono"
+                                type="password"
+                                placeholder={t('workers.secretPlaceholder')}
+                                value={secretDraft[name] ?? ''}
+                                onChange={(e) =>
+                                  setSecretDraft((prev) => ({ ...prev, [name]: e.target.value }))
+                                }
+                              />
+                            </div>
+                          ))}
+                          <div className="model-edit-actions">
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={closeSecretEditor}
+                            >
+                              {t('prompt.cancel')}
+                            </button>
+                            <button type="submit" className="settings-save-btn" disabled={secretBusy}>
+                              {secretBusy ? t('app.loading') : t('settings.save')}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                      <WorkerDefaultRoleTypeEditor
+                        worker={w}
+                        rolePrompts={data?.settings.prompts.roles}
+                        onDelete={() => void removeWorker(w.id, w.name)}
+                        onSave={async (roleType) => {
+                          try {
+                            await onSetWorkerDefaultRoleType(w.id, roleType)
+                            toastSuccess(t('roles.saved'))
+                          } catch (error) {
+                            toastError(error instanceof Error ? error.message : String(error))
                           }
-                          const draft = createWorkerDraftFromRegistry(option)
-                          setRegSelectedId(draft.selectedId)
-                          setRegName(draft.name)
-                          setRegCommand(draft.command)
-                          setRegArgs(draft.args)
-                          setRegEnv(draft.env)
-                          setRegDescription(draft.description)
-                          setRegVersion(option.version)
-                          setRegManifestDigest(option.manifestDigest ?? '')
-                          setRegDistribution(option.distribution)
-                          setRegTrustNoSha(false)
                         }}
                       />
-                      {workerRegistryCatalog && (
-                        <p className="settings-field-hint mono">
-                          {t('workers.registrySource')}: {workerRegistrySource}
-                          {' · '}
-                          {t('workers.registryUpdatedAt')}: {workerRegistryFetchedAt}
-                          {' · '}
-                          {t('workers.registryAgentCount')}: {workerRegistryAgentCount}
-                        </p>
-                      )}
                     </div>
+                  )
+                })()}
 
-                    {selectedRegistryOption && (
-                      <div className="registry-prepare-panel">
+              {/* Register new agent */}
+              {railFocus?.type === 'register' && (
+                <div className="worker-register-panel">
+                  <div className="seg-control worker-register-mode-seg" role="tablist">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={regMode === 'auto'}
+                      className={regMode === 'auto' ? 'active' : ''}
+                      onClick={() => switchRegisterMode('auto')}
+                    >
+                      {t('workers.registerModeAuto')}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={regMode === 'manual'}
+                      className={regMode === 'manual' ? 'active' : ''}
+                      onClick={() => switchRegisterMode('manual')}
+                    >
+                      {t('workers.registerModeManual')}
+                    </button>
+                  </div>
+                  <p className="settings-field-hint">
+                    {regMode === 'auto'
+                      ? t('workers.registryHint')
+                      : t('workers.manualRegistrationHint')}
+                  </p>
+                  {regMode === 'auto' ? (
+                    <>
+                      <div className="settings-field worker-register-agent-field">
+                        <div className="worker-register-field-head">
+                          <span className="field-label">{t('workers.registryAgent')}</span>
+                          <button
+                            type="button"
+                            className="worker-register-update-link"
+                            disabled={workerRegistryLoading || workerRegistryChecking}
+                            onClick={() => void checkRegistryUpdates()}
+                          >
+                            {workerRegistryChecking
+                              ? t('workers.registryUpdateChecking')
+                              : t('workers.registryUpdate')}
+                          </button>
+                        </div>
+                        <WorkerRegistryCombobox
+                          options={workerRegistry}
+                          selectedId={regSelectedId}
+                          loading={workerRegistryLoading}
+                          error={workerRegistryError}
+                          placeholder={t('workers.registryManifestUnavailable')}
+                          loadingLabel={t('app.loading')}
+                          emptyLabel={t('workers.registryEmpty')}
+                          localInstallLabel={t('workers.registryLocalInstall')}
+                          onSelect={(option) => option && createWorkerDraftFromRegistry(option)}
+                        />
+                        {workerRegistryCatalog && (
+                          <p className="settings-field-hint mono">
+                            {workerRegistrySource} · {t('workers.registryAgentCount', {
+                              count: workerRegistryAgentCount,
+                            })}
+                          </p>
+                        )}
+                      </div>
+                      {selectedRegistryOption && (
                         <RegistryAgentDetail
                           option={selectedRegistryOption}
                           distribution={regDistribution}
                           trustNoSha={regTrustNoSha}
-                          observedSha256={
-                            pendingRegistryPrepare?.operation.result &&
-                            typeof pendingRegistryPrepare.operation.result === 'object' &&
-                            'observedSha256' in pendingRegistryPrepare.operation.result
-                              ? (
-                                  pendingRegistryPrepare.operation.result as {
-                                    observedSha256?: string
-                                  }
-                                ).observedSha256
-                              : undefined
-                          }
-                          onDistributionChange={(distribution) => {
-                            setRegDistribution(distribution)
-                            setRegTrustNoSha(false)
-                          }}
-                          onTrustNoShaChange={setRegTrustNoSha}
+                          observedSha256={undefined}
+                          onDistributionChange={(d) => setRegDistribution(d)}
+                          onTrustNoShaChange={(trusted) => setRegTrustNoSha(trusted)}
                         />
-                        {selectedRegistryOption && !regManifestDigest && (
-                          <p className="settings-error" role="alert">
-                            {t('workers.registryManifestUnavailable')}
-                          </p>
-                        )}
-                        {regPrepareStatus && (
-                          <p className="settings-muted">{regPrepareStatus}</p>
-                        )}
-                        {pendingRegistryPrepare && (
-                          <WorkerPrepareProgress
-                            initial={pendingRegistryPrepare.operation}
-                            onSucceeded={(result) => {
-                              void finishRegistryRegistration(result)
-                            }}
-                            onFailed={(operation) => {
-                              setRegBusy(false)
-                              if (operation.status === 'failed') {
-                                toastError(
-                                  operation.code
-                                    ? `${operation.code}: ${operation.error ?? ''}`.trim()
-                                    : (operation.error ?? t('workers.registryPrepareFailed')),
-                                )
-                              }
-                            }}
-                            onCancel={() => setRegBusy(false)}
-                            onRetry={() => {
-                              setPendingRegistryPrepare(null)
-                              void saveWorker()
-                            }}
-                          />
-                        )}
+                      )}
+                      {selectedRegistryOption && !regManifestDigest && (
+                        <p className="settings-error">{t('workers.registryManifestUnavailable')}</p>
+                      )}
+                      {regPrepareStatus && (
+                        <p className="settings-muted">{regPrepareStatus}</p>
+                      )}
+                      {pendingRegistryPrepare && (
+                        <WorkerPrepareProgress
+                          initial={pendingRegistryPrepare.operation}
+                          onSucceeded={(result) => finishRegistryRegistration(result)}
+                          onFailed={(operation) => {
+                            setRegBusy(false)
+                            toastError(operation.error ?? t('workers.registryPrepareFailed'))
+                          }}
+                          onCancel={() => setRegBusy(false)}
+                          onRetry={() => {
+                            setPendingRegistryPrepare(null)
+                            void saveWorker()
+                          }}
+                        />
+                      )}
+                      {isRegistryPath && !selectedRegistryOption && (
+                        <p className="settings-error">{t('workers.registrySelectionUnavailable')}</p>
+                      )}
+                      <div className="settings-field">
+                        <label htmlFor="worker-reg-name">{t('workers.formName')}</label>
+                        <input
+                          id="worker-reg-name"
+                          className="settings-input ui-font"
+                          value={regName}
+                          onChange={(e) => setRegName(e.target.value)}
+                        />
                       </div>
-                    )}
-
-                    {isRegistryPath && !selectedRegistryOption && (
-                      <p className="settings-error" role="alert">
-                        {t('workers.registrySelectionUnavailable')}
-                      </p>
-                    )}
-
-                    <div className="settings-field">
-                      <label htmlFor="worker-reg-name">{t('workers.formName')}</label>
-                      <input
-                        id="worker-reg-name"
-                        className="settings-input ui-font"
-                        value={regName}
-                        onChange={(e) => setRegName(e.target.value)}
-                      />
-                    </div>
-                    <p className="settings-field-hint" style={{ margin: 0 }}>
-                      {t('workers.registryOwnerManagedHint')}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="settings-field">
-                      <label htmlFor="worker-reg-name-manual">{t('workers.formName')}</label>
-                      <input
-                        id="worker-reg-name-manual"
-                        className="settings-input ui-font"
-                        value={regName}
-                        onChange={(e) => setRegName(e.target.value)}
-                      />
-                    </div>
-                    <div className="settings-field">
-                      <label htmlFor="worker-reg-launch">{t('workers.customLaunchKind')}</label>
-                      <select
-                        id="worker-reg-launch"
-                        className="settings-input ui-font"
-                        value={regCustomLaunchKind}
-                        onChange={(event) =>
-                          setRegCustomLaunchKind(event.target.value as CustomAcpLaunchKind)
-                        }
-                      >
-                        <option value="auto">{t('workers.customAutoDetect')}</option>
-                        <option value="npx">npx package</option>
-                        <option value="uvx">uvx package</option>
-                        <option value="system">{t('workers.customSystemExecutable')}</option>
-                        <option value="local">{t('workers.customLocalExecutable')}</option>
-                      </select>
-                    </div>
-                    <div className="settings-field">
-                      <label htmlFor="worker-reg-command">
-                        {regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
-                          ? t('workers.customPackageSpec')
-                          : t('workers.formCommand')}
-                      </label>
-                      <input
-                        id="worker-reg-command"
-                        className="settings-input mono"
-                        value={regCommand}
-                        onChange={(e) => setRegCommand(e.target.value)}
-                        placeholder={
-                          regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
-                            ? '@scope/acp-agent@version'
-                            : regCustomLaunchKind === 'local'
-                              ? '/absolute/path/to/acp-agent'
-                              : regCustomLaunchKind === 'system'
-                                ? 'acp-agent'
-                                : t('workers.formCommandAutoPlaceholder')
-                        }
-                      />
-                    </div>
-                    <div className="settings-field">
-                      <label htmlFor="worker-reg-args">{t('workers.formArgs')}</label>
-                      <input
-                        id="worker-reg-args"
-                        className="settings-input mono"
-                        value={regArgs}
-                        onChange={(e) => setRegArgs(e.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
-
-                <div className="model-edit-actions">
-                  <button type="button" className="btn-ghost" onClick={() => setRegOpen(false)}>
-                    {t('workers.cancel')}
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-save-btn"
-                    disabled={
-                      regBusy ||
-                      !regName.trim() ||
-                      (regMode === 'manual'
-                        ? !regCommand.trim()
-                        : registrationRoute.kind !== 'registry')
-                    }
-                    onClick={() => void saveWorker()}
-                  >
-                    {t('workers.formSave')}
-                  </button>
+                      <p className="settings-field-hint">{t('workers.registryOwnerManagedHint')}</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="settings-field">
+                        <label htmlFor="worker-reg-name-manual">{t('workers.formName')}</label>
+                        <input
+                          id="worker-reg-name-manual"
+                          className="settings-input ui-font"
+                          value={regName}
+                          onChange={(e) => setRegName(e.target.value)}
+                        />
+                      </div>
+                      <div className="settings-field">
+                        <label htmlFor="worker-reg-launch">{t('workers.customLaunchKind')}</label>
+                        <select
+                          id="worker-reg-launch"
+                          className="settings-input ui-font"
+                          value={regCustomLaunchKind}
+                          onChange={(event) =>
+                            setRegCustomLaunchKind(event.target.value as CustomAcpLaunchKind)
+                          }
+                        >
+                          <option value="auto">{t('workers.customAutoDetect')}</option>
+                          <option value="npx">npx package</option>
+                          <option value="uvx">uvx package</option>
+                          <option value="system">{t('workers.customSystemExecutable')}</option>
+                          <option value="local">{t('workers.customLocalExecutable')}</option>
+                        </select>
+                      </div>
+                      <div className="settings-field">
+                        <label htmlFor="worker-reg-command">
+                          {regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
+                            ? t('workers.customPackageSpec')
+                            : t('workers.formCommand')}
+                        </label>
+                        <input
+                          id="worker-reg-command"
+                          className="settings-input mono"
+                          value={regCommand}
+                          onChange={(e) => setRegCommand(e.target.value)}
+                          placeholder={
+                            regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
+                              ? '@scope/acp-agent@version'
+                              : regCustomLaunchKind === 'local'
+                                ? '/absolute/path/to/acp-agent'
+                                : regCustomLaunchKind === 'system'
+                                  ? 'acp-agent'
+                                  : t('workers.formCommandAutoPlaceholder')
+                          }
+                        />
+                      </div>
+                      <div className="settings-field">
+                        <label htmlFor="worker-reg-args">{t('workers.formArgs')}</label>
+                        <input
+                          id="worker-reg-args"
+                          className="settings-input mono"
+                          value={regArgs}
+                          onChange={(e) => setRegArgs(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div className="model-edit-actions">
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => {
+                        setRegOpen(false)
+                        setRailFocus(null)
+                      }}
+                    >
+                      {t('prompt.cancel')}
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-save-btn"
+                      disabled={
+                        regBusy ||
+                        !regName.trim() ||
+                        (regMode === 'manual'
+                          ? !regCommand.trim()
+                          : registrationRoute.kind !== 'registry')
+                      }
+                      onClick={() => void saveWorker()}
+                    >
+                      {regBusy ? t('app.loading') : t('workers.formSave')}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-            {terminalAuth && (
-              <WorkerAuthTerminalModal
-                workerId={terminalAuth.workerId}
-                workerName={terminalAuth.workerName}
-                methodId={terminalAuth.methodId}
-                onClose={() => setTerminalAuth(null)}
-                onComplete={() => {
-                  setTerminalAuth(null)
-                  onRefreshSnapshot?.()
-                  toastSuccess(t('workers.terminalSucceeded'))
-                }}
-              />
-            )}
-            <ConfirmAddCliDialog
-              open={!!customPreview}
-              preview={customPreview?.preview ?? null}
-              onCancel={() => setCustomPreview(null)}
-              onConfirm={(decision) => void confirmCustomAcp(decision)}
-              onReuse={() => setCustomPreview(null)}
-            />
-            <ConfirmDialog
-              open={!!pendingConfirm}
-              config={pendingConfirm}
-              onClose={() => setPendingConfirm(null)}
-            />
+              )}
+
+              {/* Crew detail */}
+              {railFocus?.type === 'crew' &&
+                (() => {
+                  const tmpl = teamTemplates.find((x) => x.id === railFocus.id)
+                  if (!tmpl) return <p className="settings-muted">{t('workers.empty')}</p>
+                  return (
+                    <TeamTemplateLibrary
+                      workers={workers}
+                      initialTemplates={teamTemplates}
+                      focusTemplateId={tmpl.id}
+                      onChanged={() => {
+                        onRefreshSnapshot?.()
+                        // reload templates so the rail stays in sync
+                        api
+                          .listTeamTemplates()
+                          .then(({ templates }) => setTeamTemplates(templates))
+                          .catch(() => {})
+                      }}
+                      layout="settings"
+                      hideRail
+                    />
+                  )
+                })()}
+
+              {/* Empty state */}
+              {!railFocus && (
+                <div className="settings-empty-state">
+                  <p className="settings-muted">{t('workers.selectPrompt')}</p>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Modals (outside the layout grid) */}
+          {terminalAuth && (
+            <WorkerAuthTerminalModal
+              workerId={terminalAuth.workerId}
+              workerName={terminalAuth.workerName}
+              methodId={terminalAuth.methodId}
+              onClose={() => setTerminalAuth(null)}
+              onComplete={() => {
+                setTerminalAuth(null)
+                onRefreshSnapshot?.()
+                toastSuccess(t('workers.terminalSucceeded'))
+              }}
+            />
+          )}
+          <ConfirmAddCliDialog
+            open={!!customPreview}
+            preview={customPreview?.preview ?? null}
+            onCancel={() => setCustomPreview(null)}
+            onConfirm={(decision) => void confirmCustomAcp(decision)}
+            onReuse={() => setCustomPreview(null)}
+          />
+          <ConfirmDialog
+            open={!!pendingConfirm}
+            config={pendingConfirm}
+            onClose={() => setPendingConfirm(null)}
+          />
         </div>
       )}
 

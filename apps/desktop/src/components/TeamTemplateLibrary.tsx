@@ -27,6 +27,12 @@ export type TeamTemplateLibraryProps = {
    * `modal` — compact split used by the sidebar popup.
    */
   layout?: 'settings' | 'modal'
+  /**
+   * When true (settings layout only), hide the internal rail — the parent owns selection via
+   * `focusTemplateId`. Used when the library is embedded in a page that already has its own rail
+   * (e.g. the merged workers tab).
+   */
+  hideRail?: boolean
 }
 
 const ROLE_TONE: Record<WorkerRole, string> = {
@@ -116,6 +122,7 @@ export function TeamTemplateLibrary({
   focusTemplateId,
   className,
   layout = 'modal',
+  hideRail = false,
 }: TeamTemplateLibraryProps) {
   const { t } = useI18n()
   const { success, error } = useToast()
@@ -648,14 +655,20 @@ export function TeamTemplateLibrary({
         .filter(Boolean)
         .join(' ')}
     >
-      <div
-        className={
-          isSettings ? 'settings-model-layout team-library-settings-layout' : 'team-library-layout'
-        }
-      >
-        {rail}
-        {detail}
-      </div>
+      {hideRail ? (
+        detail
+      ) : (
+        <div
+          className={
+            isSettings
+              ? 'settings-model-layout team-library-settings-layout'
+              : 'team-library-layout'
+          }
+        >
+          {rail}
+          {detail}
+        </div>
+      )}
     </div>
   )
 }

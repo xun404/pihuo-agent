@@ -3474,3 +3474,61 @@ button.prompt-role-summary {
   gap: var(--sp-2);
   margin-top: var(--sp-2);
 }
+
+/* ── Workers tab (merged with crews): rail | main layout ── */
+
+/* Rail member-count badge (crews) */
+.settings-rail-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  flex: none;
+  min-width: 18px;
+  text-align: right;
+}
+
+/* Worker detail panel (right side when an agent is selected) */
+.worker-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 16px;
+}
+.worker-detail .settings-provider-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.worker-detail-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.worker-detail-titles .settings-card-title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+.worker-detail-source {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+/* Registration panel (right side when "+ register" is selected) */
+.worker-register-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 16px;
+}
+
+/* Empty state placeholder */
+.settings-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+}

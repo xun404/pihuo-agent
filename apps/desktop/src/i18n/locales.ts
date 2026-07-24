@@ -439,6 +439,15 @@ export type MessageKey =
   | 'workers.deleted'
   | 'workers.deletedWithArchived'
   | 'workers.deleteErrorOpenJobs'
+  | 'workers.railAgents'
+  | 'workers.railCrews'
+  | 'workers.newCrewName'
+  | 'workers.newCrew'
+  | 'workers.selectPrompt'
+  | 'workers.secretTitle'
+  | 'workers.secretPlaceholder'
+  | 'workers.registryUpdateChecking'
+  | 'workers.registryUpdate'
   | 'workers.deleteErrorReferenced'
   | 'workers.deleteErrorGeneric'
   | 'workers.formName'
@@ -1005,6 +1014,15 @@ const zh: Dict = {
   'workers.delete': '删除',
   'workers.deleteWorker': '删除 Worker',
   'workers.deleteDisabledHint': '请先禁用再删除',
+  'workers.railAgents': 'Agents',
+  'workers.railCrews': '编组',
+  'workers.newCrewName': '新编组',
+  'workers.newCrew': '新建编组',
+  'workers.selectPrompt': '从左侧选择一个 Agent 或编组',
+  'workers.secretTitle': '{name} 凭证',
+  'workers.secretPlaceholder': '输入密钥…',
+  'workers.registryUpdateChecking': '检查更新中…',
+  'workers.registryUpdate': '检查更新',
   'workers.deleteConfirm': '确定删除「{name}」？该操作不可撤销。',
   'workers.deleteConfirmReferenced':
     '「{name}」正被 {count} 个团队成员使用。删除后这些成员将被自动归档，相关会话需重新组队。确定删除？',
@@ -1607,6 +1625,15 @@ const en: Dict = {
   'workers.delete': 'Delete',
   'workers.deleteWorker': 'Delete Worker',
   'workers.deleteDisabledHint': 'Disable the worker before deleting',
+  'workers.railAgents': 'Agents',
+  'workers.railCrews': 'Crews',
+  'workers.newCrewName': 'New Crew',
+  'workers.newCrew': 'New Crew',
+  'workers.selectPrompt': 'Select an Agent or Crew from the left',
+  'workers.secretTitle': '{name} credentials',
+  'workers.secretPlaceholder': 'Enter secret…',
+  'workers.registryUpdateChecking': 'Checking…',
+  'workers.registryUpdate': 'Check for updates',
   'workers.deleteConfirm': 'Delete "{name}"? This cannot be undone.',
   'workers.deleteConfirmReferenced':
     '"{name}" is in use by {count} team member(s). Deleting it will auto-archive them — affected sessions will need re-teaming. Delete anyway?',
