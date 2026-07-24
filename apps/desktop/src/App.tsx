@@ -78,7 +78,7 @@ function AppShell({
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<
-    'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about' | undefined
+    'general' | 'model' | 'prompts' | 'workers' | 'about' | undefined
   >()
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth())
@@ -150,7 +150,6 @@ function AppShell({
       const detail = (ev as CustomEvent<{ tab?: string }>).detail
       if (
         detail?.tab === 'workers' ||
-        detail?.tab === 'teams' ||
         detail?.tab === 'model' ||
         detail?.tab === 'prompts' ||
         detail?.tab === 'general' ||

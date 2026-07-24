@@ -45,7 +45,7 @@ interface Props {
   onModeChange?: (mode: LeaderMode) => void
   /** Inline rename from chat header: (sessionId, newTitle) */
   onRenameSession?: (sessionId: string, title: string) => void
-  onOpenSettings?: (tab?: 'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about') => void
+  onOpenSettings?: (tab?: 'general' | 'model' | 'prompts' | 'workers' | 'about') => void
   settingsOpen?: boolean
   onBusySessionsChange?: (busyIds: Set<string>) => void
   onSetApprovalPolicy?: (sessionId: string, policy: SessionApprovalPolicy) => void

@@ -86,7 +86,6 @@ function applyAppearanceChoice(
 import {
   IconChevronLeft,
   IconCpu,
-  IconCrew,
   IconInfo,
   IconFileEdit,
   IconSettings,
@@ -114,7 +113,7 @@ import { ConfirmAddCliDialog } from './ConfirmAddCliDialog'
 import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
 import { useAcpRegistryCatalog } from '../hooks/useAcpRegistryCatalog'
 
-type TabId = 'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about'
+type TabId = 'general' | 'model' | 'prompts' | 'workers' | 'about'
 
 interface Props {
   onClose: () => void
@@ -1024,7 +1023,6 @@ export function SettingsPanel({
     { id: 'model', label: t('settings.navModel') },
     { id: 'prompts', label: t('settings.navPrompts') },
     { id: 'workers', label: t('settings.navWorkers') },
-    { id: 'teams', label: t('settings.navTeams') },
     { id: 'about', label: t('settings.navAbout') },
   ]
 
@@ -2579,18 +2577,6 @@ export function SettingsPanel({
         </div>
       )}
 
-      {!loading && tab === 'teams' && (
-        <div className="settings-model-page settings-teams-page">
-          <h2 className="settings-page-title">{t('settings.navTeams')}</h2>
-          <p className="settings-page-desc">{t('settings.descTeams')}</p>
-          <TeamTemplateLibrary
-            workers={workers}
-            onChanged={onRefreshSnapshot}
-            layout="settings"
-          />
-        </div>
-      )}
-
       {data && !loading && tab === 'about' && (
         <div className="settings-about">
           <h2 className="settings-page-title">{t('settings.navAbout')}</h2>
@@ -2631,7 +2617,6 @@ export function SettingsPanel({
     if (id === 'model') return <IconCpu size={16} />
     if (id === 'prompts') return <IconFileEdit size={16} />
     if (id === 'workers') return <IconWorkers size={16} />
-    if (id === 'teams') return <IconCrew size={16} />
     return <IconInfo size={16} />
   }
 

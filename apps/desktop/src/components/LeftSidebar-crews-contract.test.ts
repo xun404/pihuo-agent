@@ -11,7 +11,7 @@ test('left sidebar exposes a Crews section under Agent Worker', () => {
   assert.match(sidebar, /settings\.navWorkers/u)
   assert.match(sidebar, /sidebar\.crews/u)
   assert.match(sidebar, /teamTemplates/u)
-  assert.match(sidebar, /onOpenSettings\('teams'\)/u)
+  assert.match(sidebar, /onOpenSettings\('workers'\)/u)
   assert.match(sidebar, /TeamTemplateLibrary/u)
   assert.match(sidebar, /CREW_PREVIEW_LIMIT = 5/u)
   assert.match(sidebar, /useState\(true\)/u) // crews section default collapsed
@@ -23,14 +23,12 @@ test('left sidebar exposes a Crews section under Agent Worker', () => {
   assert.ok(workersIdx > 0 && crewsIdx > workersIdx && projectsIdx > crewsIdx)
 })
 
-test('settings has a dedicated teams tab wired to TeamTemplateLibrary', () => {
-  assert.match(settings, /'teams'/u)
-  assert.match(settings, /settings\.navTeams/u)
+test('settings workers tab hosts TeamTemplateLibrary (teams tab merged in)', () => {
   assert.match(settings, /TeamTemplateLibrary/u)
-  assert.match(settings, /tab === 'teams'/u)
-  assert.match(settings, /settings-model-page settings-teams-page/u)
   assert.match(settings, /layout="settings"/u)
-  assert.match(settings, /IconCrew/u)
+  // The standalone teams tab is gone.
+  assert.doesNotMatch(settings, /tab === 'teams'/u)
+  assert.doesNotMatch(settings, /'teams'/u)
 })
 
 test('settings team library reuses model master/detail layout classes', () => {
@@ -41,10 +39,10 @@ test('settings team library reuses model master/detail layout classes', () => {
   assert.match(library, /settings-provider-head/u)
 })
 
-test('app snapshot feeds team templates into the sidebar and settings deep-link', () => {
+test('app snapshot feeds team templates into the sidebar (no teams tab deep-link)', () => {
   assert.match(app, /teamTemplates=\{snapshot\.teamTemplates\}/u)
-  assert.match(app, /detail\?\.tab === 'teams'/u)
-  assert.match(app, /'teams'/u)
+  // The teams tab no longer exists; sidebar links to workers instead.
+  assert.doesNotMatch(app, /detail\?\.tab === 'teams'/u)
 })
 
 test('team template library supports rename and delete without session apply', () => {

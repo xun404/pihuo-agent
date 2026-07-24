@@ -93,7 +93,7 @@ function relTime(
   return t('sidebar.relMonth')
 }
 
-export type SettingsTabId = 'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about'
+export type SettingsTabId = 'general' | 'model' | 'prompts' | 'workers' | 'about'
 
 interface Props {
   projects: Project[]
@@ -243,7 +243,7 @@ export function LeftSidebar({
             className="section-label-action"
             title={t('sidebar.manageCrews')}
             aria-label={t('sidebar.manageCrews')}
-            onClick={() => onOpenSettings('teams')}
+            onClick={() => onOpenSettings('workers')}
           >
             {t('sidebar.manage')}
           </button>
@@ -256,7 +256,7 @@ export function LeftSidebar({
                 <button
                   type="button"
                   className="crew-empty-link"
-                  onClick={() => onOpenSettings('teams')}
+                  onClick={() => onOpenSettings('workers')}
                 >
                   {t('sidebar.manageCrews')}
                 </button>
