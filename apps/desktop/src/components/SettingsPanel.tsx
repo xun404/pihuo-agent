@@ -2351,12 +2351,12 @@ export function SettingsPanel({
                           </div>
                         </div>
 
-                        {/* Capability card */}
+                        {/* Capability + Auth card (merged) */}
                         <div className="worker-detail-card">
                           <h4 className="worker-detail-card-title">
                             {t('workers.sectionCapability')}
                           </h4>
-                          <div className="worker-cap-list">
+                          <div className="worker-cap-row">
                             {(
                               [
                                 ['capSessionLoad', cs?.sessionLoad],
@@ -2373,11 +2373,7 @@ export function SettingsPanel({
                               </div>
                             ))}
                           </div>
-                        </div>
-
-                        {/* Auth card */}
-                        <div className="worker-detail-card">
-                          <h4 className="worker-detail-card-title">
+                          <h4 className="worker-detail-card-title" style={{ marginTop: 14 }}>
                             {t('workers.sectionAuth')}
                           </h4>
                           {cs?.authMethods && cs.authMethods.length > 0 ? (
@@ -2492,23 +2488,26 @@ export function SettingsPanel({
                             </form>
                           )}
                         </div>
-                      </div>
 
-                      {/* Footer: role editor in a card */}
-                      <div className="worker-detail-card worker-detail-role-card">
-                        <WorkerDefaultRoleTypeEditor
-                          worker={w}
-                          rolePrompts={data?.settings.prompts.roles}
-                          onDelete={() => void removeWorker(w.id, w.name)}
-                          onSave={async (roleType) => {
-                            try {
-                              await onSetWorkerDefaultRoleType(w.id, roleType)
-                              toastSuccess(t('roles.saved'))
-                            } catch (error) {
-                              toastError(error instanceof Error ? error.message : String(error))
-                            }
-                          }}
-                        />
+                        {/* Role card (grid slot 4) */}
+                        <div className="worker-detail-card worker-detail-role-card">
+                          <h4 className="worker-detail-card-title">
+                            {t('workers.defaultRole')}
+                          </h4>
+                          <WorkerDefaultRoleTypeEditor
+                            worker={w}
+                            rolePrompts={data?.settings.prompts.roles}
+                            onDelete={() => void removeWorker(w.id, w.name)}
+                            onSave={async (roleType) => {
+                              try {
+                                await onSetWorkerDefaultRoleType(w.id, roleType)
+                                toastSuccess(t('roles.saved'))
+                              } catch (error) {
+                                toastError(error instanceof Error ? error.message : String(error))
+                              }
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   )

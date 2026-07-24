@@ -1023,8 +1023,8 @@
 
 /* 默认角色 = 卡底分区：顶部分割线，与 Worker 主区同宽对齐 */
 .worker-card-role {
-  border-top: 1px solid var(--border-soft);
-  background: color-mix(in srgb, var(--bg-input) 72%, var(--bg-surface));
+  border-top: none;
+  background: transparent;
   margin: 0;
 }
 .worker-card-role-summary {
@@ -1133,7 +1133,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   border: 1px solid var(--border-soft);
-  background: color-mix(in srgb, var(--bg-surface) 70%, var(--bg-input));
+  background: transparent;
   color: var(--text-1);
   font-size: var(--fs-xs);
   line-height: var(--lh-relaxed);
@@ -3585,6 +3585,12 @@ button.prompt-role-summary {
   flex-direction: column;
   gap: 6px;
 }
+/* Capability items in a single horizontal row */
+.worker-cap-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .worker-cap-item {
   display: flex;
   align-items: center;
@@ -3655,12 +3661,9 @@ button.prompt-role-summary {
   border-radius: var(--r-sm);
   background: var(--bg-hover);
 }
-.worker-detail-footer {
-  margin-top: 4px;
-}
 /* Role editor card (full width, matches the grid card style) */
 .worker-detail-role-card {
-  margin-top: 4px;
+  margin-top: 0;
 }
 .worker-detail-role-card .worker-card-role {
   margin-top: 0;
