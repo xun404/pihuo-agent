@@ -2241,23 +2241,25 @@ export function SettingsPanel({
                                 : cs?.agentVersion}
                             </span>
                           )}
-                        </div>
-                        {w.readiness && (
-                          <WorkerReadinessBadge
-                            status={w.readiness.status}
-                            code={w.readiness.code}
-                            nextAction={w.readiness.nextAction}
-                            locale={locale === 'zh' ? 'zh' : 'en'}
+                          <button
+                            type="button"
+                            className={`switch toggle${w.enabled ? ' on' : ''}`}
+                            role="switch"
+                            aria-checked={w.enabled}
+                            aria-label={t('workers.formEnabled')}
+                            onClick={() => onToggleWorker?.(w.id, !w.enabled)}
                           />
-                        )}
-                        <button
-                          type="button"
-                          className={`switch toggle${w.enabled ? ' on' : ''}`}
-                          role="switch"
-                          aria-checked={w.enabled}
-                          aria-label={t('workers.formEnabled')}
-                          onClick={() => onToggleWorker?.(w.id, !w.enabled)}
-                        />
+                        </div>
+                        <div className="worker-detail-head-actions">
+                          {w.readiness && (
+                            <WorkerReadinessBadge
+                              status={w.readiness.status}
+                              code={w.readiness.code}
+                              nextAction={w.readiness.nextAction}
+                              locale={locale === 'zh' ? 'zh' : 'en'}
+                            />
+                          )}
+                        </div>
                       </div>
 
                       {/* 2-column card grid */}
@@ -2269,7 +2271,7 @@ export function SettingsPanel({
                           </h4>
                           <div className="worker-info-row">
                             <span className="worker-info-label">{t('workers.fieldCommand')}</span>
-                            <span className="worker-info-value mono">
+                            <span className="worker-info-value mono is-emphasized">
                               {w.command} {(w.args ?? []).join(' ')}
                             </span>
                           </div>
@@ -2285,7 +2287,9 @@ export function SettingsPanel({
                           </div>
                           <div className="worker-info-row">
                             <span className="worker-info-label">{t('workers.fieldPath')}</span>
-                            <span className="worker-info-value mono">{pathLabel}</span>
+                            <span className="worker-info-value mono is-emphasized">
+                              {pathLabel}
+                            </span>
                           </div>
                         </div>
 
@@ -2490,8 +2494,11 @@ export function SettingsPanel({
                         </div>
                       </div>
 
-                      {/* Footer: role editor */}
-                      <div className="worker-detail-footer">
+                      {/* Footer: role editor in a card */}
+                      <div className="worker-detail-card worker-detail-role-card">
+                        <h4 className="worker-detail-card-title">
+                          {t('workers.defaultRole')}
+                        </h4>
                         <WorkerDefaultRoleTypeEditor
                           worker={w}
                           rolePrompts={data?.settings.prompts.roles}

@@ -3517,13 +3517,19 @@ button.prompt-role-summary {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
 }
 .worker-detail-titles .settings-card-title {
   font-size: var(--fs-md);
   font-weight: var(--fw-semibold);
   margin: 0;
+}
+.worker-detail-head-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .worker-detail-source {
   font-size: var(--fs-xs);
@@ -3651,6 +3657,18 @@ button.prompt-role-summary {
 }
 .worker-detail-footer {
   margin-top: 4px;
+}
+/* Role editor card (full width, matches the grid card style) */
+.worker-detail-role-card {
+  margin-top: 4px;
+}
+.worker-detail-role-card .worker-card-role {
+  margin-top: 0;
+}
+/* Emphasize important identity values (command, path) */
+.worker-info-row .worker-info-value.is-emphasized {
+  color: var(--text-1);
+  font-weight: var(--fw-medium);
 }
 
 /* Registration panel (right side when "+ register" is selected) */
