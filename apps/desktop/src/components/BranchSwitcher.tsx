@@ -4,8 +4,8 @@ import { useGitBranches } from '../hooks/useGitBranches'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
 import { useToast } from './Toast'
-import { confirmAction } from '../lib/native-dialogs'
 import { IconBranch, IconCheck, IconPlus } from './Icons'
+import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
 import type {
   BranchSwitchIssue,
   BranchSwitchIssueCode,
@@ -36,6 +36,7 @@ export function BranchSwitcher({ project, snapshotWorkers, snapshotJobs, onAfter
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
   const [commitAssist, setCommitAssist] = useState<{
     target: string
     issues: BranchSwitchIssue[]
@@ -71,17 +72,7 @@ export function BranchSwitcher({ project, snapshotWorkers, snapshotJobs, onAfter
     return key as MessageKey
   }
 
-  const onPick = async (name: string) => {
-    if (name === git.currentBranchName) {
-      setOpen(false)
-      return
-    }
-    if (runningJobsForProject.length > 0) {
-      const ok = await confirmAction(
-        t('git.branchSwitcher.workerWarning', { count: runningJobsForProject.length }),
-      )
-      if (!ok) return
-    }
+  const performSwitch = async (name: string) => {
     const r = await git.switchTo(name)
     if (r.ok) {
       setOpen(false)
@@ -96,6 +87,28 @@ export function BranchSwitcher({ project, snapshotWorkers, snapshotJobs, onAfter
         toastError(t(issueLocaleKey(issue?.code)))
       }
     }
+  }
+
+  const onPick = async (name: string) => {
+    if (name === git.currentBranchName) {
+      setOpen(false)
+      return
+    }
+    if (runningJobsForProject.length > 0) {
+      setPendingConfirm({
+        title: t('git.branchSwitcher.title'),
+        message: t('git.branchSwitcher.workerWarning', {
+          count: runningJobsForProject.length,
+        }),
+        confirmLabel: t('common.confirm'),
+        cancelLabel: t('common.cancel'),
+        onConfirm: async () => {
+          await performSwitch(name)
+        },
+      })
+      return
+    }
+    await performSwitch(name)
   }
 
   const triggerLabel = git.loading
@@ -219,6 +232,12 @@ export function BranchSwitcher({ project, snapshotWorkers, snapshotJobs, onAfter
           }
         }}
         validating={git.mutationPending}
+      />
+
+      <ConfirmDialog
+        open={!!pendingConfirm}
+        config={pendingConfirm}
+        onClose={() => setPendingConfirm(null)}
       />
     </div>
   )

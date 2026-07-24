@@ -14,12 +14,15 @@ import { Expandable } from './ui/Expandable'
 interface Props {
   worker: WorkerRegistration
   onSave: (roleType: WorkerRole) => Promise<void>
+  /** Delete (archive) this worker. Shown as a link left of Save; disabled while the worker is enabled. */
+  onDelete?: () => void
   rolePrompts?: Readonly<PromptSettings['roles']>
 }
 
 export function WorkerDefaultRoleTypeEditor({
   worker,
   onSave,
+  onDelete,
   rolePrompts = DEFAULT_PROMPT_SETTINGS.roles,
 }: Props) {
   const { t } = useI18n()
@@ -44,13 +47,24 @@ export function WorkerDefaultRoleTypeEditor({
     }
   }
 
+  const toggleOpen = (next: boolean) => {
+    // On collapse, reset the local draft to the worker's persisted value so reopening shows
+    // the truth instead of an unsaved edit.
+    if (!next) setRoleType(normalizeWorkerDefaultRoleType(worker.defaultRoleType))
+    setOpen(next)
+  }
+
+  // Delete is allowed only after the worker is disabled; the link stays visible but disabled,
+  // with a tooltip explaining the prerequisite.
+  const canDelete = onDelete && !worker.enabled
+
   return (
     <div className={`worker-card-role${open ? ' is-open' : ''}`}>
       <button
         type="button"
         className="worker-card-role-summary"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => toggleOpen(!open)}
       >
         <span className="worker-card-role-kicker">{t('workers.defaultRole')}</span>
         <span className="worker-card-role-preview">{t(roleMessageKey(roleType))}</span>
@@ -79,7 +93,17 @@ export function WorkerDefaultRoleTypeEditor({
             </div>
           </div>
           <div className="worker-card-role-footer">
-            <p className="settings-field-hint">{t('workers.defaultRoleInheritsModel')}</p>
+            {onDelete && (
+              <button
+                type="button"
+                className="worker-card-delete-link"
+                title={canDelete ? t('workers.deleteWorker') : t('workers.deleteDisabledHint')}
+                disabled={!canDelete}
+                onClick={onDelete}
+              >
+                {t('workers.deleteWorker')}
+              </button>
+            )}
             <button type="submit" className="settings-save-btn" disabled={saving}>
               {saving ? t('app.loading') : t('settings.save')}
             </button>

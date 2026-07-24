@@ -1056,16 +1056,14 @@ export function apiDeleteWorker(
       409,
     )
   }
-  if (
-    store()
-      .snapshot()
-      .teamMembers.some((role) => role.workerId === input.workerId && !role.archivedAt)
-  ) {
-    throw new RegistryApiError(
-      'WORKER_REFERENCED_BY_ROLE',
-      'Archive every active Team member that uses this Worker before deleting it',
-      409,
-    )
+  // Soft-delete: a Worker referenced by active Team members is still deletable. Auto-archive those
+  // members first so no dangling dispatch reference is left behind. Their session history stays
+  // intact; affected chats will need to re-team on next use.
+  const activeMemberRefs = store()
+    .snapshot()
+    .teamMembers.filter((role) => role.workerId === input.workerId && !role.archivedAt)
+  for (const role of activeMemberRefs) {
+    store().archiveTeamMember(role.chatSessionId, role.id)
   }
   // Deletion becomes an execution boundary at the first lifecycle action.
   clearTerminalAuthProbeMethods(input.workerId)
@@ -1133,7 +1131,7 @@ export function apiDeleteWorker(
     )
   }
   clearTerminalAuthProbeMethods(input.workerId)
-  return { ...detach, snapshot: store().snapshot() }
+  return { ...detach, archivedTeamMembers: activeMemberRefs.length, snapshot: store().snapshot() }
 }
 
 export function apiListCleanupCandidates(deps: RegistryCleanupDependencies = {}) {

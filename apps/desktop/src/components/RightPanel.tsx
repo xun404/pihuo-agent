@@ -12,7 +12,7 @@ import { normalizePromptSettings, WORKER_ROLES } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
 import { api, type FileEntryDto, type GitStatusResponse } from '../lib/api'
-import { confirmAction } from '../lib/native-dialogs'
+import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
 import { fetchSettings } from '../lib/settings'
 import {
   roleDraftFromWorker,
@@ -118,6 +118,7 @@ export function RightPanel({
   const { t, locale } = useI18n()
   const { success: toastSuccess, error: toastError } = useToast()
   const [tab, setTab] = useState<Tab>('roles')
+  const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
   const [git, setGit] = useState<GitStatusResponse | null>(null)
   const [gitLoading, setGitLoading] = useState(false)
   const [gitError, setGitError] = useState<string | null>(null)
@@ -466,18 +467,20 @@ export function RightPanel({
                       disabled={busy}
                       title={busy ? t('roles.resetBlocked') : undefined}
                       onClick={() =>
-                        void (async () => {
-                          const ok = await confirmAction(
-                            t('roles.confirmResetSession', { name: role.name }),
-                          )
-                          if (!ok) return
-                          try {
-                            await onResetTeamMemberSession(role.id)
-                            toastSuccess(t('roles.sessionReset'))
-                          } catch (error) {
-                            toastError(error instanceof Error ? error.message : String(error))
-                          }
-                        })()
+                        setPendingConfirm({
+                          title: t('roles.resetSession'),
+                          message: t('roles.confirmResetSession', { name: role.name }),
+                          confirmLabel: t('common.confirm'),
+                          cancelLabel: t('common.cancel'),
+                          onConfirm: async () => {
+                            try {
+                              await onResetTeamMemberSession(role.id)
+                              toastSuccess(t('roles.sessionReset'))
+                            } catch (error) {
+                              toastError(error instanceof Error ? error.message : String(error))
+                            }
+                          },
+                        })
                       }
                     >
                       {t('roles.resetSession')}
@@ -487,18 +490,21 @@ export function RightPanel({
                       type="button"
                       disabled={busy}
                       onClick={() =>
-                        void (async () => {
-                          const ok = await confirmAction(
-                            t('roles.confirmArchive', { name: role.name }),
-                          )
-                          if (!ok) return
-                          try {
-                            await onArchiveTeamMember(role.id, role.revision)
-                            toastSuccess(t('roles.archived'))
-                          } catch (error) {
-                            toastError(error instanceof Error ? error.message : String(error))
-                          }
-                        })()
+                        setPendingConfirm({
+                          title: t('roles.confirmArchiveTitle'),
+                          message: t('roles.confirmArchive', { name: role.name }),
+                          confirmLabel: t('common.confirmDelete'),
+                          cancelLabel: t('common.cancel'),
+                          danger: true,
+                          onConfirm: async () => {
+                            try {
+                              await onArchiveTeamMember(role.id, role.revision)
+                              toastSuccess(t('roles.archived'))
+                            } catch (error) {
+                              toastError(error instanceof Error ? error.message : String(error))
+                            }
+                          },
+                        })
                       }
                     >
                       {t('roles.archive')}
@@ -745,6 +751,11 @@ export function RightPanel({
             ))}
         </div>
       )}
+      <ConfirmDialog
+        open={!!pendingConfirm}
+        config={pendingConfirm}
+        onClose={() => setPendingConfirm(null)}
+      />
     </aside>
   )
 }

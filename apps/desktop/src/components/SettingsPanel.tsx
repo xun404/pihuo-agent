@@ -39,7 +39,6 @@ import { ProviderLogo, getProviderIconMeta } from '../lib/provider-icons'
 import { useTheme, type ColorPalette, type ThemeMode } from '../theme/ThemeProvider'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import type { SendShortcut } from '../lib/send-shortcut'
-import { confirmAction } from '../lib/native-dialogs'
 import { BrandLogo } from './BrandLogo'
 import { Expandable } from './ui/Expandable'
 
@@ -112,6 +111,7 @@ import { WorkerPrepareProgress, pollRegistryOperationUntilTerminal } from './Wor
 import { RegistryAgentDetail } from './RegistryAgentDetail'
 import { WorkerAuthTerminalModal } from './WorkerAuthTerminalModal'
 import { ConfirmAddCliDialog } from './ConfirmAddCliDialog'
+import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
 import { useAcpRegistryCatalog } from '../hooks/useAcpRegistryCatalog'
 
 type TabId = 'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about'
@@ -248,6 +248,8 @@ export function SettingsPanel({
     preview: CustomAcpPreview
     input: CustomAcpRegistrationInput
   } | null>(null)
+  // Generic confirmation dialog state (delete/destroy actions), replacing native OS confirms.
+  const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
   const [agentAuthOperation, setAgentAuthOperation] = useState<{
     workerId: string
     snapshot: RegistryOperationSnapshot<RegistryAuthenticateResult>
@@ -1276,24 +1278,50 @@ export function SettingsPanel({
   // Delete a worker after a native confirm. Refuses if the worker has open jobs or active team
   // members (the backend enforces this and returns a 409 with a clear message).
   const removeWorker = async (workerId: string, workerName: string) => {
-    const ok = await confirmAction(t('workers.deleteConfirm', { name: workerName }))
-    if (!ok) return
+    // Check team-member references first so the confirmation dialog can warn about the impact
+    // (auto-archive) before the user commits, instead of surprising them afterwards.
+    let referencedCount = 0
     try {
-      await api.deleteWorker(workerId)
-      onRefreshSnapshot?.()
-      toastSuccess(t('workers.deleted'))
-    } catch (e) {
-      // Map known backend codes to friendly messages; fall back to a generic hint so the user
-      // never sees a raw JSON error body.
-      const code = (e as { code?: string }).code
-      const friendly =
-        code === 'WORKER_HAS_OPEN_JOBS'
-          ? t('workers.deleteErrorOpenJobs')
-          : code === 'WORKER_REFERENCED_BY_ROLE'
-            ? t('workers.deleteErrorReferenced')
-            : t('workers.deleteErrorGeneric')
-      toastError(friendly)
+      const snap = await api.snapshot()
+      referencedCount = (snap.teamMembers ?? []).filter(
+        (tm) => tm.workerId === workerId && !tm.archivedAt,
+      ).length
+    } catch {
+      /* proceed with the generic confirm if the lookup fails */
     }
+    const message =
+      referencedCount > 0
+        ? t('workers.deleteConfirmReferenced', { name: workerName, count: referencedCount })
+        : t('workers.deleteConfirm', { name: workerName })
+    setPendingConfirm({
+      title: t('workers.delete'),
+      message,
+      confirmLabel: t('common.confirmDelete'),
+      cancelLabel: t('common.cancel'),
+      danger: true,
+      onConfirm: async () => {
+        try {
+          const result = await api.deleteWorker(workerId)
+          onRefreshSnapshot?.()
+          if ((result.archivedTeamMembers ?? 0) > 0) {
+            toastSuccess(
+              t('workers.deletedWithArchived', { count: result.archivedTeamMembers ?? 0 }),
+            )
+          } else {
+            toastSuccess(t('workers.deleted'))
+          }
+        } catch (e) {
+          const code = (e as { code?: string }).code
+          const friendly =
+            code === 'WORKER_HAS_OPEN_JOBS'
+              ? t('workers.deleteErrorOpenJobs')
+              : code === 'WORKER_REFERENCED_BY_ROLE'
+                ? t('workers.deleteErrorReferenced')
+                : t('workers.deleteErrorGeneric')
+          toastError(friendly)
+        }
+      },
+    })
   }
 
   const body = (
@@ -2213,17 +2241,6 @@ export function SettingsPanel({
                             </div>
                           )
                         })()}
-                      {!w.enabled && (
-                        <button
-                          type="button"
-                          className="worker-card-delete"
-                          title={t('workers.delete')}
-                          aria-label={t('workers.delete')}
-                          onClick={() => void removeWorker(w.id, w.name)}
-                        >
-                          <IconTrash size={14} />
-                        </button>
-                      )}
                       <button
                         type="button"
                         className={`switch toggle${w.enabled ? ' on' : ''}`}
@@ -2236,6 +2253,7 @@ export function SettingsPanel({
                     <WorkerDefaultRoleTypeEditor
                       worker={w}
                       rolePrompts={data?.settings.prompts.roles}
+                      onDelete={() => void removeWorker(w.id, w.name)}
                       onSave={async (roleType) => {
                         try {
                           await onSetWorkerDefaultRoleType(w.id, roleType)
@@ -2551,6 +2569,11 @@ export function SettingsPanel({
               onCancel={() => setCustomPreview(null)}
               onConfirm={(decision) => void confirmCustomAcp(decision)}
               onReuse={() => setCustomPreview(null)}
+            />
+            <ConfirmDialog
+              open={!!pendingConfirm}
+              config={pendingConfirm}
+              onClose={() => setPendingConfirm(null)}
             />
           </div>
         </div>

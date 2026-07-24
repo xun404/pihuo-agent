@@ -1162,6 +1162,27 @@
 .worker-card-role-footer .settings-save-btn {
   margin-left: auto;
 }
+/* Delete-worker link: hyperlinked text left of the Save button. Disabled (not hidden) when the
+ * worker is still enabled, with a tooltip explaining the prerequisite. */
+.worker-card-delete-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-xs);
+  color: var(--danger);
+  text-decoration: underline;
+  cursor: pointer;
+  flex: none;
+}
+.worker-card-delete-link:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.worker-card-delete-link:disabled {
+  color: var(--text-2);
+  text-decoration: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 
 /* 兼容旧类名（若测试/快照仍引用） */
 .worker-settings-item {
@@ -2545,6 +2566,14 @@ textarea.settings-input.team-library-desc-input {
   background: var(--bg-hover);
   color: var(--text-1);
 }
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.btn-danger:hover {
+  filter: brightness(1.05);
+}
 .btn-sm {
   height: var(--h-sm);
   font-size: var(--fs-xs);
@@ -3416,6 +3445,30 @@ button.prompt-role-summary {
   color: var(--text-2);
 }
 .confirm-add-cli-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+/* ── Generic confirmation dialog (replaces native OS confirms) ── */
+.confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.confirm-dialog-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+.confirm-dialog-message {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: var(--lh-snug);
+  white-space: pre-line;
+}
+.confirm-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--sp-2);

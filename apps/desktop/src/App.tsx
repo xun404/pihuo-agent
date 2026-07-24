@@ -21,7 +21,8 @@ import { I18nProvider, useI18n } from './i18n/I18nProvider'
 import type { Locale } from './i18n/locales'
 import { ThemeProvider } from './theme/ThemeProvider'
 import { ToastProvider, useToast } from './components/Toast'
-import { confirmAction, pickProjectDirectory } from './lib/native-dialogs'
+import { pickProjectDirectory } from './lib/native-dialogs'
+import { ConfirmDialog, type ConfirmDialogConfig } from './components/ui/ConfirmDialog'
 import {
   clampDrawerWidth,
   clampSidebarWidth,
@@ -103,6 +104,7 @@ function AppShell({
     autoSend: boolean
   } | null>(null)
   const [creatingFromComposer, setCreatingFromComposer] = useState(false)
+  const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
 
   /**
    * Sidebar notification lamps (error/done) are read-watermark driven:
@@ -317,27 +319,37 @@ function AppShell({
   }
 
   const onDeleteProject = (project: Project) => {
-    void (async () => {
-      const ok = await confirmAction(t('sidebar.confirmDeleteProject', { name: project.name }))
-      if (!ok) return
-      try {
-        await deleteProject(project.id)
-      } catch (e) {
-        toastError(String(e))
-      }
-    })()
+    setPendingConfirm({
+      title: t('sidebar.deleteProject'),
+      message: t('sidebar.confirmDeleteProject', { name: project.name }),
+      confirmLabel: t('common.confirmDelete'),
+      cancelLabel: t('common.cancel'),
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await deleteProject(project.id)
+        } catch (e) {
+          toastError(String(e))
+        }
+      },
+    })
   }
 
   const onDeleteSession = (session: Session) => {
-    void (async () => {
-      const ok = await confirmAction(t('sidebar.confirmDeleteSession', { title: session.title }))
-      if (!ok) return
-      try {
-        await deleteSession(session.id)
-      } catch (e) {
-        toastError(String(e))
-      }
-    })()
+    setPendingConfirm({
+      title: t('sidebar.deleteSession'),
+      message: t('sidebar.confirmDeleteSession', { title: session.title }),
+      confirmLabel: t('common.confirmDelete'),
+      cancelLabel: t('common.cancel'),
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await deleteSession(session.id)
+        } catch (e) {
+          toastError(String(e))
+        }
+      },
+    })
   }
 
   const onModeChange = (mode: LeaderMode) => {
@@ -536,6 +548,11 @@ function AppShell({
             </motion.div>
           )}
         </AnimatePresence>
+        <ConfirmDialog
+          open={!!pendingConfirm}
+          config={pendingConfirm}
+          onClose={() => setPendingConfirm(null)}
+        />
       </div>
     </div>
   )

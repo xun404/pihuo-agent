@@ -4,6 +4,9 @@ export type Locale = 'zh' | 'en'
 
 export type MessageKey =
   | 'access.autoEdit'
+  | 'common.cancel'
+  | 'common.confirmDelete'
+  | 'common.confirm'
   | 'access.autoEditDesc'
   | 'access.confirm'
   | 'access.confirmDesc'
@@ -104,6 +107,7 @@ export type MessageKey =
   | 'git.branchSwitcher.currentDirty'
   | 'git.branchSwitcher.createAction'
   | 'git.branchSwitcher.workerWarning'
+  | 'git.branchSwitcher.title'
   | 'git.branchSwitcher.toast.switchSuccess'
   | 'git.branchSwitcher.toast.createSuccess'
   | 'git.branchSwitcher.createDialog.title'
@@ -165,6 +169,7 @@ export type MessageKey =
   | 'roles.resetSession'
   | 'roles.confirmResetSession'
   | 'roles.confirmArchive'
+  | 'roles.confirmArchiveTitle'
   | 'roles.resetBlocked'
   | 'roles.save'
   | 'roles.saved'
@@ -427,8 +432,12 @@ export type MessageKey =
   | 'workers.capYes'
   | 'workers.capNo'
   | 'workers.delete'
+  | 'workers.deleteWorker'
+  | 'workers.deleteDisabledHint'
   | 'workers.deleteConfirm'
+  | 'workers.deleteConfirmReferenced'
   | 'workers.deleted'
+  | 'workers.deletedWithArchived'
   | 'workers.deleteErrorOpenJobs'
   | 'workers.deleteErrorReferenced'
   | 'workers.deleteErrorGeneric'
@@ -553,6 +562,9 @@ type Dict = Record<MessageKey, string>
 
 const zh: Dict = {
   'access.autoEdit': '自动编辑',
+  'common.cancel': '取消',
+  'common.confirmDelete': '删除',
+  'common.confirm': '确认',
   'access.autoEditDesc': '自动编辑文件',
   'access.confirm': '变更前确认',
   'access.confirmDesc': '改文件前先问我',
@@ -659,6 +671,7 @@ const zh: Dict = {
   'git.branchSwitcher.createAction': '创建并检出新分支…',
   'git.branchSwitcher.workerWarning':
     '当前项目有 {count} 个进行中的任务，切换分支会影响它们看到的代码。是否继续？',
+  'git.branchSwitcher.title': '切换分支',
   'git.branchSwitcher.toast.switchSuccess': '已切换到分支 {branchName}',
   'git.branchSwitcher.toast.createSuccess': '已创建并切换到分支 {branchName}',
   'git.branchSwitcher.createDialog.title': '创建新分支',
@@ -722,8 +735,9 @@ const zh: Dict = {
   'roles.confirmResetSession':
     '确定重置「{name}」的会话吗？该成员在 Worker 侧的上下文将被清空，且不可撤销。',
   'roles.confirmArchive': '确定归档成员「{name}」吗？归档后将从当前协作组中移除。',
+  'roles.confirmArchiveTitle': '归档成员',
   'roles.resetBlocked': '请先完成或取消此成员的进行中任务。',
-  'roles.save': '保存成员',
+  'roles.save': '保存',
   'roles.saved': '成员已保存。',
   'roles.sessionReset': '成员会话已重置。',
   'roles.type': '角色',
@@ -989,8 +1003,13 @@ const zh: Dict = {
   'workers.capYes': '是',
   'workers.capNo': '否',
   'workers.delete': '删除',
+  'workers.deleteWorker': '删除 Worker',
+  'workers.deleteDisabledHint': '请先禁用再删除',
   'workers.deleteConfirm': '确定删除「{name}」？该操作不可撤销。',
+  'workers.deleteConfirmReferenced':
+    '「{name}」正被 {count} 个团队成员使用。删除后这些成员将被自动归档，相关会话需重新组队。确定删除？',
   'workers.deleted': '已删除',
+  'workers.deletedWithArchived': '已删除，{count} 个团队成员已自动归档，相关会话需重新组队。',
   'workers.deleteErrorOpenJobs': '该 Worker 有进行中的任务，请先取消或完成后再删除。',
   'workers.deleteErrorReferenced': '该 Worker 正被团队会话使用，请先归档相关成员后再删除。',
   'workers.deleteErrorGeneric': '删除失败，该 Worker 可能仍在使用中，请稍后重试。',
@@ -1123,6 +1142,9 @@ const zh: Dict = {
 
 const en: Dict = {
   'access.autoEdit': 'Auto edit',
+  'common.cancel': 'Cancel',
+  'common.confirmDelete': 'Delete',
+  'common.confirm': 'Confirm',
   'access.autoEditDesc': 'Edit files automatically',
   'access.confirm': 'Confirm changes',
   'access.confirmDesc': 'Ask before editing files',
@@ -1231,6 +1253,7 @@ const en: Dict = {
   'git.branchSwitcher.createAction': 'Create and checkout new branch…',
   'git.branchSwitcher.workerWarning':
     'This project has {count} running job(s). Switching branches will change the code they see. Continue?',
+  'git.branchSwitcher.title': 'Switch branch',
   'git.branchSwitcher.toast.switchSuccess': 'Switched to branch {branchName}',
   'git.branchSwitcher.toast.createSuccess': 'Created and switched to {branchName}',
   'git.branchSwitcher.createDialog.title': 'Create new branch',
@@ -1302,8 +1325,9 @@ const en: Dict = {
     'Reset the session for “{name}”? This clears the member’s Worker-side context and cannot be undone.',
   'roles.confirmArchive':
     'Archive member “{name}”? It will be removed from the current crew.',
+  'roles.confirmArchiveTitle': 'Archive member',
   'roles.resetBlocked': 'Finish or cancel this member’s open jobs first.',
-  'roles.save': 'Save member',
+  'roles.save': 'Save',
   'roles.saved': 'Member saved.',
   'roles.sessionReset': 'Member session reset.',
   'roles.type': 'Role',
@@ -1581,8 +1605,14 @@ const en: Dict = {
   'workers.capYes': 'yes',
   'workers.capNo': 'no',
   'workers.delete': 'Delete',
+  'workers.deleteWorker': 'Delete Worker',
+  'workers.deleteDisabledHint': 'Disable the worker before deleting',
   'workers.deleteConfirm': 'Delete "{name}"? This cannot be undone.',
+  'workers.deleteConfirmReferenced':
+    '"{name}" is in use by {count} team member(s). Deleting it will auto-archive them — affected sessions will need re-teaming. Delete anyway?',
   'workers.deleted': 'Deleted',
+  'workers.deletedWithArchived':
+    'Deleted. {count} team member(s) auto-archived — affected sessions need re-teaming.',
   'workers.deleteErrorOpenJobs': 'This worker has in-progress jobs. Cancel or finish them before deleting.',
   'workers.deleteErrorReferenced': 'This worker is in use by team sessions. Archive the related members first.',
   'workers.deleteErrorGeneric': 'Failed to delete — the worker may still be in use. Please try again later.',

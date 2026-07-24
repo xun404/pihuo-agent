@@ -332,29 +332,50 @@ describe('acp-registry-api', () => {
       instructions: 'Implement the task.',
     })
 
-    assert.throws(
-      () => apiDeleteWorker({ workerId: worker.id }),
-      (error: unknown) =>
-        error instanceof RegistryApiError &&
-        error.code === 'WORKER_REFERENCED_BY_ROLE' &&
-        error.httpStatus === 409,
-    )
+    // Soft-delete: a Worker referenced by an active Team member is deletable. The member is
+    // auto-archived (no dangling dispatch reference) and the count is returned.
+    const softDeleted = apiDeleteWorker({ workerId: worker.id })
+    assert.equal(softDeleted.archivedTeamMembers, 1)
+    // The member is now archived.
+    assert.ok(getSharedStore().getTeamMember(session.id, role.id)?.archivedAt)
+    // The Worker is gone.
     assert.equal(
       getSharedStore()
         .listWorkers()
-        .find((item) => item.id === worker.id)?.id,
-      worker.id,
+        .find((item) => item.id === worker.id),
+      undefined,
     )
+  })
 
-    getSharedStore().archiveTeamMember(session.id, role.id, role.revision)
+  it('still blocks deletion when the Worker has open jobs (WORKER_HAS_OPEN_JOBS)', async () => {
+    resetInstallations()
+    const prepared = await seedInstallation({})
+    const registered = await apiRegisterRegistry({
+      registryId: 'api-agent',
+      version: '1.0.0',
+      distribution: 'npx',
+      manifestDigest,
+      installationId: prepared.installation.installationId,
+      name: 'Open Job Worker',
+    })
+    const worker = registered.worker
+    const dir = prepared.installation.installDir
+    const project = getSharedStore().upsertProject({
+      name: 'open-job-project',
+      rootPath: join(dir, 'open-job-project'),
+    })
+    const session = getSharedStore().createSession({
+      projectId: project.id,
+      title: 'Open job chat',
+    })
+    getSharedStore().setWorkerEnabled(worker.id, true)
     const openJob = getSharedStore().createJob({
-      id: 'job-role-worker-reference',
+      id: 'job-open-blocks-delete',
       sessionId: session.id,
       projectId: project.id,
       workerId: worker.id,
       workerName: worker.name,
-      teamMemberId: role.id,
-      role: role.roleType,
+      role: 'coder',
       task: 'Still running',
       cwd: project.rootPath,
       status: 'queued',
@@ -369,6 +390,7 @@ describe('acp-registry-api', () => {
         error.code === 'WORKER_HAS_OPEN_JOBS' &&
         error.httpStatus === 409,
     )
+    // Finish the job → deletion now succeeds.
     getSharedStore().updateJob(openJob.id, {
       status: 'succeeded',
       finishedAt: new Date().toISOString(),

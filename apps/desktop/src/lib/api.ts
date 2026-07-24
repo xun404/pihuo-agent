@@ -614,10 +614,13 @@ export const api = {
   /** Delete a worker (and optionally its unreferenced installation). */
   deleteWorker: (id: string, opts?: { removeInstallation?: boolean }) => {
     const params = opts?.removeInstallation ? '?removeInstallation=1' : ''
-    return request<{ ok: boolean; snapshot: AppSnapshot }>(
-      `/api/workers/${encodePathSegment(id)}${params}`,
-      { method: 'DELETE' },
-    )
+    return request<{
+      ok: boolean
+      archivedTeamMembers?: number
+      snapshot: AppSnapshot
+    }>(`/api/workers/${encodePathSegment(id)}${params}`, {
+      method: 'DELETE',
+    })
   },
   /** Fetch ACP available models (spawns agent briefly); caches on worker; updates health */
   fetchWorkerModels: (
