@@ -1112,37 +1112,6 @@
   text-align: left;
   color: inherit;
 }
-.worker-card-role-form {
-  display: grid;
-  gap: 8px;
-  padding: 10px 14px 12px;
-}
-.worker-card-role-form .settings-field {
-  margin-bottom: 0;
-  gap: 4px;
-}
-.worker-card-role-form .settings-field > span:first-child,
-.worker-card-role-form .settings-field > label {
-  margin-bottom: 0;
-}
-.worker-role-prompt-field {
-  gap: 6px;
-}
-.worker-role-prompt-preview {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border-soft);
-  background: transparent;
-  color: var(--text-1);
-  font-size: var(--fs-xs);
-  line-height: var(--lh-relaxed);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 120px;
-  overflow: auto;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent);
-}
 .worker-card-role-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3558,6 +3527,16 @@ button.prompt-role-summary {
   letter-spacing: 0.04em;
   margin: 0 0 10px;
 }
+.worker-detail-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.worker-detail-card-head .worker-detail-card-title {
+  margin: 0;
+}
 /* Info rows (label: value) */
 .worker-info-row {
   display: grid;
@@ -3578,6 +3557,29 @@ button.prompt-role-summary {
 .worker-info-row .worker-info-value.mono {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--fs-xs);
+}
+/* Command row: long commands stay on one line; when they overflow the default
+   state shows the tail (head scrolled out left with a fade), and hovering
+   scrolls the head back into view. */
+.worker-command-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+  word-break: normal;
+  text-align: right;
+}
+/* fade the left edge where overflow is clipped — only when overflowing */
+.worker-command-marquee.is-overflow {
+  mask-image: linear-gradient(to right, transparent 0, #000 16px);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16px);
+}
+.worker-command-text {
+  display: inline-block;
+  transition: transform 0.4s ease;
+  will-change: transform;
+}
+/* Right-align all values in the profile card */
+.worker-info-card .worker-info-value {
+  text-align: right;
 }
 /* Capability items */
 .worker-cap-list {
@@ -3642,44 +3644,74 @@ button.prompt-role-summary {
 .worker-health-value.bad {
   color: var(--danger);
 }
-/* Auth card */
-.worker-auth-list {
+/* Auth actions (merged into identity card) */
+.worker-auth-actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.worker-auth-method {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: var(--fs-sm);
+  margin-top: 10px;
 }
-.worker-auth-method .worker-auth-type {
-  font-size: var(--fs-xs);
-  color: var(--text-2);
-  padding: 1px 6px;
-  border-radius: var(--r-sm);
+/* Default-role picker (inline in the worker-detail header) */
+.worker-role-picker {
+  position: relative;
+}
+.worker-role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-soft);
   background: var(--bg-hover);
+  color: var(--text-1);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
 }
-/* Role editor card (full width, matches the grid card style) */
-.worker-detail-role-card {
-  margin-top: 0;
+.worker-role-chip:hover {
+  background: var(--bg-active);
+  border-color: var(--border);
 }
-.worker-detail-role-card .worker-card-role {
-  margin-top: 0;
+.worker-role-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
-/* Role form header row: title on left, save button on right */
-.worker-card-role-head {
-  display: flex;
+.worker-role-chip-label {
+  color: var(--text-2);
+}
+.worker-role-chip-value {
+  font-weight: var(--fw-semibold);
+}
+.worker-role-chip-caret {
+  color: var(--text-3);
+  font-size: 10px;
+  margin-left: 2px;
+}
+/* Pop-menu of roles — reuse global .pop-menu / .pop-item, scope the position */
+.worker-role-menu {
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 160px;
+}
+.worker-role-menu .pop-item {
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  padding: 7px 10px;
+  font-size: var(--fs-sm);
 }
-.worker-card-role-head .worker-detail-card-title {
-  margin: 0;
+.worker-role-check {
+  color: var(--accent, var(--text-1));
+  font-size: 12px;
 }
-.worker-card-role-head .settings-save-btn {
-  flex: none;
+/* Capability card (full width, below the 2-column detail grid) */
+.worker-cap-card {
+  margin-top: 16px;
+}
+.worker-cap-card .worker-cap-row {
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 /* Emphasize important identity values (command, path) */
 .worker-info-row .worker-info-value.is-emphasized {

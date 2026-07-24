@@ -456,10 +456,12 @@ export type MessageKey =
   | 'workers.fieldSource'
   | 'workers.fieldProtocol'
   | 'workers.fieldPath'
+  | 'workers.fieldVersion'
   | 'workers.healthCli'
   | 'workers.healthAcp'
   | 'workers.healthProbed'
   | 'workers.healthModels'
+  | 'workers.healthReadiness'
   | 'workers.capSessionLoad'
   | 'workers.capSessionResume'
   | 'workers.capSessionList'
@@ -485,6 +487,7 @@ export type MessageKey =
   | 'workers.authSucceeded'
   | 'workers.defaultRole'
   | 'workers.defaultRoleInheritsModel'
+  | 'workers.defaultRoleUpdated'
   | 'workers.healthAll'
   | 'workers.healthAllHint'
   | 'workers.healthDeep'
@@ -1039,7 +1042,7 @@ const zh: Dict = {
   'workers.secretPlaceholder': '输入密钥…',
   'workers.registryUpdateChecking': '检查更新中…',
   'workers.registryUpdate': '检查更新',
-  'workers.sectionIdentity': '身份信息',
+  'workers.sectionIdentity': '基本信息',
   'workers.sectionHealth': '健康状态',
   'workers.sectionCapability': '能力矩阵',
   'workers.sectionAuth': '认证方式',
@@ -1047,10 +1050,12 @@ const zh: Dict = {
   'workers.fieldSource': '来源',
   'workers.fieldProtocol': '协议',
   'workers.fieldPath': '路径',
+  'workers.fieldVersion': '版本',
   'workers.healthCli': 'CLI',
   'workers.healthAcp': 'ACP',
   'workers.healthProbed': '探测',
   'workers.healthModels': '模型',
+  'workers.healthReadiness': '就绪',
   'workers.capSessionLoad': '会话加载',
   'workers.capSessionResume': '会话恢复',
   'workers.capSessionList': '会话列表',
@@ -1084,6 +1089,7 @@ const zh: Dict = {
   'workers.authSucceeded': '认证完成，Worker 已就绪',
   'workers.defaultRole': '默认角色',
   'workers.defaultRoleInheritsModel': '模型继承 Worker 默认模型',
+  'workers.defaultRoleUpdated': '角色已更新',
   'workers.healthAll': '全部检查',
   'workers.healthAllHint': '检查所有已启用 Worker 的可用性',
   'workers.healthDeep': '深度检查（启动 ACP 进程）',
@@ -1666,7 +1672,7 @@ const en: Dict = {
   'workers.secretPlaceholder': 'Enter secret…',
   'workers.registryUpdateChecking': 'Checking…',
   'workers.registryUpdate': 'Check for updates',
-  'workers.sectionIdentity': 'Identity',
+  'workers.sectionIdentity': 'Profile',
   'workers.sectionHealth': 'Health',
   'workers.sectionCapability': 'Capabilities',
   'workers.sectionAuth': 'Authentication',
@@ -1674,10 +1680,12 @@ const en: Dict = {
   'workers.fieldSource': 'Source',
   'workers.fieldProtocol': 'Protocol',
   'workers.fieldPath': 'Path',
+  'workers.fieldVersion': 'Version',
   'workers.healthCli': 'CLI',
   'workers.healthAcp': 'ACP',
   'workers.healthProbed': 'Probed',
   'workers.healthModels': 'Models',
+  'workers.healthReadiness': 'Readiness',
   'workers.capSessionLoad': 'Session load',
   'workers.capSessionResume': 'Session resume',
   'workers.capSessionList': 'Session list',
@@ -1712,6 +1720,7 @@ const en: Dict = {
   'workers.authSucceeded': 'Authenticated and ready',
   'workers.defaultRole': 'Default role',
   'workers.defaultRoleInheritsModel': 'Model inherits the Worker default model',
+  'workers.defaultRoleUpdated': 'Role updated',
   'workers.healthAll': 'Check all',
   'workers.healthAllHint': 'Probe all enabled workers',
   'workers.healthDeep': 'Deep check (start ACP process)',
