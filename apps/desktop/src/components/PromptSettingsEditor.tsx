@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   PROMPT_ROLE_ORDER,
   defaultPromptSettings,
@@ -10,6 +10,7 @@ import {
 } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey, type Locale } from '../i18n/locales'
+import { Expandable } from './ui/Expandable'
 
 interface Props {
   prompts: PromptSettings
@@ -48,6 +49,15 @@ function promptsEqual(a: PromptSettings, b: PromptSettings): boolean {
 
 export function PromptSettingsEditor({ prompts, saving, onChange, onSave }: Props) {
   const { t, locale } = useI18n()
+  const [openRoles, setOpenRoles] = useState<Set<WorkerRole>>(() => new Set())
+  const toggleRole = (role: WorkerRole) => {
+    setOpenRoles((current) => {
+      const next = new Set(current)
+      if (next.has(role)) next.delete(role)
+      else next.add(role)
+      return next
+    })
+  }
   const promptLocale = toPromptLocale(locale)
   const defaults = defaultPromptSettings(promptLocale)
   const promptsRef = useRef(prompts)
@@ -157,41 +167,49 @@ export function PromptSettingsEditor({ prompts, saving, onChange, onSave }: Prop
         <div className="prompt-role-list">
           {PROMPT_ROLE_ORDER.map((role) => {
             const roleDirty = isDirty(prompts.roles[role], defaults.roles[role])
+            const open = openRoles.has(role)
             return (
-              <details className="prompt-role-item" key={role}>
-                <summary className="prompt-role-summary">
+              <div className={`prompt-role-item${open ? ' is-open' : ''}`} key={role}>
+                <button
+                  type="button"
+                  className="prompt-role-summary"
+                  aria-expanded={open}
+                  onClick={() => toggleRole(role)}
+                >
                   <span className="prompt-role-label">{t(roleMessageKey(role))}</span>
                   <span className="prompt-role-preview" title={prompts.roles[role]}>
                     {previewLine(prompts.roles[role])}
                   </span>
                   {roleDirty && <span className="prompt-role-dirty" aria-hidden />}
                   <span className="prompt-role-chevron" aria-hidden />
-                </summary>
-                <div className="prompt-role-body">
-                  <div className="prompt-field">
-                    <textarea
-                      id={`prompt-role-${role}`}
-                      className="settings-input ui-font prompt-settings-textarea"
-                      value={prompts.roles[role]}
-                      aria-label={t(roleMessageKey(role))}
-                      disabled={saving}
-                      onChange={(event) => updateRole(role, event.target.value)}
-                      onBlur={flushSave}
-                    />
-                    {roleDirty && (
-                      <div className="prompt-field-footer">
-                        <button
-                          type="button"
-                          className="prompt-reset-link"
-                          onClick={() => updateRole(role, defaults.roles[role])}
-                        >
-                          {t('settings.prompts.reset')}
-                        </button>
-                      </div>
-                    )}
+                </button>
+                <Expandable open={open} keepMounted>
+                  <div className="prompt-role-body">
+                    <div className="prompt-field">
+                      <textarea
+                        id={`prompt-role-${role}`}
+                        className="settings-input ui-font prompt-settings-textarea"
+                        value={prompts.roles[role]}
+                        aria-label={t(roleMessageKey(role))}
+                        disabled={saving}
+                        onChange={(event) => updateRole(role, event.target.value)}
+                        onBlur={flushSave}
+                      />
+                      {roleDirty && (
+                        <div className="prompt-field-footer">
+                          <button
+                            type="button"
+                            className="prompt-reset-link"
+                            onClick={() => updateRole(role, defaults.roles[role])}
+                          >
+                            {t('settings.prompts.reset')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </details>
+                </Expandable>
+              </div>
             )
           })}
         </div>

@@ -304,6 +304,12 @@ export async function prepareRegistryWorker(input: {
   localArchivePath?: string
   runnerEnv?: NodeJS.ProcessEnv
   signal?: AbortSignal
+  /** Total download deadline for binary archives; defaults to the installer's safety valve. */
+  downloadTimeoutMs?: number
+  /** Per-request connection/header deadline, bounded by downloadTimeoutMs. */
+  downloadHeaderTimeoutMs?: number
+  /** No-progress stall deadline for the response body; a steady stream is never killed. */
+  downloadStallTimeoutMs?: number
 }): Promise<{
   installation: AcpAgentInstallationRecord
   prepare: PrepareResult
@@ -377,6 +383,9 @@ export async function prepareRegistryWorker(input: {
       localArchivePath: input.localArchivePath,
       runnerEnv: input.runnerEnv,
       signal: input.signal,
+      downloadTimeoutMs: input.downloadTimeoutMs,
+      downloadHeaderTimeoutMs: input.downloadHeaderTimeoutMs,
+      downloadStallTimeoutMs: input.downloadStallTimeoutMs,
     })
   } catch (e) {
     if (e instanceof AcpInstallError || e instanceof AcpRunnerError) {

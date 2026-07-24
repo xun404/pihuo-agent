@@ -198,6 +198,19 @@ export type MessageKey =
   | 'team.updatedToast'
   | 'team.deletedToast'
   | 'team.replacedToast'
+  | 'team.memberCount'
+  | 'team.libraryEmpty'
+  | 'team.libraryEmptyHint'
+  | 'team.libraryManageHint'
+  | 'team.libraryPageHint'
+  | 'team.noMembers'
+  | 'team.statCrews'
+  | 'team.statMembers'
+  | 'team.workerMissing'
+  | 'team.workerReady'
+  | 'team.workerDisabled'
+  | 'team.removeMember'
+  | 'team.collapseMember'
   | 'role.coder'
   | 'role.general'
   | 'role.plan'
@@ -276,6 +289,8 @@ export type MessageKey =
   | 'settings.navModel'
   | 'settings.navPrompts'
   | 'settings.navWorkers'
+  | 'settings.navTeams'
+  | 'settings.descTeams'
   | 'settings.needKey'
   | 'settings.perModelThinking'
   | 'settings.perModelThinkingHint'
@@ -344,6 +359,10 @@ export type MessageKey =
   | 'sidebar.confirmDeleteSession'
   | 'sidebar.deleteProject'
   | 'sidebar.deleteSession'
+  | 'sidebar.crews'
+  | 'sidebar.crewsEmpty'
+  | 'sidebar.manage'
+  | 'sidebar.manageCrews'
   | 'sidebar.empty'
   | 'sidebar.needProjectOpenFolder'
   | 'sidebar.newTask'
@@ -379,11 +398,40 @@ export type MessageKey =
   | 'workers.registerModeManual'
   | 'workers.formArgs'
   | 'workers.formCommand'
+  | 'workers.formCommandAutoPlaceholder'
   | 'workers.customLaunchKind'
+  | 'workers.customAutoDetect'
   | 'workers.customSystemExecutable'
   | 'workers.customLocalExecutable'
   | 'workers.customPackageSpec'
   | 'workers.formEnabled'
+  | 'workers.confirmTitle'
+  | 'workers.confirmConnected'
+  | 'workers.confirmCommand'
+  | 'workers.confirmProtocol'
+  | 'workers.confirmSessionCaps'
+  | 'workers.confirmLogout'
+  | 'workers.confirmAuthMethods'
+  | 'workers.confirmStatus'
+  | 'workers.confirmAdd'
+  | 'workers.confirmContinue'
+  | 'workers.confirmForceAdd'
+  | 'workers.confirmCancel'
+  | 'workers.confirmDuplicateWarning'
+  | 'workers.confirmAddNew'
+  | 'workers.confirmReuseExisting'
+  | 'workers.confirmAuthRequired'
+  | 'workers.confirmAuthRequiredHint'
+  | 'workers.confirmProbeFailed'
+  | 'workers.confirmProbeFailedHint'
+  | 'workers.capYes'
+  | 'workers.capNo'
+  | 'workers.delete'
+  | 'workers.deleteConfirm'
+  | 'workers.deleted'
+  | 'workers.deleteErrorOpenJobs'
+  | 'workers.deleteErrorReferenced'
+  | 'workers.deleteErrorGeneric'
   | 'workers.formName'
   | 'workers.formPrimary'
   | 'workers.formRoles'
@@ -678,7 +726,7 @@ const zh: Dict = {
   'roles.save': '保存成员',
   'roles.saved': '成员已保存。',
   'roles.sessionReset': '成员会话已重置。',
-  'roles.type': '语义类型',
+  'roles.type': '角色',
   'roles.useDefaultPrompt': '使用角色默认提示词',
   'roles.worker': '绑定 Worker',
   'roles.workerMissing': 'Worker 不可用',
@@ -707,6 +755,20 @@ const zh: Dict = {
   'team.updatedToast': '编组模板已更新。',
   'team.deletedToast': '编组模板已删除。',
   'team.replacedToast': '已替换当前协作组。',
+  'team.memberCount': '{count} 名成员',
+  'team.libraryEmpty': '暂无编组',
+  'team.libraryEmptyHint': '从会话右侧 Team 面板把当前协作组保存为编组后，会出现在这里。',
+  'team.libraryManageHint':
+    '此处可重命名、查看成员与删除编组。新建编组请在会话 Team 中「保存为模板」；应用到会话也在 Team 面板完成。',
+  'team.libraryPageHint': '管理已保存的协作编组模板。',
+  'team.noMembers': '该编组没有成员。',
+  'team.statCrews': '编组',
+  'team.statMembers': '成员席位',
+  'team.workerMissing': 'Worker 缺失',
+  'team.workerReady': '可用',
+  'team.workerDisabled': '已禁用',
+  'team.removeMember': '移除成员',
+  'team.collapseMember': '收起',
   'role.coder': '编码',
   'role.general': '通用',
   'role.plan': '规划',
@@ -732,6 +794,7 @@ const zh: Dict = {
   'settings.descModel': '管理模型供应商与 API Key，配置后可在聊天时选择使用。',
   'settings.descPrompts': '设置 Leader 和各类角色在后续任务中使用的默认提示词。',
   'settings.descWorkers': '注册与管理 CLI Worker（Claude Code / Codex / OpenCode 等）。',
+  'settings.descTeams': '查看、重命名与删除已保存的协作编组；新建与应用到会话在 Chat Team 中完成。',
   'settings.descAbout': '产品信息与版本。',
   'settings.cancelEdit': '取消编辑',
   'settings.clear': '清除',
@@ -792,6 +855,7 @@ const zh: Dict = {
   'settings.navModel': '模型设置',
   'settings.navPrompts': '提示词',
   'settings.navWorkers': 'Agent Worker',
+  'settings.navTeams': '编组',
   'settings.needKey': '未配置 Key',
   'settings.perModelThinking': '支持的思考强度',
   'settings.perModelThinkingHint': '仅本模型：勾选可选档位；聊天栏选中该模型时只显示已勾选档位。',
@@ -857,6 +921,10 @@ const zh: Dict = {
   'sidebar.confirmDeleteSession': '删除 Session「{title}」？此操作不可撤销。',
   'sidebar.deleteProject': '删除项目',
   'sidebar.deleteSession': '删除 Session',
+  'sidebar.crews': '编组',
+  'sidebar.crewsEmpty': '暂无编组',
+  'sidebar.manage': '管理',
+  'sidebar.manageCrews': '管理编组',
   'sidebar.empty': '还没有项目。请「打开项目」并输入本地目录路径。',
   'sidebar.needProjectOpenFolder': '请先打开项目。3 秒后将自动打开文件夹…',
   'sidebar.newTask': '新建任务',
@@ -893,10 +961,39 @@ const zh: Dict = {
   'workers.registerModeManual': '手动注册',
   'workers.formArgs': '参数（空格分隔）',
   'workers.formCommand': '命令',
+  'workers.formCommandAutoPlaceholder': 'codex · claude · ~/.local/bin/agent · @scope/pkg',
   'workers.customLaunchKind': '自定义 ACP 启动方式',
+  'workers.customAutoDetect': '自动检测',
   'workers.customSystemExecutable': '系统 PATH 可执行文件',
   'workers.customLocalExecutable': '本地绝对路径',
   'workers.customPackageSpec': '包名与版本',
+  'workers.confirmTitle': '添加 CLI',
+  'workers.confirmConnected': '已连接到 ACP agent，请确认信息：',
+  'workers.confirmCommand': '命令',
+  'workers.confirmProtocol': '协议版本',
+  'workers.confirmSessionCaps': '会话能力',
+  'workers.confirmLogout': '登出',
+  'workers.confirmAuthMethods': '认证方式',
+  'workers.confirmStatus': '状态',
+  'workers.confirmAdd': '确认添加',
+  'workers.confirmContinue': '继续',
+  'workers.confirmForceAdd': '强制添加',
+  'workers.confirmCancel': '取消',
+  'workers.confirmDuplicateWarning': '检测到已存在相同的 CLI：',
+  'workers.confirmAddNew': '添加为新的 CLI',
+  'workers.confirmReuseExisting': '复用现有的',
+  'workers.confirmAuthRequired': '该 CLI 需要先登录认证才能使用。',
+  'workers.confirmAuthRequiredHint': '请先在终端完成该 CLI 的登录，再回来添加。',
+  'workers.confirmProbeFailed': '无法连接到 ACP agent。',
+  'workers.confirmProbeFailedHint': '仍可强制添加（之后可重试探测）。',
+  'workers.capYes': '是',
+  'workers.capNo': '否',
+  'workers.delete': '删除',
+  'workers.deleteConfirm': '确定删除「{name}」？该操作不可撤销。',
+  'workers.deleted': '已删除',
+  'workers.deleteErrorOpenJobs': '该 Worker 有进行中的任务，请先取消或完成后再删除。',
+  'workers.deleteErrorReferenced': '该 Worker 正被团队会话使用，请先归档相关成员后再删除。',
+  'workers.deleteErrorGeneric': '删除失败，该 Worker 可能仍在使用中，请稍后重试。',
   'workers.formEnabled': '启用',
   'workers.formName': '名称',
   'workers.formPrimary': '主角色',
@@ -1209,7 +1306,7 @@ const en: Dict = {
   'roles.save': 'Save member',
   'roles.saved': 'Member saved.',
   'roles.sessionReset': 'Member session reset.',
-  'roles.type': 'Semantic type',
+  'roles.type': 'Role',
   'roles.useDefaultPrompt': 'Use role default prompt',
   'roles.worker': 'Worker binding',
   'roles.workerMissing': 'Worker unavailable',
@@ -1238,6 +1335,21 @@ const en: Dict = {
   'team.updatedToast': 'Crew template updated.',
   'team.deletedToast': 'Crew template deleted.',
   'team.replacedToast': 'Current crew replaced.',
+  'team.memberCount': '{count} members',
+  'team.libraryEmpty': 'No crews yet',
+  'team.libraryEmptyHint':
+    'Save the current chat team from the right-hand Team panel to create a reusable crew.',
+  'team.libraryManageHint':
+    'Rename, inspect members, or delete crews here. Create crews via “Save as template” in a chat Team, and apply them from the same panel.',
+  'team.libraryPageHint': 'Manage saved collaborative crew templates.',
+  'team.noMembers': 'This crew has no members.',
+  'team.statCrews': 'Crews',
+  'team.statMembers': 'Seats',
+  'team.workerMissing': 'Worker missing',
+  'team.workerReady': 'Ready',
+  'team.workerDisabled': 'Disabled',
+  'team.removeMember': 'Remove member',
+  'team.collapseMember': 'Collapse',
   'role.coder': 'Coder',
   'role.general': 'General',
   'role.plan': 'Plan',
@@ -1264,6 +1376,8 @@ const en: Dict = {
   'settings.descModel': 'Manage model providers and API keys for chat.',
   'settings.descPrompts': 'Set the default Leader and role prompts used for future tasks.',
   'settings.descWorkers': 'Register and manage CLI workers (Claude Code / Codex / OpenCode).',
+  'settings.descTeams':
+    'Browse, rename, and delete saved collaborative crews. Create and apply crews from Chat Team.',
   'settings.descAbout': 'Product info and version.',
   'settings.cancelEdit': 'Cancel',
   'settings.clear': 'Clear',
@@ -1326,6 +1440,7 @@ const en: Dict = {
   'settings.navModel': 'Models',
   'settings.navPrompts': 'Prompts',
   'settings.navWorkers': 'Agent Worker',
+  'settings.navTeams': 'Crews',
   'settings.needKey': 'No key',
   'settings.perModelThinking': 'Supported thinking levels',
   'settings.perModelThinkingHint':
@@ -1398,6 +1513,10 @@ const en: Dict = {
   'sidebar.confirmDeleteSession': 'Delete session “{title}”? This cannot be undone.',
   'sidebar.deleteProject': 'Delete project',
   'sidebar.deleteSession': 'Delete session',
+  'sidebar.crews': 'Crews',
+  'sidebar.crewsEmpty': 'No crews yet',
+  'sidebar.manage': 'Manage',
+  'sidebar.manageCrews': 'Manage crews',
   'sidebar.empty': 'No projects yet. Use “Open project…” with a local path.',
   'sidebar.needProjectOpenFolder': 'Open a project first. Opening the folder picker in 3 seconds…',
   'sidebar.newTask': 'New task',
@@ -1434,10 +1553,39 @@ const en: Dict = {
   'workers.registerModeManual': 'Manual',
   'workers.formArgs': 'Args (space-separated)',
   'workers.formCommand': 'Command',
+  'workers.formCommandAutoPlaceholder': 'codex · claude · ~/.local/bin/agent · @scope/pkg',
   'workers.customLaunchKind': 'Custom ACP launch method',
+  'workers.customAutoDetect': 'Auto-detect',
   'workers.customSystemExecutable': 'System PATH executable',
   'workers.customLocalExecutable': 'Local absolute path',
   'workers.customPackageSpec': 'Package and version',
+  'workers.confirmTitle': 'Add CLI',
+  'workers.confirmConnected': 'Connected to ACP agent. Please confirm:',
+  'workers.confirmCommand': 'Command',
+  'workers.confirmProtocol': 'Protocol',
+  'workers.confirmSessionCaps': 'Session capabilities',
+  'workers.confirmLogout': 'Logout',
+  'workers.confirmAuthMethods': 'Auth methods',
+  'workers.confirmStatus': 'Status',
+  'workers.confirmAdd': 'Confirm add',
+  'workers.confirmContinue': 'Continue',
+  'workers.confirmForceAdd': 'Force add',
+  'workers.confirmCancel': 'Cancel',
+  'workers.confirmDuplicateWarning': 'A CLI with the same identity already exists:',
+  'workers.confirmAddNew': 'Add as a new CLI',
+  'workers.confirmReuseExisting': 'Reuse existing',
+  'workers.confirmAuthRequired': 'This CLI requires authentication before it can be used.',
+  'workers.confirmAuthRequiredHint': 'Please log in to this CLI in your terminal first, then come back.',
+  'workers.confirmProbeFailed': 'Could not connect to the ACP agent.',
+  'workers.confirmProbeFailedHint': 'You can still force-add it (probe can be retried later).',
+  'workers.capYes': 'yes',
+  'workers.capNo': 'no',
+  'workers.delete': 'Delete',
+  'workers.deleteConfirm': 'Delete "{name}"? This cannot be undone.',
+  'workers.deleted': 'Deleted',
+  'workers.deleteErrorOpenJobs': 'This worker has in-progress jobs. Cancel or finish them before deleting.',
+  'workers.deleteErrorReferenced': 'This worker is in use by team sessions. Archive the related members first.',
+  'workers.deleteErrorGeneric': 'Failed to delete — the worker may still be in use. Please try again later.',
   'workers.formEnabled': 'Enabled',
   'workers.formName': 'Name',
   'workers.formPrimary': 'Primary role',

@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { Project, Session, SessionLampClass } from '@swarmdesk-agent/shared'
+import type {
+  Project,
+  Session,
+  SessionLampClass,
+  TeamTemplate,
+  WorkerRegistration,
+} from '@swarmdesk-agent/shared'
 import {
   SESSION_LAMP_ERROR_GRACE_MS,
   isPlaceholderSessionTitle,
@@ -17,9 +23,14 @@ import {
   IconSettings,
   IconWorkers,
 } from './Icons'
+import { Modal } from './ui/Modal'
+import { Expandable } from './ui/Expandable'
+import { TeamTemplateLibrary } from './TeamTemplateLibrary'
 
 /** Sessions shown per project before the rest collapse behind "show more". */
 const SESSION_PREVIEW_LIMIT = 5
+/** Crew templates shown before the rest collapse behind "show more". */
+const CREW_PREVIEW_LIMIT = 5
 
 /**
  * Sort key for "most recently active first". Matches the relative-time source
@@ -82,9 +93,13 @@ function relTime(
   return t('sidebar.relMonth')
 }
 
+export type SettingsTabId = 'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about'
+
 interface Props {
   projects: Project[]
   sessions: Session[]
+  teamTemplates?: TeamTemplate[]
+  workers?: WorkerRegistration[]
   activeProjectId: string | null
   activeSessionId: string | null
   busySessionIds?: Set<string>
@@ -95,12 +110,15 @@ interface Props {
   onOpenProject: () => void
   onDeleteProject: (project: Project) => void
   onDeleteSession: (session: Session) => void
-  onOpenSettings: (tab?: 'general' | 'model' | 'workers' | 'about') => void
+  onOpenSettings: (tab?: SettingsTabId) => void
+  onTeamTemplatesChanged?: () => void
 }
 
 export function LeftSidebar({
   projects,
   sessions,
+  teamTemplates = [],
+  workers = [],
   activeProjectId,
   activeSessionId,
   busySessionIds,
@@ -112,10 +130,20 @@ export function LeftSidebar({
   onDeleteProject,
   onDeleteSession,
   onOpenSettings,
+  onTeamTemplatesChanged,
 }: Props) {
   const { t } = useI18n()
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  /** Per-project: reveal sessions beyond the first N. */
+  const [sessionsExpanded, setSessionsExpanded] = useState<Set<string>>(() => new Set())
+  /** Crew section starts collapsed; expand to browse saved templates. */
+  const [crewsCollapsed, setCrewsCollapsed] = useState(true)
+  /** Projects section supports collapse; default expanded. */
+  const [projectsCollapsed, setProjectsCollapsed] = useState(false)
+  const [crewsListExpanded, setCrewsListExpanded] = useState(false)
+  const [crewModal, setCrewModal] = useState<{ open: boolean; focusId: string | null }>({
+    open: false,
+    focusId: null,
+  })
   /**
    * Ticking clock for lamp expiry: the only time-dependent render is the
    * red lamp's 3s after-read grace. Schedule the next re-render exactly at
@@ -136,14 +164,7 @@ export function LeftSidebar({
   }, [sessions, now])
 
   useEffect(() => {
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      for (const id of [...next]) {
-        if (!projects.some((p) => p.id === id)) next.delete(id)
-      }
-      return next
-    })
-    setExpanded((prev) => {
+    setSessionsExpanded((prev) => {
       const next = new Set(prev)
       for (const id of [...next]) {
         if (!projects.some((p) => p.id === id)) next.delete(id)
@@ -152,17 +173,8 @@ export function LeftSidebar({
     })
   }, [projects])
 
-  const toggleCollapsed = (projectId: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (next.has(projectId)) next.delete(projectId)
-      else next.add(projectId)
-      return next
-    })
-  }
-
-  const toggleExpanded = (projectId: string) => {
-    setExpanded((prev) => {
+  const toggleSessionsExpanded = (projectId: string) => {
+    setSessionsExpanded((prev) => {
       const next = new Set(prev)
       if (next.has(projectId)) next.delete(projectId)
       else next.add(projectId)
@@ -207,8 +219,137 @@ export function LeftSidebar({
         </button>
       </div>
 
-      <div className="section-label">{t('sidebar.projects')}</div>
+      <div className="sidebar-section sidebar-crews">
+        <div className="section-label section-label-row">
+          <button
+            type="button"
+            className="section-label-toggle"
+            onClick={() => setCrewsCollapsed((value) => !value)}
+            aria-expanded={!crewsCollapsed}
+          >
+            <span className="section-label-text">{t('sidebar.crews')}</span>
+            <span className="section-label-count" aria-hidden>
+              {teamTemplates.length}
+            </span>
+            <span
+              className={`section-label-chevron${crewsCollapsed ? ' is-collapsed' : ''}`}
+              aria-hidden
+            >
+              <IconChevronDown size={12} />
+            </span>
+          </button>
+          <button
+            type="button"
+            className="section-label-action"
+            title={t('sidebar.manageCrews')}
+            aria-label={t('sidebar.manageCrews')}
+            onClick={() => onOpenSettings('teams')}
+          >
+            {t('sidebar.manage')}
+          </button>
+        </div>
+        <Expandable open={!crewsCollapsed}>
+          <div className="crew-list" role="list" aria-label={t('sidebar.crews')}>
+            {teamTemplates.length === 0 ? (
+              <div className="crew-empty">
+                <p>{t('sidebar.crewsEmpty')}</p>
+                <button
+                  type="button"
+                  className="crew-empty-link"
+                  onClick={() => onOpenSettings('teams')}
+                >
+                  {t('sidebar.manageCrews')}
+                </button>
+              </div>
+            ) : (
+              (() => {
+                const overflow = Math.max(0, teamTemplates.length - CREW_PREVIEW_LIMIT)
+                const visible =
+                  overflow === 0 || crewsListExpanded
+                    ? teamTemplates
+                    : teamTemplates.slice(0, CREW_PREVIEW_LIMIT)
+                return (
+                  <>
+                    {visible.map((template) => (
+                      <button
+                        key={template.id}
+                        type="button"
+                        className="crew-row"
+                        role="listitem"
+                        onClick={() => setCrewModal({ open: true, focusId: template.id })}
+                        title={template.description || template.name}
+                      >
+                        <span className="crew-row-name">{template.name}</span>
+                        <span className="crew-row-meta">
+                          {t('team.memberCount', { count: template.members.length })}
+                        </span>
+                      </button>
+                    ))}
+                    {overflow > 0 && !crewsListExpanded && (
+                      <div className="sess-fade crew-list-fade" aria-hidden>
+                        <button
+                          type="button"
+                          className="sess-toggle"
+                          onClick={() => setCrewsListExpanded(true)}
+                          aria-label={t('sidebar.showMore', { count: overflow })}
+                          title={t('sidebar.showMore', { count: overflow })}
+                        >
+                          <span className="sess-toggle-chevron" aria-hidden>
+                            <IconChevronDown size={14} />
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                    {overflow > 0 && crewsListExpanded && (
+                      <button
+                        type="button"
+                        className="sess-toggle sess-toggle-text"
+                        onClick={() => setCrewsListExpanded(false)}
+                        aria-expanded={crewsListExpanded}
+                      >
+                        <span className="sess-toggle-chevron up" aria-hidden>
+                          <IconChevronDown size={12} />
+                        </span>
+                        {t('sidebar.showLess')}
+                      </button>
+                    )}
+                  </>
+                )
+              })()
+            )}
+          </div>
+        </Expandable>
+      </div>
 
+      <div
+        className={`sidebar-section sidebar-projects${projectsCollapsed ? '' : ' is-open'}`}
+      >
+        <div className="section-label section-label-row">
+          <button
+            type="button"
+            className="section-label-toggle"
+            onClick={() => setProjectsCollapsed((value) => !value)}
+            aria-expanded={!projectsCollapsed}
+          >
+            <span className="section-label-text">{t('sidebar.projects')}</span>
+            <span className="section-label-count" aria-hidden>
+              {projects.length}
+            </span>
+            <span
+              className={`section-label-chevron${projectsCollapsed ? ' is-collapsed' : ''}`}
+              aria-hidden
+            >
+              <IconChevronDown size={12} />
+            </span>
+          </button>
+        </div>
+
+        {/*
+          项目区要「占满剩余高度 + 内部滚动」，不能用 Expandable 的 height 像素动画
+         （flex:1 会与 height 动画互相抢布局）。用 grid 0fr↔1fr 做同节奏展开。
+        */}
+        <div className="sidebar-projects-collapse" aria-hidden={projectsCollapsed}>
+          <div className="sidebar-projects-collapse-inner">
       <div className="session-scroll">
         {projects.length === 0 && <div className="empty-sess">{t('sidebar.empty')}</div>}
 
@@ -217,11 +358,12 @@ export function LeftSidebar({
             .filter((s) => s.projectId === project.id)
             .slice()
             .sort((a, b) => sessionSortKey(b) - sessionSortKey(a))
-          const isCollapsed = collapsed.has(project.id)
-          const isExpanded = expanded.has(project.id)
+          const showAllSessions = sessionsExpanded.has(project.id)
           const overflow = Math.max(0, projectSessions.length - SESSION_PREVIEW_LIMIT)
           const visibleSessions =
-            overflow === 0 || isExpanded ? projectSessions : projectSessions.slice(0, SESSION_PREVIEW_LIMIT)
+            overflow === 0 || showAllSessions
+              ? projectSessions
+              : projectSessions.slice(0, SESSION_PREVIEW_LIMIT)
           return (
             <div className="proj" key={project.id}>
               <div
@@ -229,15 +371,11 @@ export function LeftSidebar({
                 role="button"
                 tabIndex={0}
                 title={project.rootPath}
-                onClick={() => {
-                  onSelectProject(project)
-                  toggleCollapsed(project.id)
-                }}
+                onClick={() => onSelectProject(project)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
                     onSelectProject(project)
-                    toggleCollapsed(project.id)
                   }
                 }}
               >
@@ -272,90 +410,86 @@ export function LeftSidebar({
                   ×
                 </button>
               </div>
-              {!isCollapsed && (
-                <>
-                  {projectSessions.length === 0 && (
-                    <div className="empty-sess">{t('sidebar.noSessions')}</div>
-                  )}
-                  <div className="sess-list">
-                    {visibleSessions.map((session) => {
-                      // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
-                      const busy = busySessionIds?.has(session.id)
-                      const sc = sessionLampClass(session, busy ?? false, now)
-                      const active = session.id === activeSessionId
-                      const untitled = isPlaceholderSessionTitle(session.title)
-                      const displayTitle = untitled ? t('sidebar.untitledSession') : session.title
-                      return (
-                        <div
-                          key={session.id}
-                          className={`sess${active ? ' active' : ''}${sc ? ` ${sc}` : ''}${untitled ? ' untitled' : ''}`}
-                          onClick={() => onSelectSession(session)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') onSelectSession(session)
-                          }}
-                        >
-                          <span className="dot" aria-hidden title={t(statusTitleKey(sc))} />
-                          <span className="sess-title">{displayTitle}</span>
-                          <span className="sess-trail">
-                            <span className="time">
-                              {relTime(session.lastReplyAt ?? session.createdAt, t)}
-                            </span>
-                            <button
-                              type="button"
-                              className="row-del"
-                              title={t('sidebar.deleteSession')}
-                              aria-label={t('sidebar.deleteSession')}
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                onDeleteSession(session)
-                              }}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        </div>
-                      )
-                    })}
-                    {overflow > 0 && !isExpanded && (
-                      /* 渐变遮罩盖在第 5 个 session 上：底部淡入侧栏背景色，
-                         中间放一个向下箭头，提示下面还有更多 session。遮罩自身
-                         pointer-events:none，仅箭头按钮可点。 */
-                      <div className="sess-fade" aria-hidden>
+              {projectSessions.length === 0 && (
+                <div className="empty-sess">{t('sidebar.noSessions')}</div>
+              )}
+              <div className="sess-list">
+                {visibleSessions.map((session) => {
+                  // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
+                  const busy = busySessionIds?.has(session.id)
+                  const sc = sessionLampClass(session, busy ?? false, now)
+                  const active = session.id === activeSessionId
+                  const untitled = isPlaceholderSessionTitle(session.title)
+                  const displayTitle = untitled ? t('sidebar.untitledSession') : session.title
+                  return (
+                    <div
+                      key={session.id}
+                      className={`sess${active ? ' active' : ''}${sc ? ` ${sc}` : ''}${untitled ? ' untitled' : ''}`}
+                      onClick={() => onSelectSession(session)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') onSelectSession(session)
+                      }}
+                    >
+                      <span className="dot" aria-hidden title={t(statusTitleKey(sc))} />
+                      <span className="sess-title">{displayTitle}</span>
+                      <span className="sess-trail">
+                        <span className="time">
+                          {relTime(session.lastReplyAt ?? session.createdAt, t)}
+                        </span>
                         <button
                           type="button"
-                          className="sess-toggle"
-                          onClick={() => toggleExpanded(project.id)}
-                          aria-label={t('sidebar.showMore', { count: overflow })}
-                          title={t('sidebar.showMore', { count: overflow })}
+                          className="row-del"
+                          title={t('sidebar.deleteSession')}
+                          aria-label={t('sidebar.deleteSession')}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            onDeleteSession(session)
+                          }}
                         >
-                          <span className="sess-toggle-chevron" aria-hidden>
-                            <IconChevronDown size={14} />
-                          </span>
+                          ×
                         </button>
-                      </div>
-                    )}
-                    {overflow > 0 && isExpanded && (
-                      <button
-                        type="button"
-                        className="sess-toggle sess-toggle-text"
-                        onClick={() => toggleExpanded(project.id)}
-                        aria-expanded={isExpanded}
-                      >
-                        <span className="sess-toggle-chevron up" aria-hidden>
-                          <IconChevronDown size={12} />
-                        </span>
-                        {t('sidebar.showLess')}
-                      </button>
-                    )}
+                      </span>
+                    </div>
+                  )
+                })}
+                {overflow > 0 && !showAllSessions && (
+                  <div className="sess-fade" aria-hidden>
+                    <button
+                      type="button"
+                      className="sess-toggle"
+                      onClick={() => toggleSessionsExpanded(project.id)}
+                      aria-label={t('sidebar.showMore', { count: overflow })}
+                      title={t('sidebar.showMore', { count: overflow })}
+                    >
+                      <span className="sess-toggle-chevron" aria-hidden>
+                        <IconChevronDown size={14} />
+                      </span>
+                    </button>
                   </div>
-                </>
-              )}
+                )}
+                {overflow > 0 && showAllSessions && (
+                  <button
+                    type="button"
+                    className="sess-toggle sess-toggle-text"
+                    onClick={() => toggleSessionsExpanded(project.id)}
+                    aria-expanded={showAllSessions}
+                  >
+                    <span className="sess-toggle-chevron up" aria-hidden>
+                      <IconChevronDown size={12} />
+                    </span>
+                    {t('sidebar.showLess')}
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}
+      </div>
+          </div>
+        </div>
       </div>
 
       <div className="sidebar-foot">
@@ -366,6 +500,25 @@ export function LeftSidebar({
           <span className="nav-label">{t('sidebar.settings')}</span>
         </button>
       </div>
+
+      <Modal
+        open={crewModal.open}
+        onClose={() => setCrewModal({ open: false, focusId: null })}
+        label={t('sidebar.crews')}
+        panelClassName="team-library-modal team-library-modal--settings"
+      >
+        <div className="team-library-modal-page">
+          <h2 className="settings-page-title">{t('settings.navTeams')}</h2>
+          <p className="settings-page-desc">{t('settings.descTeams')}</p>
+          <TeamTemplateLibrary
+            workers={workers}
+            initialTemplates={teamTemplates}
+            focusTemplateId={crewModal.focusId}
+            onChanged={onTeamTemplatesChanged}
+            layout="settings"
+          />
+        </div>
+      </Modal>
     </aside>
   )
 }

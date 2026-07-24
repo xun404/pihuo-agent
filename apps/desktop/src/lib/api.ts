@@ -15,6 +15,7 @@ import type {
   TeamTemplateMemberMapping,
   CreateTeamMemberInput,
   CustomAcpRegistrationInput,
+  CustomAcpPreview,
   UpdateTeamMemberInput,
   WorkerRegistration,
   WorkerRole,
@@ -253,7 +254,24 @@ async function request<T>(
   }
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`${res.status} ${path}: ${text}`)
+    // Preserve the backend's structured { error, code } so callers can map known codes to
+    // friendly messages instead of showing the raw JSON body to the user.
+    let code: string | undefined
+    let message: string | undefined
+    try {
+      const parsed = JSON.parse(text) as { error?: string; code?: string }
+      code = parsed.code
+      message = parsed.error
+    } catch {
+      /* non-JSON error body */
+    }
+    const err = new Error(message ?? `${res.status} ${path}: ${text}`) as Error & {
+      code?: string
+      status?: number
+    }
+    err.code = code
+    err.status = res.status
+    throw err
   }
   return res.json() as Promise<T>
 }
@@ -587,6 +605,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  /** Probe + dedup; returns the agent identity for the confirmation dialog. Never persists. */
+  previewCustomAcpWorker: (body: CustomAcpRegistrationInput) =>
+    request<{ preview: CustomAcpPreview }>('/api/workers/custom/preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** Delete a worker (and optionally its unreferenced installation). */
+  deleteWorker: (id: string, opts?: { removeInstallation?: boolean }) => {
+    const params = opts?.removeInstallation ? '?removeInstallation=1' : ''
+    return request<{ ok: boolean; snapshot: AppSnapshot }>(
+      `/api/workers/${encodePathSegment(id)}${params}`,
+      { method: 'DELETE' },
+    )
+  },
   /** Fetch ACP available models (spawns agent briefly); caches on worker; updates health */
   fetchWorkerModels: (
     id: string,

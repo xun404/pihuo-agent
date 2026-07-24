@@ -922,6 +922,36 @@
   padding: 12px 14px;
   min-height: 52px;
 }
+.worker-card-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  /* Fade-in when a worker is disabled (the button is conditionally rendered then). */
+  animation: worker-card-delete-in var(--dur-fast) var(--ease-out);
+  transition: background 0.12s, color 0.12s;
+}
+@keyframes worker-card-delete-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.worker-card-delete:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
 .worker-card-info {
   flex: 1;
   min-width: 0;
@@ -941,6 +971,23 @@
   font-weight: var(--fw-semibold);
   color: var(--text-1);
   line-height: var(--lh-snug);
+}
+.worker-card-version {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  font-weight: var(--fw-regular);
+  font-variant-numeric: tabular-nums;
+}
+/* Enlarge the brand logo inside worker cards (overrides the global .worker-logo sizing). */
+.worker-card .worker-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  flex: none;
+}
+.worker-card .worker-logo svg {
+  width: 18px;
+  height: 18px;
 }
 .worker-card-source {
   font-size: var(--fs-xs);
@@ -1031,13 +1078,24 @@
   transform: rotate(45deg);
   transition: transform var(--dur-fast) var(--ease-out);
 }
+.worker-card-role.is-open .worker-card-role-chevron::before,
 .worker-card-role[open] .worker-card-role-chevron::before {
   top: 6px;
   transform: rotate(225deg);
 }
+.worker-card-role.is-open .worker-card-role-summary,
 .worker-card-role[open] .worker-card-role-summary {
   border-bottom: 1px solid var(--border-soft);
   background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+}
+.worker-card-role-summary {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: inherit;
 }
 .worker-card-role-form {
   display: grid;
@@ -2158,9 +2216,20 @@ input.settings-input.worker-registry-input {
   font-size: var(--fs-base);
 }
 /* 多行提示词：勿被上方单行 height 压成 1 行 */
-textarea.settings-input.role-form-instructions {
+textarea.settings-input.role-form-instructions,
+textarea.settings-input.team-member-prompt-input {
   height: calc(20px + 1em * var(--lh-relaxed) * 5);
   min-height: calc(20px + 1em * var(--lh-relaxed) * 5);
+  padding: 10px 12px;
+  line-height: var(--lh-relaxed);
+  white-space: pre-wrap;
+  overflow: auto;
+  resize: vertical;
+  display: block;
+}
+textarea.settings-input.team-library-desc-input {
+  height: calc(20px + 1em * var(--lh-relaxed) * 2);
+  min-height: calc(20px + 1em * var(--lh-relaxed) * 2);
   padding: 10px 12px;
   line-height: var(--lh-relaxed);
   white-space: pre-wrap;
@@ -3146,16 +3215,28 @@ textarea.settings-input.role-form-instructions {
   transform: rotate(45deg);
   transition: transform var(--dur-fast) var(--ease-out);
 }
+.prompt-role-item.is-open .prompt-role-chevron::before,
 .prompt-role-item[open] .prompt-role-chevron::before {
   top: 6px;
   transform: rotate(225deg);
 }
+.prompt-role-item.is-open .prompt-role-summary,
 .prompt-role-item[open] .prompt-role-summary {
   background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
   border-bottom: 1px solid var(--border-soft);
 }
+.prompt-role-item.is-open .prompt-role-preview,
 .prompt-role-item[open] .prompt-role-preview {
   color: var(--text-2);
+}
+button.prompt-role-summary {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: inherit;
 }
 .prompt-role-body {
   padding: 10px 16px 12px;
@@ -3209,4 +3290,134 @@ textarea.settings-input.role-form-instructions {
 .home .home-composer {
   width: min(var(--messages-max), 100%);
   margin-top: var(--sp-1);
+}
+
+/* ── Custom-CLI confirm dialog (preview → confirm before persist) ── */
+.confirm-add-cli {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.confirm-add-cli-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+.confirm-add-cli-subtitle,
+.confirm-add-cli-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.confirm-add-cli-warn {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  font-weight: var(--fw-medium);
+}
+/* Parameter card: the ACP identity from initialize */
+.confirm-add-cli-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg);
+}
+.confirm-add-cli-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.confirm-add-cli-agent {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+.confirm-add-cli-version {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.confirm-add-cli-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+.confirm-add-cli-field {
+  display: contents;
+}
+.confirm-add-cli-field > dt {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  align-self: start;
+  white-space: nowrap;
+}
+.confirm-add-cli-field > dd {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  word-break: break-all;
+}
+.confirm-add-cli-field > dd.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+}
+/* Readiness status coloring (raised specificity to win over .confirm-add-cli-field > dd) */
+.confirm-add-cli-field > dd.confirm-add-cli-status {
+  font-weight: var(--fw-medium);
+}
+.confirm-add-cli-field > dd.confirm-add-cli-status-ready {
+  color: var(--green);
+}
+.confirm-add-cli-field > dd.confirm-add-cli-status-auth_required,
+.confirm-add-cli-field > dd.confirm-add-cli-status-failed,
+.confirm-add-cli-field > dd.confirm-add-cli-status-incompatible {
+  color: var(--danger);
+}
+/* Auth-required block (state 4) */
+.confirm-add-cli-authrequired {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+/* Duplicate conflict chooser (state 2) */
+.confirm-add-cli-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.confirm-add-cli-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  cursor: pointer;
+}
+.confirm-add-cli-radio input[type='radio'] {
+  margin-top: 2px;
+}
+.confirm-add-cli-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.confirm-add-cli-conflict-name {
+  font-weight: var(--fw-medium);
+}
+.confirm-add-cli-conflict-cmd {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.confirm-add-cli-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
 }

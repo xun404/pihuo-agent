@@ -402,7 +402,10 @@ describe('acp-agent-installer', () => {
           downloadHeaderTimeoutMs: 15,
           fetchImpl: neverFetch,
         }),
-      (error: unknown) => error instanceof AcpInstallError && error.code === 'ACP_INSTALL_FAILED',
+      (error: unknown) =>
+        error instanceof AcpInstallError &&
+        error.code === 'ACP_INSTALL_DOWNLOAD_FAILED' &&
+        error.message === 'Download timed out',
     )
     const parent = join(agentsRoot, 'timeout-agent', '1.0.0')
     assert.equal(
@@ -413,6 +416,151 @@ describe('acp-agent-installer', () => {
         : false,
       false,
     )
+  })
+
+  it('aborts a response body that stalls (no bytes) after the stall deadline', async () => {
+    const agent: AcpRegistryAgentMetadata = {
+      id: 'stall-agent',
+      name: 'Stall Agent',
+      version: '1.0.0',
+      description: 'd',
+      icon: '',
+      distributions: [
+        {
+          kind: 'binary',
+          targets: [
+            {
+              target: 'darwin-aarch64',
+              archiveUrl: 'https://example.com/agent.bin',
+              cmd: './agent',
+              args: [],
+              env: {},
+            },
+          ],
+        },
+      ],
+      manifestDigest: 'sha256:stall-manifest',
+      availability: 'available',
+    }
+    const agentsRoot = join(dir, 'stall-agents')
+    // Streams one chunk then never enqueues again: a real mid-transfer stall. The stall
+    // guard (not the header timer, not the total timer) must fire and classify the failure.
+    const stalledFetch = (() => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array([0, 1, 2, 3]))
+          // intentionally never close or enqueue further
+        },
+      })
+      const res = new Response(stream, { status: 200, headers: { 'content-length': '1048576' } })
+      return (() => Promise.resolve(res)) as unknown as typeof fetch
+    })()
+    const parent = join(agentsRoot, agent.id, agent.version)
+    await assert.rejects(
+      () =>
+        prepareRegistryAgent({
+          agent,
+          distribution: 'binary',
+          target: 'darwin-aarch64',
+          agentsRoot,
+          trust: {
+            acceptedAt: new Date().toISOString(),
+            explicitNoSha: true,
+            manifestDigest: agent.manifestDigest,
+          },
+          downloadStallTimeoutMs: 50,
+          downloadHeaderTimeoutMs: 5000,
+          downloadTimeoutMs: 10_000,
+          fetchImpl: stalledFetch,
+        }),
+      (error: unknown) =>
+        error instanceof AcpInstallError &&
+        error.code === 'ACP_INSTALL_DOWNLOAD_FAILED' &&
+        error.message === 'Download timed out',
+    )
+    assert.equal(
+      existsSync(parent)
+        ? readdirSync(parent).some(
+            (name) => name.includes('.staging.') || name.endsWith('.download'),
+          )
+        : false,
+      false,
+      'staging/download artifacts must be cleaned up after a stall',
+    )
+  })
+
+  it('completes a slow-but-steady stream instead of killing it on a wall-clock total', async () => {
+    const binaryBytes = Buffer.from('#!/bin/sh\necho ok\n')
+    const digest = sha256(binaryBytes)
+    const rawAgent = {
+      id: 'steady-agent',
+      name: 'Steady Agent',
+      version: '1.0.0',
+      description: 'd',
+      distribution: {
+        binary: {
+          'darwin-aarch64': {
+            archive: 'https://example.com/agent.bin',
+            sha256: digest,
+            cmd: './agent',
+          },
+        },
+      },
+    }
+    const agent: AcpRegistryAgentMetadata = {
+      id: 'steady-agent',
+      name: 'Steady Agent',
+      version: '1.0.0',
+      description: 'd',
+      icon: '',
+      distributions: [
+        {
+          kind: 'binary',
+          targets: [
+            {
+              target: 'darwin-aarch64',
+              archiveUrl: 'https://example.com/agent.bin',
+              sha256: digest,
+              cmd: './agent',
+              args: [],
+              env: {},
+            },
+          ],
+        },
+      ],
+      manifestDigest: digestOfAgentEntry(rawAgent),
+      availability: 'available',
+    }
+    const agentsRoot = join(dir, 'steady-agents')
+    // Drip the bytes in 4 chunks, 15ms apart. Every chunk lands within the 50ms stall
+    // window, so the stream is "making progress" and must NOT be aborted even though it
+    // takes ~60ms total (longer than a naive fixed deadline would tolerate).
+    const steadyFetch = (() => {
+      const stream = new ReadableStream({
+        async start(controller) {
+          for (let i = 0; i < binaryBytes.length; i += 6) {
+            controller.enqueue(binaryBytes.subarray(i, i + 6))
+            await new Promise((r) => setTimeout(r, 15))
+          }
+          controller.close()
+        },
+      })
+      const res = new Response(stream, { status: 200 })
+      return (() => Promise.resolve(res)) as unknown as typeof fetch
+    })()
+    const result = await prepareRegistryAgent({
+      agent,
+      distribution: 'binary',
+      target: 'darwin-aarch64',
+      agentsRoot,
+      downloadStallTimeoutMs: 50,
+      downloadHeaderTimeoutMs: 5000,
+      downloadTimeoutMs: 10_000,
+      fetchImpl: steadyFetch,
+    })
+    assert.equal(result.distribution, 'binary')
+    assert.equal(result.observedSha256, digest)
+    assert.ok(existsSync(result.resolvedExecutable!), 'executable must be materialized')
   })
 
   it('rejects downloaded content whose magic does not match the original URL pathname', async () => {

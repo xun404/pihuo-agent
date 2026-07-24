@@ -535,6 +535,672 @@ textarea.settings-input.role-form-instructions {
   color: var(--accent);
   line-height: var(--lh-snug);
 }
+
+/* 侧栏弹窗：复用设置页编组布局（master/detail 撑满）
+ * 必须盖过 .text-prompt-modal { width: 440px }（若仍带该类） */
+.team-library-modal.team-library-modal--settings,
+.modal-overlay-anim .team-library-modal {
+  width: min(1080px, calc(100vw - 56px));
+  max-width: min(1080px, calc(100vw - 56px));
+  height: min(86vh, 820px);
+  max-height: min(86vh, 820px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 20px 22px 18px;
+  box-sizing: border-box;
+}
+.team-library-modal-page {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.team-library-modal-page .settings-page-title {
+  margin: 0 0 4px;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  min-height: auto;
+  line-height: var(--lh-snug);
+  color: var(--text-1);
+  flex-shrink: 0;
+}
+.team-library-modal-page .settings-page-desc {
+  margin: 0 0 var(--sp-3);
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: var(--lh-body);
+}
+.team-library-modal-page .team-library.is-settings {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.team-library-modal-page .team-library-settings-layout {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+}
+.team-library {
+  min-width: 0;
+}
+.team-library.is-page {
+  gap: 0;
+}
+.team-library-chrome {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 var(--sp-4);
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--purple) 10%, var(--bg-surface)) 0%,
+      color-mix(in srgb, var(--blue) 6%, var(--bg-surface)) 55%,
+      var(--bg-surface) 100%
+    );
+}
+.team-library-chrome-mark {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--purple) 16%, var(--bg-surface));
+  color: var(--purple);
+  border: 1px solid color-mix(in srgb, var(--purple) 24%, transparent);
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.04));
+}
+.team-library-chrome-copy {
+  min-width: 0;
+  flex: 1;
+}
+.team-library-chrome-title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+}
+.team-library-chrome-desc {
+  margin: 2px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
+.team-library-stats {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.team-library-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+  border: 1px solid var(--border-soft);
+}
+.team-library-stat-value {
+  font-family: var(--mono);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: 1.1;
+}
+.team-library-stat-label {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  letter-spacing: var(--ls-label);
+}
+.team-library-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: var(--sp-4);
+  min-height: 360px;
+  align-items: stretch;
+}
+.team-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg-input) 55%, var(--bg-surface));
+  overflow: hidden;
+}
+.team-library-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.team-library-list-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+}
+.team-library-count-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  border: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.team-library-items {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  max-height: min(52vh, 480px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.team-library-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-1);
+}
+.team-library-item:hover {
+  background: var(--bg-hover);
+}
+.team-library-item.is-active {
+  background: var(--bg-surface);
+  border-color: color-mix(in srgb, var(--purple) 28%, var(--border-soft));
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.04));
+}
+.team-library-item-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.team-library-item-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.team-library-item-meta {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+}
+.team-library-detail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: 4px 2px 0;
+}
+.team-library-detail-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--r-lg);
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  text-align: center;
+  background: color-mix(in srgb, var(--bg-input) 40%, transparent);
+}
+.team-library-detail-empty p {
+  margin: 0;
+  max-width: 32em;
+  line-height: var(--lh-body);
+}
+.team-library-worker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 8px 2px 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-input) 80%, transparent);
+  border: 1px solid var(--border-soft);
+  color: var(--text-1);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+}
+.team-library-worker-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.team-library-empty {
+  margin: 0;
+  padding: 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+@media (max-width: 720px) {
+  .team-library-layout {
+    grid-template-columns: 1fr;
+  }
+}
+/* 设置页编组：复用模型设置 master/detail，撑满主栏 */
+.team-library.is-settings {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.team-library-settings-layout {
+  width: 100%;
+  height: 100%;
+}
+/* 右侧：与模型设置相同的字段节奏 */
+.team-library-main .settings-field {
+  margin-bottom: var(--sp-3);
+}
+.team-library-main .team-library-provider-head {
+  margin-bottom: var(--sp-4);
+  gap: 8px;
+}
+.team-library-main .team-library-provider-head .pname {
+  min-width: 0;
+  max-width: min(42%, 360px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.team-library .settings-btn-soft.is-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border-soft));
+  background: color-mix(in srgb, var(--danger) 7%, var(--bg-surface));
+}
+.team-library .settings-btn-soft.is-danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border-soft));
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-surface));
+}
+textarea.settings-input.team-library-desc-input {
+  box-sizing: border-box;
+  height: calc(20px + 1em * var(--lh-relaxed, 1.5) * 2);
+  min-height: calc(20px + 1em * var(--lh-relaxed, 1.5) * 2);
+  max-height: none;
+  padding: 10px 12px;
+  line-height: var(--lh-relaxed, 1.5);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: block;
+  align-items: stretch;
+  resize: vertical;
+  font-family: var(--font);
+  overflow: auto;
+  text-overflow: clip;
+}
+.team-library-members-section {
+  margin-top: var(--sp-2);
+}
+.team-library-members-section .settings-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 成员行：默认折叠查看，展开后编辑 */
+.team-member-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.team-member-row.is-expanded {
+  background: color-mix(in srgb, var(--bg-input) 28%, var(--bg-surface));
+}
+.team-member-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.team-member-summary:hover {
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+}
+.team-member-summary-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.team-member-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.team-member-row-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+}
+.team-member-summary-prompt {
+  margin: 0;
+  padding: 0 14px 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.team-member-chevron {
+  width: 14px;
+  height: 14px;
+  position: relative;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.team-member-chevron::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.team-member-chevron.is-open::before {
+  top: 6px;
+  transform: rotate(225deg);
+}
+.team-member-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.team-member-row .expandable {
+  /* keep chevron-driven card polish while height animates */
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+}
+.team-member-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+.team-member-edit-grid .settings-field {
+  margin: 0;
+  gap: 6px;
+}
+.team-member-edit-grid .settings-field > span {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+}
+.team-member-worker-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+/* 仅在选中 Worker 时预留品牌色块空间，避免无 icon 时左侧空一截 */
+.team-member-worker-select.has-logo .settings-input {
+  padding-left: 36px;
+}
+.team-member-worker-select .team-member-worker-logo.worker-logo {
+  position: absolute;
+  left: 8px;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  pointer-events: none;
+}
+.team-member-worker-select .team-member-worker-logo.worker-logo svg {
+  width: 12px;
+  height: 12px;
+}
+.team-library-worker-chip .worker-logo {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.team-library-worker-chip .worker-logo svg {
+  width: 10px;
+  height: 10px;
+}
+.team-member-prompt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.team-member-prompt-field > span {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+}
+/* 提高优先级：盖过 06-settings .settings-input { height: h-lg }，默认 5 行 */
+textarea.settings-input.team-member-prompt-input {
+  box-sizing: border-box;
+  height: calc(20px + 1em * var(--lh-relaxed, 1.5) * 5);
+  min-height: calc(20px + 1em * var(--lh-relaxed, 1.5) * 5);
+  max-height: none;
+  padding: 10px 12px;
+  line-height: var(--lh-relaxed, 1.5);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: block;
+  align-items: stretch;
+  resize: vertical;
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  overflow: auto;
+  text-overflow: clip;
+}
+.team-member-edit-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.team-member-remove-link {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--danger);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.team-member-remove-link:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--danger) 85%, #000);
+}
+.team-member-remove-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+.team-member-add {
+  appearance: none;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--r-lg);
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--blue);
+  cursor: pointer;
+  text-align: center;
+}
+.team-member-add:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 28%, var(--border-soft));
+}
+.team-member-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+@media (max-width: 720px) {
+  .team-member-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 角色色标 / 状态标签 */
+.team-role-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.team-role-tag.tone-plan {
+  color: #5b4bc9;
+  background: color-mix(in srgb, #5b4bc9 12%, transparent);
+}
+.team-role-tag.tone-coder {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.team-role-tag.tone-review {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.team-role-tag.tone-test {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.team-role-tag.tone-research {
+  color: #0f8a8a;
+  background: color-mix(in srgb, #0f8a8a 12%, transparent);
+}
+.team-role-tag.tone-general {
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-hover) 90%, transparent);
+}
+.team-role-tag.tone-more {
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+}
+.team-status-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+}
+.team-status-tag.is-ready {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.team-status-tag.is-disabled {
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--bg-hover) 90%, transparent);
+}
+.team-status-tag.is-missing {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.team-model-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  height: 18px;
+  padding: 0 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-input) 90%, transparent);
+  border: 1px solid var(--border-soft);
+}
+.team-model-tag.is-inherit {
+  color: var(--text-3);
+  font-family: var(--font);
+}
+
 .team-mapping-list {
   display: flex;
   flex-direction: column;

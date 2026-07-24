@@ -119,7 +119,7 @@ interface Props {
    *  decides whether to actually persist (e.g. skip if unchanged / empty). */
   onRenameSession?: (title: string) => void
   /** Open settings panel; optionally pin a tab (e.g. 'model' for model-config entries). */
-  onOpenSettings?: (tab?: 'general' | 'model' | 'workers' | 'about') => void
+  onOpenSettings?: (tab?: 'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about') => void
   /** When settings closes, reload available models */
   settingsOpen?: boolean
   /** Report streaming/busy so sidebar can show parallel activity */

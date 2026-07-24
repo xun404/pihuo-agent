@@ -74,6 +74,9 @@ export type PrepareRequest = {
   downloadTimeoutMs?: number
   /** Per-request connection/header deadline, bounded by downloadTimeoutMs. */
   downloadHeaderTimeoutMs?: number
+  /** No-progress stall deadline for the response body. A download that keeps receiving
+   *  bytes is never killed; only a body that receives nothing for this long aborts. */
+  downloadStallTimeoutMs?: number
   /** Trusted/test resolver environment; never materialized into the agent environment. */
   runnerEnv?: NodeJS.ProcessEnv
 }
@@ -480,13 +483,19 @@ async function downloadToFile(
     maxRedirects?: number
     totalTimeoutMs?: number
     headerTimeoutMs?: number
+    /** No-progress deadline for the response body. A download that keeps receiving bytes is
+     *  never aborted; only a body that receives nothing for this long is. Default 30s. */
+    stallTimeoutMs?: number
   } = {},
 ): Promise<{ bytes: number }> {
   const fetchImpl = options.fetchImpl ?? fetch
   const maxBytes = options.maxBytes ?? ARCHIVE_LIMITS.maxArchiveBytes
   const maxRedirects = options.maxRedirects ?? 5
-  const totalTimeoutMs = options.totalTimeoutMs ?? 60_000
+  // Absolute safety valve (default 30 min): guards against a truly wedged download that never
+  // errors and somehow never stalls. Normal downloads are bounded by stallTimeoutMs, not this.
+  const totalTimeoutMs = options.totalTimeoutMs ?? 1_800_000
   const headerTimeoutMs = Math.min(options.headerTimeoutMs ?? 15_000, totalTimeoutMs)
+  const stallTimeoutMs = Math.min(options.stallTimeoutMs ?? 30_000, totalTimeoutMs)
   const timeoutSignal = AbortSignal.timeout(totalTimeoutMs)
   const totalSignal = options.signal
     ? AbortSignal.any([options.signal, timeoutSignal])
@@ -497,10 +506,12 @@ async function downloadToFile(
     const onTotalAbort = () => headerController.abort(totalSignal.reason)
     if (totalSignal.aborted) onTotalAbort()
     else totalSignal.addEventListener('abort', onTotalAbort, { once: true })
-    const headerTimer = setTimeout(
-      () => headerController.abort(new Error('Download header timeout')),
-      headerTimeoutMs,
-    )
+    const headerTimer = setTimeout(() => {
+      // A named DOMException lets the prepare catch classify a header deadline as a download
+      // timeout rather than the generic 'Agent preparation failed' catch-all.
+      const reason = new DOMException('Download header timeout', 'TimeoutError')
+      headerController.abort(reason)
+    }, headerTimeoutMs)
     // headerTimer must stay ref'd so AbortSignal.timeout races keep the event loop alive on Node 22
     let res: Response
     try {
@@ -515,31 +526,56 @@ async function downloadToFile(
     }
     if ([301, 302, 303, 307, 308].includes(res.status)) {
       const loc = res.headers.get('location')
-      if (!loc) throw new AcpInstallError('ACP_INSTALL_FAILED', 'Redirect without Location')
+      if (!loc)
+        throw new AcpInstallError('ACP_INSTALL_DOWNLOAD_FAILED', 'Redirect without Location')
       current = new URL(loc, current).toString()
       if (!current.startsWith('https://')) {
-        throw new AcpInstallError('ACP_INSTALL_FAILED', 'Only https downloads allowed')
+        throw new AcpInstallError('ACP_INSTALL_DOWNLOAD_FAILED', 'Only https downloads allowed')
       }
       continue
     }
     if (!res.ok || !res.body) {
-      throw new AcpInstallError('ACP_INSTALL_FAILED', `Download failed HTTP ${res.status}`)
+      throw new AcpInstallError(
+        'ACP_INSTALL_DOWNLOAD_FAILED',
+        `Download failed HTTP ${res.status}`,
+      )
     }
     const len = res.headers.get('content-length')
     if (len && Number(len) > maxBytes) {
-      throw new AcpInstallError('ACP_INSTALL_FAILED', 'Content-Length exceeds limit')
+      throw new AcpInstallError('ACP_INSTALL_DOWNLOAD_FAILED', 'Content-Length exceeds limit')
     }
     mkdirSync(dirname(destPath), { recursive: true, mode: 0o700 })
     const out = createWriteStream(destPath, { mode: 0o600 })
     let received = 0
     const nodeBody = Readable.fromWeb(res.body as import('node:stream/web').ReadableStream)
+    // Progress-driven stall guard: the download is only killed when the body stops producing
+    // bytes for stallTimeoutMs. A slow-but-steady stream runs as long as it keeps flowing.
+    // The absolute totalTimeoutMs above remains the backstop for a fully wedged transfer.
+    const stallController = new AbortController()
+    const bodySignal = AbortSignal.any([totalSignal, stallController.signal])
+    let lastProgressAt = Date.now()
+    // Poll faster than the deadline so a stall is caught promptly even for short windows;
+    // capped at 1s for the common 30s default to avoid busy-waiting.
+    const stallPollMs = Math.max(50, Math.min(1000, Math.ceil(stallTimeoutMs / 4)))
+    const stallTimer = setInterval(() => {
+      if (Date.now() - lastProgressAt >= stallTimeoutMs) {
+        stallController.abort(new DOMException('Download stalled', 'TimeoutError'))
+      }
+    }, stallPollMs)
     nodeBody.on('data', (chunk: Buffer) => {
+      lastProgressAt = Date.now()
       received += chunk.length
       if (received > maxBytes) {
-        nodeBody.destroy(new AcpInstallError('ACP_INSTALL_FAILED', 'Download exceeds max bytes'))
+        nodeBody.destroy(
+          new AcpInstallError('ACP_INSTALL_DOWNLOAD_FAILED', 'Download exceeds max bytes'),
+        )
       }
     })
-    await pipeline(nodeBody, out, { signal: totalSignal })
+    try {
+      await pipeline(nodeBody, out, { signal: bodySignal })
+    } finally {
+      clearInterval(stallTimer)
+    }
     const fd = openSync(destPath, 'r+')
     try {
       fsyncSync(fd)
@@ -548,7 +584,7 @@ async function downloadToFile(
     }
     return { bytes: received }
   }
-  throw new AcpInstallError('ACP_INSTALL_FAILED', 'Too many redirects')
+  throw new AcpInstallError('ACP_INSTALL_DOWNLOAD_FAILED', 'Too many redirects')
 }
 
 function findDistribution(
@@ -744,6 +780,7 @@ async function prepareBinaryAgent(input: PrepareRequest): Promise<PrepareResult>
         signal: input.signal,
         totalTimeoutMs: input.downloadTimeoutMs,
         headerTimeoutMs: input.downloadHeaderTimeoutMs,
+        stallTimeoutMs: input.downloadStallTimeoutMs,
       })
     }
 
@@ -833,6 +870,13 @@ async function prepareBinaryAgent(input: PrepareRequest): Promise<PrepareResult>
       throw new AcpInstallError('ACP_INSTALL_ARCHIVE_UNSAFE', e.message)
     }
     if (e instanceof AcpInstallError) throw e
+    // AbortSignal.timeout() rejects with a DOMException named 'TimeoutError'; fetch stream
+    // teardown surfaces 'AbortError'. Both mean the download deadline fired — surface that
+    // specifically instead of the generic 'Agent preparation failed' catch-all.
+    const errName = (e as { name?: string } | null)?.name
+    if (errName === 'TimeoutError' || errName === 'AbortError') {
+      throw new AcpInstallError('ACP_INSTALL_DOWNLOAD_FAILED', 'Download timed out')
+    }
     throw new AcpInstallError('ACP_INSTALL_FAILED', 'Agent preparation failed')
   }
 }

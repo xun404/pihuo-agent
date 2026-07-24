@@ -21,7 +21,7 @@ export type AcpRegistryTarget =
   | 'windows-x86_64'
 
 export type AcpRegistryDistributionKind = 'binary' | 'npx' | 'uvx'
-export type CustomAcpLaunchKind = 'npx' | 'uvx' | 'system' | 'local'
+export type CustomAcpLaunchKind = 'auto' | 'npx' | 'uvx' | 'system' | 'local'
 
 /** How the Worker is managed for install / version / trust. */
 export type WorkerSource =
@@ -65,7 +65,8 @@ export interface WorkerLaunchSpec {
 
 export interface CustomAcpRegistrationInput {
   name: string
-  launchKind: CustomAcpLaunchKind
+  /** Omit or set to 'auto' to let the backend detect npx/uvx/system/local from the command. */
+  launchKind?: CustomAcpLaunchKind
   /** Required for npx/uvx. */
   packageSpec?: string
   /** Required for system/local executable launch. */
@@ -75,6 +76,41 @@ export interface CustomAcpRegistrationInput {
   description?: string
   defaultModel?: string
   enabled?: boolean
+  /** Confirm-time: allow persisting despite a probe failure (incompatible/failed). */
+  force?: boolean
+  /** Confirm-time: acknowledge the duplicate-CLI conflict and add anyway. */
+  duplicateDecision?: 'add_anyway'
+}
+
+/** ACP agent identity + capabilities surfaced from the initialize handshake, for confirmation UI. */
+export interface CustomAcpPreviewCandidate {
+  agentName?: string
+  agentVersion?: string
+  command: string
+  args: string[]
+  protocolVersion?: number
+  sessionLoad?: boolean
+  sessionResume?: boolean
+  sessionList?: boolean
+  authLogout?: boolean
+  authMethods: Array<{ id: string; name?: string; description?: string; type?: string }>
+  readiness: Pick<WorkerReadiness, 'status' | 'code' | 'message'>
+}
+
+/** An existing worker that clashes with the candidate (same agentName or same command). */
+export interface CustomAcpConflictCandidate {
+  workerId: string
+  name: string
+  agentName?: string
+  agentVersion?: string
+  command: string
+  readinessStatus: WorkerReadiness['status']
+}
+
+/** Result of the preview step: what the agent reported + any existing duplicates. Never persists. */
+export interface CustomAcpPreview {
+  candidate: CustomAcpPreviewCandidate
+  conflicts: CustomAcpConflictCandidate[]
 }
 
 /**
@@ -123,11 +159,14 @@ export const ACP_PUBLIC_ERROR_CODES = [
   'ACP_INSTALL_TRUST_REQUIRED',
   'ACP_INSTALL_DIGEST_MISMATCH',
   'ACP_INSTALL_ARCHIVE_UNSAFE',
+  'ACP_INSTALL_DOWNLOAD_FAILED',
   'ACP_INSTALL_FAILED',
   'ACP_PROTOCOL_INCOMPATIBLE',
   'WORKER_AUTH_REQUIRED',
   'WORKER_AUTH_FAILED',
   'WORKER_NOT_READY',
+  'WORKER_HAS_OPEN_JOBS',
+  'WORKER_REFERENCED_BY_ROLE',
 ] as const
 
 export type AcpPublicErrorCode = (typeof ACP_PUBLIC_ERROR_CODES)[number]

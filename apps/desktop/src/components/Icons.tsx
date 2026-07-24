@@ -72,6 +72,18 @@ export function IconWorkers(p: IconProps) {
   )
 }
 
+/** Crew / team template grouping mark */
+export function IconCrew(p: IconProps) {
+  return (
+    <svg {...baseProps(p)}>
+      <circle cx="9" cy="8" r="2.4" />
+      <circle cx="16.5" cy="9" r="2" />
+      <path d="M4.2 17.5c.4-2.3 2.4-4 4.8-4s4.4 1.7 4.8 4" />
+      <path d="M14 17.5c.3-1.6 1.6-2.9 3.4-3 1.7.1 3 1.3 3.4 3" />
+    </svg>
+  )
+}
+
 /**
  * Leader / sidebar brand glyph.
  * Full honeycomb mark lives in docs/assets/icon.svg; small UI marks use 🐝.
@@ -344,7 +356,13 @@ export function IconOpenCode(p: IconProps) {
   )
 }
 
-/** Infer brand from kind or display name (completed events may omit kind). */
+/**
+ * Worker brand icons source of truth:
+ * - brand key from WorkerRegistration.kind (claude|codex|opencode|custom)
+ * - fallback: infer from display name (e.g. "Claude Code")
+ * - SVG marks: IconClaude / IconCodex / IconOpenCode / abstract custom
+ * - colored chip: wrap with class `worker-logo ${brand}` (see 04-chat.css tokens)
+ */
 export function resolveWorkerBrand(
   kind?: string | null,
   name?: string | null,
@@ -353,11 +371,17 @@ export function resolveWorkerBrand(
   if (k === 'claude' || k.includes('claude')) return 'claude'
   if (k === 'codex' || k.includes('codex')) return 'codex'
   if (k === 'opencode' || k.includes('opencode')) return 'opencode'
+  if (k === 'gemini' || k.includes('gemini')) return 'custom'
   const n = (name ?? '').toLowerCase()
   if (n.includes('claude')) return 'claude'
   if (n.includes('codex') || n.includes('openai')) return 'codex'
   if (n.includes('opencode')) return 'opencode'
   return 'custom'
+}
+
+/** CSS class suffix for `.worker-logo.{brand}` color chips. */
+export function workerBrandClass(kind?: string | null, name?: string | null): string {
+  return resolveWorkerBrand(kind, name)
 }
 
 export function WorkerBrandLogo({

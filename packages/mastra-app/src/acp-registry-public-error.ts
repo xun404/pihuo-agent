@@ -10,11 +10,14 @@ const PUBLIC_ERROR_TEXT: Readonly<Record<string, string>> = Object.freeze({
   ACP_INSTALL_TRUST_REQUIRED: 'Explicit trust is required before installation',
   ACP_INSTALL_DIGEST_MISMATCH: 'Registry installation integrity check failed',
   ACP_INSTALL_ARCHIVE_UNSAFE: 'Registry installation archive is unsafe',
+  ACP_INSTALL_DOWNLOAD_FAILED: 'Registry installation download failed',
   ACP_INSTALL_FAILED: 'Registry installation failed',
   ACP_PROTOCOL_INCOMPATIBLE: 'Registry agent protocol is incompatible',
   WORKER_AUTH_REQUIRED: 'Worker authentication is required',
   WORKER_AUTH_FAILED: 'Worker authentication failed',
   WORKER_NOT_READY: 'Worker is not ready',
+  WORKER_HAS_OPEN_JOBS: 'Worker has in-progress jobs',
+  WORKER_REFERENCED_BY_ROLE: 'Worker is in use by team members',
 })
 
 export type RegistryPublicError = {

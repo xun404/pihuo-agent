@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type {
   CustomAcpLaunchKind,
   CustomAcpRegistrationInput,
+  CustomAcpPreview,
   PromptSettings,
   WorkerTimeoutSettings,
   WorkerRegistration,
@@ -38,6 +39,7 @@ import { ProviderLogo, getProviderIconMeta } from '../lib/provider-icons'
 import { useTheme, type ColorPalette, type ThemeMode } from '../theme/ThemeProvider'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import type { SendShortcut } from '../lib/send-shortcut'
+import { confirmAction } from '../lib/native-dialogs'
 import { BrandLogo } from './BrandLogo'
 import { Expandable } from './ui/Expandable'
 
@@ -85,12 +87,15 @@ function applyAppearanceChoice(
 import {
   IconChevronLeft,
   IconCpu,
+  IconCrew,
   IconInfo,
   IconFileEdit,
   IconSettings,
+  IconTrash,
   IconWorkers,
   WorkerBrandLogo,
 } from './Icons'
+import { TeamTemplateLibrary } from './TeamTemplateLibrary'
 import type { Locale } from '../i18n/locales'
 import { formatContextWindow, parseContextWindow } from '../lib/context-window'
 import { useToast } from './Toast'
@@ -106,9 +111,10 @@ import { WorkerReadinessBadge } from './WorkerReadinessBadge'
 import { WorkerPrepareProgress, pollRegistryOperationUntilTerminal } from './WorkerPrepareProgress'
 import { RegistryAgentDetail } from './RegistryAgentDetail'
 import { WorkerAuthTerminalModal } from './WorkerAuthTerminalModal'
+import { ConfirmAddCliDialog } from './ConfirmAddCliDialog'
 import { useAcpRegistryCatalog } from '../hooks/useAcpRegistryCatalog'
 
-type TabId = 'general' | 'model' | 'prompts' | 'workers' | 'about'
+type TabId = 'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about'
 
 interface Props {
   onClose: () => void
@@ -217,7 +223,7 @@ export function SettingsPanel({
   const [regName, setRegName] = useState('')
   const [regCommand, setRegCommand] = useState('')
   const [regArgs, setRegArgs] = useState('')
-  const [regCustomLaunchKind, setRegCustomLaunchKind] = useState<CustomAcpLaunchKind>('system')
+  const [regCustomLaunchKind, setRegCustomLaunchKind] = useState<CustomAcpLaunchKind>('auto')
   const [regEnv, setRegEnv] = useState<Record<string, string>>({})
   const [regDescription, setRegDescription] = useState('')
   const [regSelectedId, setRegSelectedId] = useState<string | null>(null)
@@ -235,6 +241,12 @@ export function SettingsPanel({
     workerId: string
     workerName: string
     methodId: string
+  } | null>(null)
+  // Custom-CLI preview: probe result + duplicate detection, shown in the confirm dialog before
+  // the worker is actually persisted. Holds the pending input so confirm can re-send it.
+  const [customPreview, setCustomPreview] = useState<{
+    preview: CustomAcpPreview
+    input: CustomAcpRegistrationInput
   } | null>(null)
   const [agentAuthOperation, setAgentAuthOperation] = useState<{
     workerId: string
@@ -1010,6 +1022,7 @@ export function SettingsPanel({
     { id: 'model', label: t('settings.navModel') },
     { id: 'prompts', label: t('settings.navPrompts') },
     { id: 'workers', label: t('settings.navWorkers') },
+    { id: 'teams', label: t('settings.navTeams') },
     { id: 'about', label: t('settings.navAbout') },
   ]
 
@@ -1212,10 +1225,11 @@ export function SettingsPanel({
         operationStarted = true
         return
       } else {
-        // Custom / manual path
+        // Custom / manual path: probe first, then show the confirm dialog. The worker is only
+        // persisted after the user confirms (handled in confirmCustomAcp below).
         if (!regCommand.trim()) return
         const args = regArgs.trim().split(/\s+/).filter(Boolean)
-        await onRegisterCustomAcpWorker({
+        const customInput: CustomAcpRegistrationInput = {
           name: regName.trim(),
           launchKind: regCustomLaunchKind,
           ...(regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
@@ -1225,7 +1239,11 @@ export function SettingsPanel({
           env: Object.keys(regEnv).length > 0 ? regEnv : undefined,
           enabled: true,
           description: regDescription.trim() || undefined,
-        })
+        }
+        const { preview } = await api.previewCustomAcpWorker(customInput)
+        setCustomPreview({ preview, input: customInput })
+        operationStarted = true
+        return
       }
       resetWorkerRegistration()
     } catch (e) {
@@ -1233,6 +1251,48 @@ export function SettingsPanel({
       setRegPrepareStatus(null)
     } finally {
       if (!operationStarted) setRegBusy(false)
+    }
+  }
+
+  // User confirmed the custom-CLI preview dialog → persist with the chosen decision.
+  const confirmCustomAcp = async (decision: {
+    force?: boolean
+    duplicateDecision?: 'add_anyway'
+  }) => {
+    const pending = customPreview
+    if (!pending) return
+    setCustomPreview(null)
+    setRegBusy(true)
+    try {
+      await onRegisterCustomAcpWorker({ ...pending.input, ...decision })
+      resetWorkerRegistration()
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRegBusy(false)
+    }
+  }
+
+  // Delete a worker after a native confirm. Refuses if the worker has open jobs or active team
+  // members (the backend enforces this and returns a 409 with a clear message).
+  const removeWorker = async (workerId: string, workerName: string) => {
+    const ok = await confirmAction(t('workers.deleteConfirm', { name: workerName }))
+    if (!ok) return
+    try {
+      await api.deleteWorker(workerId)
+      onRefreshSnapshot?.()
+      toastSuccess(t('workers.deleted'))
+    } catch (e) {
+      // Map known backend codes to friendly messages; fall back to a generic hint so the user
+      // never sees a raw JSON error body.
+      const code = (e as { code?: string }).code
+      const friendly =
+        code === 'WORKER_HAS_OPEN_JOBS'
+          ? t('workers.deleteErrorOpenJobs')
+          : code === 'WORKER_REFERENCED_BY_ROLE'
+            ? t('workers.deleteErrorReferenced')
+            : t('workers.deleteErrorGeneric')
+      toastError(friendly)
     }
   }
 
@@ -2041,11 +2101,21 @@ export function SettingsPanel({
                         title={w.name}
                         aria-hidden
                       >
-                        <WorkerBrandLogo kind={w.kind} size={14} />
+                        <WorkerBrandLogo kind={w.kind} size={18} />
                       </span>
                       <div className="worker-card-info">
                         <div className="worker-card-title">
                           <span className="worker-card-name">{w.name}</span>
+                          {(w.source?.type === 'registry'
+                            ? w.source.registryVersion
+                            : w.capabilitySummary?.agentVersion) && (
+                            <span className="worker-card-version">
+                              v
+                              {w.source?.type === 'registry'
+                                ? w.source.registryVersion
+                                : w.capabilitySummary?.agentVersion}
+                            </span>
+                          )}
                           {w.health === 'healthy' && (
                             <span className="tag-on">{t('workers.health.healthy')}</span>
                           )}
@@ -2143,6 +2213,17 @@ export function SettingsPanel({
                             </div>
                           )
                         })()}
+                      {!w.enabled && (
+                        <button
+                          type="button"
+                          className="worker-card-delete"
+                          title={t('workers.delete')}
+                          aria-label={t('workers.delete')}
+                          onClick={() => void removeWorker(w.id, w.name)}
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={`switch toggle${w.enabled ? ' on' : ''}`}
@@ -2389,6 +2470,7 @@ export function SettingsPanel({
                           setRegCustomLaunchKind(event.target.value as CustomAcpLaunchKind)
                         }
                       >
+                        <option value="auto">{t('workers.customAutoDetect')}</option>
                         <option value="npx">npx package</option>
                         <option value="uvx">uvx package</option>
                         <option value="system">{t('workers.customSystemExecutable')}</option>
@@ -2407,11 +2489,13 @@ export function SettingsPanel({
                         value={regCommand}
                         onChange={(e) => setRegCommand(e.target.value)}
                         placeholder={
-                          regCustomLaunchKind === 'local'
-                            ? '/absolute/path/to/acp-agent'
-                            : regCustomLaunchKind === 'system'
-                              ? 'acp-agent'
-                              : '@scope/acp-agent@version'
+                          regCustomLaunchKind === 'npx' || regCustomLaunchKind === 'uvx'
+                            ? '@scope/acp-agent@version'
+                            : regCustomLaunchKind === 'local'
+                              ? '/absolute/path/to/acp-agent'
+                              : regCustomLaunchKind === 'system'
+                                ? 'acp-agent'
+                                : t('workers.formCommandAutoPlaceholder')
                         }
                       />
                     </div>
@@ -2461,7 +2545,26 @@ export function SettingsPanel({
                 }}
               />
             )}
+            <ConfirmAddCliDialog
+              open={!!customPreview}
+              preview={customPreview?.preview ?? null}
+              onCancel={() => setCustomPreview(null)}
+              onConfirm={(decision) => void confirmCustomAcp(decision)}
+              onReuse={() => setCustomPreview(null)}
+            />
           </div>
+        </div>
+      )}
+
+      {!loading && tab === 'teams' && (
+        <div className="settings-model-page settings-teams-page">
+          <h2 className="settings-page-title">{t('settings.navTeams')}</h2>
+          <p className="settings-page-desc">{t('settings.descTeams')}</p>
+          <TeamTemplateLibrary
+            workers={workers}
+            onChanged={onRefreshSnapshot}
+            layout="settings"
+          />
         </div>
       )}
 
@@ -2505,6 +2608,7 @@ export function SettingsPanel({
     if (id === 'model') return <IconCpu size={16} />
     if (id === 'prompts') return <IconFileEdit size={16} />
     if (id === 'workers') return <IconWorkers size={16} />
+    if (id === 'teams') return <IconCrew size={16} />
     return <IconInfo size={16} />
   }
 

@@ -49,6 +49,7 @@ import {
 } from '@swarmdesk-agent/core'
 import {
   configureWorkerEnvDefaults,
+  configureLoginShellPath,
   parseHealthDepth,
   formatPublicError,
   type SessionEntryConfig,
@@ -102,6 +103,7 @@ import type {
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 import { pipeUIMessageStreamToResponse } from 'ai'
+import { coalesceAssistantTurns } from './coalesce-assistant-turns.js'
 import { RequestContext } from '@mastra/core/request-context'
 import { leaderAgent } from './agents/leader-agent.js'
 import { leaderMemory } from './agents/leader-agent.js'
@@ -149,7 +151,11 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomBytes } from 'node:crypto'
 import { HttpJsonBodyError, readJsonBody as readJson } from './http-json-body.js'
 import { resolveHttpPort, resolveMemoryLastMessages } from './runtime-config.js'
-import { CustomAcpRegistrationError, registerCustomAcpWorker } from './custom-acp-registration.js'
+import {
+  CustomAcpRegistrationError,
+  previewCustomAcpWorker,
+  registerCustomAcpWorker,
+} from './custom-acp-registration.js'
 import { shouldMarkRoleReviewPrompted } from './role-review-prompt.js'
 import { getTeamTemplateService, TeamTemplateServiceError } from './team-template-service.js'
 
@@ -2148,6 +2154,27 @@ const server = createServer(async (req, res) => {
         return
       }
 
+      // Custom ACP preview: probe + dedup detection, returns the agent identity for confirmation.
+      // Never persists — the client re-POSTs to /register with force/duplicateDecision after the
+      // user confirms in the dialog.
+      if (method === 'POST' && path === '/api/workers/custom/preview') {
+        const body = (await readJson(req)) as CustomAcpRegistrationInput
+        try {
+          const preview = await previewCustomAcpWorker(body, {
+            store,
+            cwd: store.getActive().project?.rootPath ?? process.cwd(),
+          })
+          send(res, 200, { preview })
+        } catch (error) {
+          if (error instanceof CustomAcpRegistrationError) {
+            send(res, 400, { error: error.message, code: error.code })
+          } else {
+            sendUnexpectedFailure(res, error, 'custom ACP preview')
+          }
+        }
+        return
+      }
+
       if (method === 'POST' && path === '/api/workers/custom/register') {
         const body = (await readJson(req)) as CustomAcpRegistrationInput
         try {
@@ -2854,11 +2881,16 @@ const server = createServer(async (req, res) => {
             perPage: false,
           })
           const messages = toAISdkMessages(stored ?? [], { version: 'v6' })
+          // Coalesce consecutive assistant messages split by TaskSignalProvider
+          // signal drain (each signal rotates the response messageId, creating
+          // multiple persisted assistant messages per turn). The frontend expects
+          // one bubble per turn; merge them back into a single UI message.
+          const coalesced = coalesceAssistantTurns(messages)
           send(res, 200, {
-            messages,
+            messages: coalesced,
             threadId,
             resourceId: resourceId ?? null,
-            count: messages.length,
+            count: coalesced.length,
           })
         } catch (e) {
           console.error('[http] memory history recall failed', e)
@@ -2999,6 +3031,9 @@ server.on('upgrade', (req, socket, head) => {
 
 // Apply Worker spawn defaults (npm registry, …) before accepting traffic.
 configureWorkerEnvDefaults({ npmRegistry: loadSettings().npmRegistry ?? null })
+// Harvest the user's login-shell PATH once so whichSync resolves binaries the user added in
+// ~/.zshrc etc. (the server itself is a non-interactive process that did not source those files).
+configureLoginShellPath()
 
 server.listen(port, '127.0.0.1', () => {
   scheduleAutoWorkerHealth()

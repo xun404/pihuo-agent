@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import React, { type ReactNode } from 'react'
 import { useCollapsible } from '../chat/useCollapsible'
 
 type ExpandableProps = {

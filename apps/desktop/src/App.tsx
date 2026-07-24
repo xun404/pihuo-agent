@@ -77,7 +77,7 @@ function AppShell({
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<
-    'general' | 'model' | 'workers' | 'about' | undefined
+    'general' | 'model' | 'prompts' | 'workers' | 'teams' | 'about' | undefined
   >()
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth())
@@ -148,7 +148,9 @@ function AppShell({
       const detail = (ev as CustomEvent<{ tab?: string }>).detail
       if (
         detail?.tab === 'workers' ||
+        detail?.tab === 'teams' ||
         detail?.tab === 'model' ||
+        detail?.tab === 'prompts' ||
         detail?.tab === 'general' ||
         detail?.tab === 'about'
       ) {
@@ -395,6 +397,8 @@ function AppShell({
                 <LeftSidebar
                   projects={snapshot.projects}
                   sessions={snapshot.sessions}
+                  teamTemplates={snapshot.teamTemplates}
+                  workers={snapshot.workers}
                   activeProjectId={snapshot.activeProjectId}
                   // HomeChat / pending new session: no server session yet — clear highlight.
                   activeSessionId={pendingNewSession ? null : snapshot.activeSessionId}
@@ -416,6 +420,7 @@ function AppShell({
                     setSettingsOpen(true)
                     setInspectorOpen(false)
                   }}
+                  onTeamTemplatesChanged={() => void refresh()}
                 />
                 <div
                   className="panel-resizer panel-resizer-left"

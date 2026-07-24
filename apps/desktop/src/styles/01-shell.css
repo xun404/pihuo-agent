@@ -480,6 +480,46 @@ html[data-theme='dark'] {
   letter-spacing: 0;
 }
 
+/* 编组 / 项目分区：同一套标签行 + 水平内边距，保证标题对齐 */
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sidebar-section.sidebar-crews {
+  flex-shrink: 0;
+  margin: 0;
+}
+.sidebar-section.sidebar-projects {
+  flex: 1;
+  min-height: 0;
+  /* auto = 标题行；0fr/1fr = 内容区折叠/撑满（可动画，且不与 height 像素动画冲突） */
+  display: grid;
+  grid-template-rows: auto 0fr;
+  transition: grid-template-rows 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sidebar-section.sidebar-projects.is-open {
+  grid-template-rows: auto 1fr;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-section.sidebar-projects {
+    transition: none;
+  }
+}
+.sidebar-projects-collapse {
+  min-height: 0;
+  overflow: hidden;
+}
+.sidebar-projects-collapse-inner {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-projects-collapse-inner .session-scroll {
+  flex: 1;
+  min-height: 0;
+}
 .section-label {
   padding: var(--sp-2) var(--sp-2) var(--sp-1);
   font-size: var(--fs-xs);
@@ -487,6 +527,144 @@ html[data-theme='dark'] {
   color: var(--text-3);
   letter-spacing: var(--ls-label);
   line-height: var(--lh-snug);
+}
+.section-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: var(--sp-2) var(--sp-2) var(--sp-1);
+  box-sizing: border-box;
+}
+.section-label-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.section-label-text {
+  min-width: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-3);
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
+}
+.section-label-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  opacity: 0.85;
+}
+.section-label-chevron {
+  display: inline-flex;
+  color: var(--text-3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.section-label-chevron.is-collapsed {
+  transform: rotate(-90deg);
+}
+.section-label-action {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.sidebar-crews:hover .section-label-action,
+.section-label-action:focus-visible {
+  opacity: 1;
+}
+.section-label-action:hover {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+
+/* 侧栏编组：默认折叠；展开后最多先展示 5 条（同 session 折叠样式） */
+.crew-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: relative;
+  padding: 0 2px 4px;
+}
+.crew-empty {
+  padding: 6px var(--sp-2) 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
+.crew-empty p {
+  margin: 0 0 4px;
+}
+.crew-empty-link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--blue);
+  cursor: pointer;
+}
+.crew-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 7px var(--sp-2);
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.crew-row:hover {
+  background: var(--bg-hover);
+}
+.crew-row-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--text-1);
+}
+.crew-row-meta {
+  flex-shrink: 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
+.crew-list-fade {
+  position: relative;
 }
 
 .session-scroll {

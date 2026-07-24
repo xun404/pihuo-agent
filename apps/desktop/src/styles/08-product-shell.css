@@ -385,8 +385,9 @@ body.is-resizing-panels * {
 .settings-general > .settings-form-card + .settings-form-card {
   margin-top: var(--sp-4);
 }
-/* 模型设置：标题+描述不滚；下方 model-layout 可滚 */
-.settings-model-page {
+/* 模型设置 / 编组：标题+描述不滚；下方 model-layout 可滚、撑满 */
+.settings-model-page,
+.settings-teams-page {
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -394,17 +395,22 @@ body.is-resizing-panels * {
   flex-direction: column;
   overflow: hidden;
 }
-.settings-model-page .settings-model-layout {
+.settings-model-page .settings-model-layout,
+.settings-teams-page .settings-model-layout,
+.settings-teams-page .team-library,
+.settings-teams-page .team-library-settings-layout {
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-.settings-model-page .settings-provider-rail {
+.settings-model-page .settings-provider-rail,
+.settings-teams-page .settings-provider-rail {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
 }
-.settings-model-page .settings-model-main {
+.settings-model-page .settings-model-main,
+.settings-teams-page .settings-model-main {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;

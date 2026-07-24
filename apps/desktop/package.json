@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.232",
+    "@emotion/is-prop-valid": "^1.4.0",
     "@swarmdesk-agent/shared": "0.1.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",

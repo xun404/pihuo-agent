@@ -1,5 +1,5 @@
 export { resolveWorkerCwd } from './presets.js'
-export { whichSync } from './which.js'
+export { whichSync, expandHome, configureLoginShellPath } from './which.js'
 export {
   checkWorkerCommand,
   probeWorkerHealth,
