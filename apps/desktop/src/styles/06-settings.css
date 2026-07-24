@@ -989,6 +989,21 @@
   width: 18px;
   height: 18px;
 }
+/* Rail + detail logos: override the global .worker-logo svg 10px constraint */
+.settings-rail-item .worker-logo svg {
+  width: 16px;
+  height: 16px;
+}
+.worker-detail .worker-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  flex: none;
+}
+.worker-detail .worker-logo svg {
+  width: 20px;
+  height: 20px;
+}
 .worker-card-source {
   font-size: var(--fs-xs);
   color: var(--text-3);
@@ -3491,7 +3506,8 @@ button.prompt-role-summary {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: 16px;
+  padding: 16px 20px;
+  max-width: 640px;
 }
 .worker-detail .settings-provider-head {
   display: flex;
@@ -3521,7 +3537,8 @@ button.prompt-role-summary {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: 16px;
+  padding: 16px 20px;
+  max-width: 640px;
 }
 
 /* Empty state placeholder */

@@ -360,7 +360,13 @@ export function TeamTemplateLibrary({
 
   const detail = (
     <section
-      className={isSettings ? 'settings-model-main team-library-main' : 'team-library-detail'}
+      className={
+        isSettings
+          ? hideRail
+            ? 'team-library-main team-library-main--embedded'
+            : 'settings-model-main team-library-main'
+          : 'team-library-detail'
+      }
       aria-live="polite"
     >
       {!selected ? (

@@ -2151,7 +2151,7 @@ export function SettingsPanel({
                   setRailFocus({ type: 'register' })
                 }}
               >
-                + {t('workers.register')}
+                {t('workers.register')}
               </button>
 
               <div className="settings-rail-label" style={{ marginTop: 12 }}>
@@ -2192,7 +2192,7 @@ export function SettingsPanel({
                   }
                 }}
               >
-                + {t('workers.newCrew')}
+                {t('workers.newCrew')}
               </button>
             </aside>
 
