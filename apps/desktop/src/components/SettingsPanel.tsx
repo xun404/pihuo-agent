@@ -101,6 +101,7 @@ import { formatContextWindow, parseContextWindow } from '../lib/context-window'
 import { useToast } from './Toast'
 import { WorkerRegistryCombobox } from './WorkerRegistryCombobox'
 import { WorkerDefaultRoleTypeEditor } from './WorkerDefaultRoleTypeEditor'
+import { WorkerCommandField } from './WorkerCommandField'
 import { PromptSettingsEditor } from './PromptSettingsEditor'
 import { WorkerTimeoutSettingsEditor } from './WorkerTimeoutSettingsEditor'
 import {
@@ -2218,6 +2219,16 @@ export function SettingsPanel({
                         : sourceStr ?? '—'
                   const pathLabel =
                     w.launchSpec?.executable ?? w.command ?? '—'
+                  // Command shown to the user. If w.command is a bare name
+                  // (no path separator), prefix it with the resolved executable
+                  // path so the displayed command is unambiguous (e.g.
+                  // "~/.kimi-code/bin/kimi acp" instead of just "kimi acp").
+                  const commandParts = [w.command, ...(w.args ?? [])].filter(Boolean)
+                  const commandIsBare = w.command ? !w.command.includes('/') : true
+                  const commandLabel =
+                    commandIsBare && w.launchSpec?.executable && w.command
+                      ? [w.launchSpec.executable, ...(w.args ?? [])].filter(Boolean).join(' ')
+                      : commandParts.join(' ') || '—'
                   return (
                     <div className="worker-detail">
                       {/* Header */}
@@ -2231,24 +2242,17 @@ export function SettingsPanel({
                         </span>
                         <div className="worker-detail-titles">
                           <h3 className="settings-card-title">{w.name}</h3>
-                          {(w.source?.type === 'registry'
-                            ? w.source.registryVersion
-                            : cs?.agentVersion) && (
-                            <span className="worker-card-version">
-                              v
-                              {w.source?.type === 'registry'
-                                ? w.source.registryVersion
-                                : cs?.agentVersion}
-                            </span>
-                          )}
-                          {w.readiness && (
-                            <WorkerReadinessBadge
-                              status={w.readiness.status}
-                              code={w.readiness.code}
-                              nextAction={w.readiness.nextAction}
-                              locale={locale === 'zh' ? 'zh' : 'en'}
-                            />
-                          )}
+                          <WorkerDefaultRoleTypeEditor
+                            worker={w}
+                            onSave={async (roleType) => {
+                              try {
+                                await onSetWorkerDefaultRoleType(w.id, roleType)
+                                toastSuccess(t('workers.defaultRoleUpdated'))
+                              } catch (error) {
+                                toastError(error instanceof Error ? error.message : String(error))
+                              }
+                            }}
+                          />
                           <button
                             type="button"
                             className={`switch toggle${w.enabled ? ' on' : ''}`}
@@ -2278,125 +2282,45 @@ export function SettingsPanel({
                       {/* 2-column card grid */}
                       <div className="worker-detail-grid">
                         {/* Identity card */}
-                        <div className="worker-detail-card">
+                        <div className="worker-detail-card worker-info-card">
                           <h4 className="worker-detail-card-title">
                             {t('workers.sectionIdentity')}
                           </h4>
                           <div className="worker-info-row">
-                            <span className="worker-info-label">{t('workers.fieldCommand')}</span>
-                            <span className="worker-info-value mono is-emphasized">
-                              {w.command} {(w.args ?? []).join(' ')}
+                            <span className="worker-info-label">{t('workers.fieldVersion')}</span>
+                            <span className="worker-info-value">
+                              {[
+                                w.source?.type === 'registry'
+                                  ? w.source.registryVersion
+                                  : cs?.agentVersion,
+                                cs?.protocolVersion ? `ACP ${cs.protocolVersion}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' / ') || '—'}
                             </span>
+                          </div>
+                          <div className="worker-info-row">
+                            <span className="worker-info-label">{t('workers.fieldCommand')}</span>
+                            <WorkerCommandField command={commandLabel} />
                           </div>
                           <div className="worker-info-row">
                             <span className="worker-info-label">{t('workers.fieldSource')}</span>
                             <span className="worker-info-value">{sourceLabel}</span>
                           </div>
                           <div className="worker-info-row">
-                            <span className="worker-info-label">{t('workers.fieldProtocol')}</span>
+                            <span className="worker-info-label">
+                              {t('workers.sectionAuth')}
+                            </span>
                             <span className="worker-info-value">
-                              {cs?.protocolVersion ? `ACP ${cs.protocolVersion}` : '—'}
-                            </span>
-                          </div>
-                          <div className="worker-info-row">
-                            <span className="worker-info-label">{t('workers.fieldPath')}</span>
-                            <span className="worker-info-value mono is-emphasized">
-                              {pathLabel}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Health card */}
-                        <div className="worker-detail-card">
-                          <h4 className="worker-detail-card-title">
-                            {t('workers.sectionHealth')}
-                          </h4>
-                          <div className="worker-health-row">
-                            <span className="worker-health-label">{t('workers.healthCli')}</span>
-                            <span
-                              className={`worker-health-value ${
-                                w.commandHealth?.status === 'healthy' ||
-                                w.cliHealth === 'healthy'
-                                  ? 'ok'
-                                  : w.cliHealth === 'unhealthy'
-                                    ? 'bad'
-                                    : 'warn'
-                              }`}
-                            >
-                              {w.commandHealth?.status ?? w.cliHealth ?? 'unknown'}
-                            </span>
-                          </div>
-                          <div className="worker-health-row">
-                            <span className="worker-health-label">{t('workers.healthAcp')}</span>
-                            <span
-                              className={`worker-health-value ${
-                                w.acpHealth?.status === 'ready'
-                                  ? 'ok'
-                                  : w.acpHealth?.status === 'degraded'
-                                    ? 'warn'
-                                    : w.acpHealth?.status === 'unavailable'
-                                      ? 'bad'
-                                      : ''
-                              }`}
-                            >
-                              {w.acpHealth?.status ?? 'unknown'}
-                            </span>
-                          </div>
-                          <div className="worker-health-row">
-                            <span className="worker-health-label">
-                              {t('workers.healthProbed')}
-                            </span>
-                            <span className="worker-health-value">
-                              {cs?.probedAt
-                                ? new Date(cs.probedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')
+                              {cs?.authMethods && cs.authMethods.length > 0
+                                ? cs.authMethods
+                                    .map((m) => `${m.name ?? m.id} (${m.type})`)
+                                    .join(', ')
                                 : '—'}
                             </span>
                           </div>
-                          <div className="worker-health-row">
-                            <span className="worker-health-label">
-                              {t('workers.healthModels')}
-                            </span>
-                            <span className="worker-health-value">
-                              {w.availableModels?.length != null
-                                ? `${w.availableModels.length}`
-                                : w.modelCatalogState ?? '—'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Capability + Auth card (merged) */}
-                        <div className="worker-detail-card">
-                          <h4 className="worker-detail-card-title">
-                            {t('workers.sectionCapability')}
-                          </h4>
-                          <div className="worker-cap-row">
-                            {(
-                              [
-                                ['capSessionLoad', cs?.sessionLoad],
-                                ['capSessionResume', cs?.sessionResume],
-                                ['capSessionList', cs?.sessionList],
-                                ['capLogout', cs?.authLogout],
-                              ] as const
-                            ).map(([key, val]) => (
-                              <div key={key} className="worker-cap-item">
-                                <span className={`worker-cap-check ${val ? 'on' : 'off'}`}>
-                                  {val ? '✓' : '✗'}
-                                </span>
-                                {t(`workers.${key}`)}
-                              </div>
-                            ))}
-                          </div>
-                          <h4 className="worker-detail-card-title" style={{ marginTop: 14 }}>
-                            {t('workers.sectionAuth')}
-                          </h4>
-                          {cs?.authMethods && cs.authMethods.length > 0 ? (
-                            <div className="worker-auth-list">
-                              {cs.authMethods.map((m) => (
-                                <div key={m.id} className="worker-auth-method">
-                                  <span>{m.name ?? m.id}</span>
-                                  <span className="worker-auth-type">{m.type}</span>
-                                </div>
-                              ))}
+                          {(w.readiness?.status === 'auth_required' || authActive) && (
+                            <div className="worker-auth-actions">
                               {terminalMethod && (
                                 <button
                                   type="button"
@@ -2455,10 +2379,6 @@ export function SettingsPanel({
                                 </button>
                               )}
                             </div>
-                          ) : (
-                            <p className="settings-muted" style={{ fontSize: 'var(--fs-sm)' }}>
-                              —
-                            </p>
                           )}
                           {secretEditor?.workerId === w.id && (
                             <form
@@ -2502,20 +2422,97 @@ export function SettingsPanel({
                           )}
                         </div>
 
-                        {/* Role card (grid slot 4) */}
-                        <div className="worker-detail-card worker-detail-role-card">
-                          <WorkerDefaultRoleTypeEditor
-                            worker={w}
-                            rolePrompts={data?.settings.prompts.roles}
-                            onSave={async (roleType) => {
-                              try {
-                                await onSetWorkerDefaultRoleType(w.id, roleType)
-                                toastSuccess(t('roles.saved'))
-                              } catch (error) {
-                                toastError(error instanceof Error ? error.message : String(error))
-                              }
-                            }}
-                          />
+                        {/* Health card */}
+                        <div className="worker-detail-card">
+                          <div className="worker-detail-card-head">
+                            <h4 className="worker-detail-card-title">
+                              {t('workers.sectionHealth')}
+                            </h4>
+                            {w.readiness && (
+                              <WorkerReadinessBadge
+                                status={w.readiness.status}
+                                code={w.readiness.code}
+                                nextAction={w.readiness.nextAction}
+                                locale={locale === 'zh' ? 'zh' : 'en'}
+                              />
+                            )}
+                          </div>
+                          <div className="worker-health-row">
+                            <span className="worker-health-label">{t('workers.healthCli')}</span>
+                            <span
+                              className={`worker-health-value ${
+                                w.commandHealth?.status === 'healthy' ||
+                                w.cliHealth === 'healthy'
+                                  ? 'ok'
+                                  : w.cliHealth === 'unhealthy'
+                                    ? 'bad'
+                                    : 'warn'
+                              }`}
+                            >
+                              {w.commandHealth?.status ?? w.cliHealth ?? 'unknown'}
+                            </span>
+                          </div>
+                          <div className="worker-health-row">
+                            <span className="worker-health-label">{t('workers.healthAcp')}</span>
+                            <span
+                              className={`worker-health-value ${
+                                w.acpHealth?.status === 'ready'
+                                  ? 'ok'
+                                  : w.acpHealth?.status === 'degraded'
+                                    ? 'warn'
+                                    : w.acpHealth?.status === 'unavailable'
+                                      ? 'bad'
+                                      : ''
+                              }`}
+                            >
+                              {w.acpHealth?.status ?? 'unknown'}
+                            </span>
+                          </div>
+                          <div className="worker-health-row">
+                            <span className="worker-health-label">
+                              {t('workers.healthProbed')}
+                            </span>
+                            <span className="worker-health-value">
+                              {cs?.probedAt
+                                ? new Date(cs.probedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')
+                                : '—'}
+                            </span>
+                          </div>
+                          <div className="worker-health-row">
+                            <span className="worker-health-label">
+                              {t('workers.healthModels')}
+                            </span>
+                            <span className="worker-health-value">
+                              {w.availableModels?.length != null
+                                ? `${w.availableModels.length}`
+                                : w.modelCatalogState ?? '—'}
+                            </span>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Capability card — full width below the grid */}
+                      <div className="worker-detail-card worker-cap-card">
+                        <h4 className="worker-detail-card-title">
+                          {t('workers.sectionCapability')}
+                        </h4>
+                        <div className="worker-cap-row">
+                          {(
+                            [
+                              ['capSessionLoad', cs?.sessionLoad],
+                              ['capSessionResume', cs?.sessionResume],
+                              ['capSessionList', cs?.sessionList],
+                              ['capLogout', cs?.authLogout],
+                            ] as const
+                          ).map(([key, val]) => (
+                            <div key={key} className="worker-cap-item">
+                              <span className={`worker-cap-check ${val ? 'on' : 'off'}`}>
+                                {val ? '✓' : '✗'}
+                              </span>
+                              {t(`workers.${key}`)}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>

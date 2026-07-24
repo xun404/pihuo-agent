@@ -1,9 +1,8 @@
-import React, { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
-  DEFAULT_PROMPT_SETTINGS,
   WORKER_ROLES,
   normalizeWorkerDefaultRoleType,
-  type PromptSettings,
   type WorkerRegistration,
   type WorkerRole,
 } from '@swarmdesk-agent/shared'
@@ -12,73 +11,101 @@ import { roleMessageKey } from '../i18n/locales'
 
 interface Props {
   worker: WorkerRegistration
+  /** Called whenever the selected role changes. Should persist + report success. */
   onSave: (roleType: WorkerRole) => Promise<void>
-  rolePrompts?: Readonly<PromptSettings['roles']>
 }
 
 /**
- * Default-role editor for a worker. Renders inline inside a worker-detail card:
+ * Default-role picker rendered inline in the worker-detail header. A compact
+ * chip button showing the current role; clicking opens a pop-menu of roles.
+ * Selecting a role persists immediately — no save button.
  *
- *   默认角色                         [保存]
- *   角色
- *   [select ▼]
- *   角色提示词
- *   [prompt preview]
+ *   [通用 ▾]   ← chip button (shows current role)
+ *      ┌────────────┐
+ *      │ ✓ 通用      │  ← pop-menu
+ *      │   规划      │
+ *      │   编码      │
+ *      │ …          │
+ *      └────────────┘
  */
-export function WorkerDefaultRoleTypeEditor({
-  worker,
-  onSave,
-  rolePrompts = DEFAULT_PROMPT_SETTINGS.roles,
-}: Props) {
+export function WorkerDefaultRoleTypeEditor({ worker, onSave }: Props) {
   const { t } = useI18n()
   const [roleType, setRoleType] = useState<WorkerRole>(() =>
     normalizeWorkerDefaultRoleType(worker.defaultRoleType),
   )
-  const [saving, setSaving] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setRoleType(normalizeWorkerDefaultRoleType(worker.defaultRoleType))
   }, [worker.id, worker.defaultRoleType])
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (saving) return
-    setSaving(true)
+  // close on outside click
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+
+  const pick = async (next: WorkerRole) => {
+    setOpen(false)
+    if (next === roleType || busy) return
+    setRoleType(next)
+    setBusy(true)
     try {
-      await onSave(roleType)
+      await onSave(next)
     } finally {
-      setSaving(false)
+      setBusy(false)
     }
   }
 
   return (
-    <form className="worker-card-role-form" onSubmit={(event) => void submit(event)}>
-      <div className="worker-card-role-head">
-        <h4 className="worker-detail-card-title">{t('workers.defaultRole')}</h4>
-        <button type="submit" className="settings-save-btn" disabled={saving}>
-          {saving ? t('app.loading') : t('settings.save')}
-        </button>
-      </div>
-      <label className="settings-field">
-        <span>{t('roles.type')}</span>
-        <select
-          className="settings-input ui-font"
-          value={roleType}
-          onChange={(event) => setRoleType(event.target.value as WorkerRole)}
-        >
-          {WORKER_ROLES.map((role) => (
-            <option key={role} value={role}>
-              {t(roleMessageKey(role))}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="settings-field worker-role-prompt-field">
-        <span>{t('roles.instructions')}</span>
-        <div className="worker-role-prompt-preview" aria-label={t('roles.instructions')}>
-          {rolePrompts[roleType]}
-        </div>
-      </div>
-    </form>
+    <div className="ctx worker-role-picker" ref={wrapRef}>
+      <button
+        type="button"
+        className="worker-role-chip"
+        onClick={() => setOpen((v) => !v)}
+        disabled={busy}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={t('workers.defaultRole')}
+      >
+        <span className="worker-role-chip-label">{t('roles.type')}</span>
+        <span className="worker-role-chip-value">{t(roleMessageKey(roleType))}</span>
+        <span className="worker-role-chip-caret" aria-hidden>
+          ▾
+        </span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="pop-menu worker-role-menu"
+            role="menu"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
+          >
+            {WORKER_ROLES.map((role) => (
+              <button
+                key={role}
+                type="button"
+                className={`pop-item${role === roleType ? ' on' : ''}`}
+                role="menuitem"
+                disabled={busy}
+                onClick={() => void pick(role)}
+              >
+                <span>{t(roleMessageKey(role))}</span>
+                {role === roleType && <span className="worker-role-check" aria-hidden>✓</span>}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
