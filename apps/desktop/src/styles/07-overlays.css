@@ -425,7 +425,8 @@
   letter-spacing: var(--ls-label);
   text-transform: uppercase;
   color: var(--text-3);
-  padding: 4px 8px 8px;
+  /* No right padding: the inline action button sits flush with the rail edge. */
+  padding: 4px 0 8px 8px;
 }
 .settings-rail-item {
   display: flex;

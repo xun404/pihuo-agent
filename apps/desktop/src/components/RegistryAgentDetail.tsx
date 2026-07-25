@@ -36,7 +36,7 @@ export function digestsEqual(a: string | undefined, b: string | undefined): bool
 function DigestValue({ value }: { value: string }) {
   return (
     <code className="registry-digest mono" title={value}>
-      {formatDigestShort(value)}
+      {digestBare(value)}
     </code>
   )
 }

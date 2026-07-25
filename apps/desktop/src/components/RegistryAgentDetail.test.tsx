@@ -94,11 +94,14 @@ describe('RegistryAgentDetail', () => {
       'fixture-agent --acp',
       'Integrity',
       'Manifest',
-      `${'a'.repeat(10)}…${'a'.repeat(8)}`,
+      'a'.repeat(64),
       'After preparation',
       'not a security sandbox',
     ])
       assert.match(html, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'))
+    // manifest digest is shown in full (64 hex chars), never truncated
+    assert.match(html, /b{64}/u)
+    assert.doesNotMatch(html, /…/u)
     assert.doesNotMatch(html, /untrusted\.example\/icon\.svg/u)
     assert.doesNotMatch(html, /dangerouslySetInnerHTML/u)
   })

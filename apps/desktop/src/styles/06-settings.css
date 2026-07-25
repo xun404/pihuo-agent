@@ -142,11 +142,21 @@
   overflow: auto;
 }
 .settings-rail-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* Second section label gets a bit of top spacing to separate groups */
+.settings-rail-label--section {
+  margin-top: 12px;
+}
+/* Inline action button inside a rail label */
+.settings-rail-label .settings-rail-add {
+  margin-top: 0;
+  padding: 2px 8px;
   font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
-  color: var(--text-3);
-  padding: var(--sp-1) var(--sp-2) var(--sp-2);
-  letter-spacing: var(--ls-label);
+  border-radius: var(--r-sm);
 }
 .settings-provider-item {
   display: flex;
@@ -492,6 +502,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   text-align: center;
 }
 .btn {
@@ -1471,6 +1482,7 @@ input.settings-input.worker-registry-input {
   font-size: var(--fs-2xs);
   color: var(--text-1);
   letter-spacing: 0.01em;
+  word-break: break-all;
   cursor: help;
 }
 .registry-digest-pending {
@@ -3643,6 +3655,65 @@ button.prompt-role-summary {
 }
 .worker-health-value.bad {
   color: var(--danger);
+}
+/* Probe console: action head + code-styled log */
+.worker-probe-console-card {
+  margin-top: 16px;
+}
+.worker-probe-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.worker-probe-head .worker-detail-card-title {
+  margin: 0;
+}
+.worker-probe-run {
+  height: 26px;
+  padding: 0 12px;
+  font-size: var(--fs-xs);
+}
+.worker-probe-log {
+  background: var(--bg-input);
+  color: var(--text-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-relaxed, 1.5);
+}
+.worker-probe-log-empty {
+  margin: 0;
+  color: var(--text-3);
+  opacity: 0.7;
+}
+.worker-probe-log-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.worker-probe-log-ts {
+  flex: none;
+  color: var(--text-3);
+}
+.worker-probe-log-line.is-ok .worker-probe-log-text {
+  color: var(--green);
+}
+.worker-probe-log-line.is-warn .worker-probe-log-text {
+  color: var(--warning, var(--danger));
+}
+.worker-probe-log-line.is-err .worker-probe-log-text {
+  color: var(--danger);
+}
+.worker-probe-log-line.is-info .worker-probe-log-text {
+  color: var(--blue);
 }
 /* Auth actions (merged into identity card) */
 .worker-auth-actions {

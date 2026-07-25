@@ -789,6 +789,10 @@ export async function apiProbeWorker(workerId: string, deps: RegistryLifecycleDe
     throw error
   }
   recordTerminalAuthProbeMethods({ worker: after, methods: result.authMethods })
+  // Persist the probe outcome back to the worker store so that any reader
+  // (scheduler / readiness gate / API) sees the updated readiness, not the
+  // stale value captured at registration time.
+  store().upsertWorker(after)
   return { worker: after }
 }
 
