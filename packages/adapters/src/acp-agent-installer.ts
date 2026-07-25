@@ -473,7 +473,7 @@ function writePreparedMetadata(stagingDir: string, metadata: PreparedArtifactMet
   )
 }
 
-async function downloadToFile(
+export async function downloadToFile(
   url: string,
   destPath: string,
   options: {

@@ -1076,22 +1076,10 @@ export function SettingsPanel({
   const switchRegisterMode = (mode: 'auto' | 'manual') => {
     if (mode === regMode) return
     setRegMode(mode)
-    setPendingRegistryPrepare(null)
-    setRegPrepareStatus(null)
-    setRegBusy(false)
-    if (mode === 'manual') {
-      setRegSelectedId(null)
-      setRegManifestDigest('')
-      setRegVersion('')
-      setRegTrustNoSha(false)
-      setRegDistribution('npx')
-    } else {
-      setRegCommand('')
-      setRegArgs('')
-      setRegCustomLaunchKind('system')
-      setRegEnv({})
-      setRegDescription('')
-    }
+    // Wipe all form fields on mode switch so neither side carries over the
+    // other's partially-filled data (e.g. a registry selection's name leaking
+    // into the manual form, or a manual command lingering in auto mode).
+    clearRegistrationForm()
   }
 
   const startAgentAuthentication = async (workerId: string, methodId: string) => {
@@ -1180,7 +1168,10 @@ export function SettingsPanel({
     }
   }
 
-  const resetWorkerRegistration = () => {
+  /** Clear every registration form field without side effects (no toast, no
+   *  snapshot refresh). Used when opening the panel or switching modes so the
+   *  user never sees stale data from a previous attempt. */
+  const clearRegistrationForm = () => {
     setRegName('')
     setRegCommand('')
     setRegArgs('')
@@ -1191,11 +1182,16 @@ export function SettingsPanel({
     setRegManifestDigest('')
     setRegVersion('')
     setRegTrustNoSha(false)
+    setRegDistribution('npx')
     setRegPrepareStatus(null)
     setPendingRegistryPrepare(null)
+    setRegBusy(false)
+  }
+
+  const resetWorkerRegistration = () => {
+    clearRegistrationForm()
     setRegMode('auto')
     setRegOpen(false)
-    setRegBusy(false)
     onRefreshSnapshot?.()
     toastSuccess(t('settings.saved'))
   }
@@ -1214,7 +1210,14 @@ export function SettingsPanel({
       setPendingRegistryPrepare(null)
       setRegPrepareStatus(null)
       setRegBusy(false)
-      toastError(error instanceof Error ? error.message : String(error))
+      const code = (error as { code?: string }).code
+      const friendly =
+        code === 'WORKER_DUPLICATE_REGISTRY'
+          ? t('workers.registryDuplicate')
+          : code === 'WORKER_DUPLICATE_NAME'
+            ? t('workers.duplicateName')
+            : null
+      toastError(friendly ?? (error instanceof Error ? error.message : String(error)))
     }
   }
 
@@ -1302,7 +1305,9 @@ export function SettingsPanel({
       await onRegisterCustomAcpWorker({ ...pending.input, ...decision })
       resetWorkerRegistration()
     } catch (e) {
-      toastError(e instanceof Error ? e.message : String(e))
+      const code = (e as { code?: string }).code
+      const friendly = code === 'WORKER_DUPLICATE_NAME' ? t('workers.duplicateName') : null
+      toastError(friendly ?? (e instanceof Error ? e.message : String(e)))
     } finally {
       setRegBusy(false)
     }
@@ -1317,12 +1322,14 @@ export function SettingsPanel({
     }
     const target = workers.find((x) => x.id === workerId)
     if (!target) return
+    // Already probed ready: just enable.
     const ready = target.readiness?.status === 'ready' || target.readiness?.status === 'degraded'
     if (ready) {
       onToggleWorker?.(workerId, true)
       return
     }
-    // Not yet ready: probe, then enable only if it reaches ready/degraded.
+    // Not yet ready: probe first (probe works on disabled workers), then
+    // enable only if it reaches ready/degraded.
     toastSuccess(t('workers.enablingProbe'))
     try {
       const { worker: after } = await api.probeRegistryWorker(workerId)
@@ -2165,6 +2172,7 @@ export function SettingsPanel({
                   type="button"
                   className={`settings-rail-add${railFocus?.type === 'register' ? ' active' : ''}`}
                   onClick={() => {
+                    clearRegistrationForm()
                     setRegOpen(true)
                     setRegMode('auto')
                     setRailFocus({ type: 'register' })
@@ -2183,7 +2191,7 @@ export function SettingsPanel({
                     onClick={() => setRailFocus({ type: 'agent', id: w.id })}
                   >
                     <span className={`settings-rail-icon worker-logo ${workerLogoClass(w.kind)}`} aria-hidden>
-                      <WorkerBrandLogo kind={w.kind} size={16} />
+                      <WorkerBrandLogo kind={w.kind} size={16} workerId={w.id} hasIcon={Boolean(w.iconPath)} iconAgentId={w.iconAgentId} />
                     </span>
                     <span className="settings-rail-text">
                       <span className="settings-rail-name">{w.name}</span>
@@ -2279,7 +2287,7 @@ export function SettingsPanel({
                           title={w.name}
                           aria-hidden
                         >
-                          <WorkerBrandLogo kind={w.kind} size={20} />
+                          <WorkerBrandLogo kind={w.kind} size={20} workerId={w.id} hasIcon={Boolean(w.iconPath)} iconAgentId={w.iconAgentId} />
                         </span>
                         <div className="worker-detail-titles">
                           <h3 className="settings-card-title">{w.name}</h3>

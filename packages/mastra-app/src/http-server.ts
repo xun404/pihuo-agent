@@ -6,6 +6,7 @@
  * Port: MASTRA_PORT or 4111
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { readFileSync } from 'node:fs'
 import { basename, resolve as pathResolve } from 'node:path'
 import {
   getWorkerModelCatalogStore,
@@ -56,6 +57,7 @@ import {
 } from '@swarmdesk-agent/adapters'
 import {
   apiGetRegistryCatalog,
+  apiRegistryAgentIcon,
   apiCheckRegistryUpdate,
   apiStartPrepareRegistry,
   apiGetRegistryOperation,
@@ -1551,6 +1553,22 @@ const server = createServer(async (req, res) => {
         return
       }
 
+      const registryIconMatch = match(path, '/api/registry/agents/:id/icon')
+      if (method === 'GET' && registryIconMatch) {
+        const result = await apiRegistryAgentIcon(registryIconMatch.id!)
+        if (!result) {
+          send(res, 404, { error: 'No icon for this agent', code: 'REGISTRY_ICON_MISSING' })
+          return
+        }
+        res.writeHead(200, {
+          'Content-Type': 'image/svg+xml',
+          'Cache-Control': 'no-cache',
+          ...corsFor(req),
+        })
+        res.end(result.svg)
+        return
+      }
+
       // Registry manual update: the only runtime path allowed to contact the official catalog.
       if (method === 'POST' && path === '/api/workers/registry/check-update') {
         try {
@@ -1692,6 +1710,28 @@ const server = createServer(async (req, res) => {
         } catch (error) {
           const p = registryApiPublicError(error)
           send(res, p.status, { error: p.error, code: p.code })
+        }
+        return
+      }
+
+      const iconMatch = match(path, '/api/workers/:id/icon')
+      if (method === 'GET' && iconMatch) {
+        const worker = store.listWorkers().find((w) => w.id === iconMatch.id)
+        const iconPath = worker?.iconPath
+        if (!iconPath) {
+          send(res, 404, { error: 'No icon for this worker', code: 'WORKER_ICON_MISSING' })
+          return
+        }
+        try {
+          const buf = readFileSync(iconPath)
+          res.writeHead(200, {
+            'Content-Type': 'image/svg+xml',
+            'Cache-Control': 'no-cache',
+            ...corsFor(req),
+          })
+          res.end(buf)
+        } catch {
+          send(res, 404, { error: 'Icon file not found', code: 'WORKER_ICON_MISSING' })
         }
         return
       }

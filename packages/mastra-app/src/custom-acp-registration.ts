@@ -20,6 +20,56 @@ import type {
   WorkerLaunchSpec,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
+import { resolveLocalRegistryCatalog } from './acp-registry-service.js'
+
+/**
+ * Best-effort fuzzy match of a custom-registered worker (by name + command)
+ * against the local registry catalog, so a manually-added CLI can reuse the
+ * matching agent's icon. Returns the agentId or undefined.
+ *
+ * Matching priority:
+ *  1. command/package contains the agent id or a known suffix (e.g.
+ *     "@agentclientprotocol/claude-agent-acp" → claude-acp)
+ *  2. name contains the agent id or display name
+ *  3. token overlap between command tokens and agent id tokens
+ */
+function matchRegistryAgentForIcon(name: string, command: string): string | undefined {
+  let agents: { id: string; name: string }[] = []
+  try {
+    agents = resolveLocalRegistryCatalog().snapshot.agents.map((a) => ({ id: a.id, name: a.name }))
+  } catch {
+    return undefined
+  }
+  if (agents.length === 0) return undefined
+  const hay = `${name} ${command}`.toLowerCase()
+  // 1. command/package contains agent id suffix
+  for (const a of agents) {
+    if (command.toLowerCase().includes(a.id)) return a.id
+  }
+  // 2. name matches agent id or display name (substring either direction)
+  const nameLower = name.toLowerCase()
+  for (const a of agents) {
+    const aid = a.id.toLowerCase()
+    const aname = a.name.toLowerCase()
+    if (hay.includes(aid) || hay.includes(aname) || aname.includes(nameLower) || aid.includes(nameLower)) {
+      return a.id
+    }
+  }
+  // 3. token overlap (e.g. "claude code" vs "claude-acp")
+  const cmdTokens = new Set(
+    command
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .filter((t) => t.length >= 3),
+  )
+  let best: { id: string; score: number } | undefined
+  for (const a of agents) {
+    const idTokens = a.id.toLowerCase().split(/[^a-z0-9]+/i).filter((t) => t.length >= 3)
+    const overlap = idTokens.filter((t) => cmdTokens.has(t)).length
+    if (overlap > 0 && (!best || overlap > best.score)) best = { id: a.id, score: overlap }
+  }
+  return best?.id
+}
 
 export class CustomAcpRegistrationError extends Error {
   constructor(
@@ -268,6 +318,18 @@ export async function registerCustomAcpWorker(
   const name = input.name?.trim()
   if (!name) throw new CustomAcpRegistrationError('WORKER_NOT_READY', 'Worker name required')
   const store = deps.store ?? getSharedStore()
+  // Reject duplicate names regardless of `force`: a name collision makes chat
+  // routing ambiguous (two workers answer to the same display name), so it is
+  // a hard constraint, not a trust decision the user can override.
+  const nameConflict = store
+    .listWorkers()
+    .some((w) => w.name.trim().toLowerCase() === name.toLowerCase())
+  if (nameConflict) {
+    throw new CustomAcpRegistrationError(
+      'WORKER_DUPLICATE_NAME',
+      `A worker named "${name}" already exists`,
+    )
+  }
   const { launch, launchDigest, probe } = await probeCustomLaunch(input, deps)
   const status = probe.readiness.status
 
@@ -319,6 +381,7 @@ export async function registerCustomAcpWorker(
     launchSpec: launch.launchSpec,
     readiness: probe.readiness,
     capabilitySummary: probe.capabilitySummary as WorkerRegistration['capabilitySummary'],
+    iconAgentId: matchRegistryAgentForIcon(name, launch.command),
   }
   return store.upsertWorkerLogged(worker)
 }

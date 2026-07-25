@@ -17,6 +17,7 @@ import {
   type WorkerRegistryOption,
 } from '../lib/worker-registry'
 import { useI18n } from '../i18n/I18nProvider'
+import { RegistryAgentIcon } from './Icons'
 
 interface Props {
   options: WorkerRegistryOption[]
@@ -210,6 +211,9 @@ export function WorkerRegistryCombobox({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => selectOption(option)}
             >
+              <span className="worker-registry-option-icon">
+                <RegistryAgentIcon agentId={option.id} size={16} />
+              </span>
               <span className="worker-registry-option-name">{option.name}</span>
               <span className="worker-registry-option-id mono">{option.id}</span>
               <span className="worker-registry-option-meta">{metaParts.join(' · ')}</span>

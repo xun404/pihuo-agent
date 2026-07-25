@@ -1306,6 +1306,28 @@ input.settings-input.worker-registry-input {
   cursor: pointer;
   box-sizing: border-box;
 }
+.worker-registry-option-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.worker-registry-option-icon svg {
+  width: 100%;
+  height: 100%;
+}
+/* Inline registry icon span (used in combobox options and elsewhere). */
+.registry-agent-icon-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.registry-agent-icon-inline svg {
+  width: 100%;
+  height: 100%;
+}
 .worker-registry-option.highlighted,
 .worker-registry-option:hover {
   background: var(--bg-hover);
@@ -1418,6 +1440,16 @@ input.settings-input.worker-registry-input {
   font-family: var(--mono);
   font-size: 10px;
   font-weight: var(--fw-semibold);
+}
+.registry-agent-detail-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+}
+.registry-agent-detail-icon svg {
+  width: 100%;
+  height: 100%;
 }
 .registry-agent-facts {
   display: grid;

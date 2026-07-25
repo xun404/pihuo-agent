@@ -568,6 +568,8 @@ export type MessageKey =
   | 'workers.registryPrepareCancelled'
   | 'workers.registryPrepareComplete'
   | 'workers.registryPrepareFailed'
+  | 'workers.registryDuplicate'
+  | 'workers.duplicateName'
   | 'workers.registryPrepareQueued'
   | 'workers.registryPrepareRetry'
   | 'workers.registryPrepareRunning'
@@ -1195,6 +1197,8 @@ const zh: Dict = {
   'workers.registryPrepareCancelled': '准备已取消',
   'workers.registryPrepareComplete': '准备完成',
   'workers.registryPrepareFailed': '准备失败',
+  'workers.registryDuplicate': '该 Registry Agent 已注册，无需重复添加',
+  'workers.duplicateName': '已存在同名 Worker，请更换名称',
   'workers.registryPrepareQueued': '等待准备…',
   'workers.registryPrepareRetry': '重试',
   'workers.registryPrepareRunning': '正在准备 Agent…',
@@ -1846,6 +1850,8 @@ const en: Dict = {
   'workers.registryPrepareCancelled': 'Preparation cancelled',
   'workers.registryPrepareComplete': 'Preparation complete',
   'workers.registryPrepareFailed': 'Preparation failed',
+  'workers.registryDuplicate': 'This registry agent is already registered',
+  'workers.duplicateName': 'A worker with this name already exists',
   'workers.registryPrepareQueued': 'Waiting to prepare…',
   'workers.registryPrepareRetry': 'Retry',
   'workers.registryPrepareRunning': 'Preparing agent…',

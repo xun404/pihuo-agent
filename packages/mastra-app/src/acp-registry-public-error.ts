@@ -18,6 +18,8 @@ const PUBLIC_ERROR_TEXT: Readonly<Record<string, string>> = Object.freeze({
   WORKER_NOT_READY: 'Worker is not ready',
   WORKER_HAS_OPEN_JOBS: 'Worker has in-progress jobs',
   WORKER_REFERENCED_BY_ROLE: 'Worker is in use by team members',
+  WORKER_DUPLICATE_REGISTRY: 'This registry agent is already registered',
+  WORKER_DUPLICATE_NAME: 'A worker with this name already exists',
 })
 
 export type RegistryPublicError = {

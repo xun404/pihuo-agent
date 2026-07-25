@@ -276,6 +276,27 @@ async function request<T>(
   return res.json() as Promise<T>
 }
 
+/**
+ * Fetch a non-JSON response (e.g. an SVG icon) with the same desktop-token
+ * auth as `request`. Returns the raw text, or null when the resource is
+ * missing (404) so callers can silently fall back.
+ */
+async function requestText(path: string, signal?: AbortSignal): Promise<string | null> {
+  const headers: Record<string, string> = {}
+  const tok = await ensureDesktopToken()
+  if (tok) {
+    headers.Authorization = `Bearer ${tok}`
+    headers['X-SwarmDesk-Agent-Desktop-Token'] = tok
+  }
+  const res = await fetch(`${BASE}${path}`, {
+    headers,
+    signal: boundedRequestSignal(signal, 15_000),
+  })
+  if (res.status === 404) return null
+  if (!res.ok) return null
+  return res.text()
+}
+
 export const api = {
   base: BASE,
   snapshot: (signal?: AbortSignal) =>
@@ -529,6 +550,10 @@ export const api = {
       false,
       60_000,
     ),
+  workerIcon: (id: string, signal?: AbortSignal) =>
+    requestText(`/api/workers/${encodePathSegment(id)}/icon`, signal),
+  registryAgentIcon: (agentId: string, signal?: AbortSignal) =>
+    requestText(`/api/registry/agents/${encodePathSegment(agentId)}/icon`, signal),
   setWorkerSecret: (id: string, envName: string, value: string, signal?: AbortSignal) =>
     request<{
       workerId: string

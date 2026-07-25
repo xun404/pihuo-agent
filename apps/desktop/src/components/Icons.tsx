@@ -1,5 +1,6 @@
 /** Linear UI icons (stroke 1.75, round cap). Brand small-mark uses 🐝. */
-import React from 'react'
+import React, { useEffect, useState } from 'react'
+import { api } from '../lib/api'
 
 type IconProps = {
   className?: string
@@ -384,15 +385,126 @@ export function workerBrandClass(kind?: string | null, name?: string | null): st
   return resolveWorkerBrand(kind, name)
 }
 
+// Module-level cache of fetched registry icons: workerId → sanitized SVG text.
+// Icons rarely change, so caching avoids re-fetching on every render.
+const iconCache = new Map<string, string>()
+
+function sanitizeIconSvg(svg: string): string | null {
+  // Reject anything that is not an <svg…> document, and strip script/event
+  // handlers so a compromised icon cannot run code. The icon source is a
+  // trusted CDN, but defense-in-depth is cheap here.
+  if (!/<svg[\s>]/i.test(svg)) return null
+  return svg
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+}
+
+// Generic cached-icon hook: fetch SVG text once per key, sanitize, and cache.
+// `iconCache` is shared across worker/registry icons by namespacing the key.
+function useCachedIcon(
+  key: string | undefined,
+  fetcher: (signal?: AbortSignal) => Promise<string | null>,
+): string | null {
+  const [svg, setSvg] = useState<string | null>(() =>
+    key ? (iconCache.get(key) ?? null) : null,
+  )
+  useEffect(() => {
+    if (!key) {
+      setSvg(null)
+      return
+    }
+    const cached = iconCache.get(key)
+    if (cached !== undefined) {
+      setSvg(cached)
+      return
+    }
+    let cancelled = false
+    fetcher()
+      .then((raw) => {
+        if (cancelled) return
+        const clean = raw ? sanitizeIconSvg(raw) : null
+        iconCache.set(key, clean ?? '')
+        setSvg(clean)
+      })
+      .catch(() => {
+        if (cancelled) return
+        iconCache.set(key, '')
+        setSvg(null)
+      })
+    return () => {
+      cancelled = true
+    }
+    // fetcher is stable per-key (module-level api methods); depend on key only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  return svg
+}
+
+/** Fetch a registered worker's locally-cached icon by workerId. */
+export function useWorkerIcon(workerId?: string): string | null {
+  return useCachedIcon(workerId ? `worker:${workerId}` : undefined, (signal) =>
+    api.workerIcon(workerId!, signal),
+  )
+}
+
+/** Fetch a registry agent's icon by agentId (via the self-hosted proxy). */
+export function useRegistryAgentIcon(agentId?: string): string | null {
+  return useCachedIcon(agentId ? `agent:${agentId}` : undefined, (signal) =>
+    api.registryAgentIcon(agentId!, signal),
+  )
+}
+
+/** Render an inline registry icon by agentId, or null when there is none. */
+export function RegistryAgentIcon({ agentId, size }: { agentId?: string; size?: number }) {
+  const svg = useRegistryAgentIcon(agentId)
+  if (!svg) return null
+  return (
+    <span
+      className="registry-agent-icon-inline"
+      style={size ? { width: size, height: size } : undefined}
+      dangerouslySetInnerHTML={{ __html: svg }}
+      aria-hidden
+    />
+  )
+}
+
 export function WorkerBrandLogo({
   kind,
   name,
   size = 14,
+  workerId,
+  hasIcon,
+  iconAgentId,
 }: {
   kind?: string
   name?: string
   size?: number
+  /** When set, fetch the registry icon and render it inline. */
+  workerId?: string
+  /** Hint that an icon may exist (worker.iconPath truthy). Avoids a 404 fetch when false. */
+  hasIcon?: boolean
+  /** Registry agent id to resolve an icon when no prepared worker icon exists. */
+  iconAgentId?: string
 }) {
+  // Prefer the worker's own prepared icon; fall back to a registry-agent icon
+  // matched at registration time (e.g. custom-added CLI).
+  const shouldFetch = Boolean(workerId && hasIcon)
+  const workerSvg = useWorkerIcon(shouldFetch ? workerId : undefined)
+  const registrySvg = useRegistryAgentIcon(!workerSvg ? iconAgentId : undefined)
+  const svg = workerSvg ?? registrySvg
+  if (svg) {
+    return (
+      <span
+        className="worker-brand-icon"
+        style={{ width: size, height: size, display: 'inline-flex' }}
+        // Icon SVG comes from the trusted registry CDN and is sanitized above.
+        dangerouslySetInnerHTML={{ __html: svg }}
+        aria-hidden
+      />
+    )
+  }
   const brand = resolveWorkerBrand(kind, name)
   if (brand === 'claude') return <IconClaude size={size} />
   if (brand === 'codex') return <IconCodex size={size} />
