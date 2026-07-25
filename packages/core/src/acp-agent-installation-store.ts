@@ -47,6 +47,8 @@ export interface AcpAgentInstallationRecord {
   payloadDigest?: string
   /** Immutable, non-secret facts used to materialize the launch exactly. */
   launchSpec?: WorkerLaunchSpec & { runnerVersion?: string }
+  /** Local path to the cached registry icon (SVG), downloaded at prepare time. */
+  iconPath?: string
   status: AcpInstallationStatus
   preparedAt?: string
   installedAt?: string

@@ -1,6 +1,7 @@
 import React from 'react'
 
 import { useI18n } from '../i18n/I18nProvider'
+import { useRegistryAgentIcon } from './Icons'
 import type { WorkerRegistryDistribution, WorkerRegistryOption } from '../lib/worker-registry'
 
 function safeHttpUrl(value: string | undefined): string | null {
@@ -51,6 +52,7 @@ export function RegistryAgentDetail(props: {
 }) {
   const { t } = useI18n()
   const { option } = props
+  const iconSvg = useRegistryAgentIcon(option.id)
   const detail = option.distributionDetails?.find(
     (candidate) => candidate.kind === props.distribution,
   )
@@ -91,9 +93,18 @@ export function RegistryAgentDetail(props: {
   return (
     <section className="registry-agent-detail" aria-label={t('workers.registryDetailTitle')}>
       <header className="registry-agent-detail-header">
-        <span className="registry-agent-generic-icon" aria-hidden>
-          ACP
-        </span>
+        {iconSvg ? (
+          <span
+            className="registry-agent-detail-icon"
+            // Sourced from the trusted registry CDN via a self-hosted proxy and sanitized.
+            dangerouslySetInnerHTML={{ __html: iconSvg }}
+            aria-hidden
+          />
+        ) : (
+          <span className="registry-agent-generic-icon" aria-hidden>
+            ACP
+          </span>
+        )}
         <div className="registry-agent-detail-identity">
           <strong className="registry-agent-detail-name">{option.name}</strong>
           <span className="registry-agent-detail-id mono">

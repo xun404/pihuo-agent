@@ -23,6 +23,7 @@ import {
 import {
   AcpInstallError,
   buildEffectiveWorkerEnv,
+  downloadToFile,
   getAcpSessionManager,
   logoutSpawnedAgent,
   probeSpawnedAgent,
@@ -37,6 +38,9 @@ import {
   type WorkerReadiness,
   type AcpRegistryDistributionKind,
 } from '@swarmdesk-agent/shared'
+import { resolveRouterDataPaths } from '@swarmdesk-agent/core'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   prepareRegistryWorker,
   registerRegistryWorker,
@@ -514,6 +518,58 @@ export async function apiGetRegistryCatalog() {
   return projectRegistryCatalog(await getRegistryCatalogForApi())
 }
 
+/**
+ * Return the cached registry icon SVG for an agent, downloading it on first
+ * request. The browser renderer cannot fetch the remote CDN (CSP blocks it),
+ * so this proxy serves the icon from `self`. Icons live in
+ * `dataDir/icons/<agentId>.svg` (version-agnostic: an agent's brand icon is
+ * stable across versions).
+ *
+ * Returns null when the agent has no icon, the URL is not https, or the
+ * download fails — callers fall back to the generic mark.
+ */
+export async function apiRegistryAgentIcon(
+  agentId: string,
+  opts: { fetchImpl?: typeof fetch; signal?: AbortSignal } = {},
+): Promise<{ svg: string } | null> {
+  const { snapshot } = resolveLocalRegistryCatalog()
+  const agent = snapshot.agents.find((a) => a.id === agentId)
+  const iconUrl = agent?.icon
+  if (!iconUrl) return null
+  let parsed: URL
+  try {
+    parsed = new URL(iconUrl)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'https:') return null
+
+  const iconsDir = join(resolveRouterDataPaths().dataDir, 'icons')
+  const dest = join(iconsDir, `${agentId}.svg`)
+  if (!existsSync(dest)) {
+    try {
+      mkdirSync(iconsDir, { recursive: true, mode: 0o700 })
+      await downloadToFile(iconUrl, dest, {
+        fetchImpl: opts.fetchImpl,
+        signal: opts.signal,
+        totalTimeoutMs: 15_000,
+        headerTimeoutMs: 8_000,
+        stallTimeoutMs: 10_000,
+        maxBytes: 256 * 1024,
+      })
+    } catch {
+      return null
+    }
+  }
+  try {
+    const svg = readFileSync(dest, 'utf8')
+    if (!svg || !/<svg[\s>]/i.test(svg)) return null
+    return { svg }
+  } catch {
+    return null
+  }
+}
+
 export async function apiCheckRegistryUpdate(
   options: { fetchImpl?: typeof fetch; signal?: AbortSignal; timeoutMs?: number } = {},
 ) {
@@ -759,7 +815,9 @@ export function apiGetWorkerAuthMethods(workerId: string): {
 }
 
 export async function apiProbeWorker(workerId: string, deps: RegistryLifecycleDependencies = {}) {
-  const before = findEnabledRegistryWorker(workerId)
+  // Probing is a diagnostic action: it must work on a disabled worker too, so
+  // that a freshly registered worker can be validated before enabling.
+  const before = findWorker(workerId)
   const lifecycle = beginWorkerLifecycle(workerId)
   const installation = exactInstallationForWorker(before)
   const setup = spawnedSetupInput(before, deps)

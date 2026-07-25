@@ -967,6 +967,18 @@
   width: 10px;
   height: 10px;
 }
+/* Inline registry icon: a fetched SVG that fills its parent chip. */
+.worker-brand-icon,
+.worker-brand-icon svg {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+}
+/* When the logo chip hosts a real icon, drop the brand color background so the
+   icon's own colors show through. */
+.worker-logo:has(.worker-brand-icon) {
+  background: transparent;
+}
 /* 品牌色：Worker logo 圆角方块的底色/前景（经典/暖色/深色 三主题 token 已覆盖） */
 .worker-logo.claude {
   background: var(--claude-bg);

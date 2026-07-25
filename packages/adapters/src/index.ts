@@ -98,6 +98,7 @@ export {
   validatePreparedRegistryInstallation,
   installationTargetDir,
   cleanupStaging,
+  downloadToFile,
   AcpInstallError,
   type PrepareRequest,
   type PrepareResult,

@@ -17,6 +17,7 @@ import {
 import {
   AcpInstallError,
   AcpRunnerError,
+  downloadToFile,
   installationTargetDir,
   prepareRegistryAgent,
   validatePreparedRegistryInstallation,
@@ -32,8 +33,8 @@ import type {
   WorkerSource,
 } from '@swarmdesk-agent/shared'
 import { defaultRegistryWorkerRoles, WORKER_ROLES } from '@swarmdesk-agent/shared'
-import { existsSync, lstatSync, renameSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync, lstatSync, mkdirSync, renameSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { resolveLocalRegistryCatalog } from './acp-registry-service.js'
 import {
   assertRegistryCandidateInput,
@@ -347,6 +348,13 @@ export async function prepareRegistryWorker(input: {
     : undefined
 
   const agentsRoot = join(resolveRouterDataPaths().dataDir, 'agents')
+  // Download the registry icon (SVG) to the agent's version dir so it can be
+  // rendered locally without depending on the remote CDN. Failure is non-fatal:
+  // a missing icon falls back to the kind-based default in the UI.
+  const iconPath = await downloadAgentIcon(agent.icon, agentsRoot, agent.id, agent.version, {
+    fetchImpl: input.fetchImpl,
+    signal: input.signal,
+  })
   let existing = findInstallation({
     registryId: agent.id,
     registryVersion: agent.version,
@@ -441,6 +449,7 @@ export async function prepareRegistryWorker(input: {
       runnerVersion: prepare.runner?.version,
       payloadDigest: prepare.payloadDigest,
       launchSpec,
+      iconPath: iconPath ?? existing?.iconPath,
       status: existing?.status ?? 'prepared',
       preparedAt: existing?.preparedAt ?? new Date().toISOString(),
       installedAt: existing?.installedAt,
@@ -488,6 +497,38 @@ export async function registerRegistryWorker(input: {
     throw new RegistryRegistrationError(
       'ACP_INSTALL_TRUST_REQUIRED',
       'manifestDigest mismatch with local catalog',
+      409,
+    )
+  }
+
+  // Reject duplicates: the same registry agent + version must not be registered
+  // twice. Re-registering the same agent offers no benefit and clutters the
+  // worker list with indistinguishable entries.
+  const duplicate = input.existingWorkers.find(
+    (w) =>
+      w.source?.type === 'registry' &&
+      w.source.registryId === input.body.registryId &&
+      w.source.registryVersion === input.body.version,
+  )
+  if (duplicate) {
+    throw new RegistryRegistrationError(
+      'WORKER_DUPLICATE_REGISTRY',
+      `Registry agent ${input.body.registryId}@${input.body.version} is already registered as "${duplicate.name}"`,
+      409,
+    )
+  }
+
+  // Reject name collisions: the final worker name (explicit or the agent's
+  // display name) must not match an existing worker, since routing keys off
+  // the display name and a duplicate would be ambiguous.
+  const finalName = (input.body.name?.trim() || agent.name).toLowerCase()
+  const nameConflict = input.existingWorkers.some(
+    (w) => w.name.trim().toLowerCase() === finalName,
+  )
+  if (nameConflict) {
+    throw new RegistryRegistrationError(
+      'WORKER_DUPLICATE_NAME',
+      `A worker named "${input.body.name?.trim() || agent.name}" already exists`,
       409,
     )
   }
@@ -597,6 +638,7 @@ export async function registerRegistryWorker(input: {
     source,
     runtimeProfile: 'generic-acp',
     installationId: record.installationId,
+    iconPath: record.iconPath,
     launchSpec: record.launchSpec,
     readiness: {
       status: 'prepared',
@@ -610,4 +652,50 @@ export async function registerRegistryWorker(input: {
 
   addWorkerReference(record.installationId, worker.id)
   return worker
+}
+
+/**
+ * Download the registry agent icon (SVG) into the agent's version dir, shared
+ * across distributions/targets. Returns the local path, or undefined if there
+ * is no icon URL, the download failed, or the result is not a usable SVG.
+ *
+ * Non-fatal: callers treat a missing icon as "fall back to the default mark".
+ */
+async function downloadAgentIcon(
+  iconUrl: string | undefined,
+  agentsRoot: string,
+  registryId: string,
+  registryVersion: string,
+  opts: { fetchImpl?: typeof fetch; signal?: AbortSignal } = {},
+): Promise<string | undefined> {
+  if (!iconUrl) return undefined
+  // Only https icons are fetched — never http / file / data.
+  let parsed: URL
+  try {
+    parsed = new URL(iconUrl)
+  } catch {
+    return undefined
+  }
+  if (parsed.protocol !== 'https:') return undefined
+
+  const dir = join(agentsRoot, registryId, registryVersion)
+  const dest = join(dir, 'icon.svg')
+  // Reuse an already-downloaded icon (e.g. re-prepare of the same version).
+  if (existsSync(dest)) return dest
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const result = await downloadToFile(iconUrl, dest, {
+      fetchImpl: opts.fetchImpl,
+      signal: opts.signal,
+      totalTimeoutMs: 15_000,
+      headerTimeoutMs: 8_000,
+      stallTimeoutMs: 10_000,
+      maxBytes: 256 * 1024, // SVG icons are tiny; cap to avoid a malicious blob
+    })
+    // Reject empty / implausibly large payloads — treat as no icon.
+    if (result.bytes === 0) return undefined
+    return dest
+  } catch {
+    return undefined
+  }
 }

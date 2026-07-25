@@ -167,6 +167,8 @@ export const ACP_PUBLIC_ERROR_CODES = [
   'WORKER_NOT_READY',
   'WORKER_HAS_OPEN_JOBS',
   'WORKER_REFERENCED_BY_ROLE',
+  'WORKER_DUPLICATE_REGISTRY',
+  'WORKER_DUPLICATE_NAME',
 ] as const
 
 export type AcpPublicErrorCode = (typeof ACP_PUBLIC_ERROR_CODES)[number]
@@ -875,6 +877,11 @@ export interface WorkerRegistration {
   launchSpec?: WorkerLaunchSpec
   /** Points into acp-agent-installations.json when managed by Registry. */
   installationId?: string
+  /** Local path to the cached registry icon (SVG), if prepared. */
+  iconPath?: string
+  /** Registry agent id used to resolve an icon when no prepared iconPath exists
+   *  (e.g. custom-registered workers matched against the catalog). */
+  iconAgentId?: string
   /** Prepare / auth / session readiness (not the same as command health). */
   readiness?: WorkerReadiness
   /**
