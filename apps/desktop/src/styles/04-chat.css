@@ -685,28 +685,6 @@
   }
 }
 
-/* ============ 流式光标（leader 回复流式时的尾部闪烁竖条）============ */
-@keyframes stream-blink {
-  0%,
-  45% {
-    opacity: 1;
-  }
-  50%,
-  100% {
-    opacity: 0.2;
-  }
-}
-.stream-cursor {
-  display: inline-block;
-  width: 7px;
-  height: 1.05em;
-  background: var(--accent);
-  vertical-align: text-bottom;
-  margin-left: 2px;
-  border-radius: 1px;
-  animation: stream-blink 1s steps(2) infinite;
-}
-
 /* ============ 等待占位（busy 且尾部 assistant 无内容时的三点脉冲）============
    来源：design/gui-v4 animation-impl demo ⑤（BusyDots，复用 thinking-pulse）*/
 .msg-pending {

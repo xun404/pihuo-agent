@@ -989,18 +989,11 @@
   font-weight: var(--fw-regular);
   font-variant-numeric: tabular-nums;
 }
-/* Enlarge the brand logo inside worker cards (overrides the global .worker-logo sizing). */
-.worker-card .worker-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-sm);
-  flex: none;
-}
-.worker-card .worker-logo svg {
-  width: 18px;
-  height: 18px;
-}
-/* Rail + detail logos: override the global .worker-logo svg 10px constraint */
+/* Rail + detail logos: override the global .worker-logo svg 10px constraint.
+   NOTE: do NOT add a bare `.worker-card .worker-logo` rule here — `.worker-card`
+   is the chat WorkerRunCard (see WorkerRunCard.tsx), not a settings surface.
+   Such a rule leaks into chat and blows the logo up to 28px inside a 16px slot,
+   producing the stray orange brand-color square between message blocks. */
 .settings-rail-item .worker-logo svg {
   width: 16px;
   height: 16px;

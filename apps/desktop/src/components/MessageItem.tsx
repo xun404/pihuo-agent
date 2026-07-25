@@ -204,10 +204,10 @@ function MessageItemImpl({
           <div className="sup-body">
             {message.parts.map((part, i) => {
               if (part.type === 'text') {
+                const tp = part as { type: 'text'; text?: string }
                 return (
                   <div className="sup-text md-content" key={i}>
-                    <MarkdownContent>{part.text}</MarkdownContent>
-                    {msgLive && <span className="stream-cursor" aria-hidden="true" />}
+                    <MarkdownContent>{tp.text ?? ''}</MarkdownContent>
                   </div>
                 )
               }
