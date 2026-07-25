@@ -102,6 +102,7 @@ import { useToast } from './Toast'
 import { WorkerRegistryCombobox } from './WorkerRegistryCombobox'
 import { WorkerDefaultRoleTypeEditor } from './WorkerDefaultRoleTypeEditor'
 import { WorkerCommandField } from './WorkerCommandField'
+import { WorkerProbeConsole } from './WorkerProbeConsole'
 import { PromptSettingsEditor } from './PromptSettingsEditor'
 import { WorkerTimeoutSettingsEditor } from './WorkerTimeoutSettingsEditor'
 import {
@@ -1194,6 +1195,7 @@ export function SettingsPanel({
     setPendingRegistryPrepare(null)
     setRegMode('auto')
     setRegOpen(false)
+    setRegBusy(false)
     onRefreshSnapshot?.()
     toastSuccess(t('settings.saved'))
   }
@@ -1252,7 +1254,7 @@ export function SettingsPanel({
             distribution: dist,
             manifestDigest: regManifestDigest,
             name: regName.trim(),
-            enabled: true,
+            enabled: false,
           },
         })
         operationStarted = true
@@ -1270,7 +1272,7 @@ export function SettingsPanel({
             : { command: regCommand.trim() }),
           args,
           env: Object.keys(regEnv).length > 0 ? regEnv : undefined,
-          enabled: true,
+          enabled: false,
           description: regDescription.trim() || undefined,
         }
         const { preview } = await api.previewCustomAcpWorker(customInput)
@@ -1303,6 +1305,43 @@ export function SettingsPanel({
       toastError(e instanceof Error ? e.message : String(e))
     } finally {
       setRegBusy(false)
+    }
+  }
+
+  // Toggle a worker's enabled flag. When turning ON, probe first so a worker
+  // that fails ACP initialization (or needs auth) is not silently enabled.
+  const toggleWorkerWithProbe = async (workerId: string, nextEnabled: boolean) => {
+    if (!nextEnabled) {
+      onToggleWorker?.(workerId, false)
+      return
+    }
+    const target = workers.find((x) => x.id === workerId)
+    if (!target) return
+    const ready = target.readiness?.status === 'ready' || target.readiness?.status === 'degraded'
+    if (ready) {
+      onToggleWorker?.(workerId, true)
+      return
+    }
+    // Not yet ready: probe, then enable only if it reaches ready/degraded.
+    toastSuccess(t('workers.enablingProbe'))
+    try {
+      const { worker: after } = await api.probeRegistryWorker(workerId)
+      const ok =
+        after.readiness?.status === 'ready' || after.readiness?.status === 'degraded'
+      if (ok) {
+        onToggleWorker?.(workerId, true)
+      } else if (after.readiness?.status === 'auth_required') {
+        toastError(t('workers.enablingAuthRequired'))
+      } else {
+        toastError(
+          after.readiness?.message
+            ? `${after.readiness.status}: ${after.readiness.message}`
+            : t('workers.enablingFailed'),
+        )
+      }
+      onRefreshSnapshot?.()
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : t('workers.enablingFailed'))
     }
   }
 
@@ -2120,7 +2159,20 @@ export function SettingsPanel({
           <div className="settings-model-layout">
             {/* ── Left rail: Agents + Crews ── */}
             <aside className="settings-provider-rail" aria-label={t('settings.navWorkers')}>
-              <div className="settings-rail-label">{t('workers.railAgents')}</div>
+              <div className="settings-rail-label">
+                <span>{t('workers.railAgents')}</span>
+                <button
+                  type="button"
+                  className={`settings-rail-add${railFocus?.type === 'register' ? ' active' : ''}`}
+                  onClick={() => {
+                    setRegOpen(true)
+                    setRegMode('auto')
+                    setRailFocus({ type: 'register' })
+                  }}
+                >
+                  {t('workers.register')}
+                </button>
+              </div>
               {workers.map((w) => {
                 const active = railFocus?.type === 'agent' && railFocus.id === w.id
                 return (
@@ -2143,20 +2195,27 @@ export function SettingsPanel({
                   </button>
                 )
               })}
-              <button
-                type="button"
-                className={`settings-rail-add${railFocus?.type === 'register' ? ' active' : ''}`}
-                onClick={() => {
-                  setRegOpen(true)
-                  setRegMode('auto')
-                  setRailFocus({ type: 'register' })
-                }}
-              >
-                {t('workers.register')}
-              </button>
 
-              <div className="settings-rail-label" style={{ marginTop: 12 }}>
-                {t('workers.railCrews')}
+              <div className="settings-rail-label settings-rail-label--section">
+                <span>{t('workers.railCrews')}</span>
+                <button
+                  type="button"
+                  className="settings-rail-add"
+                  onClick={async () => {
+                    try {
+                      const { template } = await api.createTeamTemplate({
+                        name: t('workers.newCrewName'),
+                        members: [],
+                      })
+                      setTeamTemplates((prev) => [...prev, template])
+                      setRailFocus({ type: 'crew', id: template.id })
+                    } catch (e) {
+                      toastError(e instanceof Error ? e.message : String(e))
+                    }
+                  }}
+                >
+                  {t('workers.newCrew')}
+                </button>
               </div>
               {teamTemplates.map((tmpl) => {
                 const active = railFocus?.type === 'crew' && railFocus.id === tmpl.id
@@ -2177,24 +2236,6 @@ export function SettingsPanel({
                   </button>
                 )
               })}
-              <button
-                type="button"
-                className="settings-rail-add"
-                onClick={async () => {
-                  try {
-                    const { template } = await api.createTeamTemplate({
-                      name: t('workers.newCrewName'),
-                      members: [],
-                    })
-                    setTeamTemplates((prev) => [...prev, template])
-                    setRailFocus({ type: 'crew', id: template.id })
-                  } catch (e) {
-                    toastError(e instanceof Error ? e.message : String(e))
-                  }
-                }}
-              >
-                {t('workers.newCrew')}
-              </button>
             </aside>
 
             {/* ── Right main panel ── */}
@@ -2259,7 +2300,7 @@ export function SettingsPanel({
                             role="switch"
                             aria-checked={w.enabled}
                             aria-label={t('workers.formEnabled')}
-                            onClick={() => onToggleWorker?.(w.id, !w.enabled)}
+                            onClick={() => void toggleWorkerWithProbe(w.id, !w.enabled)}
                           />
                         </div>
                         <div className="worker-detail-head-actions">
@@ -2515,6 +2556,9 @@ export function SettingsPanel({
                           ))}
                         </div>
                       </div>
+
+                      {/* Probe console — action + code-styled log */}
+                      <WorkerProbeConsole worker={w} onProbed={() => onRefreshSnapshot?.()} />
                     </div>
                   )
                 })()}
@@ -2572,7 +2616,25 @@ export function SettingsPanel({
                           loadingLabel={t('app.loading')}
                           emptyLabel={t('workers.registryEmpty')}
                           localInstallLabel={t('workers.registryLocalInstall')}
-                          onSelect={(option) => option && createWorkerDraftFromRegistry(option)}
+                          onSelect={(option) => {
+                            if (!option) {
+                              setRegSelectedId(null)
+                              setRegManifestDigest('')
+                              setRegVersion('')
+                              return
+                            }
+                            const draft = createWorkerDraftFromRegistry(option)
+                            setRegSelectedId(draft.selectedId)
+                            setRegName(draft.name)
+                            setRegCommand(draft.command)
+                            setRegArgs(draft.args)
+                            setRegEnv(draft.env)
+                            setRegDescription(draft.description)
+                            setRegVersion(option.version)
+                            setRegManifestDigest(option.manifestDigest ?? '')
+                            setRegDistribution(option.distribution)
+                            setRegTrustNoSha(false)
+                          }}
                         />
                         {workerRegistryCatalog && (
                           <p className="settings-field-hint mono">
@@ -2711,7 +2773,8 @@ export function SettingsPanel({
                       }
                       onClick={() => void saveWorker()}
                     >
-                      {regBusy ? t('app.loading') : t('workers.formSave')}
+                      {regBusy && <span className="btn-spinner" aria-hidden />}
+                      {regBusy ? t('workers.installing') : t('workers.install')}
                     </button>
                   </div>
                 </div>

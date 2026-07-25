@@ -23,27 +23,19 @@ const worker: WorkerRegistration = {
 }
 
 describe('WorkerDefaultRoleTypeEditor', () => {
-  it('selects a role and renders its prompt as read-only text', () => {
+  it('renders a role chip showing the current role and a dropdown trigger', () => {
     const html = renderToStaticMarkup(
       <I18nProvider serverLocale="zh">
-        <WorkerDefaultRoleTypeEditor
-          worker={worker}
-          rolePrompts={{
-            general: 'General.',
-            plan: 'Plan.',
-            coder: 'Implement and verify.',
-            review: 'Review.',
-            test: 'Test.',
-            research: 'Research.',
-          }}
-          onSave={async () => {}}
-        />
+        <WorkerDefaultRoleTypeEditor worker={worker} onSave={async () => {}} />
       </I18nProvider>,
     )
 
-    assert.match(html, /value="coder" selected/u)
-    assert.match(html, /Implement and verify\./u)
-    assert.doesNotMatch(html, /textarea/u)
+    // chip renders the role label + the localized current role (编码 = coder)
+    assert.match(html, /worker-role-chip/u)
+    assert.match(html, /角色/u)
+    assert.match(html, /编码/u)
+    // no longer a native <select> or a prompt preview
+    assert.doesNotMatch(html, /<select/u)
     assert.doesNotMatch(html, /角色名称/u)
   })
 })

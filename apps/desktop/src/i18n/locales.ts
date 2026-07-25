@@ -410,6 +410,9 @@ export type MessageKey =
   | 'workers.customLocalExecutable'
   | 'workers.customPackageSpec'
   | 'workers.formEnabled'
+  | 'workers.enablingProbe'
+  | 'workers.enablingAuthRequired'
+  | 'workers.enablingFailed'
   | 'workers.confirmTitle'
   | 'workers.confirmConnected'
   | 'workers.confirmCommand'
@@ -452,6 +455,20 @@ export type MessageKey =
   | 'workers.sectionHealth'
   | 'workers.sectionCapability'
   | 'workers.sectionAuth'
+  | 'workers.sectionProbe'
+  | 'workers.probeRun'
+  | 'workers.probeRunning'
+  | 'workers.probeLogEmpty'
+  | 'workers.probeLogStart'
+  | 'workers.probeLogSpawn'
+  | 'workers.probeLogHandshake'
+  | 'workers.probeLogProtocol'
+  | 'workers.probeLogAgentInfo'
+  | 'workers.probeLogCapabilities'
+  | 'workers.probeLogAuthMethods'
+  | 'workers.probeLogNoAuth'
+  | 'workers.probeLogResult'
+  | 'workers.probeLogFailed'
   | 'workers.fieldCommand'
   | 'workers.fieldSource'
   | 'workers.fieldProtocol'
@@ -472,6 +489,8 @@ export type MessageKey =
   | 'workers.formPrimary'
   | 'workers.formRoles'
   | 'workers.formSave'
+  | 'workers.install'
+  | 'workers.installing'
   | 'workers.health.healthy'
   | 'workers.health.missing'
   | 'workers.health.unhealthy'
@@ -1036,7 +1055,7 @@ const zh: Dict = {
   'workers.railAgents': 'Agents',
   'workers.railCrews': '编组',
   'workers.newCrewName': '新编组',
-  'workers.newCrew': '新建编组',
+  'workers.newCrew': '新建',
   'workers.selectPrompt': '从左侧选择一个 Agent 或编组',
   'workers.secretTitle': '{name} 凭证',
   'workers.secretPlaceholder': '输入密钥…',
@@ -1046,6 +1065,20 @@ const zh: Dict = {
   'workers.sectionHealth': '健康状态',
   'workers.sectionCapability': '能力矩阵',
   'workers.sectionAuth': '认证方式',
+  'workers.sectionProbe': 'ACP 探测',
+  'workers.probeRun': '重新探测',
+  'workers.probeRunning': '探测中',
+  'workers.probeLogEmpty': '尚未探测。点击「重新探测」启动 ACP 握手。',
+  'workers.probeLogStart': '开始探测 {name}',
+  'workers.probeLogSpawn': '启动 ACP 子进程…',
+  'workers.probeLogHandshake': '执行 initialize 握手…',
+  'workers.probeLogProtocol': '协议版本 ACP {version}',
+  'workers.probeLogAgentInfo': 'Agent：{name} v{version}',
+  'workers.probeLogCapabilities': '能力：{caps}',
+  'workers.probeLogAuthMethods': '认证方式：{methods}',
+  'workers.probeLogNoAuth': '无需认证',
+  'workers.probeLogResult': '结果：{status}（耗时 {elapsed}ms）',
+  'workers.probeLogFailed': '探测失败（耗时 {elapsed}ms）',
   'workers.fieldCommand': '命令',
   'workers.fieldSource': '来源',
   'workers.fieldProtocol': '协议',
@@ -1069,10 +1102,15 @@ const zh: Dict = {
   'workers.deleteErrorReferenced': '该 Worker 正被团队会话使用，请先归档相关成员后再删除。',
   'workers.deleteErrorGeneric': '删除失败，该 Worker 可能仍在使用中，请稍后重试。',
   'workers.formEnabled': '启用',
+  'workers.enablingProbe': '正在探测，通过后自动启用',
+  'workers.enablingAuthRequired': '该 Agent 需要先完成认证才能启用',
+  'workers.enablingFailed': '探测未通过，无法启用',
   'workers.formName': '名称',
   'workers.formPrimary': '主角色',
   'workers.formRoles': '可兼角色',
   'workers.formSave': '保存',
+  'workers.install': '安装',
+  'workers.installing': '安装中',
   'workers.health.healthy': '可用',
   'workers.health.missing': '未安装',
   'workers.health.unhealthy': '异常',
@@ -1112,11 +1150,11 @@ const zh: Dict = {
   'workers.modelRefresh': '↻ 更新模型列表…',
   'workers.modelSearch': '搜索模型…',
   'workers.primary': '主角色',
-  'workers.register': '＋ 注册',
+  'workers.register': '注册',
   'workers.registerTitle': '注册 CLI Worker',
   'workers.registered': '已注册 CLI',
   'workers.registryAgent': 'ACP Registry Agent',
-  'workers.registryAgentCount': 'Agent 数量',
+  'workers.registryAgentCount': 'Agent 数量：{count}',
   'workers.registryAuthRequired': '需要认证',
   'workers.registryBundledAtRelease': '随应用发布',
   'workers.registryCheckUpdates': '检查更新',
@@ -1666,7 +1704,7 @@ const en: Dict = {
   'workers.railAgents': 'Agents',
   'workers.railCrews': 'Crews',
   'workers.newCrewName': 'New Crew',
-  'workers.newCrew': 'New Crew',
+  'workers.newCrew': 'New',
   'workers.selectPrompt': 'Select an Agent or Crew from the left',
   'workers.secretTitle': '{name} credentials',
   'workers.secretPlaceholder': 'Enter secret…',
@@ -1676,6 +1714,20 @@ const en: Dict = {
   'workers.sectionHealth': 'Health',
   'workers.sectionCapability': 'Capabilities',
   'workers.sectionAuth': 'Authentication',
+  'workers.sectionProbe': 'ACP probe',
+  'workers.probeRun': 'Re-probe',
+  'workers.probeRunning': 'Probing',
+  'workers.probeLogEmpty': 'Not probed yet. Click “Re-probe” to start the ACP handshake.',
+  'workers.probeLogStart': 'Probing {name}',
+  'workers.probeLogSpawn': 'Spawning ACP subprocess…',
+  'workers.probeLogHandshake': 'Running initialize handshake…',
+  'workers.probeLogProtocol': 'Protocol version ACP {version}',
+  'workers.probeLogAgentInfo': 'Agent: {name} v{version}',
+  'workers.probeLogCapabilities': 'Capabilities: {caps}',
+  'workers.probeLogAuthMethods': 'Auth methods: {methods}',
+  'workers.probeLogNoAuth': 'No authentication required',
+  'workers.probeLogResult': 'Result: {status} ({elapsed}ms)',
+  'workers.probeLogFailed': 'Probe failed ({elapsed}ms)',
   'workers.fieldCommand': 'Command',
   'workers.fieldSource': 'Source',
   'workers.fieldProtocol': 'Protocol',
@@ -1700,10 +1752,15 @@ const en: Dict = {
   'workers.deleteErrorReferenced': 'This worker is in use by team sessions. Archive the related members first.',
   'workers.deleteErrorGeneric': 'Failed to delete — the worker may still be in use. Please try again later.',
   'workers.formEnabled': 'Enabled',
+  'workers.enablingProbe': 'Probing; will enable once it passes',
+  'workers.enablingAuthRequired': 'This agent requires authentication before it can be enabled',
+  'workers.enablingFailed': 'Probe did not pass; cannot enable',
   'workers.formName': 'Name',
   'workers.formPrimary': 'Primary role',
   'workers.formRoles': 'Secondary roles',
   'workers.formSave': 'Save',
+  'workers.install': 'Install',
+  'workers.installing': 'Installing',
   'workers.health.healthy': 'Ready',
   'workers.health.missing': 'Missing',
   'workers.health.unhealthy': 'Unhealthy',
@@ -1743,11 +1800,11 @@ const en: Dict = {
   'workers.modelRefresh': '↻ Refresh model list…',
   'workers.modelSearch': 'Search models…',
   'workers.primary': 'Primary',
-  'workers.register': '+ Register',
+  'workers.register': 'Register',
   'workers.registerTitle': 'Register CLI worker',
   'workers.registered': 'Registered CLIs',
   'workers.registryAgent': 'ACP Registry agent',
-  'workers.registryAgentCount': 'Agents',
+  'workers.registryAgentCount': '{count} Agents',
   'workers.registryAuthRequired': 'Authentication required',
   'workers.registryBundledAtRelease': 'Bundled with this release',
   'workers.registryCheckUpdates': 'Check for updates',

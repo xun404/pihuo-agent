@@ -15,7 +15,7 @@ export function WorkerReadinessBadge(props: {
           {
             cataloged: 'Cataloged',
             preparing: 'Preparing',
-            prepared: 'Prepared',
+            prepared: 'Pending',
             auth_required: 'Auth required',
             ready: 'Ready',
             failed: 'Failed',
@@ -27,7 +27,7 @@ export function WorkerReadinessBadge(props: {
           {
             cataloged: '已收录',
             preparing: '准备中',
-            prepared: '已准备',
+            prepared: '待激活',
             auth_required: '需认证',
             ready: '就绪',
             failed: '失败',
@@ -35,11 +35,38 @@ export function WorkerReadinessBadge(props: {
             update_available: '有更新',
           } as const
         )[ui]
+  // Human-readable hover explanation per status (replaces raw backend code/message).
+  const description =
+    locale === 'en'
+      ? (
+          {
+            cataloged: 'Listed in the registry; not yet installed.',
+            preparing: 'Downloading and verifying the agent package.',
+            prepared: 'Installed; ACP probe and authentication not yet completed.',
+            auth_required: 'Installed; authentication required before use.',
+            ready: 'Installed and reachable.',
+            failed: 'ACP setup failed. Retry the probe.',
+            incompatible: 'Agent is not compatible with this host.',
+            update_available: 'A newer version is available.',
+          } as const
+        )[ui]
+      : (
+          {
+            cataloged: '已在 Registry 收录，尚未安装。',
+            preparing: '正在下载并校验 Agent 安装包。',
+            prepared: '已安装，尚未完成 ACP 探测与认证。',
+            auth_required: '已安装，使用前需要完成认证。',
+            ready: '已安装且可正常连接。',
+            failed: 'ACP 初始化失败，请重新探测。',
+            incompatible: '该 Agent 与当前主机不兼容。',
+            update_available: '有新版本可用。',
+          } as const
+        )[ui]
 
   return (
     <span
       className={`worker-readiness-badge worker-readiness-badge--${ui}`}
-      title={props.code ?? props.nextAction ?? label}
+      title={description}
       data-status={ui}
       data-code={props.code}
       data-next-action={props.nextAction}
