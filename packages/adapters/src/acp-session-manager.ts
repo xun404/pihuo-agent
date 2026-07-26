@@ -318,13 +318,15 @@ type ModelConfigDriver = Pick<AcpSessionDriver, 'configOptions' | 'setConfigOpti
 export async function applyPinnedModelOrThrow(
   driver: ModelConfigDriver,
   configuredModel: string | undefined,
+  agentSessionId?: string,
+  configOptions: SessionConfigOption[] = driver.configOptions,
 ): Promise<void> {
   const model = configuredModel?.trim()
   if (!model) return
 
-  const modelOptions = extractModelOptions(driver.configOptions)
+  const modelOptions = extractModelOptions(configOptions)
   const declared = modelOptions.ok && modelOptions.models.some((option) => option.modelId === model)
-  const configOption = driver.configOptions.find(
+  const configOption = configOptions.find(
     (option) =>
       option.type === 'select' &&
       'options' in option &&
@@ -344,7 +346,7 @@ export async function applyPinnedModelOrThrow(
   }
 
   try {
-    await driver.setConfigOption(configOption.id, model)
+    await driver.setConfigOption(configOption.id, model, agentSessionId)
   } catch (cause) {
     throw new AcpSessionRuntimeError(
       'model_configuration_failed',
@@ -385,6 +387,16 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647
 /** validating = claimed for eligibility/setup before running (prevents double-claim races) */
 type EntryState = 'starting' | 'idle' | 'validating' | 'running' | 'closing' | 'closed' | 'broken'
 
+interface SharedProcessGroup {
+  proc: ChildProcess
+  driver?: AcpSessionDriver
+  isolatedHome?: string
+  entries: Set<LiveEntry>
+  closed?: boolean
+  sigkillScheduled?: boolean
+  evicting?: boolean
+}
+
 interface LiveEntry {
   key: SessionReuseKey
   state: EntryState
@@ -407,9 +419,18 @@ interface LiveEntry {
   _closing?: boolean
   _closeApplied?: boolean
   isolatedHome?: string
-  /** True when this entry shares a child process owned by another entry.
-   * closeEntry/evictEntry must NOT kill the shared process — the owner
-   * manages its lifecycle. */
+  /**
+   * Resolves after a cold start succeeds or its failed entry is fully cleaned
+   * up. Waiters must reselect a live sibling after awaiting this gate.
+   */
+  _processReady?: Promise<void>
+  /** Reference-counted ownership for a process/driver shared by role entries. */
+  _processGroup?: SharedProcessGroup
+  /**
+   * Compatibility marker for entries created on an existing process. The
+   * process group owns termination; without a group, this prevents a shared
+   * entry from closing the common transport.
+   */
   _sharesProcess?: boolean
 }
 
@@ -878,10 +899,10 @@ export class AcpSessionManager {
     this.entries.set(keyStr, entry)
 
     proc.on('exit', () => {
-      this.evictEntry(keyStr, entry)
+      this.evictProcessGroup(entry)
     })
     proc.on('error', () => {
-      this.evictEntry(keyStr, entry)
+      this.evictProcessGroup(entry)
     })
 
     try {
@@ -898,16 +919,15 @@ export class AcpSessionManager {
       const cap = driver.capabilities
       entry.capabilities = cap
 
-      if (disposition === 'resume') {
-        await driver.sessionResume(agentSessionId)
-      } else {
-        await driver.sessionLoad(agentSessionId)
-      }
+      const sessionResponse =
+        disposition === 'resume'
+          ? await driver.sessionResume(agentSessionId)
+          : await driver.sessionLoad(agentSessionId)
       this.assertEntryActive(keyStr, entry)
 
       entry.agentSessionId = agentSessionId
-      entry.configOptions = [...driver.configOptions]
-      await applyPinnedModelOrThrow(driver, config.model)
+      entry.configOptions = [...(sessionResponse.configOptions ?? [])]
+      await applyPinnedModelOrThrow(driver, config.model, agentSessionId, entry.configOptions)
       this.assertEntryActive(keyStr, entry)
 
       try {
@@ -971,9 +991,11 @@ export class AcpSessionManager {
     //    Fix: before spawning, look for an EXISTING live entry on the same
     //    worker + cwd and reuse its child process — just open a new ACP session
     //    on its driver. One child process, many sessions.
-    const sibling = this.findSharableEntry(key)
+    let sibling = this.findSharableEntry(key)
     if (sibling) {
-      return this.createSessionOnExistingEntry(req, sibling)
+      await sibling._processReady
+      sibling = this.findSharableEntry(key)
+      if (sibling?.driver) return this.createSessionOnExistingEntry(req, sibling)
     }
 
     let command: string
@@ -1008,6 +1030,21 @@ export class AcpSessionManager {
     })
 
     const keyStr = reuseKeyToString(key)
+    let processReadyResolved = false
+    let resolveProcessReady!: () => void
+    const processReady = new Promise<void>((resolve) => {
+      resolveProcessReady = resolve
+    })
+    const processGroup: SharedProcessGroup = {
+      proc,
+      isolatedHome,
+      entries: new Set(),
+    }
+    const markProcessReady = () => {
+      if (processReadyResolved) return
+      processReadyResolved = true
+      resolveProcessReady()
+    }
     const entry: LiveEntry = {
       key,
       state: 'starting',
@@ -1025,14 +1062,17 @@ export class AcpSessionManager {
       sessionConfig: config,
       workerKind: kind,
       isolatedHome,
+      _processReady: processReady,
+      _processGroup: processGroup,
     }
+    processGroup.entries.add(entry)
     this.entries.set(keyStr, entry)
 
     proc.on('exit', () => {
-      this.evictEntry(keyStr, entry)
+      this.evictProcessGroup(entry)
     })
     proc.on('error', () => {
-      this.evictEntry(keyStr, entry)
+      this.evictProcessGroup(entry)
     })
 
     let catalogCommitted = false
@@ -1043,6 +1083,7 @@ export class AcpSessionManager {
         Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>,
       )
       entry.driver = driver
+      processGroup.driver = driver
       this.assertEntryActive(keyStr, entry)
 
       await driver.initialize()
@@ -1053,8 +1094,8 @@ export class AcpSessionManager {
       const newResp = await driver.sessionNew()
       entry.agentSessionId = newResp.sessionId
       this.assertEntryActive(keyStr, entry)
-      entry.configOptions = [...driver.configOptions]
-      await applyPinnedModelOrThrow(driver, config.model)
+      entry.configOptions = [...(newResp.configOptions ?? [])]
+      await applyPinnedModelOrThrow(driver, config.model, newResp.sessionId, entry.configOptions)
       this.assertEntryActive(keyStr, entry)
 
       try {
@@ -1092,6 +1133,8 @@ export class AcpSessionManager {
 
       entry.state = 'idle'
       entry.lastUsedAt = Date.now()
+      markProcessReady()
+      entry._processReady = undefined
       this.activity('session_created', {
         summary: entry.summary,
         workerId: key.workerId,
@@ -1103,6 +1146,8 @@ export class AcpSessionManager {
     } catch (e) {
       if (!catalogCommitted) await this.discardUncommittedSession(entry)
       this.failEntry(keyStr, entry, e instanceof Error ? e.message : String(e))
+      markProcessReady()
+      entry._processReady = undefined
       throw e
     }
   }
@@ -1151,7 +1196,7 @@ export class AcpSessionManager {
       if (
         entry.key.workerId === key.workerId &&
         entry.key.canonicalCwd === key.canonicalCwd &&
-        entry.driver &&
+        (entry.driver || entry._processReady) &&
         !entry._closing &&
         entry.state !== 'closing' &&
         entry.state !== 'closed' &&
@@ -1177,12 +1222,21 @@ export class AcpSessionManager {
   ): Promise<EnqueuePromptResult> {
     const { key, config, task, binding } = req
     const keyStr = reuseKeyToString(key)
+    const processGroup =
+      sibling._processGroup ??
+      ({
+        proc: sibling.proc,
+        driver: sibling.driver,
+        isolatedHome: sibling.isolatedHome,
+        entries: new Set([sibling]),
+      } satisfies SharedProcessGroup)
+    sibling._processGroup = processGroup
 
     // Create our own entry that points at the sibling's process/driver.
     const entry: LiveEntry = {
       key,
       state: 'starting',
-      proc: sibling.proc, // shared process — do NOT kill on evict
+      proc: sibling.proc, // Shared process; the process group owns termination.
       driver: undefined!,
       agentSessionId: undefined!,
       capabilities: sibling.capabilities,
@@ -1197,11 +1251,13 @@ export class AcpSessionManager {
       workerKind: sibling.workerKind,
       isolatedHome: undefined,
       _sharesProcess: true,
+      _processGroup: processGroup,
     }
+    processGroup.entries.add(entry)
     this.entries.set(keyStr, entry)
 
-    // Don't register proc.on('exit') — the sibling owns the process lifecycle.
-    // But DO react if the sibling's entry dies: mark ours broken.
+    // The existing process listener already evicts the whole group, so do not
+    // register a duplicate. The source sibling must remain live during setup.
     const siblingKeyStr = reuseKeyToString(sibling.key)
     const checkAlive = () => {
       if (!this.entries.has(siblingKeyStr) || sibling._closing) {
@@ -1209,7 +1265,6 @@ export class AcpSessionManager {
       }
     }
 
-    let catalogCommitted = false
     try {
       // Reuse the sibling's driver — it's the same JSON-RPC connection.
       entry.driver = sibling.driver
@@ -1221,8 +1276,13 @@ export class AcpSessionManager {
       entry.agentSessionId = newResp.sessionId
       checkAlive()
       this.assertEntryActive(keyStr, entry)
-      entry.configOptions = [...sibling.driver.configOptions]
-      await applyPinnedModelOrThrow(sibling.driver, config.model)
+      entry.configOptions = [...(newResp.configOptions ?? [])]
+      await applyPinnedModelOrThrow(
+        sibling.driver,
+        config.model,
+        newResp.sessionId,
+        entry.configOptions,
+      )
       this.assertEntryActive(keyStr, entry)
 
       try {
@@ -1248,7 +1308,6 @@ export class AcpSessionManager {
           createdAt: new Date().toISOString(),
           lastUsedAt: new Date().toISOString(),
         })
-        catalogCommitted = Boolean(this.catalogPort)
       } catch (cause) {
         throw new AcpSessionRuntimeError(
           'catalog_repair_required',
@@ -1264,10 +1323,9 @@ export class AcpSessionManager {
 
       return this.executePrompt(entry, task, binding, false, 'new')
     } catch (e) {
-      if (!catalogCommitted) {
-        // Don't discard via driver — the session belongs to the shared process.
-        // Just clear our entry; the sibling keeps its own session.
-      }
+      // Do not close the shared driver or process for an uncommitted role.
+      // failEntry removes only this role's live reference, leaving sibling
+      // sessions on the shared process undisturbed.
       this.failEntry(keyStr, entry, e instanceof Error ? e.message : String(e))
       throw e
     }
@@ -1397,7 +1455,7 @@ export class AcpSessionManager {
       if (binding.signal) {
         onAbort = () => {
           try {
-            entry.driver?.cancel().catch(() => {})
+            entry.driver?.cancel(entry.agentSessionId).catch(() => {})
           } catch {}
           abortEvictionTimer = setTimeout(() => {
             if (entry.currentBinding === binding) {
@@ -1406,7 +1464,7 @@ export class AcpSessionManager {
               else this.closeEntry(entry)
               resolveAbortResult?.({
                 ok: false,
-                output: entry.driver?.partialOutput ?? '',
+                output: entry.driver?.partialOutputFor(binding) ?? '',
                 stopReason: 'cancelled',
                 error: 'Cancelled',
               })
@@ -1423,7 +1481,7 @@ export class AcpSessionManager {
         }
       }
 
-      const promptResult = entry.driver.prompt(task, binding)
+      const promptResult = entry.driver.prompt(task, binding, entry.agentSessionId)
       const result: PromptResult = binding.signal
         ? await Promise.race([promptResult, abortResult])
         : await promptResult
@@ -1480,10 +1538,10 @@ export class AcpSessionManager {
           result.error ?? '(no detail)',
           { jobId: binding.jobId, outputLength: result.output?.length ?? 0 },
         )
-        // A request/transport failure has no protocol stop reason. Do not put
-        // this connection back into the reusable pool; keep the durable
-        // catalog mapping so the next dispatch can recover it normally.
-        this.evictEntry(keyStr, entry)
+        // A request/transport failure has no protocol stop reason, so the
+        // shared connection is unusable. Evict every hosted session and stale
+        // their durable mappings instead of attempting recovery on it.
+        this.evictProcessGroup(entry)
         return {
           ok: false,
           output: result.output,
@@ -1941,7 +1999,7 @@ export class AcpSessionManager {
       if (e.currentBinding) {
         needsGracePeriod = true
         try {
-          e.driver?.cancel().catch(() => {})
+          e.driver?.cancel(e.agentSessionId).catch(() => {})
         } catch {}
       }
     }
@@ -1978,21 +2036,35 @@ export class AcpSessionManager {
     })
     this.rejectQueued(entry, new Error('ACP session evicted'))
     this.closeEntry(entry)
-    // When the live entry's child process exits (the common cause of eviction),
-    // mark the durable catalog record stale so the NEXT dispatch for this reuse
-    // key does NOT try to resume a dead session — it builds a fresh one instead.
-    // Without this, a dead child leaves a 'ready' catalog record pointing at a
-    // session the agent no longer holds, and every subsequent dispatch for that
-    // member fails with "ACP connection closed" until a manual reset.
-    // Skip for shared-process entries — their catalog record is independent and
-    // the process owner manages staleness.
-    if (this.reuseEnabled && entry.agentSessionId && !entry._sharesProcess) {
+    // Eviction means this role's remote context may no longer be trustworthy
+    // after process exit, cancellation races, or another uncertain state. Mark
+    // its durable mapping stale so later dispatch cannot resume that context and
+    // instead enters the normal resettable stale-session path. Every role has
+    // its own catalog record even when several roles share one process.
+    if (this.reuseEnabled && entry.agentSessionId) {
       try {
         this.markCatalogStale(this.computeKeyDigest(entry.key), 'process_exit')
       } catch {
         // Catalog storage hiccup — non-fatal; the record will be retried and
         // fail on next dispatch, triggering the normal stale path.
       }
+    }
+  }
+
+  /**
+   * Invalidates every logical session after process exit or transport failure.
+   * Session-local cancellation continues to use evictEntry instead.
+   */
+  private evictProcessGroup(entry: LiveEntry): void {
+    const processGroup = entry._processGroup
+    if (!processGroup) {
+      this.evictEntry(reuseKeyToString(entry.key), entry)
+      return
+    }
+    if (processGroup.evicting) return
+    processGroup.evicting = true
+    for (const dependent of [...processGroup.entries]) {
+      this.evictEntry(reuseKeyToString(dependent.key), dependent)
     }
   }
 
@@ -2012,9 +2084,15 @@ export class AcpSessionManager {
   private closeEntry(entry: LiveEntry): void {
     if (entry._closeApplied) {
       // The transport may be assigned after a concurrent close won startup.
-      try {
-        entry.driver?.close()
-      } catch {}
+      if (entry._processGroup?.closed) {
+        try {
+          ;(entry._processGroup.driver ?? entry.driver)?.close()
+        } catch {}
+      } else if (!entry._processGroup && !entry._sharesProcess) {
+        try {
+          entry.driver?.close()
+        } catch {}
+      }
       entry.state = 'closed'
       return
     }
@@ -2028,6 +2106,47 @@ export class AcpSessionManager {
       routerSessionId: entry.key.routerSessionId,
       state: previousState,
     })
+    const processGroup = entry._processGroup
+    if (processGroup) {
+      processGroup.entries.delete(entry)
+      if (processGroup.entries.size > 0) {
+        entry.state = 'closed'
+        return
+      }
+      if (!processGroup.closed) {
+        processGroup.closed = true
+        try {
+          ;(processGroup.driver ?? entry.driver)?.close()
+        } catch {}
+        if (processGroup.isolatedHome) {
+          try {
+            rmSync(processGroup.isolatedHome, { recursive: true, force: true })
+          } catch {}
+        }
+        if (processGroup.proc.exitCode === null && processGroup.proc.signalCode === null) {
+          try {
+            killProcessGroup(processGroup.proc, 'SIGTERM')
+          } catch {}
+        }
+        if (!processGroup.sigkillScheduled) {
+          processGroup.sigkillScheduled = true
+          const killTimer = setTimeout(() => {
+            try {
+              killProcessGroup(processGroup.proc, 'SIGKILL')
+            } catch {}
+          }, 2000)
+          killTimer.unref?.()
+        }
+      }
+      entry.state = 'closed'
+      return
+    }
+    // Compatibility for entries created before process-group ownership was
+    // attached: a shared entry must never close the common transport.
+    if (entry._sharesProcess) {
+      entry.state = 'closed'
+      return
+    }
     try {
       entry.driver?.close()
     } catch {}
@@ -2035,12 +2154,6 @@ export class AcpSessionManager {
       try {
         rmSync(entry.isolatedHome, { recursive: true, force: true })
       } catch {}
-    }
-    // Shared-process entries must NOT kill the child — the owning entry
-    // manages its lifecycle. Only close the driver-side session reference.
-    if (entry._sharesProcess) {
-      entry.state = 'closed'
-      return
     }
     if (entry.proc) {
       if (entry.proc.exitCode === null && entry.proc.signalCode === null) {

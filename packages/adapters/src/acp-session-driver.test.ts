@@ -43,10 +43,15 @@ interface FakeAgentOpts {
   throwOnNew?: string
   throwOnResume?: string
   throwOnLoad?: string
-  onPrompt?: (sid: string) => { stopReason: TestStopReason; text?: string }
+  onPrompt?: (
+    sid: string,
+  ) =>
+    | { stopReason: TestStopReason; text?: string }
+    | Promise<{ stopReason: TestStopReason; text?: string }>
   sendUpdateOnPrompt?: (sid: string) => Array<{ text: string }>
   onClose?: (sid: string) => void
   onDelete?: (sid: string) => void
+  onCancel?: (sid: string) => void
   onLogout?: () => void
 }
 
@@ -94,7 +99,7 @@ function createFakeAgent(opts: FakeAgentOpts = {}): AgentApp {
     .onRequest(methods.agent.session.prompt, async (ctx) => {
       const sid = ctx.params.sessionId
       if (opts.onPrompt) {
-        const r = opts.onPrompt(sid)
+        const r = await opts.onPrompt(sid)
         if (r.text) {
           await ctx.client.notify(methods.client.session.update, {
             sessionId: sid,
@@ -133,7 +138,9 @@ function createFakeAgent(opts: FakeAgentOpts = {}): AgentApp {
       opts.onLogout?.()
       return {}
     })
-    .onNotification(methods.agent.session.cancel, async () => {})
+    .onNotification(methods.agent.session.cancel, async (ctx) => {
+      opts.onCancel?.(ctx.params.sessionId)
+    })
 }
 
 async function setupDriver(opts: FakeAgentOpts = {}): Promise<{
@@ -225,6 +232,58 @@ describe('AcpSessionDriver — live reuse', () => {
     const r2 = await driver.prompt('task-2', makeBinding({ jobId: 'j2' }))
     assert.ok(r2.ok)
     assert.equal(driver.agentSessionId, 'sid-reuse')
+  })
+
+  it('routes a prompt to its requested session after another session is created', async () => {
+    const promptedSessionIds: string[] = []
+    const { driver } = await setupDriver({
+      sessionIds: ['sid-writer', 'sid-reader'],
+      onPrompt: (sessionId) => {
+        promptedSessionIds.push(sessionId)
+        return { stopReason: 'end_turn', text: `reply-from-${sessionId}` }
+      },
+    })
+
+    await driver.sessionNew()
+    await driver.sessionNew()
+
+    const writer = await driver.prompt(
+      'writer follow-up',
+      makeBinding({ jobId: 'writer-follow-up' }),
+      'sid-writer',
+    )
+    const reader = await driver.prompt(
+      'reader follow-up',
+      makeBinding({ jobId: 'reader-follow-up' }),
+      'sid-reader',
+    )
+
+    assert.deepEqual(promptedSessionIds, ['sid-writer', 'sid-reader'])
+    assert.equal(writer.output, 'reply-from-sid-writer')
+    assert.equal(reader.output, 'reply-from-sid-reader')
+  })
+
+  it('serializes concurrent prompts across sessions on one driver', async () => {
+    const { driver } = await setupDriver({
+      sessionIds: ['sid-writer', 'sid-reader'],
+      onPrompt: async (sessionId) => {
+        if (sessionId === 'sid-writer') {
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+        return { stopReason: 'end_turn', text: `reply-from-${sessionId}` }
+      },
+    })
+
+    await driver.sessionNew()
+    await driver.sessionNew()
+
+    const [writer, reader] = await Promise.all([
+      driver.prompt('writer follow-up', makeBinding({ jobId: 'writer' }), 'sid-writer'),
+      driver.prompt('reader follow-up', makeBinding({ jobId: 'reader' }), 'sid-reader'),
+    ])
+
+    assert.equal(writer.output, 'reply-from-sid-writer')
+    assert.equal(reader.output, 'reply-from-sid-reader')
   })
 })
 
@@ -465,6 +524,21 @@ describe('AcpSessionDriver — cancel', () => {
     await driver.cancel()
     assert.ok(cancelReceived, 'cancel notification should have been received')
 
+    driver.close()
+  })
+
+  it('cancels the requested session after another shared session is created', async () => {
+    const cancelledSessionIds: string[] = []
+    const { driver } = await setupDriver({
+      sessionIds: ['sid-writer', 'sid-reader'],
+      onCancel: (sessionId) => cancelledSessionIds.push(sessionId),
+    })
+    await driver.sessionNew()
+    await driver.sessionNew()
+
+    await driver.cancel('sid-writer')
+
+    assert.deepEqual(cancelledSessionIds, ['sid-writer'])
     driver.close()
   })
 })

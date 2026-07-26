@@ -9,7 +9,7 @@ import {
 } from './acp-session-manager.js'
 import * as sessionManagerModule from './acp-session-manager.js'
 import type { SessionReuseKey, SessionEntryConfig } from './acp-session-manager.js'
-import { AcpSessionDriver } from './acp-session-driver.js'
+import { AcpSessionDriver, type PromptBinding } from './acp-session-driver.js'
 
 const SAFE_CWD = process.cwd()
 
@@ -709,6 +709,289 @@ describe('session reuse', () => {
     assert.equal(manager.getDebugInfo().entries, 1)
   })
 
+  it('keeps role prompts on distinct ACP sessions while sharing one worker process', async () => {
+    const originalFactory = AcpSessionDriver.fromChildProcess
+    let factoryCalls = 0
+    let driverCloseCalls = 0
+    let activeSessionId: string | undefined
+    let sessionNumber = 0
+    const promptedSessionIds: string[] = []
+    ;(AcpSessionDriver as any).fromChildProcess = async () => {
+      factoryCalls += 1
+      return {
+        initialize: async () => ({ agentCapabilities: {} }),
+        get capabilities() {
+          return {}
+        },
+        sessionNew: async () => {
+          activeSessionId = `role-session-${++sessionNumber}`
+          return { sessionId: activeSessionId, configOptions: [] }
+        },
+        get configOptions() {
+          return []
+        },
+        hasCapability: () => false,
+        prompt: async (_task: string, _binding: PromptBinding, requestedSessionId?: string) => {
+          const sessionId = requestedSessionId ?? activeSessionId
+          promptedSessionIds.push(sessionId ?? 'missing')
+          return { ok: true, output: sessionId, stopReason: 'end_turn' }
+        },
+        cancel: async () => {},
+        close: () => {
+          driverCloseCalls += 1
+        },
+        dispose: () => {},
+      }
+    }
+
+    const cfg = mkConfig({
+      command: process.execPath,
+      args: ['-e', 'setInterval(() => {}, 1000)'],
+      model: undefined,
+      env: {},
+    })
+    const writerKey = mkKey({
+      workerId: 'shared-worker',
+      teamMemberId: 'writer',
+      executionFingerprint: computeExecutionFingerprint(cfg),
+    })
+    const readerKey = mkKey({
+      workerId: 'shared-worker',
+      teamMemberId: 'reader',
+      executionFingerprint: computeExecutionFingerprint(cfg),
+    })
+
+    try {
+      const writerFirst = await manager.enqueuePrompt({
+        key: writerKey,
+        config: cfg,
+        kind: 'custom',
+        task: 'write essay',
+        binding: { jobId: 'writer-first', sequence: 0 },
+      })
+      const readerFirst = await manager.enqueuePrompt({
+        key: readerKey,
+        config: cfg,
+        kind: 'custom',
+        task: 'read essay',
+        binding: { jobId: 'reader-first', sequence: 0 },
+      })
+      const [writerFollowUp, readerFollowUp] = await Promise.all([
+        manager.enqueuePrompt({
+          key: writerKey,
+          config: cfg,
+          kind: 'custom',
+          task: 'what was your previous question?',
+          binding: { jobId: 'writer-follow-up', sequence: 0 },
+        }),
+        manager.enqueuePrompt({
+          key: readerKey,
+          config: cfg,
+          kind: 'custom',
+          task: 'what was your previous question?',
+          binding: { jobId: 'reader-follow-up', sequence: 0 },
+        }),
+      ])
+
+      assert.equal(writerFirst.output, 'role-session-1')
+      assert.equal(readerFirst.output, 'role-session-2')
+      assert.equal(writerFollowUp.output, 'role-session-1')
+      assert.equal(readerFollowUp.output, 'role-session-2')
+      assert.deepEqual(promptedSessionIds, [
+        'role-session-1',
+        'role-session-2',
+        'role-session-1',
+        'role-session-2',
+      ])
+      assert.equal(factoryCalls, 1)
+      assert.equal(manager.getDebugInfo().entries, 2)
+
+      manager.closeLiveByReuseKey(writerKey)
+      const readerAfterOwnerClose = await manager.enqueuePrompt({
+        key: readerKey,
+        config: cfg,
+        kind: 'custom',
+        task: 'reader still alive',
+        binding: { jobId: 'reader-after-owner-close', sequence: 0 },
+      })
+      assert.equal(driverCloseCalls, 0)
+      assert.equal(readerAfterOwnerClose.output, 'role-session-2')
+    } finally {
+      await manager.closeAll()
+      ;(AcpSessionDriver as any).fromChildProcess = originalFactory
+    }
+  })
+
+  it('shares one worker process across simultaneous cold role starts', async () => {
+    const originalFactory = AcpSessionDriver.fromChildProcess
+    let factoryCalls = 0
+    let sessionNumber = 0
+    ;(AcpSessionDriver as any).fromChildProcess = async () => {
+      factoryCalls += 1
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      let activeSessionId: string | undefined
+      return {
+        initialize: async () => ({ agentCapabilities: {} }),
+        get capabilities() {
+          return {}
+        },
+        sessionNew: async () => {
+          activeSessionId = `cold-session-${++sessionNumber}`
+          return { sessionId: activeSessionId, configOptions: [] }
+        },
+        get configOptions() {
+          return []
+        },
+        hasCapability: () => false,
+        prompt: async (_task: string, _binding: PromptBinding, requestedSessionId?: string) => ({
+          ok: true,
+          output: requestedSessionId ?? activeSessionId,
+          stopReason: 'end_turn',
+        }),
+        cancel: async () => {},
+        close: () => {},
+        dispose: () => {},
+      }
+    }
+
+    const cfg = mkConfig({
+      command: process.execPath,
+      args: ['-e', 'setInterval(() => {}, 1000)'],
+      model: undefined,
+      env: {},
+    })
+    const writerKey = mkKey({
+      workerId: 'cold-shared-worker',
+      teamMemberId: 'writer',
+      executionFingerprint: computeExecutionFingerprint(cfg),
+    })
+    const readerKey = mkKey({
+      workerId: 'cold-shared-worker',
+      teamMemberId: 'reader',
+      executionFingerprint: computeExecutionFingerprint(cfg),
+    })
+
+    try {
+      const [writer, reader] = await Promise.all([
+        manager.enqueuePrompt({
+          key: writerKey,
+          config: cfg,
+          kind: 'custom',
+          task: 'write essay',
+          binding: { jobId: 'cold-writer', sequence: 0 },
+        }),
+        manager.enqueuePrompt({
+          key: readerKey,
+          config: cfg,
+          kind: 'custom',
+          task: 'read essay',
+          binding: { jobId: 'cold-reader', sequence: 0 },
+        }),
+      ])
+
+      assert.equal(factoryCalls, 1)
+      assert.notEqual(writer.output, reader.output)
+      assert.equal(manager.getDebugInfo().entries, 2)
+    } finally {
+      await manager.closeAll()
+      ;(AcpSessionDriver as any).fromChildProcess = originalFactory
+    }
+  })
+
+  it('releases a failed cold start before a waiting role spawns a replacement', async () => {
+    const originalFactory = AcpSessionDriver.fromChildProcess
+    let factoryCalls = 0
+    let failedDriverClosed = false
+    let replacementStartedAfterCleanup = false
+    ;(AcpSessionDriver as any).fromChildProcess = async () => {
+      factoryCalls += 1
+      if (factoryCalls === 1) {
+        return {
+          initialize: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20))
+            throw new Error('initialization failed')
+          },
+          sessionNew: async () => {
+            throw new Error('failed driver must not be reused')
+          },
+          hasCapability: () => false,
+          close: () => {
+            failedDriverClosed = true
+          },
+          dispose: () => {},
+        }
+      }
+      replacementStartedAfterCleanup = failedDriverClosed
+      let activeSessionId: string | undefined
+      return {
+        initialize: async () => ({ agentCapabilities: {} }),
+        get capabilities() {
+          return {}
+        },
+        sessionNew: async () => {
+          activeSessionId = 'replacement-session'
+          return { sessionId: activeSessionId, configOptions: [] }
+        },
+        get configOptions() {
+          return []
+        },
+        hasCapability: () => false,
+        prompt: async () => ({
+          ok: true,
+          output: activeSessionId,
+          stopReason: 'end_turn',
+        }),
+        cancel: async () => {},
+        close: () => {},
+        dispose: () => {},
+      }
+    }
+
+    const cfg = mkConfig({
+      command: process.execPath,
+      args: ['-e', 'setInterval(() => {}, 1000)'],
+      model: undefined,
+      env: {},
+    })
+    const firstKey = mkKey({
+      workerId: 'cold-failure-worker',
+      teamMemberId: 'first',
+      executionFingerprint: computeExecutionFingerprint(cfg),
+    })
+    const waitingKey = mkKey({
+      workerId: 'cold-failure-worker',
+      teamMemberId: 'waiting',
+      executionFingerprint: computeExecutionFingerprint(cfg),
+    })
+
+    try {
+      const results = await Promise.allSettled([
+        manager.enqueuePrompt({
+          key: firstKey,
+          config: cfg,
+          kind: 'custom',
+          task: 'first',
+          binding: { jobId: 'cold-failure-first', sequence: 0 },
+        }),
+        manager.enqueuePrompt({
+          key: waitingKey,
+          config: cfg,
+          kind: 'custom',
+          task: 'waiting',
+          binding: { jobId: 'cold-failure-waiting', sequence: 0 },
+        }),
+      ])
+
+      assert.equal(results[0].status, 'rejected')
+      assert.equal(results[1].status, 'fulfilled')
+      assert.equal(factoryCalls, 2)
+      assert.equal(replacementStartedAfterCleanup, true)
+    } finally {
+      await manager.closeAll()
+      ;(AcpSessionDriver as any).fromChildProcess = originalFactory
+    }
+  })
+
   it('evicts a live connection after a transport-level prompt failure', async () => {
     const key = mkKey()
     const entry = makeFakeIdleEntry(key)
@@ -735,6 +1018,38 @@ describe('session reuse', () => {
     assert.equal(result.error, 'ACP agent failed while processing the task.')
     assert.equal(manager.getDebugInfo().entries, 0)
     assert.equal(closed, 1)
+  })
+
+  it('evicts every shared role after a common transport failure', async () => {
+    const ownerKey = mkKey({ workerId: 'transport-worker', teamMemberId: 'owner' })
+    const siblingKey = mkKey({ workerId: 'transport-worker', teamMemberId: 'sibling' })
+    const owner = makeFakeIdleEntry(ownerKey)
+    const sibling = makeFakeIdleEntry(siblingKey)
+    const driver = owner.driver
+    driver.prompt = async () => ({ ok: false, output: '', error: 'connection closed' })
+    sibling.driver = driver
+    sibling.proc = owner.proc
+    sibling._sharesProcess = true
+    const processGroup = {
+      proc: owner.proc,
+      driver,
+      entries: new Set([owner, sibling]),
+    }
+    owner._processGroup = processGroup
+    sibling._processGroup = processGroup
+    ;(manager as any).entries.set(keyToString(ownerKey), owner)
+    ;(manager as any).entries.set(keyToString(siblingKey), sibling)
+
+    const result = await manager.enqueuePrompt({
+      key: ownerKey,
+      config: mkConfig(),
+      kind: 'custom',
+      task: 'trigger transport failure',
+      binding: { jobId: 'transport-failure', sequence: 0 },
+    })
+
+    assert.equal(result.ok, false)
+    assert.equal(manager.getDebugInfo().entries, 0)
   })
 })
 
@@ -1076,6 +1391,7 @@ describe('queued prompt abort', () => {
     if (timer) clearInterval(timer)
     const entry = makeFakeIdleEntry(key)
     entry.driver.partialOutput = 'partial before cancellation'
+    entry.driver.partialOutputFor = () => 'partial before cancellation'
     entry.driver.prompt = () => new Promise(() => {})
     ;(mgr as any).entries.set(keyToString(key), entry)
 
@@ -1101,6 +1417,33 @@ describe('queued prompt abort', () => {
     assert.equal(result.error, 'Cancelled')
     assert.equal(result.output, 'partial before cancellation')
     assert.equal(mgr.getDebugInfo().entries, 0)
+  })
+
+  it('does not return sibling partial output when cancelling a driver-queued role', async () => {
+    const key = mkKey({ teamMemberId: 'queued-reader' })
+    const mgr = new AcpSessionManager({ cancelGraceMs: 10 })
+    const timer = (mgr as any).idleTimer as ReturnType<typeof setInterval> | null
+    if (timer) clearInterval(timer)
+    const entry = makeFakeIdleEntry(key)
+    entry.driver.partialOutput = 'private writer output'
+    entry.driver.partialOutputFor = () => ''
+    entry.driver.prompt = () => new Promise(() => {})
+    ;(mgr as any).entries.set(keyToString(key), entry)
+
+    const abort = new AbortController()
+    const pending = (mgr as any).executePrompt(
+      entry,
+      'reader task',
+      { jobId: 'queued-reader', sequence: 0, signal: abort.signal },
+      true,
+      'live_reused',
+    )
+    abort.abort()
+
+    const result = await pending
+    assert.equal(result.ok, false)
+    assert.equal(result.error, 'Cancelled')
+    assert.equal(result.output, '')
   })
 
   it('isolates session-ready observer failures from the agent prompt', async () => {
@@ -1611,6 +1954,22 @@ describe('closeLiveByReuseKey', () => {
       'keyA2 (same session) should remain',
     )
     assert.ok((manager as any).entries.has(keyToString(keyB)), 'keyB should remain')
+  })
+
+  it('does not close the common driver when removing a shared-process entry', () => {
+    const key = mkKey({ teamMemberId: 'shared-role' })
+    const entry = makeFakeIdleEntry(key)
+    let driverCloseCalls = 0
+    entry._sharesProcess = true
+    entry.driver.close = () => {
+      driverCloseCalls += 1
+    }
+    ;(manager as any).entries.set(keyToString(key), entry)
+
+    manager.closeLiveByReuseKey(key)
+
+    assert.equal(driverCloseCalls, 0)
+    assert.equal(manager.getDebugInfo().entries, 0)
   })
 
   it('rejects queued prompts for the closed entry only', () => {
@@ -2371,6 +2730,64 @@ describe('pinned model transaction boundary', () => {
         return true
       },
     )
+  })
+
+  it('applies a pinned model to the requested shared session', async () => {
+    let configuredSessionId: string | undefined
+    const driver = {
+      configOptions: [
+        {
+          id: 'model',
+          type: 'select',
+          name: 'Model',
+          currentValue: 'm1',
+          options: [{ value: 'm1', name: 'm1' }],
+        },
+      ],
+      setConfigOption: async (_configId: string, _value: string, sessionId?: string) => {
+        configuredSessionId = sessionId
+      },
+    }
+
+    await (sessionManagerModule as any).applyPinnedModelOrThrow(driver, 'm1', 'sid-writer')
+
+    assert.equal(configuredSessionId, 'sid-writer')
+  })
+
+  it('uses the requested session options when a sibling changed driver-global options', async () => {
+    const configured: string[] = []
+    const driver = {
+      configOptions: [
+        {
+          id: 'model',
+          type: 'select',
+          name: 'Model',
+          currentValue: 'reader-model',
+          options: [{ value: 'reader-model', name: 'reader-model' }],
+        },
+      ],
+      setConfigOption: async (_configId: string, value: string, sessionId?: string) => {
+        configured.push(`${sessionId}:${value}`)
+      },
+    }
+    const writerOptions = [
+      {
+        id: 'model',
+        type: 'select',
+        name: 'Model',
+        currentValue: 'writer-model',
+        options: [{ value: 'writer-model', name: 'writer-model' }],
+      },
+    ]
+
+    await (sessionManagerModule as any).applyPinnedModelOrThrow(
+      driver,
+      'writer-model',
+      'sid-writer',
+      writerOptions,
+    )
+
+    assert.deepEqual(configured, ['sid-writer:writer-model'])
   })
 
   it('deletes an uncommitted remote session when catalog upsert fails', async () => {

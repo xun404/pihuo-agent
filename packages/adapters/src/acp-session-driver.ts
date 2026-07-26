@@ -148,10 +148,30 @@ export class AcpSessionDriver {
   private _cwd: string
   private _outputAcc: string = ''
   private permissionError: AcpSessionRuntimeError | null = null
+  private operationTail: Promise<void> = Promise.resolve()
 
   private constructor(app: ClientApp, cwd: string) {
     this.app = app
     this._cwd = cwd
+  }
+
+  /**
+   * ACP agents commonly process one session operation at a time. A shared
+   * driver therefore needs one FIFO across all hosted sessions, not one queue
+   * per LiveEntry, otherwise mutable notification/binding state can overlap.
+   */
+  private async runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.operationTail
+    let release!: () => void
+    this.operationTail = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await previous
+    try {
+      return await operation()
+    } finally {
+      release()
+    }
   }
 
   static async connect(cwd: string, transportStream: Stream): Promise<AcpSessionDriver> {
@@ -269,6 +289,11 @@ export class AcpSessionDriver {
     return this._outputAcc
   }
 
+  /** Prevents a queued role from observing the running sibling's partial output. */
+  partialOutputFor(binding: PromptBinding): string {
+    return this.currentBinding === binding ? this._outputAcc : ''
+  }
+
   /** Client capabilities actually implemented by this driver (not future work). */
   static buildClientCapabilities(opts: InitializeDriverOptions = {}): ClientCapabilities {
     const caps: ClientCapabilities = {
@@ -310,55 +335,85 @@ export class AcpSessionDriver {
   }
 
   async sessionNew(): Promise<NewSessionResponse> {
-    const response = await this.agent.request(methods.agent.session.new, {
-      cwd: this._cwd,
-      mcpServers: [],
+    return this.runExclusive(async () => {
+      const response = await this.agent.request(methods.agent.session.new, {
+        cwd: this._cwd,
+        mcpServers: [],
+      })
+      this._agentSessionId = response.sessionId
+      this._configOptions = response.configOptions ?? []
+      return response
     })
-    this._agentSessionId = response.sessionId
-    this._configOptions = response.configOptions ?? []
-    return response
   }
 
   async sessionResume(agentSessionId: string): Promise<ResumeSessionResponse> {
-    this._agentSessionId = agentSessionId
-    const response = await this.agent.request(methods.agent.session.resume, {
-      sessionId: agentSessionId,
-      cwd: this._cwd,
-      mcpServers: [],
-    })
-    this._configOptions = response.configOptions ?? []
-    return response
-  }
-
-  async sessionLoad(agentSessionId: string): Promise<LoadSessionResponse> {
-    this.isLoadPhase = true
-    this._agentSessionId = agentSessionId
-    try {
-      const response = await this.agent.request(methods.agent.session.load, {
+    return this.runExclusive(async () => {
+      this._agentSessionId = agentSessionId
+      const response = await this.agent.request(methods.agent.session.resume, {
         sessionId: agentSessionId,
         cwd: this._cwd,
         mcpServers: [],
       })
       this._configOptions = response.configOptions ?? []
       return response
-    } finally {
-      this.isLoadPhase = false
-    }
-  }
-
-  async setConfigOption(configId: string, value: string): Promise<void> {
-    if (!this._agentSessionId) throw new Error('No active session')
-    await this.agent.request(methods.agent.session.setConfigOption, {
-      sessionId: this._agentSessionId,
-      configId,
-      value,
     })
   }
 
-  async prompt(task: string, binding: PromptBinding): Promise<PromptResult> {
-    if (!this._agentSessionId) return { ok: false, output: '', error: 'No active session' }
+  async sessionLoad(agentSessionId: string): Promise<LoadSessionResponse> {
+    return this.runExclusive(async () => {
+      this.isLoadPhase = true
+      this._agentSessionId = agentSessionId
+      try {
+        const response = await this.agent.request(methods.agent.session.load, {
+          sessionId: agentSessionId,
+          cwd: this._cwd,
+          mcpServers: [],
+        })
+        this._configOptions = response.configOptions ?? []
+        return response
+      } finally {
+        this.isLoadPhase = false
+      }
+    })
+  }
+
+  async setConfigOption(
+    configId: string,
+    value: string,
+    agentSessionId = this._agentSessionId,
+  ): Promise<void> {
+    return this.runExclusive(async () => {
+      if (!agentSessionId) throw new Error('No active session')
+      this._agentSessionId = agentSessionId
+      await this.agent.request(methods.agent.session.setConfigOption, {
+        sessionId: agentSessionId,
+        configId,
+        value,
+      })
+    })
+  }
+
+  async prompt(
+    task: string,
+    binding: PromptBinding,
+    agentSessionId = this._agentSessionId,
+  ): Promise<PromptResult> {
+    return this.runExclusive(() => this.promptExclusive(task, binding, agentSessionId))
+  }
+
+  private async promptExclusive(
+    task: string,
+    binding: PromptBinding,
+    agentSessionId: string | null,
+  ): Promise<PromptResult> {
+    if (!agentSessionId) return { ok: false, output: '', error: 'No active session' }
     if (binding.signal?.aborted) return { ok: false, output: '', error: 'Cancelled' }
 
+    // One ACP process can host multiple sessions. Select the LiveEntry's exact
+    // session for this prompt instead of relying on whichever session/new or
+    // session/load happened most recently on the shared driver.
+    this._agentSessionId = agentSessionId
+    const promptSessionId = agentSessionId
     this.currentBinding = binding
     this._outputAcc = ''
     this.permissionError = null
@@ -368,7 +423,7 @@ export class AcpSessionDriver {
       onAbort = () => {
         try {
           this.agent
-            .notify(methods.agent.session.cancel, { sessionId: this._agentSessionId! })
+            .notify(methods.agent.session.cancel, { sessionId: promptSessionId })
             .catch(() => {})
         } catch {}
       }
@@ -382,7 +437,7 @@ export class AcpSessionDriver {
 
     try {
       const response = await this.agent.request(methods.agent.session.prompt, {
-        sessionId: this._agentSessionId,
+        sessionId: promptSessionId,
         prompt: [{ type: 'text', text: task }],
       })
 
@@ -419,10 +474,12 @@ export class AcpSessionDriver {
     }
   }
 
-  async cancel(): Promise<void> {
-    if (!this._agentSessionId) return
+  async cancel(agentSessionId = this._agentSessionId): Promise<void> {
+    if (!agentSessionId) return
+    // Cancellation must bypass the operation FIFO so it can interrupt the
+    // prompt currently holding the driver instead of waiting behind it.
     try {
-      await this.agent.notify(methods.agent.session.cancel, { sessionId: this._agentSessionId })
+      await this.agent.notify(methods.agent.session.cancel, { sessionId: agentSessionId })
     } catch {}
   }
 
@@ -449,19 +506,25 @@ export class AcpSessionDriver {
   }
 
   async closeSession(agentSessionId = this._agentSessionId): Promise<void> {
-    if (!agentSessionId) return
-    await this.agent.request(methods.agent.session.close, { sessionId: agentSessionId })
-    if (this._agentSessionId === agentSessionId) this._agentSessionId = null
+    return this.runExclusive(async () => {
+      if (!agentSessionId) return
+      await this.agent.request(methods.agent.session.close, { sessionId: agentSessionId })
+      if (this._agentSessionId === agentSessionId) this._agentSessionId = null
+    })
   }
 
   async deleteSession(agentSessionId = this._agentSessionId): Promise<void> {
-    if (!agentSessionId) return
-    await this.agent.request(methods.agent.session.delete, { sessionId: agentSessionId })
-    if (this._agentSessionId === agentSessionId) this._agentSessionId = null
+    return this.runExclusive(async () => {
+      if (!agentSessionId) return
+      await this.agent.request(methods.agent.session.delete, { sessionId: agentSessionId })
+      if (this._agentSessionId === agentSessionId) this._agentSessionId = null
+    })
   }
 
   async logout(): Promise<void> {
-    await this.agent.request(methods.agent.logout, {})
+    return this.runExclusive(async () => {
+      await this.agent.request(methods.agent.logout, {})
+    })
   }
 
   close(): void {
