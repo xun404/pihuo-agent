@@ -103,6 +103,12 @@ export function terminalWorkerEventFromToolPart(part: {
     output: typeof value.output === 'string' ? value.output : '',
     error: typeof value.error === 'string' ? value.error : undefined,
     errorCode: typeof value.errorCode === 'string' ? value.errorCode : undefined,
+    // Recovery fields must be re-hydrated from the persisted tool output too,
+    // not just the live SSE event — otherwise a page refresh / session switch
+    // drops them and the "Reset ACP context" button disappears from a failed
+    // card that still needs it (e.g. session_not_found after a stale catalog).
+    recoveryError: typeof value.recoveryError === 'string' ? value.recoveryError : undefined,
+    canResetAcpContext: Boolean(value.canResetAcpContext) || undefined,
     truncated: Boolean(value.truncated),
     // optional wall-clock from jobToToolResult (ISO strings)
     startedAt: typeof value.startedAt === 'string' ? value.startedAt : undefined,

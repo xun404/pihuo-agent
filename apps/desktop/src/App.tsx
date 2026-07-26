@@ -458,6 +458,7 @@ function AppShell({
                       setSettingsOpen(true)
                       setInspectorOpen(false)
                     }}
+                    onRefreshSnapshot={() => void refresh()}
                     settingsOpen={false}
                     onBusySessionsChange={setBusySessionIds}
                     onSetApprovalPolicy={(sessionId, policy) =>

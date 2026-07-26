@@ -1149,6 +1149,8 @@ export class WorkerScheduler {
         error: failure.error,
         message: failure.error,
         errorCode: failure.errorCode,
+        recoveryError: failure.recoveryError,
+        canResetAcpContext: failure.canResetAcpContext,
       },
       {
         type: 'failed',
@@ -1754,6 +1756,8 @@ export class WorkerScheduler {
           error: failure.error,
           message: failure.error,
           errorCode: runtimeCode,
+          recoveryError: failure.recoveryError,
+          canResetAcpContext: failure.canResetAcpContext,
         },
         {
           type: 'failed',
@@ -1795,6 +1799,8 @@ export class WorkerScheduler {
       error?: string
       errorCode?: string
       output?: string
+      recoveryError?: string
+      canResetAcpContext?: boolean
     },
     event?: WorkerRunEvent,
     opts?: { retainRuntime?: boolean },

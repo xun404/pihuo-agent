@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import { getSharedStore } from '@swarmdesk-agent/core'
-import { getWorkerScheduler, workerTimeoutSnapshotFromJob } from '../scheduler.js'
+import { getWorkerScheduler, toPublicAcpFailure, workerTimeoutSnapshotFromJob } from '../scheduler.js'
 import { getRuntimeDispatchPort } from '../runtime-dispatch-port.js'
 import type { RuntimeDispatchPort } from '../runtime-dispatch-port.js'
 import type { WorkerJob, WorkerKind, WorkerRole, WorkerRunEvent } from '@swarmdesk-agent/shared'
@@ -42,6 +42,11 @@ export function applyTerminalEventToJob(job: WorkerJob, event: WorkerRunEvent): 
     output: event.output ?? job.output,
     error: event.error,
     errorCode: event.errorCode,
+    // Propagate recovery fields so the persisted tool-part output (read on
+    // page refresh / session switch) carries them — otherwise the "Reset ACP
+    // context" button disappears after hydration.
+    recoveryError: event.recoveryError,
+    canResetAcpContext: event.canResetAcpContext,
     workerName: event.workerName ?? job.workerName,
     role: event.role ?? job.role,
     finishedAt: job.finishedAt ?? new Date().toISOString(),
@@ -65,6 +70,10 @@ export function jobToToolResult(job: WorkerJob) {
     output: job.output,
     error: job.error,
     errorCode: job.errorCode,
+    // Recovery fields so the "Reset ACP context" button survives a page
+    // refresh / session switch when the card is re-hydrated from job state.
+    recoveryError: job.recoveryError,
+    canResetAcpContext: job.canResetAcpContext,
     // For UI duration (WorkerRunCard) when hydrating from tool parts / history
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
@@ -94,6 +103,8 @@ export function jobToTerminalEvent(job: WorkerJob): WorkerRunEvent {
     truncated: false,
     workerName: job.workerName,
     role: job.role,
+    recoveryError: job.recoveryError,
+    canResetAcpContext: job.canResetAcpContext,
   }
 }
 
@@ -826,6 +837,10 @@ export const dispatchTeamMemberTool = createTool({
           if (isDeadline) {
             await port.cancel(jid).catch(() => {})
           }
+          // Recovery failures (session_not_found / recovery_failed thrown by
+          // enqueuePrompt) must surface recoveryError + canResetAcpContext so
+          // the "Reset ACP context" button renders in the chat card.
+          const failure = toPublicAcpFailure(e)
           return {
             ok: false,
             jobId: jid,
@@ -837,6 +852,9 @@ export const dispatchTeamMemberTool = createTool({
             task: job.task,
             message: msg,
             error: msg,
+            errorCode: failure.errorCode,
+            recoveryError: failure.recoveryError,
+            canResetAcpContext: failure.canResetAcpContext,
           }
         } finally {
           pumpRunning = false
@@ -862,6 +880,7 @@ export const dispatchTeamMemberTool = createTool({
           const msg = e instanceof Error ? e.message : String(e)
           const isDeadline = e instanceof WorkerJobWaitTimeoutError
           if (isDeadline) await port.cancel(job.id).catch(() => {})
+          const failure = toPublicAcpFailure(e)
           return {
             ok: false,
             jobId: job.id,
@@ -873,6 +892,9 @@ export const dispatchTeamMemberTool = createTool({
             task: job.task,
             message: msg,
             error: msg,
+            errorCode: failure.errorCode,
+            recoveryError: failure.recoveryError,
+            canResetAcpContext: failure.canResetAcpContext,
           }
         }
       }

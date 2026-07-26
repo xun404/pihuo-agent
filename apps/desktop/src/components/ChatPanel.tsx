@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import type {
@@ -37,6 +37,8 @@ import {
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
+import { CompactionMarker, type CompactionMarkerData } from './CompactionMarker'
+import { useToast } from './Toast'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
@@ -120,6 +122,9 @@ interface Props {
   onRenameSession?: (title: string) => void
   /** Open settings panel; optionally pin a tab (e.g. 'model' for model-config entries). */
   onOpenSettings?: (tab?: 'general' | 'model' | 'prompts' | 'workers' | 'about') => void
+  /** Fired after an action mutates server-side session state (e.g. context
+   * compression) so the parent can re-fetch the snapshot. */
+  onRefreshSnapshot?: () => void
   /** When settings closes, reload available models */
   settingsOpen?: boolean
   /** Report streaming/busy so sidebar can show parallel activity */
@@ -191,6 +196,7 @@ export function ChatPanel({
   onModeChange,
   onRenameSession,
   onOpenSettings,
+  onRefreshSnapshot,
   settingsOpen,
   onBusyChange,
   approvalPolicy,
@@ -243,6 +249,10 @@ export function ChatPanel({
   /** Inline title editing in the chat header */
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
+  /** Compaction separators in the timeline (one per compress action). Each
+   * carries an `afterMessageId` so it renders at the right spot in the stream. */
+  const [compactionMarkers, setCompactionMarkers] = useState<CompactionMarkerData[]>([])
+  const { success: toastSuccess, error: toastError } = useToast()
   const titleInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const historyLoadedFor = useRef<string | null>(null)
@@ -358,6 +368,13 @@ export function ChatPanel({
   useEffect(() => {
     void loadModels()
   }, [session.id, loadModels])
+
+  // Compaction markers are per-session timeline artifacts — drop them when the
+  // active session changes so a stale "compressing" marker doesn't bleed into
+  // another chat.
+  useEffect(() => {
+    setCompactionMarkers([])
+  }, [session.id])
 
   // After leaving settings, re-fetch so newly configured keys / intensity appear
   useEffect(() => {
@@ -936,7 +953,18 @@ export function ChatPanel({
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const text = input.trim()
-    if (!text || busy) return
+    if (!text) return
+
+    // /compact slash command: trigger context compression inline. Unlike a
+    // normal send this is allowed while busy (compression is a memory-thread
+    // op, independent of any in-flight leader turn). Don't transmit the slash
+    // text to the model — clear the composer and run the compressor.
+    if (text === '/compact' || text === '/compress') {
+      setInput('')
+      void runCompressContext()
+      return
+    }
+    if (busy) return
 
     // Soft client guard: no configured model/key — don't fire a raw stream error
     if (!selectedModel || models.length === 0) {
@@ -957,6 +985,66 @@ export function ChatPanel({
     void sendMessage({ text })
     setInput('')
   }
+
+  /**
+   * Run context compression and reflect it in the chat timeline.
+   * 1. Insert a `running` compaction marker after the current last message.
+   * 2. Call the backend; on resolve, update the marker to success/failed/skipped.
+   * 3. On success, reload the message list from the thread (the early history
+   *    was replaced by a digest on the server) and refresh the snapshot so the
+   *    context-ring number shrinks.
+   * Returns true if compression actually happened (not skipped/failed).
+   */
+  const runCompressContext = useCallback(async (): Promise<boolean> => {
+    if (!session?.id) return false
+    const markerId = `compact-${Date.now()}`
+    const afterMessageId = messages.length > 0 ? messages[messages.length - 1]!.id : null
+    // Insert running marker immediately — visible feedback that the action started.
+    setCompactionMarkers((prev) => [
+      ...prev,
+      { id: markerId, status: 'running', afterMessageId },
+    ])
+    try {
+      const result = await api.compressSessionContext(session.id)
+      if (result.skipped) {
+        setCompactionMarkers((prev) =>
+          prev.map((m) => (m.id === markerId ? { ...m, status: 'skipped' } : m)),
+        )
+        toastSuccess(t('chat.compactSkipped'))
+        return false
+      }
+      const freed = result.freedTokens ?? 0
+      setCompactionMarkers((prev) =>
+        prev.map((m) =>
+          m.id === markerId ? { ...m, status: 'success', freedTokens: freed } : m,
+        ),
+      )
+      toastSuccess(
+        freed > 0
+          ? t('chat.ctxCompressedFreed', { freed: formatTokenCountDisplay(freed, locale) })
+          : t('chat.ctxCompressed'),
+      )
+      // Reload messages so the compressed-away early history disappears from the
+      // chat view, and refresh the snapshot so usage/context-ring update.
+      try {
+        const res = await api.getThreadMessages(session.memoryThreadId ?? session.id)
+        if (Array.isArray(res.messages) && res.messages.length >= 0) {
+          setMessages(() => res.messages as never)
+        }
+      } catch (e) {
+        // Non-fatal: marker + toast already shown; messages will refresh on next poll.
+        console.error('[compress] message reload failed', e)
+      }
+      onRefreshSnapshot?.()
+      return true
+    } catch (err) {
+      setCompactionMarkers((prev) =>
+        prev.map((m) => (m.id === markerId ? { ...m, status: 'failed' } : m)),
+      )
+      toastError(err instanceof Error ? err.message : t('chat.compactFailed'))
+      return false
+    }
+  }, [session?.id, session?.memoryThreadId, messages, setMessages, t, locale, toastSuccess, toastError, onRefreshSnapshot])
 
   const handleContinueBudget = useCallback(() => {
     if (!activeBudgetEvent || busy) return
@@ -1028,27 +1116,27 @@ export function ChatPanel({
           <div className="chat-history-loading">{t('app.loading')}</div>
         )}
         {messages.map((message, msgIdx) => (
-          <MessageItem
-            key={message.id}
-            message={message}
-            msgIdx={msgIdx}
-            messages={messages}
-            busy={busy}
-            lastAssistantId={lastAssistantId}
-            isTailMessage={lastMessage?.id === message.id}
-            showErrorInThisBubble={
-              errorBelongsInLastAssistant &&
-              lastMessage?.id === message.id &&
-              message.role !== 'user'
-            }
-            t={t}
-            locale={locale}
-            models={models}
-            selectedModel={selectedModel}
-            thinkingIntensity={thinkingIntensity}
-            modelShort={modelShort}
-            thinkShort={thinkShort}
-            metaOpen={metaOpen}
+          <Fragment key={message.id}>
+            <MessageItem
+              message={message}
+              msgIdx={msgIdx}
+              messages={messages}
+              busy={busy}
+              lastAssistantId={lastAssistantId}
+              isTailMessage={lastMessage?.id === message.id}
+              showErrorInThisBubble={
+                errorBelongsInLastAssistant &&
+                lastMessage?.id === message.id &&
+                message.role !== 'user'
+              }
+              t={t}
+              locale={locale}
+              models={models}
+              selectedModel={selectedModel}
+              thinkingIntensity={thinkingIntensity}
+              modelShort={modelShort}
+              thinkShort={thinkShort}
+              metaOpen={metaOpen}
             setMetaOpen={setMetaOpen}
             tick={tick}
             placementByJobId={placementByJobId}
@@ -1065,7 +1153,23 @@ export function ChatPanel({
             toolStartTimes={toolStartTimes}
             toolDurations={toolDurations}
           />
+            {/* Compaction markers rendered inline at the position they were
+                triggered (after the message whose id matches afterMessageId). */}
+            {compactionMarkers
+              .filter((m) => m.afterMessageId === message.id)
+              .map((m) => (
+                <CompactionMarker key={m.id} status={m.status} freedTokens={m.freedTokens} />
+              ))}
+          </Fragment>
         ))}
+        {/* Markers with no anchor (afterMessageId null/undefined) render at the
+            very end of the stream — e.g. a compress triggered when messages
+            were empty, or anchored to an id no longer present after a reload. */}
+        {compactionMarkers
+          .filter((m) => !m.afterMessageId || !messages.some((msg) => msg.id === m.afterMessageId))
+          .map((m) => (
+            <CompactionMarker key={m.id} status={m.status} freedTokens={m.freedTokens} />
+          ))}
         {/* 尚无 assistant 回复时（失败在首包前）：单独一张卡承载错误 */}
         {displayError && !errorBelongsInLastAssistant && (
           <div className="msg leader">
@@ -1185,6 +1289,14 @@ export function ChatPanel({
             models={models}
             modelsLoading={modelsLoading}
             tokenCount={approxTokens}
+            tokenUsage={{
+              inputTokens: session.usageInputTokens ?? 0,
+              cachedTokens: session.usageCachedTokens ?? 0,
+              outputTokens: session.usageOutputTokens ?? 0,
+              lastInputTokens: session.usageLastInputTokens ?? 0,
+            }}
+            sessionId={session.id}
+            onCompressContext={runCompressContext}
             locale={locale}
             onModeChange={(m) => {
               setMode(m)

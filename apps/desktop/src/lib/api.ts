@@ -379,6 +379,27 @@ export const api = {
         body: JSON.stringify({ approvalPolicy }),
       },
     ),
+  /**
+   * Compress a session's early conversation history into a model-authored digest
+   * (replaces old messages with a summary marker; preserves recent turns).
+   * Returns `{ ok, skipped, freedTokens?, ... }` — `skipped:true` means nothing
+   * was eligible to compress (too few messages, or unchanged since last run).
+   */
+  compressSessionContext: (id: string, opts?: { keepRecentTurns?: number }) =>
+    request<{
+      ok: boolean
+      skipped: boolean
+      reason?: string
+      summary?: string
+      deletedCount?: number
+      keptRecent?: number
+      preCompactTokens?: number
+      postCompactTokens?: number
+      freedTokens?: number
+    }>(`/api/sessions/${encodePathSegment(id)}/compress-context`, {
+      method: 'POST',
+      body: JSON.stringify(opts?.keepRecentTurns != null ? { keepRecentTurns: opts.keepRecentTurns } : {}),
+    }),
   deleteSession: (id: string) =>
     request<{ ok: boolean; snapshot: AppSnapshot }>(`/api/sessions/${encodePathSegment(id)}`, {
       method: 'DELETE',
