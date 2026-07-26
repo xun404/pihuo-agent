@@ -407,6 +407,10 @@ interface LiveEntry {
   _closing?: boolean
   _closeApplied?: boolean
   isolatedHome?: string
+  /** True when this entry shares a child process owned by another entry.
+   * closeEntry/evictEntry must NOT kill the shared process — the owner
+   * manages its lifecycle. */
+  _sharesProcess?: boolean
 }
 
 interface QueueItem {
@@ -956,6 +960,20 @@ export class AcpSessionManager {
 
   private async createAndExecute(req: EnqueuePromptRequest): Promise<EnqueuePromptResult> {
     const { key, config, kind, task, binding } = req
+
+    // ── Process sharing: many agents (e.g. opencode) cannot run two `acp`
+    //    child processes at once — they share a config/session store and the
+    //    second instance crashes with "ServeError". Different team members on
+    //    the same worker each have a distinct reuseKey (teamMemberId differs),
+    //    so without sharing they'd each spawn their own child → conflict.
+    //    Fix: before spawning, look for an EXISTING live entry on the same
+    //    worker + cwd and reuse its child process — just open a new ACP session
+    //    on its driver. One child process, many sessions.
+    const sibling = this.findSharableEntry(key)
+    if (sibling) {
+      return this.createSessionOnExistingEntry(req, sibling)
+    }
+
     let command: string
     let args: string[]
     let env: Record<string, string>
@@ -1117,6 +1135,139 @@ export class AcpSessionManager {
       })
     } finally {
       if (timeout) clearTimeout(timeout)
+    }
+  }
+
+  /**
+   * Find an existing live entry that can share its child process with a new
+   * member on the same worker + cwd. The entry must have a live driver and not
+   * be closing/closed. This prevents spawning a second conflicting child for
+   * agents that don't tolerate concurrent processes (e.g. opencode).
+   */
+  private findSharableEntry(key: SessionReuseKey): LiveEntry | null {
+    for (const entry of this.entries.values()) {
+      if (
+        entry.key.workerId === key.workerId &&
+        entry.key.canonicalCwd === key.canonicalCwd &&
+        entry.driver &&
+        !entry._closing &&
+        entry.state !== 'closing' &&
+        entry.state !== 'closed' &&
+        entry.state !== 'broken' &&
+        entry.proc &&
+        entry.proc.exitCode === null &&
+        entry.proc.signalCode === null
+      ) {
+        return entry
+      }
+    }
+    return null
+  }
+
+  /**
+   * Open a NEW ACP session on an existing entry's driver (child process), then
+   * run the prompt on it. Used when multiple team members share one worker —
+   * they each get their own agentSessionId on the same child process.
+   */
+  private async createSessionOnExistingEntry(
+    req: EnqueuePromptRequest,
+    sibling: LiveEntry,
+  ): Promise<EnqueuePromptResult> {
+    const { key, config, task, binding } = req
+    const keyStr = reuseKeyToString(key)
+
+    // Create our own entry that points at the sibling's process/driver.
+    const entry: LiveEntry = {
+      key,
+      state: 'starting',
+      proc: sibling.proc, // shared process — do NOT kill on evict
+      driver: undefined!,
+      agentSessionId: undefined!,
+      capabilities: sibling.capabilities,
+      createdAt: Date.now(),
+      lastUsedAt: Date.now(),
+      generation: sibling.generation + 1,
+      summary: `w=${key.workerId} s=${key.routerSessionId.slice(0, 8)} gen=${sibling.generation + 1} (shared)`,
+      currentBinding: null,
+      promptQueue: [],
+      configOptions: [...sibling.configOptions],
+      sessionConfig: config,
+      workerKind: sibling.workerKind,
+      isolatedHome: undefined,
+      _sharesProcess: true,
+    }
+    this.entries.set(keyStr, entry)
+
+    // Don't register proc.on('exit') — the sibling owns the process lifecycle.
+    // But DO react if the sibling's entry dies: mark ours broken.
+    const siblingKeyStr = reuseKeyToString(sibling.key)
+    const checkAlive = () => {
+      if (!this.entries.has(siblingKeyStr) || sibling._closing) {
+        entry.state = 'broken'
+      }
+    }
+
+    let catalogCommitted = false
+    try {
+      // Reuse the sibling's driver — it's the same JSON-RPC connection.
+      entry.driver = sibling.driver
+      checkAlive()
+      this.assertEntryActive(keyStr, entry)
+
+      // Open a new session on the shared driver.
+      const newResp = await sibling.driver.sessionNew()
+      entry.agentSessionId = newResp.sessionId
+      checkAlive()
+      this.assertEntryActive(keyStr, entry)
+      entry.configOptions = [...sibling.driver.configOptions]
+      await applyPinnedModelOrThrow(sibling.driver, config.model)
+      this.assertEntryActive(keyStr, entry)
+
+      try {
+        this.catalogPort?.upsert({
+          version: 1,
+          keyDigest: this.computeKeyDigest(key),
+          routerSessionId: key.routerSessionId,
+          workerId: key.workerId,
+          teamMemberId: key.teamMemberId,
+          teamMemberRevision: key.teamMemberRevision,
+          installationId: config.installationId,
+          manifestDigest: config.manifestDigest,
+          canonicalCwd: key.canonicalCwd,
+          executionFingerprint: key.executionFingerprint,
+          agentSessionId: newResp.sessionId,
+          capabilities: {
+            loadSession: sibling.driver.hasCapability('load'),
+            resume: sibling.driver.hasCapability('resume'),
+            close: sibling.driver.hasCapability('close'),
+            delete: sibling.driver.hasCapability('delete'),
+          },
+          state: 'ready',
+          createdAt: new Date().toISOString(),
+          lastUsedAt: new Date().toISOString(),
+        })
+        catalogCommitted = Boolean(this.catalogPort)
+      } catch (cause) {
+        throw new AcpSessionRuntimeError(
+          'catalog_repair_required',
+          'ACP session storage is unavailable. Repair the catalog before retrying.',
+          false,
+          { cause },
+        )
+      }
+
+      entry.state = 'idle'
+      entry.lastUsedAt = Date.now()
+      this.assertEntryActive(keyStr, entry)
+
+      return this.executePrompt(entry, task, binding, false, 'new')
+    } catch (e) {
+      if (!catalogCommitted) {
+        // Don't discard via driver — the session belongs to the shared process.
+        // Just clear our entry; the sibling keeps its own session.
+      }
+      this.failEntry(keyStr, entry, e instanceof Error ? e.message : String(e))
+      throw e
     }
   }
 
@@ -1831,7 +1982,9 @@ export class AcpSessionManager {
     // Without this, a dead child leaves a 'ready' catalog record pointing at a
     // session the agent no longer holds, and every subsequent dispatch for that
     // member fails with "ACP connection closed" until a manual reset.
-    if (this.reuseEnabled && entry.agentSessionId) {
+    // Skip for shared-process entries — their catalog record is independent and
+    // the process owner manages staleness.
+    if (this.reuseEnabled && entry.agentSessionId && !entry._sharesProcess) {
       try {
         this.markCatalogStale(this.computeKeyDigest(entry.key), 'process_exit')
       } catch {
@@ -1880,6 +2033,12 @@ export class AcpSessionManager {
       try {
         rmSync(entry.isolatedHome, { recursive: true, force: true })
       } catch {}
+    }
+    // Shared-process entries must NOT kill the child — the owning entry
+    // manages its lifecycle. Only close the driver-side session reference.
+    if (entry._sharesProcess) {
+      entry.state = 'closed'
+      return
     }
     if (entry.proc) {
       if (entry.proc.exitCode === null && entry.proc.signalCode === null) {
