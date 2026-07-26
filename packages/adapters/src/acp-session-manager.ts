@@ -961,19 +961,17 @@ export class AcpSessionManager {
   private async createAndExecute(req: EnqueuePromptRequest): Promise<EnqueuePromptResult> {
     const { key, config, kind, task, binding } = req
 
-    // ── Process sharing: some agents cannot run two concurrent `acp` child
-    //    processes — they share a config/session store and the second instance
-    //    crashes (e.g. opencode → "ServeError"). Different team members on the
-    //    same worker each have a distinct reuseKey (teamMemberId differs), so
+    // ── Process sharing: ALL ACP workers share one child process per
+    //    worker + cwd. ACP's session model (session/new) is designed for
+    //    multiple independent sessions on a single agent process, and many
+    //    agents (not just opencode) reject concurrent child processes because
+    //    they share config/session stores. Different team members on the same
+    //    worker each have a distinct reuseKey (teamMemberId differs), so
     //    without sharing they'd each spawn their own child → conflict.
-    //
-    //    We only share for kinds KNOWN to (a) reject concurrent processes AND
-    //    (b) support multiple sessions on one process. Others (claude, codex,
-    //    custom) keep their original per-member-spawn behavior until verified.
-    const SHARES_PROCESS_KIND = new Set<string>(['opencode'])
-    const sibling = SHARES_PROCESS_KIND.has(kind ?? '')
-      ? this.findSharableEntry(key)
-      : null
+    //    Fix: before spawning, look for an EXISTING live entry on the same
+    //    worker + cwd and reuse its child process — just open a new ACP session
+    //    on its driver. One child process, many sessions.
+    const sibling = this.findSharableEntry(key)
     if (sibling) {
       return this.createSessionOnExistingEntry(req, sibling)
     }
