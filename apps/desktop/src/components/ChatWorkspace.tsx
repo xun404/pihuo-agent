@@ -46,6 +46,9 @@ interface Props {
   /** Inline rename from chat header: (sessionId, newTitle) */
   onRenameSession?: (sessionId: string, title: string) => void
   onOpenSettings?: (tab?: 'general' | 'model' | 'prompts' | 'workers' | 'about') => void
+  /** Fired after an action mutates server-side session state (e.g. context
+   * compression) so the parent can re-fetch the snapshot. */
+  onRefreshSnapshot?: () => void
   settingsOpen?: boolean
   onBusySessionsChange?: (busyIds: Set<string>) => void
   onSetApprovalPolicy?: (sessionId: string, policy: SessionApprovalPolicy) => void
@@ -114,6 +117,7 @@ export function ChatWorkspace({
   onModeChange,
   onRenameSession,
   onOpenSettings,
+  onRefreshSnapshot,
   settingsOpen,
   onBusySessionsChange,
   onSetApprovalPolicy,
@@ -468,6 +472,7 @@ export function ChatWorkspace({
                 isActive && onRenameSession ? (title) => onRenameSession(s.id, title) : undefined
               }
               onOpenSettings={onOpenSettings}
+              onRefreshSnapshot={onRefreshSnapshot}
               settingsOpen={settingsOpen}
               onBusyChange={(busy) =>
                 setBusyMap((prev) => (prev[s.id] === busy ? prev : { ...prev, [s.id]: busy }))

@@ -101,6 +101,23 @@ export interface ComposerToolbarProps {
   modelsLoading?: boolean
   /** Token usage for the ContextRing. Empty state passes 0. */
   tokenCount?: number
+  /**
+   * Real token usage from the model (snapshot-driven). `lastInputTokens` drives
+   * the context ring (most-recent-turn prompt size); `inputTokens`/`cachedTokens`
+   * are cumulative and drive the cache-hit-rate row. Omit for empty state.
+   */
+  tokenUsage?: {
+    inputTokens: number
+    cachedTokens: number
+    outputTokens: number
+    lastInputTokens: number
+  }
+  /** Active session id (for the compress-context call). Omit when no session. */
+  sessionId?: string
+  /** Fired when the user clicks "Compress context". The parent owns the actual
+   * API call + the compaction-marker timeline + message-list refresh.
+   * May resolve to a boolean (true = compression actually happened). */
+  onCompressContext?: () => void | Promise<void | boolean>
   /** Locale for number formatting. */
   locale: Locale
   /** Persist thinking selection to settings (no-op in empty state). */
@@ -127,6 +144,9 @@ export function ComposerToolbar({
   models,
   modelsLoading = false,
   tokenCount = 0,
+  tokenUsage,
+  sessionId,
+  onCompressContext,
   locale,
   persistThinking = true,
   onModeChange,
@@ -147,6 +167,7 @@ export function ComposerToolbar({
   const [modelSideOpen, setModelSideOpen] = useState(false)
   const [thinkMenuOpen, setThinkMenuOpen] = useState(false)
   const [ctxTipOpen, setCtxTipOpen] = useState(false)
+  const [compressing, setCompressing] = useState(false)
   const accessWrapRef = useRef<HTMLDivElement>(null)
   const teamWrapRef = useRef<HTMLDivElement>(null)
   const modelWrapRef = useRef<HTMLDivElement>(null)
@@ -186,11 +207,24 @@ export function ComposerToolbar({
   const modelChipLabel = `${modelShort} ${thinkShort}`
 
   // —— derived: context meter ——
+  // The ring shows the prompt size the model saw on the MOST RECENT turn
+  // (`usageLastInputTokens` — real, model-reported). That is the best proxy
+  // for "current context occupancy": it includes system prompt + tool schemas
+  // + reasoning that a chars/4 estimate misses, AND it drops after a context
+  // compression (the next turn's prompt is shorter). Falls back to the live
+  // chars/4 estimate (`tokenCount`) before the first turn / on legacy data.
+  //
+  // `tokenUsage.inputTokens` (cumulative) is NOT used here — it only grows and
+  // would never reflect a compression. It feeds the cache-hit-rate row only.
   const ctxTotal =
     selectedMeta?.contextWindow && selectedMeta.contextWindow > 0
       ? selectedMeta.contextWindow
       : 1_000_000
-  const approxTokens = Math.min(ctxTotal, Math.round(tokenCount))
+  const lastInputTokens = tokenUsage?.lastInputTokens ?? 0
+  const approxTokens = Math.min(
+    ctxTotal,
+    lastInputTokens > 0 ? lastInputTokens : Math.round(tokenCount),
+  )
   const ctxPctRaw = ctxTotal > 0 ? (approxTokens / ctxTotal) * 100 : 0
   const ctxPct = Math.min(100, Math.round(ctxPctRaw * 10) / 10)
   const ctxUsedLabel = formatTokenCountDisplay(approxTokens, locale)
@@ -201,6 +235,32 @@ export function ComposerToolbar({
       : ctxPct % 1 === 0
         ? String(Math.round(ctxPct))
         : ctxPct.toFixed(1)
+  // Cache hit rate = cachedInputTokens / inputTokens across the whole session
+  // (cumulative real values from the model). Display null (—) until there is
+  // real data: a hardcoded 99.89% placeholder was misleading before any turn.
+  const realInputTokens = tokenUsage?.inputTokens ?? 0
+  const cachedTokens = tokenUsage?.cachedTokens ?? 0
+  const cacheHitPct =
+    realInputTokens > 0 ? Math.min(100, (cachedTokens / realInputTokens) * 100) : null
+  const cacheHitLabel =
+    cacheHitPct == null
+      ? null
+      : cacheHitPct % 1 === 0
+        ? `${Math.round(cacheHitPct)}%`
+        : `${cacheHitPct.toFixed(1)}%`
+
+  const handleCompressContext = async () => {
+    if (!sessionId || compressing) return
+    // Delegate to the parent (ChatPanel), which owns the compaction-marker
+    // timeline + message-list refresh. The button just reports its loading
+    // state locally and fires the callback.
+    setCompressing(true)
+    try {
+      await onCompressContext?.()
+    } finally {
+      setCompressing(false)
+    }
+  }
 
   const supportedThinking: ThinkingIntensity[] = selectedMeta?.thinkingIntensities?.length
     ? selectedMeta.thinkingIntensities
@@ -486,16 +546,18 @@ export function ComposerToolbar({
                 </div>
                 <div className="ctx-tip-cache">
                   <span className="t-label">{t('chat.ctxCacheHit')}</span>
-                  <span className="t-value">99.89%</span>
+                  <span className="t-value">{cacheHitLabel ?? t('chat.ctxNoData')}</span>
                 </div>
                 <button
                   type="button"
                   className="ctx-tip-btn"
+                  disabled={!sessionId || compressing}
                   onClick={(e) => {
                     e.stopPropagation()
+                    void handleCompressContext()
                   }}
                 >
-                  {t('chat.ctxCompress')}
+                  {compressing ? t('chat.ctxCompressing') : t('chat.ctxCompress')}
                 </button>
               </motion.div>
             )}

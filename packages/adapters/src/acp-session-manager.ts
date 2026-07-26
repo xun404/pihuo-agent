@@ -447,6 +447,24 @@ function positiveTimerInt(value: unknown, fallback: number): number {
   return Math.min(positiveInt(value, fallback), MAX_TIMER_DELAY_MS)
 }
 
+/**
+ * Sanitize a driver-level ACP error for inclusion in the public error message.
+ * Strips anything that looks like an absolute path, env value, or stack trace,
+ * and caps length — the goal is to surface the *cause* (e.g. "method not found",
+ * "session not found", "timeout") without leaking transport internals or PII.
+ */
+function sanitizeAcpError(raw: string): string {
+  const clean = raw
+    // Drop stack-trace lines (keep only the first line, which is the message)
+    .split('\n')[0]!
+    // Strip absolute filesystem paths
+    .replace(/(?:\/[\w.\-@]+)+\/?/g, '<path>')
+    // Strip "at <frame>" stack frames
+    .replace(/\s+at\s+[\w.<>/]+(?:\s+\([^)]*\))?/g, '')
+    .trim()
+  return clean.length > 200 ? clean.slice(0, 200) + '…' : clean
+}
+
 function spawnDetachedAcpProcess(input: {
   command: string
   args: string[]
@@ -1295,8 +1313,20 @@ export class AcpSessionManager {
         ? undefined
         : result.stopReason
           ? `ACP agent stopped before completing the task (${result.stopReason}).`
-          : 'ACP agent failed while processing the task.'
+          : result.error
+            ? `ACP agent failed while processing the task: ${sanitizeAcpError(result.error)}`
+            : 'ACP agent failed while processing the task.'
       if (!result.ok && !result.stopReason) {
+        // The driver returns the real underlying error in `result.error` (e.g.
+        // JSON-RPC error from the agent, transport failure, permission denial).
+        // Log it verbatim here so the actual cause is diagnosable — and fold a
+        // sanitized form into `publicError` so it reaches the job + UI, not just
+        // the server log. Previously the generic message made these opaque.
+        console.error(
+          '[acp] prompt failed (no stop reason) — real error from driver:',
+          result.error ?? '(no detail)',
+          { jobId: binding.jobId, outputLength: result.output?.length ?? 0 },
+        )
         // A request/transport failure has no protocol stop reason. Do not put
         // this connection back into the reusable pool; keep the durable
         // catalog mapping so the next dispatch can recover it normally.

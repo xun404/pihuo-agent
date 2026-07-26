@@ -922,6 +922,42 @@ export class LocalStore {
     return session ? structuredClone(session) : null
   }
 
+  /**
+   * Accumulate real model-reported token usage into the session. Called from
+   * the chat `onFinish` hook with each turn's `step.usage` totals. Does NOT
+   * bump `updatedAt` (same rationale as `markSessionRead`): usage is a
+   * background stat, not a recency signal. Missing legacy fields are read as 0
+   * via `?? 0`. No-op (returns null) if the session was deleted mid-stream.
+   *
+   * Compress-once semantics are intentionally NOT applied here: cumulative
+   * usage reflects the session's true lifetime cost, so it keeps growing even
+   * after a context compress (which only affects subsequent turns' input).
+   */
+  markSessionUsage(
+    sessionId: string,
+    delta: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number },
+  ): Session | null {
+    const inputTokens = Math.max(0, Math.floor(delta.inputTokens ?? 0))
+    const cachedTokens = Math.max(0, Math.floor(delta.cachedInputTokens ?? 0))
+    const outputTokens = Math.max(0, Math.floor(delta.outputTokens ?? 0))
+    if (inputTokens === 0 && cachedTokens === 0 && outputTokens === 0) return null
+    let session: Session | null = null
+    this.commit((d) => {
+      const s = d.sessions.find((x) => x.id === sessionId)
+      if (!s) return
+      s.usageInputTokens = (s.usageInputTokens ?? 0) + inputTokens
+      s.usageCachedTokens = (s.usageCachedTokens ?? 0) + cachedTokens
+      s.usageOutputTokens = (s.usageOutputTokens ?? 0) + outputTokens
+      // Last-turn input is overwritten (not accumulated): the context-window
+      // ring shows "how big was the prompt the model just saw", which is the
+      // best proxy for current context occupancy and drops after a compress.
+      s.usageLastInputTokens = inputTokens
+      s.usageLastUpdatedAt = now()
+      session = d.sessions.find((x) => x.id === sessionId)!
+    })
+    return session ? structuredClone(session) : null
+  }
+
   markSessionRoleReviewPrompted(sessionId: string): Session | null {
     let session: Session | null = null
     const timestamp = now()
@@ -1570,6 +1606,8 @@ export class LocalStore {
         | 'workerName'
         | 'meta'
         | 'reuseKeyDigest'
+        | 'recoveryError'
+        | 'canResetAcpContext'
       >
     >,
   ): WorkerJob {

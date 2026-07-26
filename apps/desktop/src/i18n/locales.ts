@@ -26,8 +26,19 @@ export type MessageKey =
   | 'approvals.worker'
   | 'chat.budgetExhausted'
   | 'chat.continueTask'
+  | 'chat.compactDone'
+  | 'chat.compactFailed'
+  | 'chat.compactFreed'
+  | 'chat.compactRunning'
+  | 'chat.compactSkipped'
   | 'chat.ctxCompress'
+  | 'chat.ctxCompressed'
+  | 'chat.ctxCompressedFreed'
+  | 'chat.ctxCompressFailed'
+  | 'chat.ctxCompressing'
   | 'chat.ctxCacheHit'
+  | 'chat.ctxNoData'
+  | 'chat.ctxNothingToCompress'
   | 'chat.ctxStats'
   | 'chat.ctxSub'
   | 'chat.ctxTitle'
@@ -633,8 +644,19 @@ const zh: Dict = {
   'approvals.worker': 'Worker',
   'chat.budgetExhausted': '已消耗 {used}/{max} 步骤预算，任务可能尚未完成。',
   'chat.continueTask': '继续',
+  'chat.compactDone': '上下文已压缩',
+  'chat.compactFailed': '上下文压缩失败',
+  'chat.compactFreed': '释放 {freed}',
+  'chat.compactRunning': '正在压缩上下文',
+  'chat.compactSkipped': '上下文已是最新，无需压缩',
   'chat.ctxCompress': '压缩上下文',
+  'chat.ctxCompressed': '已压缩上下文',
+  'chat.ctxCompressedFreed': '已压缩上下文，释放约 {freed} tokens',
+  'chat.ctxCompressFailed': '压缩失败，请稍后重试',
+  'chat.ctxCompressing': '压缩中…',
   'chat.ctxCacheHit': '缓存命中率',
+  'chat.ctxNoData': '—',
+  'chat.ctxNothingToCompress': '暂无可压缩的历史',
   'chat.ctxStats': '{used}/{total} ({pct}%)',
   'chat.ctxSub': '已用 {used}，共 {total}',
   'chat.ctxTitle': '上下文窗口',
@@ -1262,8 +1284,19 @@ const en: Dict = {
   'approvals.worker': 'Worker',
   'chat.budgetExhausted': '{used}/{max} step budget exhausted. Task may be incomplete.',
   'chat.continueTask': 'Continue',
+  'chat.compactDone': 'Context compressed',
+  'chat.compactFailed': 'Context compression failed',
+  'chat.compactFreed': 'freed {freed}',
+  'chat.compactRunning': 'Compressing context',
+  'chat.compactSkipped': 'Context is up to date; no compression needed',
   'chat.ctxCompress': 'Compress context',
+  'chat.ctxCompressed': 'Context compressed',
+  'chat.ctxCompressedFreed': 'Context compressed — freed ~{freed} tokens',
+  'chat.ctxCompressFailed': 'Compression failed, please retry',
+  'chat.ctxCompressing': 'Compressing…',
   'chat.ctxCacheHit': 'Cache hit rate',
+  'chat.ctxNoData': '—',
+  'chat.ctxNothingToCompress': 'Nothing to compress yet',
   'chat.ctxStats': '{used}/{total} ({pct}%)',
   'chat.ctxSub': 'Used {used} of {total}',
   'chat.ctxTitle': 'Context window',

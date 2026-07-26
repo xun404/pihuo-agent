@@ -117,6 +117,7 @@ import {
   createBudgetMarkerMessage,
 } from './leader-step-budget.js'
 import { generateSessionTitle, extractFirstUserText } from './session-title-generator.js'
+import { compressSessionContext } from './session-compressor.js'
 import { isPlaceholderSessionTitle } from '@swarmdesk-agent/core'
 import type { LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
 import { initializeAcpRuntime } from './acp-runtime.js'
@@ -940,7 +941,7 @@ const server = createServer(async (req, res) => {
               ...paramsWithMemory,
               untilIdle: true,
               onFinish: async (onFinishEvent: {
-                steps?: readonly unknown[]
+                steps?: readonly { usage?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number } }[]
                 finishReason?: string
                 runId?: string
               }) => {
@@ -958,6 +959,36 @@ const server = createServer(async (req, res) => {
                     })
                   ) {
                     store.markSessionRoleReviewPrompted(routerSession.id)
+                  }
+                }
+
+                // —— Cumulative token usage ——
+                // Sum real model-reported usage across all steps of this turn and
+                // accumulate into the session (for the context popup's cache-hit
+                // rate + context size). Failures are swallowed: usage stats must
+                // never break the chat flow (same contract as session-title).
+                if (routerSession && onFinishEvent.steps?.length) {
+                  try {
+                    let inputTokens = 0
+                    let cachedInputTokens = 0
+                    let outputTokens = 0
+                    for (const step of onFinishEvent.steps) {
+                      const u = step?.usage
+                      if (!u) continue
+                      inputTokens += Math.max(0, Math.floor(u.inputTokens ?? 0))
+                      cachedInputTokens += Math.max(0, Math.floor(u.cachedInputTokens ?? 0))
+                      outputTokens += Math.max(0, Math.floor(u.outputTokens ?? 0))
+                    }
+                    store.markSessionUsage(routerSession.id, {
+                      inputTokens,
+                      cachedInputTokens,
+                      outputTokens,
+                    })
+                  } catch (err) {
+                    console.error(
+                      '[session-usage] onFinish usage accumulation failed',
+                      err instanceof Error ? err.message : err,
+                    )
                   }
                 }
 
@@ -2939,6 +2970,87 @@ const server = createServer(async (req, res) => {
             code: 'MEMORY_HISTORY_UNAVAILABLE',
             messages: [],
             threadId,
+          })
+        }
+        return
+      }
+
+      // —— Compress session context (summarize early history → digest) ——
+      // @see packages/mastra-app/src/session-compressor.ts
+      const compressContextMatch = match(path, '/api/sessions/:id/compress-context')
+      if (method === 'POST' && compressContextMatch) {
+        const sessionId = compressContextMatch.id!
+        const body = (await readJson(req).catch(() => ({}))) as { keepRecentTurns?: number }
+        const session = store.listSessions().find((s) => s.id === sessionId)
+        if (!session) {
+          send(res, 404, { error: 'session not found', code: 'SESSION_NOT_FOUND' })
+          return
+        }
+        const threadId = session.memoryThreadId
+        const boundProjectId = session.projectId
+        // Resolve leader model exactly like the chat handler so the summarizer
+        // uses the same provider/model/secrets as a normal turn.
+        const settings = loadSettings()
+        const leaderModelRaw =
+          settings.leaderModel || process.env.LEADER_MODEL || DEFAULT_LEADER_MODEL
+        const leaderModel = normalizeLeaderModelForMastra(
+          normalizeMastraModelId(leaderModelRaw),
+          settings.customProviders,
+        )
+        applySecretsToEnv(process.env)
+        const keyInfo = resolveApiKeyEnvsForModel(leaderModel, settings.customProviders)
+        if (keyInfo && !hasAnyApiKey(keyInfo.envKeys, process.env)) {
+          send(res, 400, {
+            code: 'MISSING_API_KEY',
+            error: `Missing API key for ${leaderModel}`,
+            providerId: keyInfo.providerId,
+            envKey: keyInfo.envKeys[0],
+          })
+          return
+        }
+        const thinkingIntensity = normalizeThinkingIntensity(
+          settings.thinkingIntensity ?? process.env.THINKING_INTENSITY,
+        )
+        const requestContext = new RequestContext()
+        requestContext.set('leaderModel', leaderModel)
+        requestContext.set('thinkingIntensity', thinkingIntensity)
+        requestContext.set('routerSessionId', session.id)
+        requestContext.set('routerProjectId', boundProjectId)
+        requestContext.set('memoryThreadId', threadId)
+        const routerProject = store.listProjects().find((p) => p.id === boundProjectId)
+        if (routerProject) {
+          requestContext.set('routerProjectRoot', routerProject.rootPath)
+        }
+        try {
+          const result = await compressSessionContext({
+            threadId,
+            resourceId: boundProjectId,
+            requestContext,
+            keepRecentTurns: body.keepRecentTurns,
+          })
+          if (!result) {
+            // Nothing to compress (too few messages) or summarizer declined.
+            send(res, 200, { ok: true, skipped: true, reason: 'nothing-to-compress' })
+            return
+          }
+          send(res, 200, {
+            ok: true,
+            skipped: false,
+            summary: result.summary,
+            deletedCount: result.deletedMessageIds.length,
+            keptRecent: result.keptRecent,
+            // Token-footprint delta (estimated via tokenx). freedTokens is the
+            // net context saving; the UI can show "freed ~N tokens".
+            preCompactTokens: result.preCompactTokens,
+            postCompactTokens: result.postCompactTokens,
+            freedTokens: Math.max(0, result.preCompactTokens - result.postCompactTokens),
+          })
+        } catch (e) {
+          console.error('[http] compress-context failed', e)
+          send(res, 500, {
+            error: 'Context compression failed.',
+            code: 'COMPRESS_CONTEXT_FAILED',
+            detail: e instanceof Error ? e.message : String(e),
           })
         }
         return

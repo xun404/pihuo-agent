@@ -687,12 +687,31 @@ export interface Session {
   updatedAt: string
   /**
    * Timestamp of the last assistant reply (chat onFinish). The sidebar uses
-   * `lastReplyAt ?? createdAt` as the relative-time source so opening / renaming
-   * a session does not falsely "freshen" it. Missing on legacy snapshots and on
+   * `lastReplyAt ?? createdAt` as the relative-time source so opening / renaming /
+   * switching mode does not falsely "freshen" it. Missing on legacy snapshots and on
    * sessions that have not received a reply yet → callers fall back to
    * `createdAt`. Bumped via `store.markSessionReply(sessionId)`.
    */
   lastReplyAt?: string
+  /**
+   * Cumulative token usage across all turns (real model-reported values from the
+   * chat `onFinish` step.usage). Used by the chat context popup to show a real
+   * cache-hit rate and context size. All fields missing on legacy snapshots and
+   * before the first turn → treated as 0. Stamped via
+   * `store.markSessionUsage(sessionId, delta)` (does NOT bump `updatedAt`).
+   */
+  usageInputTokens?: number
+  usageCachedTokens?: number
+  usageOutputTokens?: number
+  /**
+   * Real input-token count of the MOST RECENT turn (overwritten each turn, not
+   * accumulated). This is what the context-window ring should show: it reflects
+   * the actual prompt size the model just saw, so it correctly drops after a
+   * context compression (the next turn's prompt is shorter). Falls back to the
+   * live chars/4 estimate when missing (legacy snapshots / before first turn).
+   */
+  usageLastInputTokens?: number
+  usageLastUpdatedAt?: string
 }
 
 /**
@@ -988,6 +1007,13 @@ export interface WorkerJob {
    * Used by reset-context so config/auth drift cannot recompute the wrong key.
    */
   reuseKeyDigest?: string
+  /**
+   * Set when session recovery fails (worker process died, session not found,
+   * recovery unsupported). Persisted on the job so the "Reset ACP context"
+   * button survives a page refresh / session switch, not just the live SSE event.
+   */
+  recoveryError?: string
+  canResetAcpContext?: boolean
 }
 
 export const JOB_OPEN_STATUSES: JobStatus[] = ['queued', 'running', 'pending_approval']

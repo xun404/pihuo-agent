@@ -187,6 +187,72 @@
 .msg.leader + .msg.user {
   margin-top: 2px;
 }
+/* ============ Context-compaction separator marker (/compact or popup button) ============
+   Layout: [line] — [icon] status text — [line], muted color, single row.
+   Status drives the text + motion: `running` gets a gradient sweep animation
+   (the only motion — no spinner); success/failed/skipped are static. */
+.compaction-marker {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-2);
+  width: 100%;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--ls-label);
+}
+.compaction-marker .cm-line {
+  flex: 1;
+  height: 1px;
+  min-width: var(--sp-8);
+  background: var(--border);
+}
+.compaction-marker .cm-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.compaction-marker .cm-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* running: gradient-sweep text (compression in progress), brand color but muted */
+.compaction-marker.is-running {
+  color: var(--accent);
+}
+.compaction-marker.is-running .cm-label {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 50%, transparent),
+    var(--accent),
+    color-mix(in srgb, var(--accent) 50%, transparent)
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: cm-sweep 1.6s linear infinite;
+  font-weight: var(--fw-medium);
+}
+@keyframes cm-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+.compaction-marker.is-success {
+  color: var(--text-3);
+}
+.compaction-marker.is-failed {
+  color: var(--danger);
+}
+.compaction-marker.is-skipped {
+  color: var(--text-4);
+}
 .msg.user {
   align-items: flex-end;
 }
