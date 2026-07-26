@@ -969,20 +969,31 @@ const server = createServer(async (req, res) => {
                 // never break the chat flow (same contract as session-title).
                 if (routerSession && onFinishEvent.steps?.length) {
                   try {
+                    // Cumulative totals (for cache-hit-rate): sum across steps.
                     let inputTokens = 0
                     let cachedInputTokens = 0
                     let outputTokens = 0
+                    // Track the LAST step's input separately: in a multi-step
+                    // agentic loop, each step's inputTokens already includes all
+                    // prior context (system + user + prior step outputs), so
+                    // summing them double-counts. The last step's input is the
+                    // best proxy for "current context occupancy" — it reflects
+                    // the full prompt the model just saw.
+                    let lastStepInputTokens = 0
                     for (const step of onFinishEvent.steps) {
                       const u = step?.usage
                       if (!u) continue
-                      inputTokens += Math.max(0, Math.floor(u.inputTokens ?? 0))
+                      const stepInput = Math.max(0, Math.floor(u.inputTokens ?? 0))
+                      inputTokens += stepInput
                       cachedInputTokens += Math.max(0, Math.floor(u.cachedInputTokens ?? 0))
                       outputTokens += Math.max(0, Math.floor(u.outputTokens ?? 0))
+                      if (stepInput > 0) lastStepInputTokens = stepInput
                     }
                     store.markSessionUsage(routerSession.id, {
                       inputTokens,
                       cachedInputTokens,
                       outputTokens,
+                      lastInputTokens: lastStepInputTokens,
                     })
                   } catch (err) {
                     console.error(

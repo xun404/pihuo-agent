@@ -935,23 +935,34 @@ export class LocalStore {
    */
   markSessionUsage(
     sessionId: string,
-    delta: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number },
+    delta: {
+      inputTokens?: number
+      cachedInputTokens?: number
+      outputTokens?: number
+      lastInputTokens?: number
+    },
   ): Session | null {
     const inputTokens = Math.max(0, Math.floor(delta.inputTokens ?? 0))
     const cachedTokens = Math.max(0, Math.floor(delta.cachedInputTokens ?? 0))
     const outputTokens = Math.max(0, Math.floor(delta.outputTokens ?? 0))
+    const lastInput = Math.max(0, Math.floor(delta.lastInputTokens ?? 0))
     if (inputTokens === 0 && cachedTokens === 0 && outputTokens === 0) return null
     let session: Session | null = null
     this.commit((d) => {
       const s = d.sessions.find((x) => x.id === sessionId)
       if (!s) return
+      // Cumulative totals (for cache-hit-rate row): inputTokens here is the
+      // SUM across all steps — it represents total token spend, not current
+      // context size. cache-hit = cumulative cached / cumulative input.
       s.usageInputTokens = (s.usageInputTokens ?? 0) + inputTokens
       s.usageCachedTokens = (s.usageCachedTokens ?? 0) + cachedTokens
       s.usageOutputTokens = (s.usageOutputTokens ?? 0) + outputTokens
-      // Last-turn input is overwritten (not accumulated): the context-window
-      // ring shows "how big was the prompt the model just saw", which is the
-      // best proxy for current context occupancy and drops after a compress.
-      s.usageLastInputTokens = inputTokens
+      // Last-turn input is the LAST STEP's input (not the sum) — in a
+      // multi-step loop each step already includes prior context, so the last
+      // step's input is the best proxy for "current context occupancy" and
+      // drops after a compress. Falls back to cumulative sum when caller
+      // doesn't separate it.
+      s.usageLastInputTokens = lastInput > 0 ? lastInput : inputTokens
       s.usageLastUpdatedAt = now()
       session = d.sessions.find((x) => x.id === sessionId)!
     })
