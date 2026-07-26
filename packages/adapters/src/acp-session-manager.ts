@@ -1825,6 +1825,20 @@ export class AcpSessionManager {
     })
     this.rejectQueued(entry, new Error('ACP session evicted'))
     this.closeEntry(entry)
+    // When the live entry's child process exits (the common cause of eviction),
+    // mark the durable catalog record stale so the NEXT dispatch for this reuse
+    // key does NOT try to resume a dead session — it builds a fresh one instead.
+    // Without this, a dead child leaves a 'ready' catalog record pointing at a
+    // session the agent no longer holds, and every subsequent dispatch for that
+    // member fails with "ACP connection closed" until a manual reset.
+    if (this.reuseEnabled && entry.agentSessionId) {
+      try {
+        this.markCatalogStale(this.computeKeyDigest(entry.key), 'process_exit')
+      } catch {
+        // Catalog storage hiccup — non-fatal; the record will be retried and
+        // fail on next dispatch, triggering the normal stale path.
+      }
+    }
   }
 
   private failEntry(keyStr: string, entry: LiveEntry, reason: string): void {
