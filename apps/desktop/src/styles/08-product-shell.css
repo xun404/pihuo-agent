@@ -121,10 +121,9 @@ select,
   bottom: 0;
   width: var(--drawer-w);
 }
-/* main-column 让出 drawer 空间（padding-right 平滑过渡，配合 drawer 动画）*/
+/* main-column 让出 drawer 空间（transition 在 .main-column base 声明，class 切换双向触发）*/
 .shell.with-inspector > .main-column {
   padding-right: calc(var(--drawer-w) + var(--sp-2));
-  transition: padding-right var(--dur-base) var(--ease-out);
 }
 
 /* 左右边栏拖拽调整宽度 */
@@ -200,6 +199,10 @@ body.is-resizing-panels * {
   flex-direction: column;
   background: var(--bg-main);
   position: relative;
+  /* inspector 让位：base 0，.with-inspector 时覆盖为 drawer-w。
+     transition 在 base 声明，class 切换时双向触发（含折叠时 padding→0 的过渡）。*/
+  padding-right: 0;
+  transition: padding-right var(--dur-base) var(--ease-out);
 }
 
 /* Sidebar fills its grid column (width from --sidebar-w) */
