@@ -501,11 +501,10 @@ function AppShell({
                     <motion.div
                       key="inspector-drawer"
                       className="inspector-host drawer"
-                      initial={{ width: 0, opacity: 0 }}
-                      animate={{ width: drawerWidth, opacity: 1 }}
-                      exit={{ width: 0, opacity: 0 }}
+                      initial={{ x: '100%', opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: '100%', opacity: 0 }}
                       transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.32, 0.72, 0, 1] }}
-                      style={{ overflow: 'hidden' }}
                     >
                     <div
                       className="panel-resizer panel-resizer-right"

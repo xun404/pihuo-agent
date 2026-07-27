@@ -105,11 +105,26 @@ select,
   position: relative;
 }
 .shell.with-inspector {
-  /* drawer 作为第 3 列（与 sidebar、main-column 并列）*/
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--drawer-w);
+  /* grid 始终 2 列（sidebar + main），drawer 用 absolute 浮在右侧。
+     main-column 用 padding-right 让出 drawer 空间（CSS transition 平滑过渡），
+     避免 grid-template-columns 切换导致 main 瞬间跳变。*/
   gap: 0 var(--sp-2);
   padding: 0 var(--sp-2) var(--sp-2) 0;
   align-items: stretch;
+}
+/* drawer 浮在 shell 右侧（absolute），不参与 grid 流 */
+.shell.with-inspector > .inspector-host.drawer,
+.shell.with-inspector > .drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--drawer-w);
+}
+/* main-column 让出 drawer 空间（padding-right 平滑过渡，配合 drawer 动画）*/
+.shell.with-inspector > .main-column {
+  padding-right: calc(var(--drawer-w) + var(--sp-2));
+  transition: padding-right var(--dur-base) var(--ease-out);
 }
 
 /* 左右边栏拖拽调整宽度 */
