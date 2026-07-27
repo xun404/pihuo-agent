@@ -496,8 +496,17 @@ function AppShell({
                   />
                 </div>
 
-                {inspectorOpen && (
-                  <div className="inspector-host drawer">
+                <AnimatePresence>
+                  {inspectorOpen && (
+                    <motion.div
+                      key="inspector-drawer"
+                      className="inspector-host drawer"
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 'var(--drawer-w)', opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.32, 0.72, 0, 1] }}
+                      style={{ overflow: 'hidden' }}
+                    >
                     <div
                       className="panel-resizer panel-resizer-right"
                       role="separator"
@@ -542,8 +551,9 @@ function AppShell({
                         onRefreshSnapshot={() => void refresh()}
                       />
                     </div>
-                  </div>
-                )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           )}

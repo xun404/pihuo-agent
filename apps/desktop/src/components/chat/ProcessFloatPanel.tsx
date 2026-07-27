@@ -42,7 +42,7 @@ interface Props {
   onClose?: () => void
 }
 
-function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'panel', onClose }: Props) {
+function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini', onClose }: Props) {
   const [modeState, setModeState] = useState<Mode>(defaultMode)
   const mode = modeProp ?? modeState
 
@@ -51,18 +51,31 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'panel', o
   const total = tasks.length
   const completed = tasks.filter((t) => t.status === 'completed').length
   const hasInProgress = tasks.some((t) => t.status === 'in_progress')
+  const activeTask = tasks.find((t) => t.status === 'in_progress')
   const allDone = completed === total
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0
 
-  // ============ mini 模式：一行 pill ============
+  // ============ mini 模式：一行 pill，默认折叠，显示当前执行任务 ============
   if (mode === 'mini') {
+    const activeText = activeTask
+      ? activeTask.activeForm || parseRole(activeTask.content).text
+      : allDone
+        ? '全部完成'
+        : ''
     return (
-      <div className="proc-float proc-mini" role="button" tabIndex={0} aria-label="进程（点击展开）">
+      <div
+        className="proc-float proc-mini"
+        role="button"
+        tabIndex={0}
+        aria-label="进程（点击展开）"
+        onClick={() => setModeState('panel')}
+      >
         <CircleCheck size={13} />
         <span className="proc-mini-label">进程</span>
         <span className="proc-mini-count">
           {completed}/{total}
         </span>
+        {activeText && <span className="proc-mini-task">{activeText}</span>}
         {hasInProgress && <span className="proc-mini-pip" aria-hidden />}
         <button
           type="button"

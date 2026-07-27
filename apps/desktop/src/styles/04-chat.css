@@ -1771,6 +1771,20 @@
   box-shadow: var(--shadow-md);
   overflow: hidden;
   pointer-events: auto;
+  /* 切换 origin 让展开/折叠动画从右上角发散 */
+  transform-origin: top right;
+  animation: proc-float-in var(--dur-base) var(--ease-out);
+}
+
+@keyframes proc-float-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 /* —— panel 模式（完整列表）—— */
@@ -2003,6 +2017,22 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-3);
 }
+/* mini 模式：当前执行任务文本（截断）*/
+.proc-mini-task {
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  /* 用细竖线与计数分隔 */
+  border-left: 1px solid var(--border-soft);
+  padding-left: 8px;
+  margin-left: 2px;
+}
+.proc-mini {
+  max-width: calc(100vw - 28px);
+}
 .proc-mini-pip {
   width: 5px;
   height: 5px;
@@ -2033,6 +2063,10 @@
   /* 窄窗默认 mini：避免遮挡消息内容 */
   .proc-panel {
     width: min(280px, calc(100vw - 28px));
+  }
+  /* 窄窗隐藏 mini 的任务文本（避免 pill 过宽）*/
+  .proc-mini-task {
+    display: none;
   }
 }
 
