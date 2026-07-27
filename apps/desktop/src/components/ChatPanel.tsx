@@ -1253,7 +1253,6 @@ export function ChatPanel({
 
   // 浮窗进程气泡：提取最新 task 快照（无 task → null → 不渲染浮窗）
   const taskSnapshot = useMemo(() => findLatestTaskList(messages), [messages])
-  const [procPanelClosed, setProcPanelClosed] = useState(false)
 
   const composerCard = (
     <div className="composer-stack">
@@ -1460,12 +1459,9 @@ export function ChatPanel({
             busy={effectiveBusy}
             scrollContainerRef={messagesScrollRef}
           />
-          {/* 右上角浮窗进程气泡：仅在有 task 快照且未关闭时显示 */}
-          {taskSnapshot && !procPanelClosed && (
-            <ProcessFloatPanel
-              tasks={taskSnapshot}
-              onClose={() => setProcPanelClosed(true)}
-            />
+          {/* 右上角浮窗进程气泡：有 task 快照时显示（mini/panel 切换，无关闭按钮）*/}
+          {taskSnapshot && (
+            <ProcessFloatPanel tasks={taskSnapshot} />
           )}
           <div ref={messagesScrollRef} className="messages-scroll">
             <div className="messages">{messageList}</div>

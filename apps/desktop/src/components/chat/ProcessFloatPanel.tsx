@@ -12,6 +12,7 @@
  * 持久化：mode 用 useState（in-session），不跨 session（项目无 UI-pref 持久化机制）。
  */
 import { memo, useState } from 'react'
+import { Minimize2, Maximize2 } from 'lucide-react'
 import { Circle, CircleCheck, IconClock } from '../Icons'
 import type { TaskItem } from './TaskListCard'
 
@@ -39,10 +40,9 @@ interface Props {
   /** 强制模式（外部控制）；不传则内部 useState */
   mode?: Mode
   defaultMode?: Mode
-  onClose?: () => void
 }
 
-function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini', onClose }: Props) {
+function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini' }: Props) {
   const [modeState, setModeState] = useState<Mode>(defaultMode)
   const mode = modeProp ?? modeState
 
@@ -87,7 +87,7 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini', on
             setModeState('panel')
           }}
         >
-          <ChevronExpand />
+          <Maximize2 size={12} />
         </button>
       </div>
     )
@@ -128,19 +128,8 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini', on
             title="折叠"
             onClick={() => setModeState('mini')}
           >
-            <MinusIcon />
+            <Minimize2 size={12} />
           </button>
-          {onClose && (
-            <button
-              type="button"
-              className="proc-head-btn"
-              aria-label="关闭"
-              title="关闭"
-              onClick={onClose}
-            >
-              <CloseIcon />
-            </button>
-          )}
         </span>
       </div>
       {/* body */}
@@ -197,32 +186,11 @@ function DoneFold({ count }: { count: number }) {
   )
 }
 
-// —— 内联小图标（避免为单个 chevron/minus/close 引入额外依赖）——
-function ChevronExpand() {
-  return (
-    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-    </svg>
-  )
-}
+// —— 内联小图标（DoneFold 的 chevron；其余用 lucide-react）——
 function ChevronRight() {
   return (
     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M9 6l6 6-6 6" />
-    </svg>
-  )
-}
-function MinusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M5 12h14" />
-    </svg>
-  )
-}
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M18 6L6 18M6 6l12 12" />
     </svg>
   )
 }
