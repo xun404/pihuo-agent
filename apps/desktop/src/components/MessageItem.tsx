@@ -16,7 +16,8 @@ import { MarkdownContent } from './MarkdownContent'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
-import { IconBolt, IconClock, IconSupervisor } from './Icons'
+import { TaskListCard, type TaskItem } from './chat/TaskListCard'
+import { IconClock, Sparkle, Zap, ZapOff, Calendar } from './Icons'
 import { setRecordKey } from '../lib/chat-state'
 import type { MessageKey } from '../i18n/locales'
 import { parseRouterUserMessage } from '../lib/user-message-display'
@@ -173,33 +174,17 @@ function MessageItemImpl({
           sealedStart != null
             ? formatClockTime(sealedStart, locale, { timeZoneLabel: t('chat.runTzCst') })
             : ''
-        return { modelLabel, thinkLabel, durationLabel, startLabel, live }
+        return { modelLabel, thinking: thinkKey, thinkLabel, durationLabel, startLabel, live }
       })()
     : null
 
   return (
     <div className={`msg ${message.role === 'user' ? 'user' : 'leader'}`}>
       {isLeader && leaderMeta ? (
-        <div className="sup-card">
-          {/* header：头像 + Supervisor + 模型 badge + 运行态 */}
-          <div className="sup-header">
-            <span className="sup-avatar" aria-hidden>
-              <IconSupervisor size={14} />
-            </span>
-            <span className="sup-name">{t('chat.leader')}</span>
-            {leaderMeta.modelLabel && (
-              <span className="sup-model">
-                <IconBolt size={9} />
-                {leaderMeta.modelLabel}
-              </span>
-            )}
-            {leaderMeta.live && (
-              <span className="sup-status">
-                <span className="pip" />
-                {t('chat.runningShort')}
-              </span>
-            )}
-          </div>
+        /* Leader 扁平化：去掉 sup-card 卡片壳 + header（头像/Supervisor/模型徽章）。
+           身份信息（模型/思考强度/耗时/日期）全部下沉到 footer（openchamber 风格）。
+           思考/正文/工具/Worker 直接作为 .msg.leader 的子元素铺开。 */
+        <>
           {/* body：思考/工具/Worker/正文 */}
           <div className="sup-body">
             {message.parts.map((part, i) => {
@@ -403,6 +388,28 @@ function MessageItemImpl({
                   />
                 )
               }
+              // data-signal：Mastra TaskSignalProvider 下发的任务列表快照。
+              // tagName='task-list-update'(增量)/'current-task-list'(快照)，
+              // 全量 tasks 在 part.data.metadata.value.tasks。
+              if (part.type === 'data-signal') {
+                const sp = part as {
+                  type: 'data-signal'
+                  data?: {
+                    tagName?: string
+                    metadata?: { value?: { tasks?: unknown } }
+                    value?: { tasks?: unknown }
+                  }
+                }
+                const tagName = sp.data?.tagName
+                if (tagName === 'task-list-update' || tagName === 'current-task-list') {
+                  const rawTasks = sp.data?.metadata?.value?.tasks ?? sp.data?.value?.tasks
+                  if (Array.isArray(rawTasks) && rawTasks.length > 0) {
+                    const tasks = rawTasks as TaskItem[]
+                    return <TaskListCard key={i} tasks={tasks} />
+                  }
+                }
+                return null
+              }
               return null
             })}
             {/* pending 占位符：busy 且本轮还没产出任何 text 正文时显示。
@@ -423,37 +430,47 @@ function MessageItemImpl({
             {showErrorInThisBubble && errorBlock}
           </div>
           {/* /sup-body */}
-          {/* footer：时长 · 思考 · 时间戳（从 header 下沉）*/}
-          {(leaderMeta.durationLabel || leaderMeta.thinkLabel || leaderMeta.startLabel) && (
-            <div className="sup-footer">
-              {leaderMeta.durationLabel && (
-                <span className="sup-footer-meta mono">
-                  <IconClock size={10} />
-                  {leaderMeta.durationLabel}
-                </span>
-              )}
-              {leaderMeta.durationLabel && leaderMeta.thinkLabel && (
-                <span className="sup-footer-sep" aria-hidden>
-                  ·
+          {/* footer：模型 · 思考强度 · 耗时 · 日期（openchamber 风格，无 · 分隔，纯 gap 留白）。
+              图标+文字，统一 muted；live 时末尾追加运行中脉冲点（迁移自 sup-status）。 */}
+          {(leaderMeta.modelLabel ||
+            leaderMeta.thinkLabel ||
+            leaderMeta.durationLabel ||
+            leaderMeta.startLabel ||
+            leaderMeta.live) && (
+            <div className="lead-footer">
+              {leaderMeta.modelLabel && (
+                <span className="lead-footer-meta">
+                  <Sparkle size={13} />
+                  <span className="lead-footer-text">{leaderMeta.modelLabel}</span>
                 </span>
               )}
               {leaderMeta.thinkLabel && (
-                <span className="sup-footer-meta">
-                  <IconBolt size={10} />
-                  {leaderMeta.thinkLabel}
+                <span className="lead-footer-meta">
+                  {/* 思考关闭用 ZapOff，其余强度用 Zap */}
+                  {leaderMeta.thinking === 'off' ? <ZapOff size={13} /> : <Zap size={13} />}
+                  <span className="lead-footer-text">{leaderMeta.thinkLabel}</span>
                 </span>
               )}
-              {leaderMeta.thinkLabel && leaderMeta.startLabel && (
-                <span className="sup-footer-sep" aria-hidden>
-                  ·
+              {leaderMeta.durationLabel && (
+                <span className="lead-footer-meta mono">
+                  <IconClock size={13} />
+                  <span className="lead-footer-text">{leaderMeta.durationLabel}</span>
                 </span>
               )}
               {leaderMeta.startLabel && (
-                <span className="sup-footer-meta mono">{leaderMeta.startLabel}</span>
+                <span className="lead-footer-meta mono">
+                  <Calendar size={13} />
+                  <span className="lead-footer-text">{leaderMeta.startLabel}</span>
+                </span>
+              )}
+              {leaderMeta.live && (
+                <span className="lead-footer-live" aria-hidden>
+                  <span className="lead-footer-pip" />
+                </span>
               )}
             </div>
           )}
-        </div>
+        </>
       ) : (
         /* User message: just the bubble */
         message.parts.map((part, i) => {

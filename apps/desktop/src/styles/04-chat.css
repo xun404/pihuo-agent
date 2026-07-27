@@ -383,6 +383,203 @@
   user-select: none;
 }
 
+/* ============ Leader 扁平 footer（lead-footer）============
+   sup-card 卡片壳移除后，footer 不再有顶部分隔线。
+   openchamber 风格：4 段（模型·思考强度·耗时·日期），每段 图标(13px)+文字，
+   无 · 分隔符，纯 gap 留白；统一 muted（text-3 / opacity .6）。
+   全用 CSS 变量，三套主题（warm/classic/dark）自动适配。 */
+.lead-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px; /* 段间距（对应 openchamber gap-x-2.5）*/
+  padding-top: 8px;
+  margin-top: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  opacity: 0.6;
+}
+.lead-footer-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lead-footer-meta.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.lead-footer-meta svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.lead-footer-text {
+  min-width: 0;
+}
+/* live 运行中脉冲点（迁移自 sup-status .pip）*/
+.lead-footer-live {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+.lead-footer-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* ============ TaskListCard（data-signal 任务列表）============
+   inline 渲染在 Leader 消息流里。线稿 icon-spec-v3 配色。
+   全用 CSS 变量，三套主题自动适配。 */
+.task-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg-surface) 85%, transparent);
+  overflow: hidden;
+  margin: 2px 0;
+}
+.task-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+}
+.task-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.task-card-title svg {
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+}
+.task-card-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.task-card-bar {
+  width: 64px;
+  height: 4px;
+  background: var(--bg-hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.task-card-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width var(--dur-base) var(--ease-out);
+}
+.task-card-live {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--accent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.task-card-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.task-card-body {
+  display: flex;
+  flex-direction: column;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 7px 12px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  border-top: 1px solid transparent;
+}
+.task-row + .task-row {
+  border-top-color: var(--border-soft);
+}
+.task-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.task-row-icon svg {
+  width: 14px;
+  height: 14px;
+}
+/* 状态样式 */
+.task-completed {
+  color: var(--text-3);
+}
+.task-completed .task-row-text {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-4);
+}
+.task-completed .task-row-icon svg {
+  color: var(--green);
+}
+.task-in_progress {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.task-in_progress .task-row-icon svg {
+  color: var(--accent);
+}
+.task-pending .task-row-icon svg {
+  color: var(--text-4);
+}
+.task-row-role {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.task-row-text {
+  flex: 1;
+  min-width: 0;
+}
+.task-row-active {
+  font-size: 11px;
+  color: var(--text-3);
+  font-style: italic;
+  flex-shrink: 0;
+}
+/* role 配色（复用 worker-card-head .node-cap 语义）*/
+.role-plan .task-row-role {
+  color: var(--purple);
+}
+.role-coder .task-row-role {
+  color: var(--blue);
+}
+.role-review .task-row-role {
+  color: var(--accent);
+}
+.role-research .task-row-role {
+  color: var(--green);
+}
+
+
+
 /* leader 旧规则清理后的消息间距 */
 .msg.leader {
   /* 仅保留 flex 基础——卡片样式移至 .sup-card */

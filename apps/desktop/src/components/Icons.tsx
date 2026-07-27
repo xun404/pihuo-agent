@@ -1,6 +1,26 @@
 /** Linear UI icons (stroke 1.75, round cap). Brand small-mark uses 🐝. */
 import React, { useEffect, useState } from 'react'
 import { api } from '../lib/api'
+// lucide-react：补充项目缺失的图标（脑子/日历/任务状态等）。
+// 复用 lucide 真实 SVG path，保证视觉与官网一致；stroke 1.75 与本项目风格对齐。
+import {
+  Brain,
+  Sparkle,
+  Zap,
+  ZapOff,
+  Clock as LucideClock,
+  Calendar,
+  Circle,
+  CircleCheck,
+  FileBraces,
+  FilePen,
+  SquareTerminal,
+  Shapes,
+} from 'lucide-react'
+
+// re-export：新 UI 代码（footer / 思考块 / task 卡片）直接从本文件 import 这些名字，
+// 与项目原有 IconXxx 命名风格并存，避免大范围改动既有引用。
+export { Brain, Sparkle, Zap, ZapOff, Calendar, Circle, CircleCheck }
 
 type IconProps = {
   className?: string
@@ -668,7 +688,10 @@ export function IconMove(p: IconProps) {
   )
 }
 
-type IconComponent = React.FC<IconProps>
+// 兼容项目自有 IconXxx（React.FC<IconProps>）与 lucide-react 图标（LucideIcon）。
+// lucide 组件的 props 是 IconProps 的超集（size/className 都支持），联合类型让 getToolIcon
+// 等映射函数可同时返回两类组件，调用方按 {size, className} 传参即可。
+type IconComponent = React.FC<IconProps> | React.FC<React.SVGProps<SVGSVGElement> & { size?: number }>
 
 /**
  * 工具名 → 专属图标映射。
@@ -681,25 +704,25 @@ type IconComponent = React.FC<IconProps>
 export function getToolIcon(toolName: string): IconComponent {
   const name = toolName.toLowerCase().trim()
   // router session tools（PascalCase → lowercase 后用 includes 匹配）
-  if (name.includes('dispatch') && name.includes('worker')) return IconAIAgent
+  if (name.includes('dispatch') && name.includes('worker')) return Shapes
   if (name.includes('list') && name.includes('worker')) return IconWorkers
   if (name.includes('context')) return IconInfo
   if (name.includes('list') && name.includes('project')) return IconFolder
-  if (name.includes('job')) return IconClock
+  if (name.includes('job')) return LucideClock
   // 外部 CLI 工具（lowercase，对齐 AcpToolKind）
   if (name.includes('delete') || name.includes('remove') || name.includes('rm')) return IconTrash
   if (name.includes('move') || name.includes('rename')) return IconMove
   if (name.includes('edit') || name.includes('str_replace') || name.includes('patch'))
-    return IconPencil
-  if (name.includes('write') || name.includes('create')) return IconFileEdit
-  if (name.includes('read') || name.includes('view') || name.includes('cat')) return IconFileText
+    return FilePen
+  if (name.includes('write') || name.includes('create')) return FilePen
+  if (name.includes('read') || name.includes('view') || name.includes('cat')) return FileBraces
   if (
     name.includes('bash') ||
     name.includes('shell') ||
     name.includes('terminal') ||
     name.includes('exec')
   )
-    return IconTerminalBox
+    return SquareTerminal
   if (
     name.includes('grep') ||
     name.includes('glob') ||
@@ -707,7 +730,7 @@ export function getToolIcon(toolName: string): IconComponent {
     name.includes('find')
   )
     return IconSearch
-  if (name.includes('task') || name.includes('agent')) return IconAIAgent
+  if (name.includes('task') || name.includes('agent')) return Shapes
   if (
     name.includes('fetch') ||
     name.includes('web') ||
