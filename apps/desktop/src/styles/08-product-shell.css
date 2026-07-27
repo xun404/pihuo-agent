@@ -105,7 +105,8 @@ select,
   position: relative;
 }
 .shell.with-inspector {
-  /* drawer 浮在右侧（absolute），main-column 用 padding-right 让出空间 */
+  /* drawer 作为第 3 列（与 sidebar、main-column 并列）*/
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--drawer-w);
   gap: 0 var(--sp-2);
   padding: 0 var(--sp-2) var(--sp-2) 0;
   align-items: stretch;
