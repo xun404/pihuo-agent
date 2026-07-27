@@ -1758,6 +1758,7 @@
 }
 
 
+/* ============ ProcessFloatPanel · 右上角浮窗进程气泡 ============
    设计线稿（floating-process.html）：absolute top/right，浮在消息流之上，
    shadow + 圆角，panel/mini 双模式。全用 CSS 变量，三套主题自动适配。 */
 .proc-float {
