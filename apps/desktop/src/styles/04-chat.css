@@ -1763,8 +1763,9 @@
    shadow + 圆角，panel/mini 双模式。全用 CSS 变量，三套主题自动适配。 */
 .proc-float {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  /* 避开 head（44px）+ 间距，贴 head 下方 */
+  top: calc(44px + var(--sp-2));
+  right: var(--sp-3);
   z-index: 20;
   background: var(--bg-surface);
   border: 1px solid var(--border-soft);
@@ -1774,6 +1775,10 @@
   pointer-events: auto;
   /* 切换 origin 让展开/折叠动画从右上角发散 */
   transform-origin: top right;
+  /* panel↔mini 切换时平滑过渡尺寸 */
+  transition: width var(--dur-base) var(--ease-out),
+    height var(--dur-base) var(--ease-out),
+    max-height var(--dur-base) var(--ease-out);
   animation: proc-float-in var(--dur-base) var(--ease-out);
 }
 

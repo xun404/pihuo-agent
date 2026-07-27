@@ -150,6 +150,14 @@ body.is-resizing-panels .panel-resizer:active::after {
 }
 .inspector-host.drawer {
   position: relative;
+  /* 动画期间内容保持目标宽度，容器宽度变化只裁切不重排 */
+  overflow: hidden;
+}
+.inspector-host.drawer .drawer-panel {
+  /* 固定宽度 = drawer-w，避免容器 width 动画时内容重排 */
+  width: var(--drawer-w);
+  min-width: var(--drawer-w);
+  box-sizing: border-box;
 }
 body.is-resizing-panels {
   cursor: col-resize !important;

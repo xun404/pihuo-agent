@@ -64,6 +64,7 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini', on
         : ''
     return (
       <div
+        key="proc-mini"
         className="proc-float proc-mini"
         role="button"
         tabIndex={0}
@@ -100,7 +101,7 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini', on
   const focusTasks = compact ? pendingTasks : tasks
 
   return (
-    <div className="proc-float proc-panel" role="complementary" aria-label="任务进程">
+    <div key="proc-panel" className="proc-float proc-panel" role="complementary" aria-label="任务进程">
       {/* header */}
       <div className="proc-head">
         <span className="proc-head-title">
