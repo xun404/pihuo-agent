@@ -71,14 +71,14 @@ function buildQueries(messages: AnyMessage[], busy: boolean): QueryItem[] {
   return items
 }
 
-/** fisheye 计算结果（对照 icon-spec ④ Tgt 函数） */
+/** fisheye 计算结果（缩小 1/3 后的尺度） */
 function fisheye(idx: number, active: number | null): { cls: string; scale: number; op: number } {
-  if (active === null) return { cls: 'mid', scale: 1, op: 0.58 }
+  if (active === null) return { cls: 'mid', scale: 1, op: 0.5 }
   const d = Math.abs(idx - active)
-  if (d === 0) return { cls: 'peak', scale: 2.6, op: 1 }
-  if (d === 1) return { cls: 'near', scale: 1.7, op: 0.86 }
-  if (d === 2) return { cls: 'mid', scale: 1.25, op: 0.72 }
-  return { cls: 'far', scale: 1, op: 0.58 }
+  if (d === 0) return { cls: 'peak', scale: 1.8, op: 1 }
+  if (d === 1) return { cls: 'near', scale: 1.3, op: 0.8 }
+  if (d === 2) return { cls: 'mid', scale: 1, op: 0.65 }
+  return { cls: 'far', scale: 1, op: 0.5 }
 }
 
 interface Props {
@@ -93,6 +93,8 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
   const [activeIdx, setActiveIdx] = useState<number | null>(null)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const [focusIdx, setFocusIdx] = useState<number | null>(null)
+  // 默认不选中：只在用户首次滚动或点击 tick 后才跟踪 active query
+  const hasInteractedRef = useRef(false)
 
   // 用 IntersectionObserver 监听各 user msg 节点，确定当前活跃 query
   useEffect(() => {
@@ -109,6 +111,11 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
 
     const observer = new IntersectionObserver(
       (entries) => {
+        // 用户未交互前不主动设 active（保持默认不选中）
+        if (!hasInteractedRef.current) {
+          void entries
+          return
+        }
         // 选最靠上（容器顶部附近）可见的 user msg 为活跃 query
         let topIdx: number | null = null
         let topTop = -Infinity
@@ -129,7 +136,16 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
     )
 
     els.forEach((el) => observer.observe(el))
-    return () => observer.disconnect()
+
+    // 用户首次滚动后才开始跟踪 active query（默认不选中）
+    const onScroll = () => {
+      hasInteractedRef.current = true
+    }
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      observer.disconnect()
+      container.removeEventListener('scroll', onScroll)
+    }
   }, [queries, scrollContainerRef])
 
   // focusIdx：hover 优先，否则 active
@@ -140,6 +156,7 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
     const container = scrollContainerRef.current
     const q = queries[idx]
     if (!container || !q) return
+    hasInteractedRef.current = true
     const el = container.querySelector(`[data-msg-id="${CSS.escape(q.id)}"]`)
     if (el) {
       const containerRect = container.getBoundingClientRect()
@@ -199,9 +216,15 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
         })}
       </div>
 
-      {/* hover 预览 */}
+      {/* hover 预览：垂直跟随被 hover 的 tick（track 居中，step=11px）*/}
       {hoverIdx !== null && queries[hoverIdx] && (
-        <div className="turn-nav-preview" role="tooltip">
+        <div
+          className="turn-nav-preview"
+          role="tooltip"
+          style={{
+            top: `calc(50% + ${(hoverIdx - (queries.length - 1) / 2) * 11}px)`,
+          }}
+        >
           <div className="turn-nav-preview-idx">QUERY {hoverIdx + 1} / {queries.length}</div>
           <div className="turn-nav-preview-q">{queries[hoverIdx]!.text || '(空)'}</div>
           {queries[hoverIdx]!.preview && (
