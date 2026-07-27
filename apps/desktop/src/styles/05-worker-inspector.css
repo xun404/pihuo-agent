@@ -5,7 +5,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
+  /* height 由 .inspector-host.drawer 的 absolute top/bottom 决定（08-product-shell.css），
+     不再设 100%，否则 absolute + height:100% + top 会导致底部溢出贴边。*/
   padding: var(--sp-2);
   box-shadow: inset 0 0 0 1px var(--border-soft);
   overflow: hidden;

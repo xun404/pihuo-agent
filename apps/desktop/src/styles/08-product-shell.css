@@ -163,6 +163,10 @@ body.is-resizing-panels .panel-resizer:active::after {
   right: var(--sp-2);
   bottom: var(--sp-2);
   width: var(--drawer-w);
+  /* 覆盖 .drawer { height: 100% }（05）和 .inspector-host.drawer { flex:1 }（06）。
+     absolute + top + bottom + height:auto 让高度自动 = 父级 - 上下边距。*/
+  height: auto !important;
+  flex: none !important;
   /* 动画期间内容保持目标宽度，容器宽度变化只裁切不重排 */
   overflow: hidden;
 }
