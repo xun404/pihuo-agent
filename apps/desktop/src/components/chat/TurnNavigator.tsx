@@ -13,7 +13,7 @@
  *   - 仅 ≥2 个 query 才渲染（单 query 无需导航）
  *   - 纯 CSS 变量，三套主题自动适配
  */
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { UIMessage } from '@ai-sdk/react'
 import { parseRouterUserMessage } from '../../lib/user-message-display'
 
@@ -90,96 +90,29 @@ interface Props {
 
 function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
   const queries = useMemo(() => buildQueries(messages, busy), [messages, busy])
-  const [activeIdx, setActiveIdx] = useState<number | null>(null)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
-  const [focusIdx, setFocusIdx] = useState<number | null>(null)
-  // 默认不选中：只在用户首次滚动或点击 tick 后才跟踪 active query
-  const hasInteractedRef = useRef(false)
 
-  // 用 IntersectionObserver 监听各 user msg 节点，确定当前活跃 query
-  useEffect(() => {
-    if (queries.length < 2) return
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    // 找到所有 user msg DOM 节点（需 data-msg-id）
-    const els = queries
-      .map((q) => container.querySelector(`[data-msg-id="${CSS.escape(q.id)}"]`))
-      .filter((el): el is Element => !!el)
-
-    if (els.length === 0) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // 用户未交互前不主动设 active（保持默认不选中）
-        if (!hasInteractedRef.current) {
-          void entries
-          return
-        }
-        // 选最靠上（容器顶部附近）可见的 user msg 为活跃 query
-        let topIdx: number | null = null
-        let topTop = -Infinity
-        for (let i = 0; i < els.length; i++) {
-          const el = els[i]!
-          const rect = el.getBoundingClientRect()
-          const containerRect = container.getBoundingClientRect()
-          // user msg 顶部在容器顶部下方 120px 内（含刚滚过的）
-          if (rect.top <= containerRect.top + 120 && rect.top > topTop) {
-            topTop = rect.top
-            topIdx = i
-          }
-        }
-        if (topIdx !== null) setActiveIdx(topIdx)
-        void entries
-      },
-      { root: container, threshold: [0, 0.1, 0.5, 1] },
-    )
-
-    els.forEach((el) => observer.observe(el))
-
-    // 用户首次滚动后才开始跟踪 active query（默认不选中）
-    const onScroll = () => {
-      hasInteractedRef.current = true
-    }
-    container.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      observer.disconnect()
-      container.removeEventListener('scroll', onScroll)
-    }
-  }, [queries, scrollContainerRef])
-
-  // focusIdx：hover 优先，否则 active
-  const focus = hoverIdx ?? activeIdx
+  // fisheye 只看 hover：未 hover 时全部统一 mid 态（不跟踪滚动 active）
+  const focus = hoverIdx
 
   // 跳转到指定 query
   const jumpTo = (idx: number) => {
     const container = scrollContainerRef.current
     const q = queries[idx]
     if (!container || !q) return
-    hasInteractedRef.current = true
     const el = container.querySelector(`[data-msg-id="${CSS.escape(q.id)}"]`)
     if (el) {
       const containerRect = container.getBoundingClientRect()
       const elRect = el.getBoundingClientRect()
       const offset = elRect.top - containerRect.top + container.scrollTop
       container.scrollTo({ top: Math.max(0, offset - 8), behavior: 'smooth' })
-      setFocusIdx(idx)
     }
   }
 
   // 点击外部/hover 退出后，恢复 active 为 focus。
   // 注意：必须在 early return 之前调用（Rules of Hooks）。
-  useEffect(() => {
-    if (hoverIdx === null && focusIdx !== null) {
-      const t = setTimeout(() => setFocusIdx(null), 600)
-      return () => clearTimeout(t)
-    }
-  }, [hoverIdx, focusIdx])
-
   // <2 query 不渲染
   if (queries.length < 2) return null
-
-  const displayFocus = focus ?? focusIdx
 
   return (
     <nav
@@ -189,17 +122,15 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
     >
       <div className="turn-nav-track">
         {queries.map((q, idx) => {
-          const f = fisheye(idx, displayFocus)
+          const f = fisheye(idx, focus)
           return (
             <button
               key={q.id}
               type="button"
               className={`turn-nav-tick ${f.cls}${q.running ? ' running' : ''}`}
-              aria-current={idx === activeIdx ? 'location' : undefined}
               aria-label={`跳转到 query ${idx + 1}: ${q.text.slice(0, 60)}`}
               aria-posinset={idx + 1}
               aria-setsize={queries.length}
-              data-active={idx === activeIdx ? 'true' : 'false'}
               onMouseEnter={() => setHoverIdx(idx)}
               onFocus={() => setHoverIdx(idx)}
               onClick={() => jumpTo(idx)}
