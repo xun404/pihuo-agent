@@ -44,17 +44,17 @@ import {
 } from './acp-archive-reader.js'
 import {
   binaryDistributionToLaunchSpec,
+  materializeWorkerLaunch,
   packageDistributionToLaunchSpec,
 } from './acp-launch-spec.js'
 import {
   buildPackageAgentArgv,
   resolveAcpRunner,
+  resolveNodeAbsolutePath,
+  resolveNpmCliFromNpx,
   type ResolvedRunner,
 } from './acp-runner-resolver.js'
-import {
-  materializeNpmPackage,
-  PackageMaterializeError,
-} from './acp-package-materializer.js'
+import { materializeNpmPackage, PackageMaterializeError } from './acp-package-materializer.js'
 
 export type PrepareTrustDecision = {
   acceptedAt: string
@@ -156,6 +156,47 @@ export function installationTargetDir(input: {
 
 function stagingDirFor(finalDir: string): string {
   return `${finalDir}.staging.${process.pid}.${randomBytes(4).toString('hex')}`
+}
+
+function npmInstallerEnvironment(
+  env: NodeJS.ProcessEnv,
+  includeFixtureControls: boolean,
+): Record<string, string> {
+  const allowed = new Set([
+    'PATH',
+    'PATHEXT',
+    'SYSTEMROOT',
+    'WINDIR',
+    'COMSPEC',
+    'HOME',
+    'USERPROFILE',
+    'TMP',
+    'TEMP',
+    'TMPDIR',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'ALL_PROXY',
+    'NO_PROXY',
+    'NPM_CONFIG_REGISTRY',
+    'NPM_CONFIG_USERCONFIG',
+    'NPM_CONFIG_CACHE',
+    'NPM_CONFIG_HTTPS_PROXY',
+    'NPM_CONFIG_PROXY',
+    'NPM_CONFIG_STRICT_SSL',
+    'NPM_TOKEN',
+    'NODE_EXTRA_CA_CERTS',
+    'SSL_CERT_FILE',
+    'CI',
+  ])
+  const projected: Record<string, string> = {}
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== 'string') continue
+    const upper = key.toUpperCase()
+    if (allowed.has(upper) || (includeFixtureControls && upper.startsWith('ACP_FAKE_NPM_'))) {
+      projected[key] = value
+    }
+  }
+  return projected
 }
 
 type PreparedArtifactMetadata = {
@@ -423,16 +464,42 @@ async function assertReusablePreparedArtifact(input: {
     } catch {
       throw new AcpInstallError('ACP_INSTALL_DIGEST_MISMATCH', 'Prepared executable is missing')
     }
-    if (
-      !stat.isFile() ||
-      stat.isSymbolicLink() ||
-      metadata.command !== executable ||
-      metadata.launchSpec.executable !== executable
-    ) {
+    if (!stat.isFile() || stat.isSymbolicLink() || metadata.launchSpec.executable !== executable) {
       throw new AcpInstallError(
         'ACP_INSTALL_DIGEST_MISMATCH',
         'Prepared executable facts are inconsistent',
       )
+    }
+    if (metadata.distribution === 'binary' && metadata.command !== executable) {
+      throw new AcpInstallError(
+        'ACP_INSTALL_DIGEST_MISMATCH',
+        'Prepared binary executable facts are inconsistent',
+      )
+    }
+    if (metadata.distribution === 'npx') {
+      const interpreter = metadata.launchSpec.interpreter
+      if (interpreter && (metadata.command !== interpreter || metadata.args[0] !== executable)) {
+        throw new AcpInstallError(
+          'ACP_INSTALL_DIGEST_MISMATCH',
+          'Prepared package interpreter facts are inconsistent',
+        )
+      }
+      if (!interpreter && metadata.command !== executable) {
+        throw new AcpInstallError(
+          'ACP_INSTALL_DIGEST_MISMATCH',
+          'Prepared native package launch facts are inconsistent',
+        )
+      }
+      if (interpreter) {
+        try {
+          if (!lstatSync(realpathSync(interpreter)).isFile()) throw new Error('not a file')
+        } catch {
+          throw new AcpInstallError(
+            'ACP_INSTALL_DIGEST_MISMATCH',
+            'Prepared package interpreter is unavailable',
+          )
+        }
+      }
     }
   } else if (
     !metadata.runner ||
@@ -541,10 +608,7 @@ export async function downloadToFile(
       continue
     }
     if (!res.ok || !res.body) {
-      throw new AcpInstallError(
-        'ACP_INSTALL_DOWNLOAD_FAILED',
-        `Download failed HTTP ${res.status}`,
-      )
+      throw new AcpInstallError('ACP_INSTALL_DOWNLOAD_FAILED', `Download failed HTTP ${res.status}`)
     }
     const len = res.headers.get('content-length')
     if (len && Number(len) > maxBytes) {
@@ -629,6 +693,11 @@ async function preparePackageAgent(input: PrepareRequest): Promise<PrepareResult
   })
   if (reusable) return metadataToPrepareResult(reusable, installDir, input.trust)
   const runner = resolveAcpRunner(dist.kind, input.runnerEnv)
+  const nodeInterpreter =
+    dist.kind === 'npx' ? resolveNodeAbsolutePath(input.runnerEnv ?? process.env) : undefined
+  if (dist.kind === 'npx' && !nodeInterpreter) {
+    throw new AcpInstallError('ACP_RUNNER_MISSING', 'Node interpreter could not be resolved')
+  }
   const argv = buildPackageAgentArgv({
     kind: dist.kind,
     packageSpec: dist.package,
@@ -665,20 +734,19 @@ async function preparePackageAgent(input: PrepareRequest): Promise<PrepareResult
     let command = argv.command
     let args = [...argv.args]
     if (dist.kind === 'npx') {
-      const siblingNpm = join(dirname(runner.command), 'npm-cli.js')
+      const npmCli = resolveNpmCliFromNpx(runner.command)
       const installer =
         input.packageInstaller ??
-        (existsSync(siblingNpm) ? { command: siblingNpm } : undefined)
+        (npmCli && nodeInterpreter ? { command: nodeInterpreter, argsPrefix: [npmCli] } : undefined)
       if (!installer) {
         throw new AcpInstallError(
           'ACP_RUNNER_MISSING',
           'npm installer could not be resolved beside the verified npx runner',
         )
       }
-      const installerEnv = Object.fromEntries(
-        Object.entries(input.runnerEnv ?? process.env).filter(
-          (entry): entry is [string, string] => typeof entry[1] === 'string',
-        ),
+      const installerEnv = npmInstallerEnvironment(
+        input.runnerEnv ?? process.env,
+        Boolean(input.packageInstaller),
       )
       const materialized = await materializeNpmPackage({
         packageSpec: dist.package,
@@ -690,9 +758,13 @@ async function preparePackageAgent(input: PrepareRequest): Promise<PrepareResult
         timeoutMs: input.downloadTimeoutMs,
       })
       resolvedExecutable = join(installDir, ...materialized.executableRelativePath.split('/'))
-      materializedLaunchSpec = { ...resolvedLaunchSpec, executable: resolvedExecutable }
-      command = resolvedExecutable
-      args = [...dist.args]
+      materializedLaunchSpec = {
+        ...resolvedLaunchSpec,
+        executable: resolvedExecutable,
+        ...(materialized.launchMode === 'node' ? { interpreter: nodeInterpreter! } : {}),
+      }
+      command = materialized.launchMode === 'node' ? nodeInterpreter! : resolvedExecutable
+      args = [...(materialized.launchMode === 'node' ? [resolvedExecutable] : []), ...dist.args]
     }
     const payloadFiles = await collectPayloadFiles(stagingDir)
     const payloadDigest = payloadInventoryDigest(payloadFiles)
@@ -734,7 +806,9 @@ async function preparePackageAgent(input: PrepareRequest): Promise<PrepareResult
       payloadDigest,
     }
   } catch (e) {
-    rmSync(stagingDir, { recursive: true, force: true })
+    if (!(e instanceof PackageMaterializeError && e.code === 'ACP_INSTALL_CLEANUP_FAILED')) {
+      rmSync(stagingDir, { recursive: true, force: true })
+    }
     if (e instanceof AcpInstallError) throw e
     if (e instanceof PackageMaterializeError) throw new AcpInstallError(e.code, e.message)
     throw new AcpInstallError('ACP_INSTALL_FAILED', 'Agent preparation failed')
@@ -961,24 +1035,21 @@ export async function validatePreparedRegistryInstallation(input: {
   expectedPayloadDigest: string
 }): Promise<PrepareResult> {
   const metadata = await assertReusablePreparedArtifact(input)
-  const expectedCommand =
-    input.expectedLaunchSpec.executable
-      ? input.expectedLaunchSpec.executable
-      : input.expectedLaunchSpec.runnerCommand
-  const expectedArgs =
-    input.expectedLaunchSpec.executable
-      ? [...input.expectedLaunchSpec.agentArgs]
-      : [
-          ...input.expectedLaunchSpec.runnerArgs,
-          ...(input.expectedLaunchSpec.packageSpec ? [input.expectedLaunchSpec.packageSpec] : []),
-          ...input.expectedLaunchSpec.agentArgs,
-        ]
+  let expected: ReturnType<typeof materializeWorkerLaunch>
+  try {
+    expected = materializeWorkerLaunch(input.expectedLaunchSpec)
+  } catch {
+    throw new AcpInstallError(
+      'ACP_INSTALL_DIGEST_MISMATCH',
+      'Prepared artifact launch facts are incomplete',
+    )
+  }
   if (
     !metadata ||
     metadata.payloadDigest !== input.expectedPayloadDigest ||
     !isDeepStrictEqual(metadata.launchSpec, input.expectedLaunchSpec) ||
-    metadata.command !== expectedCommand ||
-    !isDeepStrictEqual(metadata.args, expectedArgs) ||
+    metadata.command !== expected.command ||
+    !isDeepStrictEqual(metadata.args, expected.args) ||
     !isDeepStrictEqual(metadata.env, input.expectedLaunchSpec.env)
   ) {
     throw new AcpInstallError(

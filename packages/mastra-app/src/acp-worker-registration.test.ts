@@ -27,6 +27,14 @@ const FAKE_PACKAGE_INSTALLER = {
   argsPrefix: ['--import', fileURLToPath(import.meta.resolve('tsx')), FAKE_NPM],
 }
 
+async function waitUntil(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate() && Date.now() < deadline) {
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, 10))
+  }
+  assert.equal(predicate(), true, 'condition did not become true before deadline')
+}
+
 describe('acp-worker-registration', () => {
   let dir: string
   const prevData = process.env.SWARMDESK_AGENT_DATA_DIR
@@ -128,7 +136,8 @@ describe('acp-worker-registration', () => {
     assert.equal(prepare.packageSpec, '@example/reg-agent@1.0.0')
     assert.equal(prepare.distribution, 'npx')
     assert.equal(installation.status, 'prepared')
-    assert.equal(installation.launchSpec?.executable, prepare.command)
+    assert.equal(installation.launchSpec?.executable, installation.resolvedExecutable)
+    assert.equal(installation.launchSpec?.interpreter, prepare.command)
     assert.deepEqual(installation.launchSpec?.agentArgs, ['--acp'])
     assert.deepEqual(installation.launchSpec?.env, { ACP_MODE: 'stdio' })
 
@@ -434,21 +443,158 @@ describe('acp-worker-registration', () => {
         ],
       })
 
-      const result = await prepareRegistryWorker({
+      const request = {
         packageInstaller: FAKE_PACKAGE_INSTALLER,
         body: {
           registryId: 'reg-agent',
           version: '1.0.0',
-          distribution: 'npx',
+          distribution: 'npx' as const,
           manifestDigest,
         },
-      })
+      }
+      const [result, concurrent] = await Promise.all([
+        prepareRegistryWorker(request),
+        prepareRegistryWorker({
+          ...request,
+          body: {
+            registryId: 'reg-agent',
+            distribution: 'npx',
+            manifestDigest,
+          },
+        }),
+      ])
 
       assert.equal(result.installation.installationId, legacyId)
-      assert.equal(result.installation.resolvedExecutable, result.prepare.command)
+      assert.equal(concurrent.installation.installationId, legacyId)
+      assert.equal(concurrent.prepare.command, result.prepare.command)
+      assert.equal(result.installation.launchSpec?.interpreter, result.prepare.command)
       assert.deepEqual(result.installation.workerIds, ['worker_existing'])
       assert.equal(existsSync(join(installDir, 'package-prepare.json')), true)
-      assert.equal(existsSync(result.prepare.command), true)
+      assert.equal(existsSync(result.installation.resolvedExecutable!), true)
+
+      const interrupted = loadAcpAgentInstallationIndex()
+      const interruptedRecord = interrupted.installations.find(
+        (item) => item.installationId === legacyId,
+      )!
+      const interruptedLaunch = { ...interruptedRecord.launchSpec! }
+      delete interruptedLaunch.executable
+      delete interruptedLaunch.interpreter
+      interruptedRecord.resolvedExecutable = undefined
+      interruptedRecord.payloadDigest = 'legacy-marker'
+      interruptedRecord.launchSpec = interruptedLaunch
+      saveAcpAgentInstallationIndex(interrupted)
+      const quarantine = `${installDir}.legacy.${legacyId}`
+      mkdirSync(quarantine, { recursive: true })
+      writeFileSync(join(quarantine, 'package-prepare.json'), '{}')
+
+      const recovered = await prepareRegistryWorker(request)
+      assert.equal(recovered.installation.installationId, legacyId)
+      assert.ok(recovered.installation.resolvedExecutable)
+      assert.equal(existsSync(quarantine), false)
+    } finally {
+      process.env.SWARMDESK_AGENT_DATA_DIR = previous.data
+      process.env.ACP_REGISTRY_CATALOG_PATH = previous.catalog
+      process.env.ACP_AGENT_INSTALLATIONS_PATH = previous.installs
+    }
+  })
+
+  it('keeps later prepares queued when an intermediate lock waiter is cancelled', async () => {
+    const isolated = join(dir, 'cancelled-lock-waiter')
+    const previous = {
+      data: process.env.SWARMDESK_AGENT_DATA_DIR,
+      catalog: process.env.ACP_REGISTRY_CATALOG_PATH,
+      installs: process.env.ACP_AGENT_INSTALLATIONS_PATH,
+    }
+    process.env.SWARMDESK_AGENT_DATA_DIR = isolated
+    process.env.ACP_REGISTRY_CATALOG_PATH = join(isolated, 'catalog.json')
+    process.env.ACP_AGENT_INSTALLATIONS_PATH = join(isolated, 'installs.json')
+    try {
+      saveAcpRegistryCatalogStore({
+        schemaVersion: '1.0.0',
+        digest: 'sha256:catalog',
+        snapshot: catalogSnapshot,
+      })
+      const legacyId = createInstallationId()
+      const installDir = join(isolated, 'data', 'agents', 'reg-agent', '1.0.0', 'npx')
+      mkdirSync(installDir, { recursive: true })
+      writeFileSync(join(installDir, 'package-prepare.json'), '{}')
+      saveAcpAgentInstallationIndex({
+        version: 1,
+        installations: [
+          {
+            installationId: legacyId,
+            registryId: 'reg-agent',
+            registryVersion: '1.0.0',
+            distribution: 'npx',
+            manifestDigest,
+            installDir,
+            packageSpec: '@example/reg-agent@1.0.0',
+            runnerCommand: process.execPath,
+            runnerVersion: 'legacy',
+            payloadDigest: 'legacy-marker',
+            launchSpec: {
+              distribution: 'npx',
+              runnerCommand: process.execPath,
+              runnerVersion: 'legacy',
+              runnerArgs: ['--yes'],
+              packageSpec: '@example/reg-agent@1.0.0',
+              agentArgs: ['--acp'],
+              env: { ACP_MODE: 'stdio' },
+            },
+            status: 'prepared',
+            preparedAt: '2026-07-17T00:00:00.000Z',
+            workerIds: ['worker_existing'],
+          },
+        ],
+      })
+      const ownerController = new AbortController()
+      const traceFile = join(isolated, 'owner.trace')
+      const body = {
+        registryId: 'reg-agent',
+        version: '1.0.0',
+        distribution: 'npx' as const,
+        manifestDigest,
+      }
+      const owner = prepareRegistryWorker({
+        body,
+        packageInstaller: FAKE_PACKAGE_INSTALLER,
+        runnerEnv: {
+          ...process.env,
+          ACP_FAKE_NPM_MODE: 'hang',
+          ACP_FAKE_NPM_TRACE_FILE: traceFile,
+        },
+        signal: ownerController.signal,
+        downloadTimeoutMs: 5_000,
+      })
+      await waitUntil(() => existsSync(traceFile))
+
+      const cancelledController = new AbortController()
+      cancelledController.abort()
+      await assert.rejects(
+        () =>
+          prepareRegistryWorker({
+            body,
+            packageInstaller: FAKE_PACKAGE_INSTALLER,
+            signal: cancelledController.signal,
+          }),
+        (error: unknown) => error instanceof Error && error.name === 'AbortError',
+      )
+
+      let laterSettled = false
+      const later = prepareRegistryWorker({ body, packageInstaller: FAKE_PACKAGE_INSTALLER }).then(
+        (result) => {
+          laterSettled = true
+          return result
+        },
+      )
+      await new Promise<void>((resolveWait) => setTimeout(resolveWait, 100))
+      assert.equal(laterSettled, false)
+
+      ownerController.abort()
+      await assert.rejects(owner)
+      const result = await later
+      assert.equal(result.installation.installationId, legacyId)
+      assert.equal(existsSync(result.installation.resolvedExecutable!), true)
     } finally {
       process.env.SWARMDESK_AGENT_DATA_DIR = previous.data
       process.env.ACP_REGISTRY_CATALOG_PATH = previous.catalog

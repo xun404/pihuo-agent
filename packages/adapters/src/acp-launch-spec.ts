@@ -131,8 +131,8 @@ export function materializeWorkerLaunch(spec: WorkerLaunchSpec): {
 } {
   if (spec.executable) {
     return {
-      command: spec.executable,
-      args: [...spec.agentArgs],
+      command: spec.interpreter ?? spec.executable,
+      args: [...(spec.interpreter ? [spec.executable] : []), ...spec.agentArgs],
       env: { ...spec.env },
     }
   }

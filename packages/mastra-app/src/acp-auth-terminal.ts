@@ -683,8 +683,8 @@ function materializeTerminalAuthCommandWithBoundary(
           409,
         )
       }
-      command = spec.executable
-      args = terminalArgs
+      command = spec.interpreter ?? spec.executable
+      args = [...(spec.interpreter ? [spec.executable] : []), ...terminalArgs]
     } else if (
       !spec.runnerCommand ||
       !spec.packageSpec ||

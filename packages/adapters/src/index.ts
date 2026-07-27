@@ -79,6 +79,8 @@ export {
 export type { AcpRegistryTarget, AcpRegistryDistributionKind } from '@swarmdesk-agent/shared'
 export {
   resolveAcpRunner,
+  resolveNodeAbsolutePath,
+  resolveNpmCliFromNpx,
   resolveRunnerAbsolutePath,
   buildPackageAgentArgv,
   AcpRunnerError,

@@ -49,8 +49,16 @@ describe('materializeNpmPackage', () => {
 
     assert.equal(result.packageName, '@example/agent')
     assert.equal(result.executableRelativePath, 'node_modules/@example/agent/dist/cli.js')
+    assert.equal(result.launchMode, 'node')
     assert.equal(existsSync(join(stagingDir, result.executableRelativePath)), true)
     assert.match(readFileSync(traceFile, 'utf8'), /start:success[\s\S]*complete/u)
+  })
+
+  it('recognizes native npm bins for direct execution instead of forcing Node', async () => {
+    const { input } = fixture('native-bin')
+    const result = await materializeNpmPackage(input)
+    assert.equal(result.launchMode, 'direct')
+    assert.match(result.executableRelativePath, /\/dist\/agent$/u)
   })
 
   it('terminates a stalled installer at the materialization deadline', async () => {
@@ -81,12 +89,29 @@ describe('materializeNpmPackage', () => {
     assert.match(readFileSync(traceFile, 'utf8'), /signal:SIGTERM/u)
   })
 
+  it(
+    'waits for a SIGTERM-resistant installer descendant to be killed',
+    { skip: process.platform === 'win32' },
+    async () => {
+      const { input, traceFile } = fixture('tree-hang')
+      const controller = new AbortController()
+      input.signal = controller.signal
+      setTimeout(() => controller.abort(), 300)
+
+      await assert.rejects(() => materializeNpmPackage(input))
+      const descendant = Number(readFileSync(traceFile, 'utf8').match(/descendant:(\d+)/u)?.[1])
+      assert.ok(descendant > 0)
+      assert.throws(() => process.kill(descendant, 0))
+    },
+  )
+
   it('maps installer and entry failures without exposing stderr or private paths', async () => {
     for (const [mode, code] of [
       ['exit-error', 'ACP_INSTALL_FAILED'],
       ['missing-bin', 'ACP_INSTALL_ENTRY_INVALID'],
       ['multiple-bin', 'ACP_INSTALL_ENTRY_INVALID'],
       ['escaping-bin', 'ACP_INSTALL_ENTRY_INVALID'],
+      ['mismatched-version', 'ACP_INSTALL_ENTRY_INVALID'],
     ] as const) {
       const { input, stagingDir } = fixture(mode)
       await assert.rejects(
@@ -104,6 +129,17 @@ describe('materializeNpmPackage', () => {
   it('rejects npm tags and ranges instead of resolving a mutable package version', async () => {
     const { input } = fixture()
     input.packageSpec = '@example/agent@latest'
+    await assert.rejects(
+      () => materializeNpmPackage(input),
+      (error: unknown) =>
+        error instanceof Error &&
+        (error as Error & { code?: string }).code === 'ACP_INSTALL_ENTRY_INVALID',
+    )
+  })
+
+  it('rejects URL-like package names even when they end with an exact version', async () => {
+    const { input } = fixture()
+    input.packageSpec = 'https://example.com/agent.tgz@1.2.3'
     await assert.rejects(
       () => materializeNpmPackage(input),
       (error: unknown) =>

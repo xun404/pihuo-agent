@@ -53,6 +53,8 @@ export interface WorkerLaunchSpec {
   runnerArgs: string[]
   packageSpec?: string
   executable?: string
+  /** Verified interpreter for managed script entrypoints (for example node.exe on Windows). */
+  interpreter?: string
   agentArgs: string[]
   env: Record<string, string>
   artifact?: {

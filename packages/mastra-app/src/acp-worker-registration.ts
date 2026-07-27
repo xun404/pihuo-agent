@@ -56,6 +56,43 @@ export class RegistryRegistrationError extends Error {
   }
 }
 
+const registryPrepareLocks = new Map<string, Promise<void>>()
+
+async function withRegistryPrepareLock<T>(
+  key: string,
+  signal: AbortSignal | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = registryPrepareLocks.get(key) ?? Promise.resolve()
+  let release!: () => void
+  const gate = new Promise<void>((resolveGate) => {
+    release = resolveGate
+  })
+  const queued = previous.then(() => gate)
+  registryPrepareLocks.set(key, queued)
+  try {
+    if (signal?.aborted) signal.throwIfAborted()
+    if (signal) {
+      await new Promise<void>((resolveWait, rejectWait) => {
+        const onAbort = () => rejectWait(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+        signal.addEventListener('abort', onAbort, { once: true })
+        void previous.then(resolveWait, rejectWait).finally(() => {
+          signal.removeEventListener('abort', onAbort)
+        })
+      })
+    } else {
+      await previous
+    }
+    signal?.throwIfAborted()
+    return await run()
+  } finally {
+    release()
+    void queued.finally(() => {
+      if (registryPrepareLocks.get(key) === queued) registryPrepareLocks.delete(key)
+    })
+  }
+}
+
 function projectInputValidation(run: () => void): void {
   try {
     run()
@@ -307,11 +344,8 @@ function quarantineReferencedLegacyNpx(input: {
   }
   const quarantine = `${record.installDir}.legacy.${record.installationId}`
   if (existsSync(quarantine)) {
-    throw new RegistryRegistrationError(
-      'ACP_INSTALL_FAILED',
-      'Legacy installation quarantine already exists',
-      409,
-    )
+    // Resume an Owner transaction interrupted before Store commit/cleanup.
+    return quarantine
   }
   renameSync(record.installDir, quarantine)
   return quarantine
@@ -325,6 +359,28 @@ function restoreQuarantinedLegacyNpx(input: { installDir: string; quarantine?: s
 }
 
 export async function prepareRegistryWorker(input: {
+  body: RegistryPrepareBody
+  fetchImpl?: typeof fetch
+  localArchivePath?: string
+  runnerEnv?: NodeJS.ProcessEnv
+  signal?: AbortSignal
+  downloadTimeoutMs?: number
+  downloadHeaderTimeoutMs?: number
+  downloadStallTimeoutMs?: number
+  packageInstaller?: PrepareRequest['packageInstaller']
+}): Promise<{
+  installation: AcpAgentInstallationRecord
+  prepare: PrepareResult
+}> {
+  const resolvedVersion = findAgentInLocalCatalog(input.body.registryId, input.body.version).version
+  const key = `${input.body.registryId}\0${resolvedVersion}\0${input.body.distribution}`
+  const lockedInput = { ...input, body: { ...input.body, version: resolvedVersion } }
+  return withRegistryPrepareLock(key, input.signal, () =>
+    prepareRegistryWorkerUnlocked(lockedInput),
+  )
+}
+
+async function prepareRegistryWorkerUnlocked(input: {
   body: RegistryPrepareBody
   fetchImpl?: typeof fetch
   localArchivePath?: string
@@ -412,6 +468,9 @@ export async function prepareRegistryWorker(input: {
     ) {
       referencedLegacyNpx = existing
       legacyQuarantine = quarantineReferencedLegacyNpx({ installation: existing, agentsRoot })
+    } else if (existing.distribution === 'npx') {
+      const interruptedQuarantine = `${existing.installDir}.legacy.${existing.installationId}`
+      if (existsSync(interruptedQuarantine)) legacyQuarantine = interruptedQuarantine
     }
   }
 

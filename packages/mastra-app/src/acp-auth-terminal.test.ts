@@ -376,6 +376,7 @@ describe('acp-auth-terminal', () => {
     const target = worker()
     seedPrivateMethod(target)
     const executable = '/private/router/agents/term-agent/node_modules/@example/agent/bin/agent.js'
+    const interpreter = '/trusted/bin/node'
     const record = installation({
       resolvedExecutable: executable,
       launchSpec: {
@@ -384,6 +385,7 @@ describe('acp-auth-terminal', () => {
         runnerArgs: ['--yes'],
         packageSpec: '@example/agent@1.0.0',
         executable,
+        interpreter,
         agentArgs: ['acp', '--stdio'],
         env: {},
       },
@@ -399,8 +401,8 @@ describe('acp-auth-terminal', () => {
     )
 
     const attempt = getTerminalAuthAttempt(created.attemptId)!
-    assert.equal(attempt.command, executable)
-    assert.deepEqual(attempt.args, ['auth', 'login'])
+    assert.equal(attempt.command, interpreter)
+    assert.deepEqual(attempt.args, [executable, 'auth', 'login'])
   })
 
   it('binds one-time token to worker, method, attempt, exact Origin, and current Desktop token', () => {

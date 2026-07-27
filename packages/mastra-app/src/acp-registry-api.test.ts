@@ -764,11 +764,9 @@ describe('acp-registry-api', () => {
 
     assert.equal(captured?.command, worker.command)
     assert.deepEqual(captured?.args, worker.args)
-    assert.equal(
-      captured?.command,
-      findInstallationById(worker.installationId!)?.resolvedExecutable,
-    )
-    assert.deepEqual(captured?.args, ['--acp'])
+    const preparedInstallation = findInstallationById(worker.installationId!)
+    assert.equal(captured?.command, preparedInstallation?.launchSpec?.interpreter)
+    assert.deepEqual(captured?.args, [preparedInstallation?.resolvedExecutable, '--acp'])
     assert.equal(captured?.cwd, findInstallationById(worker.installationId!)?.installDir)
     assert.equal(captured?.terminalAuthReady, true)
     assert.equal(captured?.env.AGENT_API_KEY, 'worker-only-secret')
@@ -823,6 +821,7 @@ describe('acp-registry-api', () => {
     )!
     const legacyLaunch = { ...record.launchSpec! }
     delete legacyLaunch.executable
+    delete legacyLaunch.interpreter
     record.resolvedExecutable = undefined
     record.payloadDigest = 'legacy-marker-payload'
     record.launchSpec = legacyLaunch
@@ -851,14 +850,14 @@ describe('acp-registry-api', () => {
     })
 
     const migrated = findInstallationById(worker.installationId!)!
-    assert.equal(captured?.command, migrated.resolvedExecutable)
-    assert.deepEqual(captured?.args, ['--acp'])
-    assert.equal(result.worker.command, migrated.resolvedExecutable)
+    assert.equal(captured?.command, migrated.launchSpec?.interpreter)
+    assert.deepEqual(captured?.args, [migrated.resolvedExecutable, '--acp'])
+    assert.equal(result.worker.command, migrated.launchSpec?.interpreter)
     assert.equal(
       getSharedStore()
         .listWorkers()
         .find((item) => item.id === worker.id)?.command,
-      migrated.resolvedExecutable,
+      migrated.launchSpec?.interpreter,
     )
     assert.deepEqual(migrated.workerIds, [worker.id])
   })

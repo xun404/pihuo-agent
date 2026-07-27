@@ -11,12 +11,13 @@ describe('materializeWorkerLaunch', () => {
         runnerArgs: ['--yes'],
         packageSpec: '@example/agent@1.2.3',
         executable: '/managed/agent/dist/cli.js',
+        interpreter: '/trusted/node',
         agentArgs: ['--acp'],
         env: { ACP_MODE: 'stdio' },
       }),
       {
-        command: '/managed/agent/dist/cli.js',
-        args: ['--acp'],
+        command: '/trusted/node',
+        args: ['/managed/agent/dist/cli.js', '--acp'],
         env: { ACP_MODE: 'stdio' },
       },
     )

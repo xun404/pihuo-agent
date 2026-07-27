@@ -228,19 +228,58 @@ describe('acp-agent-installer', () => {
       availability: 'available',
     }
 
+    const traceFile = join(dir, 'materialized-install-env.trace')
     const result = await prepareRegistryAgent({
       agent,
       distribution: 'npx',
       target: 'darwin-aarch64',
       agentsRoot: join(dir, 'materialized-agents'),
       packageInstaller: FAKE_PACKAGE_INSTALLER,
+      runnerEnv: {
+        ...process.env,
+        SWARMDESK_AGENT_INTERNAL_TOKEN: 'owner-secret-must-not-reach-npm',
+        ACP_FAKE_NPM_TRACE_FILE: traceFile,
+      },
     })
 
     assert.ok(result.resolvedExecutable?.startsWith(`${result.installDir}${sep}`))
-    assert.equal(result.command, result.resolvedExecutable)
-    assert.deepEqual(result.args, ['--acp'])
+    assert.equal(result.command, result.launchSpec.interpreter)
+    assert.deepEqual(result.args, [result.resolvedExecutable, '--acp'])
     assert.equal(result.launchSpec.executable, result.resolvedExecutable)
     assert.equal(result.launchSpec.packageSpec, '@example/agent@1.2.3')
+    assert.match(readFileSync(traceFile, 'utf8'), /owner-secret:absent/u)
+  })
+
+  it('launches a materialized native npm bin directly', async () => {
+    const agent: AcpRegistryAgentMetadata = {
+      id: 'materialized-native-package',
+      name: 'Materialized native package',
+      version: '1.2.3',
+      description: 'd',
+      icon: '',
+      distributions: [
+        {
+          kind: 'npx',
+          package: '@example/agent@1.2.3',
+          args: ['--acp'],
+          env: {},
+        },
+      ],
+      manifestDigest: 'sha256:materialized-native-package',
+      availability: 'available',
+    }
+    const result = await prepareRegistryAgent({
+      agent,
+      distribution: 'npx',
+      target: 'darwin-aarch64',
+      agentsRoot: join(dir, 'materialized-native-agents'),
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
+      runnerEnv: { ...process.env, ACP_FAKE_NPM_MODE: 'native-bin' },
+    })
+
+    assert.equal(result.launchSpec.interpreter, undefined)
+    assert.equal(result.command, result.resolvedExecutable)
+    assert.deepEqual(result.args, ['--acp'])
   })
 
   it('rejects a conflicting manifest without changing an existing installation', async () => {
