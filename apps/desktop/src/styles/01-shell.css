@@ -23,6 +23,9 @@ html[data-palette='classic'] {
   --bg-input: #f7f7f8;
   --border: rgba(20, 30, 50, 0.1);
   --border-soft: rgba(20, 30, 50, 0.06);
+  /* classic 冷灰调：accent 用 blue（橙色 #e8890c 在冷灰背景上突兀）*/
+  --accent: var(--blue);
+  --accent-soft: var(--blue-soft);
 }
 
 /* 显式 warm（与 :root 一致，便于切换后回写） */

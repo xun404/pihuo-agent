@@ -1785,11 +1785,11 @@
 @keyframes proc-float-in {
   from {
     opacity: 0;
-    transform: scale(0.92) translateY(-4px);
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: scale(1);
   }
 }
 
@@ -1845,7 +1845,6 @@
   transition: width var(--dur-base) var(--ease-out);
 }
 .proc-head-live {
-  margin-left: auto;
   font-size: 10.5px;
   color: var(--accent);
   font-weight: 600;
@@ -1863,6 +1862,7 @@
 .proc-head-acts {
   display: inline-flex;
   gap: 2px;
+  margin-left: auto; /* 右对齐：推到 header 最右 */
 }
 .proc-head-btn {
   width: 22px;
