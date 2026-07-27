@@ -112,15 +112,6 @@ select,
   padding: 0 var(--sp-2) var(--sp-2) 0;
   align-items: stretch;
 }
-/* drawer 浮在 shell 右侧（absolute），不参与 grid 流 */
-.shell.with-inspector > .inspector-host.drawer,
-.shell.with-inspector > .drawer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: var(--drawer-w);
-}
 /* main-column 让出 drawer 空间（transition 在 .main-column base 声明，class 切换双向触发）*/
 .shell.with-inspector > .main-column {
   padding-right: calc(var(--drawer-w) + var(--sp-2));
@@ -164,7 +155,13 @@ body.is-resizing-panels .panel-resizer:active::after {
   width: 6px;
 }
 .inspector-host.drawer {
-  position: relative;
+  /* absolute 浮在 shell 右侧（不参与 grid 流），right:0 始终保持，
+     折叠时不会因 class 移除跑偏。transform 滑入/滑出由 framer-motion 控制。*/
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--drawer-w);
   /* 动画期间内容保持目标宽度，容器宽度变化只裁切不重排 */
   overflow: hidden;
 }
