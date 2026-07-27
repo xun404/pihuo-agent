@@ -105,6 +105,12 @@ export {
   type PrepareTrustDecision,
 } from './acp-agent-installer.js'
 export {
+  materializeNpmPackage,
+  PackageMaterializeError,
+  type MaterializeNpmPackageInput,
+  type MaterializedNpmPackage,
+} from './acp-package-materializer.js'
+export {
   prepareOpenCodeAcpEnv,
   pickOpenCodeAcpModel,
   OPENCODE_SAFE_DEFAULT_MODEL,
