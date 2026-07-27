@@ -26,6 +26,7 @@ import {
   downloadToFile,
   getAcpSessionManager,
   logoutSpawnedAgent,
+  materializeWorkerLaunch,
   probeSpawnedAgent,
   resolveAcpRegistryTarget,
   type CapabilityProbeResult,
@@ -329,23 +330,65 @@ function materializeInstallationLaunch(installation: AcpAgentInstallationRecord)
       409,
     )
   }
-  if (spec.distribution === 'npx' || spec.distribution === 'uvx') {
-    if (!spec.runnerCommand || !spec.packageSpec) {
-      throw new RegistryApiError(
-        'ACP_INSTALL_FAILED',
-        'Installation launch facts are incomplete',
-        409,
-      )
-    }
-    return {
-      command: spec.runnerCommand,
-      args: [...spec.runnerArgs, spec.packageSpec, ...spec.agentArgs],
-    }
+  try {
+    return materializeWorkerLaunch(spec)
+  } catch {
+    throw new RegistryApiError(
+      'ACP_INSTALL_FAILED',
+      'Installation launch facts are incomplete',
+      409,
+    )
   }
-  if (spec.distribution === 'binary' && spec.executable) {
-    return { command: spec.executable, args: [...spec.agentArgs] }
+}
+
+function isLegacyNpxMarker(installation: AcpAgentInstallationRecord): boolean {
+  return (
+    installation.distribution === 'npx' &&
+    installation.launchSpec?.distribution === 'npx' &&
+    !installation.resolvedExecutable &&
+    !installation.launchSpec.executable
+  )
+}
+
+async function ensureMaterializedRegistryWorker(
+  worker: WorkerRegistration,
+  lifecycle: WorkerLifecycleToken,
+  deps: RegistryLifecycleDependencies,
+): Promise<WorkerRegistration> {
+  const current = exactInstallationForWorker(worker)
+  if (!isLegacyNpxMarker(current)) return worker
+  const source = worker.source?.type === 'registry' ? worker.source : undefined
+  if (!source) return worker
+
+  const prepared = await (deps.prepareRegistryWorker ?? prepareRegistryWorker)({
+    body: {
+      registryId: source.registryId,
+      version: source.registryVersion,
+      distribution: source.distribution,
+      manifestDigest: source.manifestDigest,
+    },
+    signal: deps.signal,
+  })
+  assertWorkerLifecycle(lifecycle)
+  if (prepared.installation.installationId !== current.installationId) {
+    throw new RegistryApiError(
+      'ACP_INSTALL_DIGEST_MISMATCH',
+      'Legacy package migration changed installation identity',
+      409,
+    )
   }
-  throw new RegistryApiError('ACP_INSTALL_FAILED', 'Installation launch facts are incomplete', 409)
+  const launch = materializeInstallationLaunch(prepared.installation)
+  const healed: WorkerRegistration = {
+    ...worker,
+    command: launch.command,
+    args: [...launch.args],
+    env: { ...prepared.installation.launchSpec!.env },
+    launchSpec: prepared.installation.launchSpec,
+    iconPath: prepared.installation.iconPath ?? worker.iconPath,
+  }
+  reconcileRegistryWorker(worker, healed, deps)
+  compareAndSwapLifecycleWorker(lifecycle, worker, healed)
+  return healed
 }
 
 function spawnedSetupInput(
@@ -585,9 +628,16 @@ export async function apiCheckRegistryUpdate(
 
 export async function apiPrepareRegistry(
   body: RegistryPrepareBody,
-  options: { signal?: AbortSignal } = {},
+  options: {
+    signal?: AbortSignal
+    packageInstaller?: Parameters<typeof prepareRegistryWorker>[0]['packageInstaller']
+  } = {},
 ) {
-  const result = await prepareRegistryWorker({ body, signal: options.signal })
+  const result = await prepareRegistryWorker({
+    body,
+    signal: options.signal,
+    packageInstaller: options.packageInstaller,
+  })
   return {
     installationId: result.installation.installationId,
     installation: {
@@ -817,8 +867,9 @@ export function apiGetWorkerAuthMethods(workerId: string): {
 export async function apiProbeWorker(workerId: string, deps: RegistryLifecycleDependencies = {}) {
   // Probing is a diagnostic action: it must work on a disabled worker too, so
   // that a freshly registered worker can be validated before enabling.
-  const before = findWorker(workerId)
+  let before = findWorker(workerId)
   const lifecycle = beginWorkerLifecycle(workerId)
+  before = await ensureMaterializedRegistryWorker(before, lifecycle, deps)
   const installation = exactInstallationForWorker(before)
   const setup = spawnedSetupInput(before, deps)
   const initializing = applyReadinessToWorker(before, {

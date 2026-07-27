@@ -675,7 +675,17 @@ function materializeTerminalAuthCommandWithBoundary(
   let args: string[]
 
   if (spec.distribution === 'npx' || spec.distribution === 'uvx') {
-    if (
+    if (spec.executable) {
+      if (!installation.resolvedExecutable || installation.resolvedExecutable !== spec.executable) {
+        throw new TerminalAuthError(
+          'ACP_INSTALL_DIGEST_MISMATCH',
+          'Registry package launch facts do not match',
+          409,
+        )
+      }
+      command = spec.executable
+      args = terminalArgs
+    } else if (
       !spec.runnerCommand ||
       !spec.packageSpec ||
       installation.runnerCommand !== spec.runnerCommand ||
@@ -686,9 +696,10 @@ function materializeTerminalAuthCommandWithBoundary(
         'Registry runner launch facts do not match',
         409,
       )
+    } else {
+      command = spec.runnerCommand
+      args = [...spec.runnerArgs, spec.packageSpec, ...terminalArgs]
     }
-    command = spec.runnerCommand
-    args = [...spec.runnerArgs, spec.packageSpec, ...terminalArgs]
   } else if (spec.distribution === 'binary') {
     if (
       !spec.executable ||

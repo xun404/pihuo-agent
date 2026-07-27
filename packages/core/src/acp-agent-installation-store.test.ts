@@ -11,6 +11,7 @@ import {
   loadAcpAgentInstallationIndex,
   listUnreferencedInstallations,
   markInstallationRemoved,
+  migrateLegacyNpxInstallation,
   removeWorkerReference,
   resolveInstallationDir,
   upsertInstallation,
@@ -252,5 +253,66 @@ describe('acp-agent-installation-store', () => {
     assert.equal(loaded.installations.length, 1)
     assert.equal(loaded.installations[0]?.launchSpec, undefined)
     assert.equal(loaded.installations[0]?.manifestDigest, legacy.manifestDigest)
+  })
+
+  it('atomically migrates a referenced legacy npx marker to a materialized executable', () => {
+    const legacy = upsertInstallation(
+      base({
+        distribution: 'npx',
+        installDir: join(dir, 'agents', 'demo-agent', '1.0.0', 'npx'),
+        packageSpec: '@example/agent@1.0.0',
+        runnerCommand: '/trusted/npx',
+        runnerVersion: '10.0.0',
+        payloadDigest: 'legacy-marker',
+        workerIds: ['worker_existing'],
+        launchSpec: {
+          distribution: 'npx',
+          runnerCommand: '/trusted/npx',
+          runnerVersion: '10.0.0',
+          runnerArgs: ['--yes'],
+          packageSpec: '@example/agent@1.0.0',
+          agentArgs: ['--acp'],
+          env: { ACP_MODE: 'stdio' },
+        },
+      }),
+    )
+    const executable = join(legacy.installDir, 'node_modules', '@example', 'agent', 'bin.js')
+    const migrated = migrateLegacyNpxInstallation(legacy.installationId, {
+      ...legacy,
+      resolvedExecutable: executable,
+      payloadDigest: 'materialized-payload',
+      launchSpec: { ...legacy.launchSpec!, executable },
+    })
+
+    assert.equal(migrated.resolvedExecutable, executable)
+    assert.equal(migrated.launchSpec?.executable, executable)
+    assert.deepEqual(migrated.workerIds, ['worker_existing'])
+    assert.deepEqual(findInstallationById(legacy.installationId), migrated)
+  })
+
+  it('rejects legacy npx migration after an executable has already been pinned', () => {
+    const executable = '/trusted/already-materialized'
+    const current = upsertInstallation(
+      base({
+        registryId: 'already-materialized-agent',
+        distribution: 'npx',
+        resolvedExecutable: executable,
+        packageSpec: '@example/agent@1.0.0',
+        payloadDigest: 'payload',
+        launchSpec: {
+          distribution: 'npx',
+          runnerArgs: [],
+          packageSpec: '@example/agent@1.0.0',
+          executable,
+          agentArgs: [],
+          env: {},
+        },
+      }),
+    )
+
+    assert.throws(
+      () => migrateLegacyNpxInstallation(current.installationId, { ...current }),
+      /ACP_INSTALL_DIGEST_MISMATCH/,
+    )
   })
 })

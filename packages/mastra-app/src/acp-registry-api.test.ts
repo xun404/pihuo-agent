@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import {
   findInstallationById,
   getSharedStore,
@@ -60,6 +61,14 @@ import {
   setPtyFeatureReadyForTests,
 } from './acp-auth-terminal.js'
 
+const FAKE_NPM = fileURLToPath(
+  new URL('../../adapters/src/fixtures/fake-npm-installer.ts', import.meta.url),
+)
+const FAKE_PACKAGE_INSTALLER = {
+  command: process.execPath,
+  argsPrefix: ['--import', fileURLToPath(import.meta.resolve('tsx')), FAKE_NPM],
+}
+
 describe('acp-registry-api', () => {
   let dir: string
   const prevData = process.env.SWARMDESK_AGENT_DATA_DIR
@@ -97,6 +106,7 @@ describe('acp-registry-api', () => {
         manifestDigest: digest,
       },
       runnerEnv: process.env,
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
     })
   }
 
@@ -207,12 +217,15 @@ describe('acp-registry-api', () => {
   })
 
   it('prepare + register + readiness + secrets without leaking values', async () => {
-    const prepared = await apiPrepareRegistry({
-      registryId: 'api-agent',
-      version: '1.0.0',
-      distribution: 'npx',
-      manifestDigest,
-    })
+    const prepared = await apiPrepareRegistry(
+      {
+        registryId: 'api-agent',
+        version: '1.0.0',
+        distribution: 'npx',
+        manifestDigest,
+      },
+      { packageInstaller: FAKE_PACKAGE_INSTALLER },
+    )
     assert.ok(prepared.installationId)
 
     const registered = await apiRegisterRegistry({
@@ -751,6 +764,11 @@ describe('acp-registry-api', () => {
 
     assert.equal(captured?.command, worker.command)
     assert.deepEqual(captured?.args, worker.args)
+    assert.equal(
+      captured?.command,
+      findInstallationById(worker.installationId!)?.resolvedExecutable,
+    )
+    assert.deepEqual(captured?.args, ['--acp'])
     assert.equal(captured?.cwd, findInstallationById(worker.installationId!)?.installDir)
     assert.equal(captured?.terminalAuthReady, true)
     assert.equal(captured?.env.AGENT_API_KEY, 'worker-only-secret')
@@ -782,6 +800,7 @@ describe('acp-registry-api', () => {
       worker: result.worker,
       methodId: 'terminal',
     })
+    assert.equal(privateTerminalLaunch.command, captured?.command)
     assert.deepEqual(privateTerminalLaunch.args.slice(-2), ['--token', 'private-terminal-value'])
     assert.equal(JSON.stringify(methods).includes('private-terminal-value'), false)
     const publicBody = JSON.stringify({
@@ -793,6 +812,55 @@ describe('acp-registry-api', () => {
     assert.equal(publicBody.includes('private-terminal-value'), false)
     assert.equal(publicBody.includes('secret-terminal-value'), false)
     assert.equal(publicBody.includes('private-link'), false)
+  })
+
+  it('self-heals a referenced legacy npx marker before probing', async () => {
+    resetInstallations()
+    const worker = await registerSeededWorker({ installationId: 'inst-legacy-self-heal' })
+    const index = loadAcpAgentInstallationIndex()
+    const record = index.installations.find(
+      (item) => item.installationId === worker.installationId,
+    )!
+    const legacyLaunch = { ...record.launchSpec! }
+    delete legacyLaunch.executable
+    record.resolvedExecutable = undefined
+    record.payloadDigest = 'legacy-marker-payload'
+    record.launchSpec = legacyLaunch
+    saveAcpAgentInstallationIndex(index)
+    getSharedStore().upsertWorker({
+      ...worker,
+      command: record.runnerCommand!,
+      args: [...legacyLaunch.runnerArgs, legacyLaunch.packageSpec!, ...legacyLaunch.agentArgs],
+      launchSpec: legacyLaunch,
+    })
+
+    let captured: SpawnedAcpSetupInput | undefined
+    const result = await apiProbeWorker(worker.id, {
+      prepareRegistryWorker: (input) =>
+        prepareRegistryWorker({ ...input, packageInstaller: FAKE_PACKAGE_INSTALLER }),
+      probeSpawnedAgent: async (input) => {
+        captured = input
+        return probeResult({
+          status: 'ready',
+          code: 'SESSION_READY',
+          message: 'ready',
+          checkedAt: '2026-07-17T00:00:05.000Z',
+          nextAction: 'none',
+        })
+      },
+    })
+
+    const migrated = findInstallationById(worker.installationId!)!
+    assert.equal(captured?.command, migrated.resolvedExecutable)
+    assert.deepEqual(captured?.args, ['--acp'])
+    assert.equal(result.worker.command, migrated.resolvedExecutable)
+    assert.equal(
+      getSharedStore()
+        .listWorkers()
+        .find((item) => item.id === worker.id)?.command,
+      migrated.resolvedExecutable,
+    )
+    assert.deepEqual(migrated.workerIds, [worker.id])
   })
 
   it('persists auth-required probe diagnostics without marking the installation installed', async () => {

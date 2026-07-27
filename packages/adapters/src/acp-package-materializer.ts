@@ -18,7 +18,10 @@ export type MaterializedNpmPackage = {
 }
 
 export class PackageMaterializeError extends Error {
-  constructor(readonly code: string, message: string) {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
     super(message)
     this.name = 'PackageMaterializeError'
   }
@@ -30,7 +33,8 @@ function exactPackageName(packageSpec: string): string {
   const scopedSlash = spec.startsWith('@') ? spec.indexOf('/') : -1
   const name = versionAt > Math.max(0, scopedSlash) ? spec.slice(0, versionAt) : ''
   const version = versionAt >= 0 ? spec.slice(versionAt + 1) : ''
-  if (!name || !version || name.includes('\\') || name.includes('..')) {
+  const exactVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
+  if (!name || !exactVersion.test(version) || name.includes('\\') || name.includes('..')) {
     throw new PackageMaterializeError(
       'ACP_INSTALL_ENTRY_INVALID',
       'Registry package must use an exact package name and version',
@@ -127,14 +131,18 @@ async function runInstaller(input: MaterializeNpmPackageInput): Promise<void> {
       stderrTail = `${stderrTail}${chunk.toString('utf8')}`.slice(-4_096)
     })
     child.once('error', () =>
-      finish(new PackageMaterializeError('ACP_INSTALL_FAILED', 'Registry package installer failed')),
+      finish(
+        new PackageMaterializeError('ACP_INSTALL_FAILED', 'Registry package installer failed'),
+      ),
     )
     child.once('exit', (code) => {
       if (lifecycleFailure) finish(lifecycleFailure)
       else if (code === 0) finish()
       else {
         void stderrTail
-        finish(new PackageMaterializeError('ACP_INSTALL_FAILED', 'Registry package installer failed'))
+        finish(
+          new PackageMaterializeError('ACP_INSTALL_FAILED', 'Registry package installer failed'),
+        )
       }
     })
     input.signal?.addEventListener('abort', onAbort, { once: true })

@@ -372,6 +372,37 @@ describe('acp-auth-terminal', () => {
     assert.equal(created.commandPreview.command, 'agent')
   })
 
+  it('uses the materialized package executable and replaces only ACP args', () => {
+    const target = worker()
+    seedPrivateMethod(target)
+    const executable = '/private/router/agents/term-agent/node_modules/@example/agent/bin/agent.js'
+    const record = installation({
+      resolvedExecutable: executable,
+      launchSpec: {
+        distribution: 'npx',
+        runnerCommand: '/trusted/bin/npx',
+        runnerArgs: ['--yes'],
+        packageSpec: '@example/agent@1.0.0',
+        executable,
+        agentArgs: ['acp', '--stdio'],
+        env: {},
+      },
+    })
+    const created = createTerminalAuthAttempt(
+      {
+        workerId: target.id,
+        methodId: 'login',
+        worker: target,
+        desktopToken: 'desktop-capability-v1',
+      },
+      deps(record),
+    )
+
+    const attempt = getTerminalAuthAttempt(created.attemptId)!
+    assert.equal(attempt.command, executable)
+    assert.deepEqual(attempt.args, ['auth', 'login'])
+  })
+
   it('binds one-time token to worker, method, attempt, exact Origin, and current Desktop token', () => {
     const created = create(worker(), { origin: 'http://localhost:5173' })
 

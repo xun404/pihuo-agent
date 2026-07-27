@@ -100,4 +100,15 @@ describe('materializeNpmPackage', () => {
       )
     }
   })
+
+  it('rejects npm tags and ranges instead of resolving a mutable package version', async () => {
+    const { input } = fixture()
+    input.packageSpec = '@example/agent@latest'
+    await assert.rejects(
+      () => materializeNpmPackage(input),
+      (error: unknown) =>
+        error instanceof Error &&
+        (error as Error & { code?: string }).code === 'ACP_INSTALL_ENTRY_INVALID',
+    )
+  })
 })

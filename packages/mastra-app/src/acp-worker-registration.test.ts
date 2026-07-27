@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import {
   createInstallationId,
   loadAcpAgentInstallationIndex,
@@ -17,6 +18,14 @@ import {
   RegistryRegistrationError,
 } from './acp-worker-registration.js'
 import { digestOfAgentEntry } from '@swarmdesk-agent/adapters'
+
+const FAKE_NPM = fileURLToPath(
+  new URL('../../adapters/src/fixtures/fake-npm-installer.ts', import.meta.url),
+)
+const FAKE_PACKAGE_INSTALLER = {
+  command: process.execPath,
+  argsPrefix: ['--import', fileURLToPath(import.meta.resolve('tsx')), FAKE_NPM],
+}
 
 describe('acp-worker-registration', () => {
   let dir: string
@@ -107,6 +116,7 @@ describe('acp-worker-registration', () => {
 
   it('prepare + register materializes owner launch without client command', async () => {
     const { installation, prepare } = await prepareRegistryWorker({
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
       body: {
         registryId: 'reg-agent',
         version: '1.0.0',
@@ -118,7 +128,7 @@ describe('acp-worker-registration', () => {
     assert.equal(prepare.packageSpec, '@example/reg-agent@1.0.0')
     assert.equal(prepare.distribution, 'npx')
     assert.equal(installation.status, 'prepared')
-    assert.equal(installation.launchSpec?.runnerCommand, prepare.command)
+    assert.equal(installation.launchSpec?.executable, prepare.command)
     assert.deepEqual(installation.launchSpec?.agentArgs, ['--acp'])
     assert.deepEqual(installation.launchSpec?.env, { ACP_MODE: 'stdio' })
 
@@ -146,6 +156,7 @@ describe('acp-worker-registration', () => {
 
   it('idempotently reuses the prepared installation without mutating artifacts', async () => {
     const first = await prepareRegistryWorker({
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
       body: {
         registryId: 'reg-agent',
         version: '1.0.0',
@@ -169,6 +180,7 @@ describe('acp-worker-registration', () => {
 
   it('compares the private formal metadata with the immutable store row on reuse', async () => {
     const first = await prepareRegistryWorker({
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
       body: {
         registryId: 'reg-agent',
         version: '1.0.0',
@@ -206,6 +218,7 @@ describe('acp-worker-registration', () => {
 
   it('anchors a jointly modified payload inventory to the immutable Store row', async () => {
     const first = await prepareRegistryWorker({
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
       body: {
         registryId: 'reg-agent',
         version: '1.0.0',
@@ -254,6 +267,7 @@ describe('acp-worker-registration', () => {
 
   it('revalidates the Store-anchored payload at the separate register boundary', async () => {
     const first = await prepareRegistryWorker({
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
       body: {
         registryId: 'reg-agent',
         version: '1.0.0',
@@ -342,6 +356,7 @@ describe('acp-worker-registration', () => {
         ],
       })
       const result = await prepareRegistryWorker({
+        packageInstaller: FAKE_PACKAGE_INSTALLER,
         body: {
           registryId: 'reg-agent',
           version: '1.0.0',
@@ -362,6 +377,78 @@ describe('acp-worker-registration', () => {
         ),
       )
       assert.equal(existsSync(join(installDir, 'legacy-marker')), false)
+    } finally {
+      process.env.SWARMDESK_AGENT_DATA_DIR = previous.data
+      process.env.ACP_REGISTRY_CATALOG_PATH = previous.catalog
+      process.env.ACP_AGENT_INSTALLATIONS_PATH = previous.installs
+    }
+  })
+
+  it('materializes a referenced legacy npx marker in place without losing worker references', async () => {
+    const isolated = join(dir, 'referenced-legacy-reprepare')
+    const previous = {
+      data: process.env.SWARMDESK_AGENT_DATA_DIR,
+      catalog: process.env.ACP_REGISTRY_CATALOG_PATH,
+      installs: process.env.ACP_AGENT_INSTALLATIONS_PATH,
+    }
+    process.env.SWARMDESK_AGENT_DATA_DIR = isolated
+    process.env.ACP_REGISTRY_CATALOG_PATH = join(isolated, 'catalog.json')
+    process.env.ACP_AGENT_INSTALLATIONS_PATH = join(isolated, 'installs.json')
+    try {
+      saveAcpRegistryCatalogStore({
+        schemaVersion: '1.0.0',
+        digest: 'sha256:catalog',
+        snapshot: catalogSnapshot,
+      })
+      const legacyId = createInstallationId()
+      const installDir = join(isolated, 'data', 'agents', 'reg-agent', '1.0.0', 'npx')
+      mkdirSync(installDir, { recursive: true })
+      writeFileSync(join(installDir, 'package-prepare.json'), '{}')
+      saveAcpAgentInstallationIndex({
+        version: 1,
+        installations: [
+          {
+            installationId: legacyId,
+            registryId: 'reg-agent',
+            registryVersion: '1.0.0',
+            distribution: 'npx',
+            manifestDigest,
+            installDir,
+            packageSpec: '@example/reg-agent@1.0.0',
+            runnerCommand: process.execPath,
+            runnerVersion: 'legacy',
+            payloadDigest: 'legacy-marker',
+            launchSpec: {
+              distribution: 'npx',
+              runnerCommand: process.execPath,
+              runnerVersion: 'legacy',
+              runnerArgs: ['--yes'],
+              packageSpec: '@example/reg-agent@1.0.0',
+              agentArgs: ['--acp'],
+              env: { ACP_MODE: 'stdio' },
+            },
+            status: 'prepared',
+            preparedAt: '2026-07-17T00:00:00.000Z',
+            workerIds: ['worker_existing'],
+          },
+        ],
+      })
+
+      const result = await prepareRegistryWorker({
+        packageInstaller: FAKE_PACKAGE_INSTALLER,
+        body: {
+          registryId: 'reg-agent',
+          version: '1.0.0',
+          distribution: 'npx',
+          manifestDigest,
+        },
+      })
+
+      assert.equal(result.installation.installationId, legacyId)
+      assert.equal(result.installation.resolvedExecutable, result.prepare.command)
+      assert.deepEqual(result.installation.workerIds, ['worker_existing'])
+      assert.equal(existsSync(join(installDir, 'package-prepare.json')), true)
+      assert.equal(existsSync(result.prepare.command), true)
     } finally {
       process.env.SWARMDESK_AGENT_DATA_DIR = previous.data
       process.env.ACP_REGISTRY_CATALOG_PATH = previous.catalog

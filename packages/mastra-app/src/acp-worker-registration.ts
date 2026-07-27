@@ -9,6 +9,7 @@ import {
   findInstallation,
   findInstallationById,
   markInstallationRemoved,
+  migrateLegacyNpxInstallation,
   migrateWorkerSourceFields,
   resolveRouterDataPaths,
   upsertInstallation,
@@ -19,10 +20,12 @@ import {
   AcpRunnerError,
   downloadToFile,
   installationTargetDir,
+  materializeWorkerLaunch,
   prepareRegistryAgent,
   validatePreparedRegistryInstallation,
   resolveAcpRegistryTarget,
   type PrepareResult,
+  type PrepareRequest,
   type PrepareTrustDecision,
 } from '@swarmdesk-agent/adapters'
 import type {
@@ -33,7 +36,7 @@ import type {
   WorkerSource,
 } from '@swarmdesk-agent/shared'
 import { defaultRegistryWorkerRoles, WORKER_ROLES } from '@swarmdesk-agent/shared'
-import { existsSync, lstatSync, mkdirSync, renameSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { resolveLocalRegistryCatalog } from './acp-registry-service.js'
 import {
@@ -151,39 +154,15 @@ function validateRoles(
 function materializeTrustedLaunchSpec(
   spec: NonNullable<AcpAgentInstallationRecord['launchSpec']>,
 ): { command: string; args: string[]; env: Record<string, string> } {
-  if (spec.distribution === 'npx' || spec.distribution === 'uvx') {
-    if (!spec.runnerCommand || !spec.packageSpec) {
-      throw new RegistryRegistrationError(
-        'ACP_INSTALL_FAILED',
-        'Installation launch facts are incomplete',
-        409,
-      )
-    }
-    return {
-      command: spec.runnerCommand,
-      args: [...spec.runnerArgs, spec.packageSpec, ...spec.agentArgs],
-      env: { ...spec.env },
-    }
+  try {
+    return { ...materializeWorkerLaunch(spec), env: { ...spec.env } }
+  } catch {
+    throw new RegistryRegistrationError(
+      'ACP_INSTALL_FAILED',
+      'Installation launch facts are incomplete',
+      409,
+    )
   }
-  if (spec.distribution === 'binary') {
-    if (!spec.executable) {
-      throw new RegistryRegistrationError(
-        'ACP_INSTALL_FAILED',
-        'Installation launch facts are incomplete',
-        409,
-      )
-    }
-    return {
-      command: spec.executable,
-      args: [...spec.agentArgs],
-      env: { ...spec.env },
-    }
-  }
-  throw new RegistryRegistrationError(
-    'ACP_INSTALL_FAILED',
-    'Installation launch facts use an unsupported distribution',
-    409,
-  )
 }
 
 function assertInstallationArtifactDigests(installation: AcpAgentInstallationRecord): void {
@@ -299,6 +278,52 @@ function retireLegacyInstallation(input: {
   }
 }
 
+function quarantineReferencedLegacyNpx(input: {
+  installation: AcpAgentInstallationRecord
+  agentsRoot: string
+}): string | undefined {
+  const record = input.installation
+  const expectedDir = installationTargetDir({
+    agentsRoot: input.agentsRoot,
+    registryId: record.registryId,
+    registryVersion: record.registryVersion,
+    target: 'npx',
+  })
+  if (resolve(record.installDir) !== resolve(expectedDir)) {
+    throw new RegistryRegistrationError(
+      'ACP_INSTALL_FAILED',
+      'Legacy installation is outside the managed artifact root',
+      409,
+    )
+  }
+  if (!existsSync(record.installDir)) return undefined
+  const stat = lstatSync(record.installDir)
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new RegistryRegistrationError(
+      'ACP_INSTALL_FAILED',
+      'Legacy installation is not a managed directory',
+      409,
+    )
+  }
+  const quarantine = `${record.installDir}.legacy.${record.installationId}`
+  if (existsSync(quarantine)) {
+    throw new RegistryRegistrationError(
+      'ACP_INSTALL_FAILED',
+      'Legacy installation quarantine already exists',
+      409,
+    )
+  }
+  renameSync(record.installDir, quarantine)
+  return quarantine
+}
+
+function restoreQuarantinedLegacyNpx(input: { installDir: string; quarantine?: string }): void {
+  if (existsSync(input.installDir)) rmSync(input.installDir, { recursive: true, force: true })
+  if (input.quarantine && existsSync(input.quarantine)) {
+    renameSync(input.quarantine, input.installDir)
+  }
+}
+
 export async function prepareRegistryWorker(input: {
   body: RegistryPrepareBody
   fetchImpl?: typeof fetch
@@ -311,6 +336,7 @@ export async function prepareRegistryWorker(input: {
   downloadHeaderTimeoutMs?: number
   /** No-progress stall deadline for the response body; a steady stream is never killed. */
   downloadStallTimeoutMs?: number
+  packageInstaller?: PrepareRequest['packageInstaller']
 }): Promise<{
   installation: AcpAgentInstallationRecord
   prepare: PrepareResult
@@ -361,6 +387,8 @@ export async function prepareRegistryWorker(input: {
     distribution: input.body.distribution,
     target: input.body.distribution === 'binary' ? (target ?? undefined) : undefined,
   })
+  let referencedLegacyNpx: AcpAgentInstallationRecord | undefined
+  let legacyQuarantine: string | undefined
   if (existing) {
     if (existing.manifestDigest !== agent.manifestDigest) {
       throw new RegistryRegistrationError(
@@ -376,6 +404,14 @@ export async function prepareRegistryWorker(input: {
         target: input.body.distribution === 'binary' ? target! : input.body.distribution,
       })
       existing = undefined
+    } else if (
+      existing.distribution === 'npx' &&
+      existing.launchSpec.distribution === 'npx' &&
+      !existing.resolvedExecutable &&
+      !existing.launchSpec.executable
+    ) {
+      referencedLegacyNpx = existing
+      legacyQuarantine = quarantineReferencedLegacyNpx({ installation: existing, agentsRoot })
     }
   }
 
@@ -394,8 +430,15 @@ export async function prepareRegistryWorker(input: {
       downloadTimeoutMs: input.downloadTimeoutMs,
       downloadHeaderTimeoutMs: input.downloadHeaderTimeoutMs,
       downloadStallTimeoutMs: input.downloadStallTimeoutMs,
+      packageInstaller: input.packageInstaller,
     })
   } catch (e) {
+    if (referencedLegacyNpx && legacyQuarantine) {
+      restoreQuarantinedLegacyNpx({
+        installDir: referencedLegacyNpx.installDir,
+        quarantine: legacyQuarantine,
+      })
+    }
     if (e instanceof AcpInstallError || e instanceof AcpRunnerError) {
       throw new RegistryRegistrationError(
         e.code,
@@ -432,7 +475,7 @@ export async function prepareRegistryWorker(input: {
   }
   let installation: AcpAgentInstallationRecord
   try {
-    installation = upsertInstallation({
+    const preparedRecord: AcpAgentInstallationRecord = {
       installationId,
       registryId: agent.id,
       registryVersion: agent.version,
@@ -466,8 +509,24 @@ export async function prepareRegistryWorker(input: {
               explicitNoSha: prepare.trustDecision.explicitNoSha,
             }
           : undefined),
-    })
+    }
+    installation = referencedLegacyNpx
+      ? migrateLegacyNpxInstallation(referencedLegacyNpx.installationId, preparedRecord)
+      : upsertInstallation(preparedRecord)
+    if (legacyQuarantine) {
+      try {
+        rmSync(legacyQuarantine, { recursive: true, force: true })
+      } catch {
+        // The migrated installation is already committed; stale quarantine cleanup is non-fatal.
+      }
+    }
   } catch (error) {
+    if (referencedLegacyNpx) {
+      restoreQuarantinedLegacyNpx({
+        installDir: referencedLegacyNpx.installDir,
+        quarantine: legacyQuarantine,
+      })
+    }
     if (
       error &&
       typeof error === 'object' &&
@@ -522,9 +581,7 @@ export async function registerRegistryWorker(input: {
   // display name) must not match an existing worker, since routing keys off
   // the display name and a duplicate would be ambiguous.
   const finalName = (input.body.name?.trim() || agent.name).toLowerCase()
-  const nameConflict = input.existingWorkers.some(
-    (w) => w.name.trim().toLowerCase() === finalName,
-  )
+  const nameConflict = input.existingWorkers.some((w) => w.name.trim().toLowerCase() === finalName)
   if (nameConflict) {
     throw new RegistryRegistrationError(
       'WORKER_DUPLICATE_NAME',

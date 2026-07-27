@@ -15,7 +15,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import type {
@@ -288,6 +288,85 @@ export function upsertInstallation(
   else index.installations.push(record)
   saveAcpAgentInstallationIndex(index, path)
   return record
+}
+
+function legacyNpxStableProjection(record: AcpAgentInstallationRecord): unknown {
+  const spec = record.launchSpec
+  return {
+    installationId: record.installationId,
+    registryId: record.registryId,
+    registryVersion: record.registryVersion,
+    distribution: record.distribution,
+    target: record.target,
+    manifestDigest: record.manifestDigest,
+    archiveUrl: record.archiveUrl,
+    declaredSha256: record.declaredSha256,
+    observedSha256: record.observedSha256,
+    installDir: record.installDir,
+    packageSpec: record.packageSpec,
+    status: record.status,
+    preparedAt: record.preparedAt,
+    installedAt: record.installedAt,
+    lastProbedAt: record.lastProbedAt,
+    probeCode: record.probeCode,
+    probeMessage: record.probeMessage,
+    workerIds: record.workerIds,
+    trustDecision: record.trustDecision,
+    launchSpec: spec
+      ? {
+          distribution: spec.distribution,
+          packageSpec: spec.packageSpec,
+          agentArgs: spec.agentArgs,
+          env: spec.env,
+          artifact: spec.artifact,
+        }
+      : undefined,
+  }
+}
+
+/**
+ * One-way migration for pre-materialization npx marker records. This is deliberately
+ * narrower than upsertInstallation: it preserves identity and Worker references while
+ * allowing only installer provenance, payload digest, and the new local executable facts
+ * to change after the package has been prepared atomically on disk.
+ */
+export function migrateLegacyNpxInstallation(
+  installationId: string,
+  replacement: AcpAgentInstallationRecord,
+  path = installationsPath(),
+): AcpAgentInstallationRecord {
+  const index = loadAcpAgentInstallationIndex(path)
+  const idx = index.installations.findIndex((item) => item.installationId === installationId)
+  const current = idx >= 0 ? index.installations[idx] : undefined
+  const executable = replacement.resolvedExecutable
+  const installDir = resolve(replacement.installDir)
+  const executablePath = executable ? resolve(executable) : ''
+  const validExecutable =
+    Boolean(executable) &&
+    executable === replacement.launchSpec?.executable &&
+    executablePath !== installDir &&
+    executablePath.startsWith(`${installDir}${sep}`)
+  if (
+    !current ||
+    current.distribution !== 'npx' ||
+    current.launchSpec?.distribution !== 'npx' ||
+    current.resolvedExecutable ||
+    current.launchSpec.executable ||
+    replacement.installationId !== installationId ||
+    replacement.distribution !== 'npx' ||
+    replacement.launchSpec?.distribution !== 'npx' ||
+    !replacement.payloadDigest ||
+    !validExecutable ||
+    !isDeepStrictEqual(legacyNpxStableProjection(current), legacyNpxStableProjection(replacement))
+  ) {
+    throw new AcpInstallationStoreError(
+      'ACP_INSTALL_DIGEST_MISMATCH',
+      'ACP_INSTALL_DIGEST_MISMATCH: legacy npx migration facts are invalid',
+    )
+  }
+  index.installations[idx] = replacement
+  saveAcpAgentInstallationIndex(index, path)
+  return replacement
 }
 
 export function addWorkerReference(

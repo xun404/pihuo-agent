@@ -20,6 +20,7 @@ export {
   findInstallationById,
   findInstallation,
   upsertInstallation,
+  migrateLegacyNpxInstallation,
   addWorkerReference,
   removeWorkerReference,
   listUnreferencedInstallations,
