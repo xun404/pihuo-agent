@@ -1610,7 +1610,152 @@
   font-size: var(--fs-md);
 }
 
-/* ============ ProcessFloatPanel · 右上角浮窗进程气泡 ============
+/* ============ TurnNavigator · 左侧时间线 ============
+   设计线稿（icon-spec-v3 ④）：窄竖栏，每 query 一水平 tick，fisheye 缩放，
+   hover 预览，点击跳转。≥2 query 才渲染。全用 CSS 变量，三套主题自动适配。 */
+.turn-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 48px;
+  z-index: 15;
+  pointer-events: none; /* 轨道本身不挡消息；只让 tick 可点 */
+}
+.turn-nav-track {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  max-height: calc(100% - 6rem);
+  pointer-events: auto;
+}
+.turn-nav-tick {
+  width: 36px;
+  height: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.turn-nav-tick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+.turn-nav-bar {
+  display: block;
+  height: 2px;
+  width: 12px;
+  background: var(--text-4);
+  border-radius: var(--r-pill);
+  transform-origin: left center;
+  transition: transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+/* fisheye 等级（由 JS 设 transform/opacity，class 控制颜色）*/
+.turn-nav-tick.peak .turn-nav-bar {
+  background: var(--text-1);
+}
+.turn-nav-tick.near .turn-nav-bar,
+.turn-nav-tick.mid .turn-nav-bar,
+.turn-nav-tick.far .turn-nav-bar {
+  background: var(--text-4);
+}
+/* 进行中 tick：橙色 */
+.turn-nav-tick.running .turn-nav-bar {
+  background: var(--accent);
+}
+.turn-nav-tick:hover .turn-nav-bar {
+  background: var(--text-2);
+}
+
+/* hover 预览浮卡 */
+.turn-nav-preview {
+  position: absolute;
+  left: 44px;
+  top: 14px;
+  width: 280px;
+  max-width: calc(100vw - 60px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  padding: 12px;
+  z-index: 25;
+  pointer-events: none;
+}
+.turn-nav-preview::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 16px;
+  width: 8px;
+  height: 8px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.turn-nav-preview-idx {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+}
+.turn-nav-preview-q {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+  line-height: 1.45;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.turn-nav-preview-a {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.turn-nav-preview-running {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.turn-nav-preview-running-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* 窄窗隐藏 turn-nav（避免挤压消息）*/
+@media (max-width: 640px) {
+  .turn-nav {
+    display: none;
+  }
+}
+
+
    设计线稿（floating-process.html）：absolute top/right，浮在消息流之上，
    shadow + 圆角，panel/mini 双模式。全用 CSS 变量，三套主题自动适配。 */
 .proc-float {

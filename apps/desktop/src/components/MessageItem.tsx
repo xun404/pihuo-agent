@@ -179,7 +179,11 @@ function MessageItemImpl({
     : null
 
   return (
-    <div className={`msg ${message.role === 'user' ? 'user' : 'leader'}`}>
+    <div
+      className={`msg ${message.role === 'user' ? 'user' : 'leader'}`}
+      data-msg-id={message.id}
+      data-msg-role={message.role}
+    >
       {isLeader && leaderMeta ? (
         /* Leader 扁平化：去掉 sup-card 卡片壳 + header（头像/Supervisor/模型徽章）。
            身份信息（模型/思考强度/耗时/日期）全部下沉到 footer（openchamber 风格）。

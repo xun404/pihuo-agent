@@ -13,6 +13,7 @@ html[data-palette='classic'] {
   --text-1: #1a1d24;
   --text-2: #4a5160;
   --text-3: #6b7380;
+  --text-4: #9aa3b0;
   --bg-page: #dfe2e8;
   --bg-sidebar: #f0f1f3;
   --bg-main: #f7f7f8;
@@ -29,6 +30,7 @@ html[data-palette='warm'] {
   --text-1: #2c2522;
   --text-2: #5c534c;
   --text-3: #8a8178;
+  --text-4: #b3aaa0;
   --bg-page: #e8e2d9;
   --bg-sidebar: #f3efe9;
   --bg-main: #f7f4ef;
@@ -44,6 +46,7 @@ html[data-theme='dark'] {
   --text-1: #e8eaef;
   --text-2: #a8b0bd;
   --text-3: #8b939f;
+  --text-4: #6b727f;
   --bg-sidebar: #12141a;
   --bg-main: #0c0d10;
   --bg-surface: #181b22;

@@ -25,6 +25,7 @@ import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
 import { ProcessFloatPanel } from './chat/ProcessFloatPanel'
+import { TurnNavigator } from './chat/TurnNavigator'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
 import {
   IconArrowUp,
@@ -257,6 +258,8 @@ export function ChatPanel({
   const { success: toastSuccess, error: toastError } = useToast()
   const titleInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  /** messages-scroll 容器：TurnNavigator 跳转 + 滚动监听用 */
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
   const historyLoadedFor = useRef<string | null>(null)
   // Keep latest model / thinking / mode for transport body (avoid stale closure)
   const selectedModelRef = useRef(selectedModel)
@@ -1451,6 +1454,12 @@ export function ChatPanel({
         </div>
       ) : (
         <>
+          {/* 左侧时间线：≥2 query 才渲染 */}
+          <TurnNavigator
+            messages={messages}
+            busy={effectiveBusy}
+            scrollContainerRef={messagesScrollRef}
+          />
           {/* 右上角浮窗进程气泡：仅在有 task 快照且未关闭时显示 */}
           {taskSnapshot && !procPanelClosed && (
             <ProcessFloatPanel
@@ -1458,7 +1467,7 @@ export function ChatPanel({
               onClose={() => setProcPanelClosed(true)}
             />
           )}
-          <div className="messages-scroll">
+          <div ref={messagesScrollRef} className="messages-scroll">
             <div className="messages">{messageList}</div>
           </div>
           <div className="composer-dock">{composerCard}</div>
