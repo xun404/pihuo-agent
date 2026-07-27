@@ -24,6 +24,7 @@ import { MessageItem } from './MessageItem'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
+import { ProcessFloatPanel } from './chat/ProcessFloatPanel'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
 import {
   IconArrowUp,
@@ -43,6 +44,7 @@ import { useSendShortcut } from '../hooks/useSendShortcut'
 import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
+import { findLatestTaskList } from '../lib/find-latest-task-list'
 import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
 import {
@@ -1246,6 +1248,10 @@ export function ChatPanel({
     handleContinueBudget,
   ])
 
+  // 浮窗进程气泡：提取最新 task 快照（无 task → null → 不渲染浮窗）
+  const taskSnapshot = useMemo(() => findLatestTaskList(messages), [messages])
+  const [procPanelClosed, setProcPanelClosed] = useState(false)
+
   const composerCard = (
     <div className="composer-stack">
       <form className="composer-card" onSubmit={onSubmit}>
@@ -1340,7 +1346,10 @@ export function ChatPanel({
   )
 
   return (
-    <main className="main chat-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+    <main
+      className="main chat-panel"
+      style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}
+    >
       <div className="chat-head">
         {editingTitle ? (
           <input
@@ -1442,6 +1451,13 @@ export function ChatPanel({
         </div>
       ) : (
         <>
+          {/* 右上角浮窗进程气泡：仅在有 task 快照且未关闭时显示 */}
+          {taskSnapshot && !procPanelClosed && (
+            <ProcessFloatPanel
+              tasks={taskSnapshot}
+              onClose={() => setProcPanelClosed(true)}
+            />
+          )}
           <div className="messages-scroll">
             <div className="messages">{messageList}</div>
           </div>
