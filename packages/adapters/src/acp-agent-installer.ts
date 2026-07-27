@@ -51,6 +51,10 @@ import {
   resolveAcpRunner,
   type ResolvedRunner,
 } from './acp-runner-resolver.js'
+import {
+  materializeNpmPackage,
+  PackageMaterializeError,
+} from './acp-package-materializer.js'
 
 export type PrepareTrustDecision = {
   acceptedAt: string
@@ -79,6 +83,8 @@ export type PrepareRequest = {
   downloadStallTimeoutMs?: number
   /** Trusted/test resolver environment; never materialized into the agent environment. */
   runnerEnv?: NodeJS.ProcessEnv
+  /** Trusted/test npm installer override. Production resolves npm beside the verified npx runner. */
+  packageInstaller?: { command: string; argsPrefix?: string[] }
 }
 
 export type PrepareResult = {
@@ -399,7 +405,7 @@ async function assertReusablePreparedArtifact(input: {
   if (payloadInventoryDigest(metadata.payloadFiles) !== metadata.payloadDigest) {
     throw new AcpInstallError('ACP_INSTALL_DIGEST_MISMATCH', 'Prepared artifact inventory changed')
   }
-  if (metadata.distribution === 'binary') {
+  if (metadata.distribution === 'binary' || metadata.distribution === 'npx') {
     const executable = metadata.resolvedExecutable
     const root = resolve(input.installDir)
     if (
@@ -654,6 +660,40 @@ async function preparePackageAgent(input: PrepareRequest): Promise<PrepareResult
       2,
     )
     writeFileSync(metaPath, body, { mode: 0o600 })
+    let resolvedExecutable: string | undefined
+    let materializedLaunchSpec = resolvedLaunchSpec
+    let command = argv.command
+    let args = [...argv.args]
+    if (dist.kind === 'npx') {
+      const siblingNpm = join(dirname(runner.command), 'npm-cli.js')
+      const installer =
+        input.packageInstaller ??
+        (existsSync(siblingNpm) ? { command: siblingNpm } : undefined)
+      if (!installer) {
+        throw new AcpInstallError(
+          'ACP_RUNNER_MISSING',
+          'npm installer could not be resolved beside the verified npx runner',
+        )
+      }
+      const installerEnv = Object.fromEntries(
+        Object.entries(input.runnerEnv ?? process.env).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
+        ),
+      )
+      const materialized = await materializeNpmPackage({
+        packageSpec: dist.package,
+        stagingDir,
+        npmCommand: installer.command,
+        npmArgsPrefix: installer.argsPrefix,
+        env: installerEnv,
+        signal: input.signal,
+        timeoutMs: input.downloadTimeoutMs,
+      })
+      resolvedExecutable = join(installDir, ...materialized.executableRelativePath.split('/'))
+      materializedLaunchSpec = { ...resolvedLaunchSpec, executable: resolvedExecutable }
+      command = resolvedExecutable
+      args = [...dist.args]
+    }
     const payloadFiles = await collectPayloadFiles(stagingDir)
     const payloadDigest = payloadInventoryDigest(payloadFiles)
     writePreparedMetadata(stagingDir, {
@@ -661,12 +701,13 @@ async function preparePackageAgent(input: PrepareRequest): Promise<PrepareResult
       registryVersion: input.agent.version,
       distribution: dist.kind,
       manifestDigest: input.agent.manifestDigest,
-      launchSpec: resolvedLaunchSpec,
-      command: argv.command,
-      args: [...argv.args],
+      launchSpec: materializedLaunchSpec,
+      command,
+      args,
       env: { ...dist.env },
       packageSpec: dist.package,
       runner,
+      resolvedExecutable,
       payloadFiles,
       payloadDigest,
     })
@@ -682,18 +723,20 @@ async function preparePackageAgent(input: PrepareRequest): Promise<PrepareResult
       installDir,
       stagingDir: installDir,
       distribution: dist.kind,
-      launchSpec: resolvedLaunchSpec,
-      command: argv.command,
-      args: argv.args,
+      launchSpec: materializedLaunchSpec,
+      command,
+      args,
       env: { ...dist.env },
       packageSpec: dist.package,
       runner,
+      resolvedExecutable,
       trustDecision: input.trust,
       payloadDigest,
     }
   } catch (e) {
     rmSync(stagingDir, { recursive: true, force: true })
     if (e instanceof AcpInstallError) throw e
+    if (e instanceof PackageMaterializeError) throw new AcpInstallError(e.code, e.message)
     throw new AcpInstallError('ACP_INSTALL_FAILED', 'Agent preparation failed')
   }
 }
@@ -919,11 +962,11 @@ export async function validatePreparedRegistryInstallation(input: {
 }): Promise<PrepareResult> {
   const metadata = await assertReusablePreparedArtifact(input)
   const expectedCommand =
-    input.expectedLaunchSpec.distribution === 'binary'
+    input.expectedLaunchSpec.executable
       ? input.expectedLaunchSpec.executable
       : input.expectedLaunchSpec.runnerCommand
   const expectedArgs =
-    input.expectedLaunchSpec.distribution === 'binary'
+    input.expectedLaunchSpec.executable
       ? [...input.expectedLaunchSpec.agentArgs]
       : [
           ...input.expectedLaunchSpec.runnerArgs,

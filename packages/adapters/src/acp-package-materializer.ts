@@ -67,6 +67,7 @@ async function runInstaller(input: MaterializeNpmPackageInput): Promise<void> {
     '--no-audit',
     '--no-fund',
     '--no-bin-links',
+    '--ignore-scripts',
     '--',
     input.packageSpec,
   ]

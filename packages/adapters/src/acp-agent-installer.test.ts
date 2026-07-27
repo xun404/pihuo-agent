@@ -12,11 +12,19 @@ import {
   symlinkSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { createHash } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import type { AcpRegistryAgentMetadata } from '@swarmdesk-agent/shared'
 import { AcpInstallError, prepareRegistryAgent } from './acp-agent-installer.js'
 import { digestOfAgentEntry } from './acp-registry-schema.js'
+
+const FAKE_NPM = fileURLToPath(new URL('./fixtures/fake-npm-installer.ts', import.meta.url))
+const TSX_LOADER = fileURLToPath(import.meta.resolve('tsx'))
+const FAKE_PACKAGE_INSTALLER = {
+  command: process.execPath,
+  argsPrefix: ['--import', TSX_LOADER, FAKE_NPM],
+}
 
 function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex')
@@ -181,6 +189,7 @@ describe('acp-agent-installer', () => {
       distribution: 'npx',
       target: 'darwin-aarch64',
       agentsRoot: join(dir, 'immutable-agents'),
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
     })
     const sentinel = join(first.installDir, 'sentinel')
     writeFileSync(sentinel, 'preserve-me')
@@ -198,6 +207,40 @@ describe('acp-agent-installer', () => {
     })
     assert.equal(second.installDir, first.installDir)
     assert.equal(readFileSync(sentinel, 'utf8'), 'preserve-me')
+  })
+
+  it('materializes an npx package during prepare and launches its managed local bin', async () => {
+    const agent: AcpRegistryAgentMetadata = {
+      id: 'materialized-package',
+      name: 'Materialized package',
+      version: '1.2.3',
+      description: 'd',
+      icon: '',
+      distributions: [
+        {
+          kind: 'npx',
+          package: '@example/agent@1.2.3',
+          args: ['--acp'],
+          env: { ACP_MODE: 'stdio' },
+        },
+      ],
+      manifestDigest: 'sha256:materialized-package',
+      availability: 'available',
+    }
+
+    const result = await prepareRegistryAgent({
+      agent,
+      distribution: 'npx',
+      target: 'darwin-aarch64',
+      agentsRoot: join(dir, 'materialized-agents'),
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
+    })
+
+    assert.ok(result.resolvedExecutable?.startsWith(`${result.installDir}${sep}`))
+    assert.equal(result.command, result.resolvedExecutable)
+    assert.deepEqual(result.args, ['--acp'])
+    assert.equal(result.launchSpec.executable, result.resolvedExecutable)
+    assert.equal(result.launchSpec.packageSpec, '@example/agent@1.2.3')
   })
 
   it('rejects a conflicting manifest without changing an existing installation', async () => {
@@ -224,6 +267,7 @@ describe('acp-agent-installer', () => {
       distribution: 'npx',
       target: 'darwin-aarch64',
       agentsRoot,
+      packageInstaller: FAKE_PACKAGE_INSTALLER,
     })
     const markerBefore = readFileSync(join(first.installDir, 'package-prepare.json'), 'utf8')
     await assert.rejects(

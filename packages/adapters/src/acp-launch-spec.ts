@@ -122,3 +122,30 @@ export function materializeCommandArgs(spec: WorkerLaunchSpec): {
     requiresLocalInstall: false,
   }
 }
+
+/** Materialize the immutable runtime launch; managed local executables always win. */
+export function materializeWorkerLaunch(spec: WorkerLaunchSpec): {
+  command: string
+  args: string[]
+  env: Record<string, string>
+} {
+  if (spec.executable) {
+    return {
+      command: spec.executable,
+      args: [...spec.agentArgs],
+      env: { ...spec.env },
+    }
+  }
+  if (
+    (spec.distribution === 'npx' || spec.distribution === 'uvx') &&
+    spec.runnerCommand &&
+    spec.packageSpec
+  ) {
+    return {
+      command: spec.runnerCommand,
+      args: [...spec.runnerArgs, spec.packageSpec, ...spec.agentArgs],
+      env: { ...spec.env },
+    }
+  }
+  throw new Error('Installation launch facts are incomplete')
+}

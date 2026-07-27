@@ -52,6 +52,7 @@ export {
   binaryDistributionToLaunchSpec,
   pickDefaultLaunchSpec,
   materializeCommandArgs,
+  materializeWorkerLaunch,
 } from './acp-launch-spec.js'
 export {
   SUPPORTED_REGISTRY_SCHEMA_MAJOR,
