@@ -155,12 +155,13 @@ body.is-resizing-panels .panel-resizer:active::after {
   width: 6px;
 }
 .inspector-host.drawer {
-  /* absolute 浮在 shell 右侧（不参与 grid 流），right:0 始终保持，
-     折叠时不会因 class 移除跑偏。transform 滑入/滑出由 framer-motion 控制。*/
+  /* absolute 浮在 shell 右侧（不参与 grid 流），right 始终保持，
+     折叠时不会因 class 移除跑偏。transform 滑入/滑出由 framer-motion 控制。
+     四周留 var(--sp-2) 边距，与 shell padding / sidebar 外边距一致。*/
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  bottom: var(--sp-2);
   width: var(--drawer-w);
   /* 动画期间内容保持目标宽度，容器宽度变化只裁切不重排 */
   overflow: hidden;
