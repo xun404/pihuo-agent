@@ -26,6 +26,7 @@ apps/*/dist-runtime/
 
 # Execution plans stay local; design specs are normal project documentation.
 docs/superpowers/plans/
+.superpowers/
 .opencode/
 
 # Local design assets only (wireframes / screenshots). Do not commit.

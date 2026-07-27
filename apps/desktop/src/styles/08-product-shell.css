@@ -105,10 +105,16 @@ select,
   position: relative;
 }
 .shell.with-inspector {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--drawer-w);
+  /* grid 始终 2 列（sidebar + main），drawer 用 absolute 浮在右侧。
+     main-column 用 padding-right 让出 drawer 空间（CSS transition 平滑过渡），
+     避免 grid-template-columns 切换导致 main 瞬间跳变。*/
   gap: 0 var(--sp-2);
   padding: 0 var(--sp-2) var(--sp-2) 0;
   align-items: stretch;
+}
+/* main-column 让出 drawer 空间（transition 在 .main-column base 声明，class 切换双向触发）*/
+.shell.with-inspector > .main-column {
+  padding-right: calc(var(--drawer-w) + var(--sp-2));
 }
 
 /* 左右边栏拖拽调整宽度 */
@@ -149,7 +155,26 @@ body.is-resizing-panels .panel-resizer:active::after {
   width: 6px;
 }
 .inspector-host.drawer {
-  position: relative;
+  /* absolute 浮在 shell 右侧（不参与 grid 流），right 始终保持，
+     折叠时不会因 class 移除跑偏。transform 滑入/滑出由 framer-motion 控制。
+     四周留 var(--sp-2) 边距，与 shell padding / sidebar 外边距一致。*/
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  bottom: var(--sp-2);
+  width: var(--drawer-w);
+  /* 覆盖 .drawer { height: 100% }（05）和 .inspector-host.drawer { flex:1 }（06）。
+     absolute + top + bottom + height:auto 让高度自动 = 父级 - 上下边距。*/
+  height: auto !important;
+  flex: none !important;
+  /* 动画期间内容保持目标宽度，容器宽度变化只裁切不重排 */
+  overflow: hidden;
+}
+.inspector-host.drawer .drawer-panel {
+  /* 自适应 drawer 外框内部宽度（drawer 用 transform 滑入，不再用 width 动画，
+     因此 panel 无需固定宽度防重排）。避免 width:var(--drawer-w) 导致溢出 drawer 外框。*/
+  width: 100%;
+  box-sizing: border-box;
 }
 body.is-resizing-panels {
   cursor: col-resize !important;
@@ -176,6 +201,10 @@ body.is-resizing-panels * {
   flex-direction: column;
   background: var(--bg-main);
   position: relative;
+  /* inspector 让位：base 0，.with-inspector 时覆盖为 drawer-w。
+     transition 在 base 声明，class 切换时双向触发（含折叠时 padding→0 的过渡）。*/
+  padding-right: 0;
+  transition: padding-right var(--dur-base) var(--ease-out);
 }
 
 /* Sidebar fills its grid column (width from --sidebar-w) */

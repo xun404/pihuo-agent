@@ -24,6 +24,8 @@ import { MessageItem } from './MessageItem'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
+import { ProcessFloatPanel } from './chat/ProcessFloatPanel'
+import { TurnNavigator } from './chat/TurnNavigator'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
 import {
   IconArrowUp,
@@ -43,6 +45,7 @@ import { useSendShortcut } from '../hooks/useSendShortcut'
 import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
+import { findLatestTaskList } from '../lib/find-latest-task-list'
 import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
 import {
@@ -255,6 +258,8 @@ export function ChatPanel({
   const { success: toastSuccess, error: toastError } = useToast()
   const titleInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  /** messages-scroll 容器：TurnNavigator 跳转 + 滚动监听用 */
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
   const historyLoadedFor = useRef<string | null>(null)
   // Keep latest model / thinking / mode for transport body (avoid stale closure)
   const selectedModelRef = useRef(selectedModel)
@@ -1246,6 +1251,9 @@ export function ChatPanel({
     handleContinueBudget,
   ])
 
+  // 浮窗进程气泡：提取最新 task 快照（无 task → null → 不渲染浮窗）
+  const taskSnapshot = useMemo(() => findLatestTaskList(messages), [messages])
+
   const composerCard = (
     <div className="composer-stack">
       <form className="composer-card" onSubmit={onSubmit}>
@@ -1340,7 +1348,10 @@ export function ChatPanel({
   )
 
   return (
-    <main className="main chat-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+    <main
+      className="main chat-panel"
+      style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}
+    >
       <div className="chat-head">
         {editingTitle ? (
           <input
@@ -1442,7 +1453,17 @@ export function ChatPanel({
         </div>
       ) : (
         <>
-          <div className="messages-scroll">
+          {/* 左侧时间线：≥2 query 才渲染 */}
+          <TurnNavigator
+            messages={messages}
+            busy={effectiveBusy}
+            scrollContainerRef={messagesScrollRef}
+          />
+          {/* 右上角浮窗进程气泡：有 task 快照时显示（mini/panel 切换，无关闭按钮）*/}
+          {taskSnapshot && (
+            <ProcessFloatPanel tasks={taskSnapshot} />
+          )}
+          <div ref={messagesScrollRef} className="messages-scroll">
             <div className="messages">{messageList}</div>
           </div>
           <div className="composer-dock">{composerCard}</div>

@@ -383,6 +383,203 @@
   user-select: none;
 }
 
+/* ============ Leader 扁平 footer（lead-footer）============
+   sup-card 卡片壳移除后，footer 不再有顶部分隔线。
+   openchamber 风格：4 段（模型·思考强度·耗时·日期），每段 图标(13px)+文字，
+   无 · 分隔符，纯 gap 留白；统一 muted（text-3 / opacity .6）。
+   全用 CSS 变量，三套主题（warm/classic/dark）自动适配。 */
+.lead-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px; /* 段间距（对应 openchamber gap-x-2.5）*/
+  padding-top: 8px;
+  margin-top: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  opacity: 0.6;
+}
+.lead-footer-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lead-footer-meta.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.lead-footer-meta svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.lead-footer-text {
+  min-width: 0;
+}
+/* live 运行中脉冲点（迁移自 sup-status .pip）*/
+.lead-footer-live {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+.lead-footer-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* ============ TaskListCard（data-signal 任务列表）============
+   inline 渲染在 Leader 消息流里。线稿 icon-spec-v3 配色。
+   全用 CSS 变量，三套主题自动适配。 */
+.task-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg-surface) 85%, transparent);
+  overflow: hidden;
+  margin: 2px 0;
+}
+.task-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+}
+.task-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.task-card-title svg {
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+}
+.task-card-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.task-card-bar {
+  width: 64px;
+  height: 4px;
+  background: var(--bg-hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.task-card-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width var(--dur-base) var(--ease-out);
+}
+.task-card-live {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--accent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.task-card-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.task-card-body {
+  display: flex;
+  flex-direction: column;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 7px 12px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  border-top: 1px solid transparent;
+}
+.task-row + .task-row {
+  border-top-color: var(--border-soft);
+}
+.task-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.task-row-icon svg {
+  width: 14px;
+  height: 14px;
+}
+/* 状态样式 */
+.task-completed {
+  color: var(--text-3);
+}
+.task-completed .task-row-text {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-4);
+}
+.task-completed .task-row-icon svg {
+  color: var(--green);
+}
+.task-in_progress {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.task-in_progress .task-row-icon svg {
+  color: var(--accent);
+}
+.task-pending .task-row-icon svg {
+  color: var(--text-4);
+}
+.task-row-role {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.task-row-text {
+  flex: 1;
+  min-width: 0;
+}
+.task-row-active {
+  font-size: 11px;
+  color: var(--text-3);
+  font-style: italic;
+  flex-shrink: 0;
+}
+/* role 配色（复用 worker-card-head .node-cap 语义）*/
+.role-plan .task-row-role {
+  color: var(--purple);
+}
+.role-coder .task-row-role {
+  color: var(--blue);
+}
+.role-review .task-row-role {
+  color: var(--accent);
+}
+.role-research .task-row-role {
+  color: var(--green);
+}
+
+
+
 /* leader 旧规则清理后的消息间距 */
 .msg.leader {
   /* 仅保留 flex 基础——卡片样式移至 .sup-card */
@@ -1412,3 +1609,471 @@
   min-height: 22px;
   font-size: var(--fs-md);
 }
+
+/* ============ TurnNavigator · 左侧时间线 ============
+   设计线稿（icon-spec-v3 ④）：窄竖栏，每 query 一水平 tick，fisheye 缩放，
+   hover 预览，点击跳转。≥2 query 才渲染。全用 CSS 变量，三套主题自动适配。 */
+.turn-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 48px;
+  z-index: 15;
+  pointer-events: none; /* 轨道本身不挡消息；只让 tick 可点 */
+}
+.turn-nav-track {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  max-height: calc(100% - 6rem);
+  pointer-events: auto;
+}
+.turn-nav-tick {
+  width: 28px;
+  height: 7px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.turn-nav-tick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+.turn-nav-bar {
+  display: block;
+  height: 2px;
+  width: 8px;
+  background: var(--text-4);
+  border-radius: var(--r-pill);
+  transform-origin: left center;
+  transition: transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+/* fisheye 等级（由 JS 设 transform/opacity，class 控制颜色）*/
+.turn-nav-tick.peak .turn-nav-bar {
+  background: var(--text-1);
+}
+.turn-nav-tick.near .turn-nav-bar,
+.turn-nav-tick.mid .turn-nav-bar,
+.turn-nav-tick.far .turn-nav-bar {
+  background: var(--text-4);
+}
+/* 进行中 tick：橙色 */
+.turn-nav-tick.running .turn-nav-bar {
+  background: var(--accent);
+}
+.turn-nav-tick:hover .turn-nav-bar {
+  background: var(--text-2);
+}
+
+/* hover 预览浮卡 */
+.turn-nav-preview {
+  position: absolute;
+  left: 36px;
+  /* top 由 inline style 按hoverIdx 计算；translateY 让 preview 中心对齐 tick */
+  transform: translateY(-50%);
+  width: 260px;
+  max-width: calc(100vw - 60px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  padding: 11px;
+  z-index: 25;
+  pointer-events: none;
+}
+.turn-nav-preview::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.turn-nav-preview-idx {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+}
+.turn-nav-preview-q {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+  line-height: 1.45;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.turn-nav-preview-a {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.turn-nav-preview-running {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.turn-nav-preview-running-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* 窄窗隐藏 turn-nav（避免挤压消息）*/
+@media (max-width: 640px) {
+  .turn-nav {
+    display: none;
+  }
+}
+
+
+/* ============ ProcessFloatPanel · 右上角浮窗进程气泡 ============
+   设计线稿（floating-process.html）：absolute top/right，浮在消息流之上，
+   shadow + 圆角，panel/mini 双模式。全用 CSS 变量，三套主题自动适配。 */
+.proc-float {
+  position: absolute;
+  /* 避开 head（44px）+ 间距，贴 head 下方 */
+  top: calc(44px + var(--sp-2));
+  right: var(--sp-3);
+  z-index: 20;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  pointer-events: auto;
+  /* 切换 origin 让展开/折叠动画从右上角发散 */
+  transform-origin: top right;
+  /* panel↔mini 切换时平滑过渡尺寸 */
+  transition: width var(--dur-base) var(--ease-out),
+    height var(--dur-base) var(--ease-out),
+    max-height var(--dur-base) var(--ease-out);
+  animation: proc-float-in var(--dur-base) var(--ease-out);
+}
+
+@keyframes proc-float-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* —— panel 模式（完整列表）—— */
+.proc-panel {
+  width: 300px;
+  max-width: calc(100vw - 28px);
+  max-height: min(64dvh, 32rem);
+  display: flex;
+  flex-direction: column;
+}
+.proc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.proc-head-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-1);
+}
+.proc-head-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+.proc-head-count {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.proc-head-count.all-done {
+  color: var(--green);
+}
+.proc-head-bar {
+  width: 56px;
+  height: 4px;
+  background: var(--bg-hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.proc-head-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width var(--dur-base) var(--ease-out);
+}
+.proc-head-live {
+  font-size: 10.5px;
+  color: var(--accent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.proc-head-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.proc-head-acts {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto; /* 右对齐：推到 header 最右 */
+}
+.proc-head-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.proc-head-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.proc-body {
+  padding: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 任务行（与 TaskListCard 视觉一致，但用 proc- 前缀独立命名避免耦合）*/
+.proc-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  min-height: 32px;
+  color: var(--text-2);
+}
+.proc-task:hover {
+  background: var(--bg-hover);
+}
+.proc-task-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.proc-task-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.proc-task-role {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.proc-task-text {
+  flex: 1;
+  min-width: 0;
+}
+.proc-task-active {
+  font-size: 11px;
+  color: var(--text-3);
+  font-style: italic;
+  flex-shrink: 0;
+}
+.proc-completed .proc-task-text {
+  color: var(--text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-4);
+}
+.proc-completed .proc-task-icon svg {
+  color: var(--green);
+}
+.proc-in_progress {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.proc-in_progress .proc-task-icon svg {
+  color: var(--accent);
+}
+.proc-pending .proc-task-icon svg {
+  color: var(--text-4);
+}
+/* role 配色 */
+.proc-task.role-plan .proc-task-role {
+  color: var(--purple);
+}
+.proc-task.role-coder .proc-task-role {
+  color: var(--blue);
+}
+.proc-task.role-review .proc-task-role {
+  color: var(--accent);
+}
+.proc-task.role-research .proc-task-role {
+  color: var(--green);
+}
+
+/* 折叠分组（「已完成 N 项」）*/
+.proc-fold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.proc-fold:hover {
+  background: var(--bg-hover);
+}
+.proc-fold-chev {
+  display: inline-flex;
+  transition: transform var(--dur-fast) var(--ease-out);
+  color: var(--text-3);
+}
+.proc-fold-chev.open {
+  transform: rotate(90deg);
+}
+.proc-fold-label {
+  font-weight: 500;
+}
+
+/* —— mini 模式（一行 pill）—— */
+.proc-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 8px 0 12px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.proc-mini:hover {
+  background: color-mix(in srgb, var(--bg-surface) 85%, var(--bg-hover));
+}
+.proc-mini svg {
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+}
+.proc-mini-label {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.proc-mini-count {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+/* mini 模式：当前执行任务文本（截断）*/
+.proc-mini-task {
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  /* 用细竖线与计数分隔 */
+  border-left: 1px solid var(--border-soft);
+  padding-left: 8px;
+  margin-left: 2px;
+}
+.proc-mini {
+  max-width: calc(100vw - 28px);
+}
+.proc-mini-pip {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.proc-mini-expand {
+  /* 与 .proc-head-btn 同尺寸（22×22）*/
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+}
+.proc-mini-expand:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+@media (max-width: 720px) {
+  /* 窄窗默认 mini：避免遮挡消息内容 */
+  .proc-panel {
+    width: min(280px, calc(100vw - 28px));
+  }
+  /* 窄窗隐藏 mini 的任务文本（避免 pill 过宽）*/
+  .proc-mini-task {
+    display: none;
+  }
+}
+
