@@ -513,7 +513,21 @@ export function WorkerBrandLogo({
   const shouldFetch = Boolean(workerId && hasIcon)
   const workerSvg = useWorkerIcon(shouldFetch ? workerId : undefined)
   const registrySvg = useRegistryAgentIcon(!workerSvg ? iconAgentId : undefined)
-  const svg = workerSvg ?? registrySvg
+  // Brand fallback：当 workerSvg/registrySvg 都没有时，按 brand 拉对应 registry
+  // 真实品牌 SVG（claude-acp / codex-acp / opencode），优先于手绘 mark。
+  const brand = resolveWorkerBrand(kind, name)
+  const brandFallbackAgentId =
+    !workerSvg && !registrySvg
+      ? brand === 'claude'
+        ? 'claude-acp'
+        : brand === 'codex'
+          ? 'codex-acp'
+          : brand === 'opencode'
+            ? 'opencode'
+            : undefined
+      : undefined
+  const brandSvg = useRegistryAgentIcon(brandFallbackAgentId)
+  const svg = workerSvg ?? registrySvg ?? brandSvg
   if (svg) {
     return (
       <span
@@ -525,7 +539,7 @@ export function WorkerBrandLogo({
       />
     )
   }
-  const brand = resolveWorkerBrand(kind, name)
+  // 最后兜底：registry 真实 SVG 也拉不到，才用手绘品牌 mark
   if (brand === 'claude') return <IconClaude size={size} />
   if (brand === 'codex') return <IconCodex size={size} />
   if (brand === 'opencode') return <IconOpenCode size={size} />
