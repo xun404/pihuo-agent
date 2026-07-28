@@ -762,6 +762,23 @@ html[data-theme='dark'] {
 .proj-chevron-icon.is-collapsed {
   transform: rotate(-90deg);
 }
+.proj-sessions {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.proj-sessions.is-open {
+  grid-template-rows: 1fr;
+}
+@media (prefers-reduced-motion: reduce) {
+  .proj-sessions {
+    transition: none;
+  }
+}
+.proj-sessions-inner {
+  min-height: 0;
+  overflow: hidden;
+}
 .sess {
   display: flex;
   align-items: center;

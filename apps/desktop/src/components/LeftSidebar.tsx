@@ -456,8 +456,10 @@ export function LeftSidebar({
               {projectSessions.length === 0 ? (
                 <div className="empty-sess">{t('sidebar.noSessions')}</div>
               ) : (
-                <Expandable open={!sessionsCollapsed.has(project.id)} contentClassName="sess-list">
-                  {visibleSessions.map((session) => {
+                <div className={`proj-sessions${sessionsCollapsed.has(project.id) ? '' : ' is-open'}`}>
+                  <div className="proj-sessions-inner">
+                    <div className="sess-list">
+                {visibleSessions.map((session) => {
                   // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
                   const busy = busySessionIds?.has(session.id)
                   const sc = sessionLampClass(session, busy ?? false, now)
@@ -535,7 +537,9 @@ export function LeftSidebar({
                     {t('sidebar.showLess')}
                   </button>
                  )}
-                </Expandable>
+                  </div>
+                  </div>
+                </div>
               )}
             </div>
           )
