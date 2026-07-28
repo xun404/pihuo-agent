@@ -146,6 +146,7 @@ export function ChatWorkspace({
   const { composing, onCompositionStart, onCompositionEnd } = useComposing()
   const [aliveIds, setAliveIds] = useState<string[]>([])
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({})
+  const lastBusyKeyRef = useRef('')
   const [firstMessage, setFirstMessage] = useState('')
   const [selectedTeamTemplateId, setSelectedTeamTemplateId] = useState('')
   // —— Empty-state ComposerToolbar presets (mode / approval / model / thinking) ——
@@ -286,8 +287,12 @@ export function ChatWorkspace({
         .filter(([, v]) => v)
         .map(([id]) => id),
     )
+    const key = [...busy].sort().join(',')
+    if (lastBusyKeyRef.current === key) return
+    lastBusyKeyRef.current = key
     onBusySessionsChange?.(busy)
-  }, [busyMap, onBusySessionsChange])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onBusySessionsChange is a stable useState setter
+  }, [busyMap])
 
   const mounted = useMemo(() => {
     return aliveIds

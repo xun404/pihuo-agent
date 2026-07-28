@@ -281,7 +281,7 @@ export function SettingsPanel({
     return () => {
       cancelled = true
     }
-  }, [tab, onRefreshSnapshot])
+  }, [tab])
   const [agentAuthOperation, setAgentAuthOperation] = useState<{
     workerId: string
     snapshot: RegistryOperationSnapshot<RegistryAuthenticateResult>
@@ -2566,7 +2566,7 @@ export function SettingsPanel({
                       </div>
 
                       {/* Probe console — action + code-styled log */}
-                      <WorkerProbeConsole worker={w} onProbed={() => onRefreshSnapshot?.()} />
+                      <WorkerProbeConsole key={w.id} worker={w} onProbed={() => onRefreshSnapshot?.()} />
                     </div>
                   )
                 })()}

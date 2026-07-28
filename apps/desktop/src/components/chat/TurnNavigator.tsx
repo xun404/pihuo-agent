@@ -86,9 +86,11 @@ interface Props {
   busy: boolean
   /** 滚动容器（messages-scroll）ref，用于跳转计算 */
   scrollContainerRef: React.RefObject<HTMLDivElement | null>
+  /** 点击跳转某一轮时触发 —— 让父组件脱离底部跟随（用户明确要看历史） */
+  onNavigate?: () => void
 }
 
-function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
+function TurnNavigatorImpl({ messages, busy, scrollContainerRef, onNavigate }: Props) {
   const queries = useMemo(() => buildQueries(messages, busy), [messages, busy])
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
 
@@ -97,6 +99,7 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
 
   // 跳转到指定 query
   const jumpTo = (idx: number) => {
+    onNavigate?.()
     const container = scrollContainerRef.current
     const q = queries[idx]
     if (!container || !q) return
@@ -115,11 +118,7 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
   if (queries.length < 2) return null
 
   return (
-    <nav
-      className="turn-nav"
-      aria-label="query 导航"
-      onMouseLeave={() => setHoverIdx(null)}
-    >
+    <nav className="turn-nav" aria-label="query 导航" onMouseLeave={() => setHoverIdx(null)}>
       <div className="turn-nav-track">
         {queries.map((q, idx) => {
           const f = fisheye(idx, focus)
@@ -156,7 +155,9 @@ function TurnNavigatorImpl({ messages, busy, scrollContainerRef }: Props) {
             top: `calc(50% + ${(hoverIdx - (queries.length - 1) / 2) * 11}px)`,
           }}
         >
-          <div className="turn-nav-preview-idx">QUERY {hoverIdx + 1} / {queries.length}</div>
+          <div className="turn-nav-preview-idx">
+            QUERY {hoverIdx + 1} / {queries.length}
+          </div>
           <div className="turn-nav-preview-q">{queries[hoverIdx]!.text || '(空)'}</div>
           {queries[hoverIdx]!.preview && (
             <div className="turn-nav-preview-a">{queries[hoverIdx]!.preview}</div>

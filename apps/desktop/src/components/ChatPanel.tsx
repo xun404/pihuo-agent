@@ -11,12 +11,10 @@ import type {
 } from '@swarmdesk-agent/shared'
 import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
 import type { PendingNewSession } from '../hooks/useAppState'
-import { api, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
+import { api, abortChatRun, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
+import { ThrottledChat } from '../lib/throttled-chat'
 import { useI18n } from '../i18n/I18nProvider'
-import {
-  THINKING_INTENSITY_OPTIONS,
-  type ThinkingIntensity,
-} from '../lib/settings'
+import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
 import { formatChatError } from '../lib/chat-errors'
 import { enrichLastUserMessageForWire, parseRouterUserMessage } from '../lib/user-message-display'
 import { MarkdownContent } from './MarkdownContent'
@@ -405,7 +403,12 @@ export function ChatPanel({
           // Lazy session creation: if there's a pending session, create it on the server now
           if (pending && createSessionFn) {
             try {
-              const created = await createSessionFn(undefined, pending.mode, pending.projectId, pending.memoryThreadId)
+              const created = await createSessionFn(
+                undefined,
+                pending.mode,
+                pending.projectId,
+                pending.memoryThreadId,
+              )
               sess = created
               sessionRef.current = created
               clearPendingFn?.()
@@ -444,6 +447,17 @@ export function ChatPanel({
             },
           }
         },
+        // Auth headers for the resumeStream() reconnect GET (api defaults to
+        // `${api}/${chatId}/stream`, which the server implements).
+        prepareReconnectToStreamRequest: async () => {
+          const tok = await ensureDesktopToken()
+          const headers: Record<string, string> = {}
+          if (tok) {
+            headers.Authorization = `Bearer ${tok}`
+            headers['X-SwarmDesk-Agent-Desktop-Token'] = tok
+          }
+          return { headers }
+        },
         // AI SDK 6: custom fetch so first 401 clears token, IPC re-fetch, replay once
         fetch: async (input, init) => {
           const doFetch = (headers: HeadersInit | undefined) =>
@@ -476,24 +490,35 @@ export function ChatPanel({
   })
   const lastStatusPostRef = useRef<string>('')
 
-  const { messages, sendMessage, status, stop, error, setMessages, clearError } = useChat({
-    transport,
-    id: memoryThreadId,
-    experimental_throttle: 50,
-    onData: (dataPart) => {
-      if (dataPart.type !== 'data-worker-run') return
-      const event = dataPart.data as WorkerRunEvent
-      setWorkerStates((prev) => workerRunReducer(prev, event))
-    },
-    onError: (err) => {
-      // Ensure sticky error + lamp even if effect timing misses the useChat error state
-      const friendly = formatChatError(err, errorCopyRef.current)
-      const key = `error:${friendly.message}`
-      if (lastStatusPostRef.current === key) return
-      lastStatusPostRef.current = key
-      onSessionStatusChangeRef.current?.('error', { lastChatError: friendly.message })
-    },
-  })
+  const handleChatData = useCallback((dataPart: { type?: string; data?: unknown }) => {
+    if (dataPart.type !== 'data-worker-run') return
+    const event = dataPart.data as WorkerRunEvent
+    setWorkerStates((prev) => workerRunReducer(prev, event))
+  }, [])
+
+  const handleChatError = useCallback((err: unknown) => {
+    const friendly = formatChatError(err, errorCopyRef.current)
+    const key = `error:${friendly.message}`
+    if (lastStatusPostRef.current === key) return
+    lastStatusPostRef.current = key
+    onSessionStatusChangeRef.current?.('error', { lastChatError: friendly.message })
+  }, [])
+
+  // One ThrottledChat per memory thread (vercel/ai#6166 workaround: publish a
+  // stable messages snapshot at most once per 100ms instead of swapping the
+  // array per chunk, so React's tearing guard stops force-rerendering).
+  const chat = useMemo(
+    () =>
+      new ThrottledChat({
+        id: memoryThreadId,
+        transport,
+        onData: handleChatData,
+        onError: handleChatError,
+      }),
+    [memoryThreadId, transport, handleChatData, handleChatError],
+  )
+  const { messages, sendMessage, status, stop, error, setMessages, clearError, resumeStream } =
+    useChat({ chat })
 
   const busy = status === 'submitted' || status === 'streaming'
 
@@ -506,10 +531,20 @@ export function ChatPanel({
     lastStatusPostRef.current = 'running'
     if (error) clearError()
     onSessionStatusChange?.('running', { lastChatError: null })
+    followTailRef.current = true // user-initiated send re-engages tail follow
     void sendMessage({ text: pending })
     setInput('')
     onInitialInputConsumed?.()
-  }, [selectedModel, models, busy, error, clearError, sendMessage, onSessionStatusChange, onInitialInputConsumed])
+  }, [
+    selectedModel,
+    models,
+    busy,
+    error,
+    clearError,
+    sendMessage,
+    onSessionStatusChange,
+    onInitialInputConsumed,
+  ])
 
   // Load persisted history once per thread (survives refresh). Retries on
   // transient failure: memory.recall() can 500 under SQLite concurrency (e.g.
@@ -563,6 +598,18 @@ export function ChatPanel({
       cancelled = true
     }
   }, [memoryThreadId, memoryResourceId, setMessages])
+
+  // Resume an in-flight run after a reload: re-attach to the server-side stream
+  // (GET /chat/:agentId/:threadId/stream). MUST wait until history is loaded so
+  // the replayed chunks build on the persisted messages instead of racing
+  // setMessages. 204 = no active run → no-op. Once per thread per mount.
+  const resumeAttemptedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (historyLoading) return
+    if (resumeAttemptedFor.current === memoryThreadId) return
+    resumeAttemptedFor.current = memoryThreadId
+    void resumeStream()
+  }, [historyLoading, memoryThreadId, resumeStream])
 
   // Seed message history and the complete durable snapshot in one monotonic update.
   useEffect(() => {
@@ -672,10 +719,38 @@ export function ChatPanel({
     }
   }, [hasRunningWorker])
 
+  /** Follow mode: the view only tracks the streaming tail while the user is
+   *  parked at the bottom. Detach happens ONLY on explicit user scroll intent
+   *  (wheel-up / touch-drag / scrollbar track / turn-navigator jump) — never on
+   *  scrollTop deltas: thinking blocks and worker cards collapse above the
+   *  fold all the time, which moves scrollTop with zero user input and made
+   *  delta-based detection drop the tail mid-stream ("跟丢"). Re-attach when
+   *  the user scrolls back to the bottom. */
+  const followTailRef = useRef(true)
+  /** On session open/switch/reload, reveal the tail instantly — never animate
+   *  a top-to-bottom smooth scroll through the whole history. */
+  const jumpToTailRef = useRef(true)
   useEffect(() => {
-    if (isActive) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    jumpToTailRef.current = true
+    followTailRef.current = true
+  }, [session.id])
+  useEffect(() => {
+    if (!isActive) {
+      jumpToTailRef.current = true
+      return
     }
+    if (jumpToTailRef.current && messages.length > 0) {
+      // First reveal of a session: land on the tail instantly, follow mode on.
+      jumpToTailRef.current = false
+      followTailRef.current = true
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+      return
+    }
+    if (!followTailRef.current) return
+    // Typewriter follow: lock the view to the tail on every update. Instant,
+    // not smooth — retargeting a smooth scroll on every chunk makes the
+    // viewport oscillate (the visible "jumping" while streaming).
+    bottomRef.current?.scrollIntoView({ behavior: 'instant' })
   }, [messages, status, isActive])
 
   /**
@@ -813,6 +888,56 @@ export function ChatPanel({
         : ctxPct.toFixed(1)
   const hasMessages = messages.length > 0 || historyLoading
 
+  // Follow-mode event wiring:
+  // - detach on explicit user scroll intent ONLY (wheel-up, touch drag-up,
+  //   scrollbar-track mousedown). Content-height changes above the fold must
+  //   never detach (see followTailRef comment).
+  // - re-engage when the scroll position lands back at the bottom (~2 rows).
+  // The .messages-scroll container only exists when hasMessages, so re-attach
+  // when it (re)appears.
+  useEffect(() => {
+    const el = messagesScrollRef.current
+    if (!el) return
+    const detach = () => {
+      followTailRef.current = false
+    }
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY < 0) detach()
+    }
+    let touchY: number | null = null
+    const onTouchStart = (e: TouchEvent) => {
+      touchY = e.touches[0]?.clientY ?? null
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0]?.clientY
+      // Finger drags DOWN → content scrolls UP → detach.
+      if (touchY != null && y != null && y > touchY + 4) detach()
+      touchY = y ?? touchY
+    }
+    const onMouseDown = (e: MouseEvent) => {
+      // Scrollbar track zone (right edge). Clicking/dragging there is always a
+      // scroll intent; content clicks this close to the edge are rare.
+      if (e.clientX >= el.getBoundingClientRect().right - 20) detach()
+    }
+    const onScroll = () => {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight <= 48) {
+        followTailRef.current = true
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: true })
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: true })
+    el.addEventListener('mousedown', onMouseDown)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('mousedown', onMouseDown)
+      el.removeEventListener('scroll', onScroll)
+    }
+  }, [hasMessages, session.id])
+
   // When model changes, clamp thinking to what that provider supports.
   // NOTE: intentionally does NOT depend on `thinkingIntensity` — otherwise
   // picking a different level would re-clamp and override the user's choice.
@@ -879,13 +1004,14 @@ export function ChatPanel({
 
   const persistChatError = useCallback(
     (friendly: { message: string }, opts?: { force?: boolean }) => {
-      if (!onSessionStatusChange) return Promise.resolve()
+      const cb = onSessionStatusChangeRef.current
+      if (!cb) return Promise.resolve()
       const key = `error:${friendly.message}`
       if (!opts?.force && lastStatusPostRef.current === key) return Promise.resolve()
       lastStatusPostRef.current = key
-      return Promise.resolve(onSessionStatusChange('error', { lastChatError: friendly.message }))
+      return Promise.resolve(cb('error', { lastChatError: friendly.message }))
     },
-    [onSessionStatusChange],
+    [],
   )
 
   // Keep latest error text for unmount flush (Settings replaces the shell)
@@ -893,18 +1019,19 @@ export function ChatPanel({
   displayErrorRef.current = displayError
 
   useEffect(() => {
-    if (!onSessionStatusChange) return
+    const cb = onSessionStatusChangeRef.current
+    if (!cb) return
     if (liveFriendlyError) {
-      persistChatError(liveFriendlyError)
+      void persistChatError(liveFriendlyError)
       return
     }
     if (busy) {
       const key = 'running'
       if (lastStatusPostRef.current === key) return
       lastStatusPostRef.current = key
-      onSessionStatusChange('running', { lastChatError: null })
+      cb('running', { lastChatError: null })
     }
-  }, [liveFriendlyError, busy, onSessionStatusChange, persistChatError])
+  }, [liveFriendlyError, busy])
 
   // Opening Settings unmounts this panel — flush sticky so the card returns after close
   useEffect(() => {
@@ -987,6 +1114,7 @@ export function ChatPanel({
     lastStatusPostRef.current = 'running'
     if (error) clearError()
     onSessionStatusChange?.('running', { lastChatError: null })
+    followTailRef.current = true // user-initiated send re-engages tail follow
     void sendMessage({ text })
     setInput('')
   }
@@ -1005,10 +1133,7 @@ export function ChatPanel({
     const markerId = `compact-${Date.now()}`
     const afterMessageId = messages.length > 0 ? messages[messages.length - 1]!.id : null
     // Insert running marker immediately — visible feedback that the action started.
-    setCompactionMarkers((prev) => [
-      ...prev,
-      { id: markerId, status: 'running', afterMessageId },
-    ])
+    setCompactionMarkers((prev) => [...prev, { id: markerId, status: 'running', afterMessageId }])
     try {
       const result = await api.compressSessionContext(session.id)
       if (result.skipped) {
@@ -1020,9 +1145,7 @@ export function ChatPanel({
       }
       const freed = result.freedTokens ?? 0
       setCompactionMarkers((prev) =>
-        prev.map((m) =>
-          m.id === markerId ? { ...m, status: 'success', freedTokens: freed } : m,
-        ),
+        prev.map((m) => (m.id === markerId ? { ...m, status: 'success', freedTokens: freed } : m)),
       )
       toastSuccess(
         freed > 0
@@ -1034,6 +1157,8 @@ export function ChatPanel({
       try {
         const res = await api.getThreadMessages(session.memoryThreadId ?? session.id)
         if (Array.isArray(res.messages) && res.messages.length >= 0) {
+          // Content shrinks — keep following the tail across the reload.
+          followTailRef.current = true
           setMessages(() => res.messages as never)
         }
       } catch (e) {
@@ -1049,13 +1174,24 @@ export function ChatPanel({
       toastError(err instanceof Error ? err.message : t('chat.compactFailed'))
       return false
     }
-  }, [session?.id, session?.memoryThreadId, messages, setMessages, t, locale, toastSuccess, toastError, onRefreshSnapshot])
+  }, [
+    session?.id,
+    session?.memoryThreadId,
+    messages,
+    setMessages,
+    t,
+    locale,
+    toastSuccess,
+    toastError,
+    onRefreshSnapshot,
+  ])
 
   const handleContinueBudget = useCallback(() => {
     if (!activeBudgetEvent || busy) return
     const saved = activeBudgetEvent
     setCanContinueBudget(false)
     const prompt = buildContinuePrompt(locale)
+    followTailRef.current = true // user-initiated send re-engages tail follow
     sendMessage({ text: prompt }).catch(() => {
       setActiveBudgetEvent(saved)
       setCanContinueBudget(true)
@@ -1142,22 +1278,22 @@ export function ChatPanel({
               modelShort={modelShort}
               thinkShort={thinkShort}
               metaOpen={metaOpen}
-            setMetaOpen={setMetaOpen}
-            tick={tick}
-            placementByJobId={placementByJobId}
-            toolCallJobIds={toolCallJobIds}
-            hasRunningWorker={hasRunningWorker}
-            resolving={resolving}
-            onResolveApproval={onResolveApproval}
-            onResetContext={onResetContext}
-            registryIdentityFor={registryIdentityFor}
-            isMetaOpen={isMetaOpen}
-            errorBlock={errorBlock}
-            timingEpoch={timingEpoch}
-            turnTimingRef={turnTimingRef}
-            toolStartTimes={toolStartTimes}
-            toolDurations={toolDurations}
-          />
+              setMetaOpen={setMetaOpen}
+              tick={tick}
+              placementByJobId={placementByJobId}
+              toolCallJobIds={toolCallJobIds}
+              hasRunningWorker={hasRunningWorker}
+              resolving={resolving}
+              onResolveApproval={onResolveApproval}
+              onResetContext={onResetContext}
+              registryIdentityFor={registryIdentityFor}
+              isMetaOpen={isMetaOpen}
+              errorBlock={errorBlock}
+              timingEpoch={timingEpoch}
+              turnTimingRef={turnTimingRef}
+              toolStartTimes={toolStartTimes}
+              toolDurations={toolDurations}
+            />
             {/* Compaction markers rendered inline at the position they were
                 triggered (after the message whose id matches afterMessageId). */}
             {compactionMarkers
@@ -1327,7 +1463,11 @@ export function ChatPanel({
             <button
               className="send stop"
               type="button"
-              onClick={() => stop()}
+              onClick={() => {
+                stop()
+                // stop() only aborts the local fetch — cancel the server run too.
+                void abortChatRun(memoryThreadId).catch(() => {})
+              }}
               title={t('chat.stop')}
               aria-label={t('chat.stop')}
             />
@@ -1458,11 +1598,13 @@ export function ChatPanel({
             messages={messages}
             busy={effectiveBusy}
             scrollContainerRef={messagesScrollRef}
+            onNavigate={() => {
+              // Explicit jump into history = user scroll intent: detach follow.
+              followTailRef.current = false
+            }}
           />
           {/* 右上角浮窗进程气泡：有 task 快照时显示（mini/panel 切换，无关闭按钮）*/}
-          {taskSnapshot && (
-            <ProcessFloatPanel tasks={taskSnapshot} />
-          )}
+          {taskSnapshot && <ProcessFloatPanel tasks={taskSnapshot} />}
           <div ref={messagesScrollRef} className="messages-scroll">
             <div className="messages">{messageList}</div>
           </div>

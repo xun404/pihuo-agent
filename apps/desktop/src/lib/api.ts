@@ -398,7 +398,9 @@ export const api = {
       freedTokens?: number
     }>(`/api/sessions/${encodePathSegment(id)}/compress-context`, {
       method: 'POST',
-      body: JSON.stringify(opts?.keepRecentTurns != null ? { keepRecentTurns: opts.keepRecentTurns } : {}),
+      body: JSON.stringify(
+        opts?.keepRecentTurns != null ? { keepRecentTurns: opts.keepRecentTurns } : {},
+      ),
     }),
   deleteSession: (id: string) =>
     request<{ ok: boolean; snapshot: AppSnapshot }>(`/api/sessions/${encodePathSegment(id)}`, {
@@ -1049,4 +1051,17 @@ export const api = {
 
 export function chatUrl(agentId = 'swarmdesk-leader'): string {
   return `${BASE}/chat/${encodePathSegment(agentId)}`
+}
+
+/**
+ * Cancel an in-flight leader run for a thread. useChat's stop() only aborts the
+ * local fetch; the server-side run keeps going unless explicitly aborted.
+ */
+export function abortChatRun(threadId: string, agentId = 'swarmdesk-leader') {
+  return request<{ aborted: boolean }>(
+    `/chat/${encodePathSegment(agentId)}/${encodePathSegment(threadId)}/abort`,
+    { method: 'POST' },
+    false,
+    10_000,
+  )
 }

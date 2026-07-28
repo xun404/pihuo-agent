@@ -104,7 +104,13 @@ import type {
 } from '@swarmdesk-agent/shared'
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
-import { pipeUIMessageStreamToResponse } from 'ai'
+import {
+  registerChatRun,
+  getChatRun,
+  attachChatRunSubscriber,
+  abortChatRun,
+} from './chat-run-hub.js'
+import { persistUserTurnUpFront } from './persist-user-turn.js'
 import { coalesceAssistantTurns } from './coalesce-assistant-turns.js'
 import { RequestContext } from '@mastra/core/request-context'
 import { leaderAgent } from './agents/leader-agent.js'
@@ -781,6 +787,28 @@ const server = createServer(async (req, res) => {
         }
       }
 
+      // Resume an in-flight chat stream (AI SDK useChat resume contract):
+      // 204 = no active run for this chat; 200 = SSE replay + live tail.
+      const chatStreamMatch = match(path, '/chat/:agentId/:chatId/stream')
+      if (method === 'GET' && chatStreamMatch) {
+        const hub = getChatRun(chatStreamMatch.chatId!)
+        if (!hub) {
+          res.writeHead(204, corsFor())
+          res.end()
+          return
+        }
+        attachChatRunSubscriber(hub, res, corsFor())
+        return
+      }
+
+      // Explicit stop for a running chat turn. useChat stop() only disconnects
+      // the local fetch — the server run keeps going unless aborted here.
+      const chatAbortMatch = match(path, '/chat/:agentId/:chatId/abort')
+      if (method === 'POST' && chatAbortMatch) {
+        send(res, 200, { aborted: abortChatRun(chatAbortMatch.chatId!) })
+        return
+      }
+
       // Leader chat (AI SDK useChat) — same origin as REST for desktop default base URL
       const chatMatch = match(path, '/chat/:agentId')
       if (method === 'POST' && chatMatch) {
@@ -905,10 +933,16 @@ const server = createServer(async (req, res) => {
             requestContext.set('memoryThreadId', threadId)
           }
 
+          // One controller per run: the chat-run-hub holds it so the explicit
+          // abort endpoint (and same-thread re-registration) can cancel the
+          // Mastra run. Client disconnects never abort — reload must not kill it.
+          const abortController = new AbortController()
+
           // Ensure params carry memory even if client omitted it (goal-state processor)
           const paramsWithMemory = {
             ...params,
             maxSteps: leaderMaxSteps,
+            abortSignal: abortController.signal,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -931,6 +965,21 @@ const server = createServer(async (req, res) => {
           // untilIdle keeps the stream open across background tool tasks
           // @see https://mastra.ai/docs/long-running-agents/background-tasks
 
+          // Persist the user turn up front: Mastra only saves input+output at
+          // run finish, so a mid-run reload would otherwise drop the in-flight
+          // user message from the chat UI until the run ends. Ids match the
+          // client's UIMessages → the finish-save upserts, never duplicates.
+          // Best-effort: a pre-save failure must not break the chat flow.
+          try {
+            await persistUserTurnUpFront(leaderMemory as never, {
+              messages: params.messages,
+              threadId,
+              resourceId,
+            })
+          } catch (err) {
+            console.error('[chat] user-turn pre-save failed (non-fatal)', err)
+          }
+
           let streamBudgetEvent: LeaderStepBudgetEvent | null = null
 
           const stream = await handleChatStream({
@@ -941,7 +990,13 @@ const server = createServer(async (req, res) => {
               ...paramsWithMemory,
               untilIdle: true,
               onFinish: async (onFinishEvent: {
-                steps?: readonly { usage?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number } }[]
+                steps?: readonly {
+                  usage?: {
+                    inputTokens?: number
+                    cachedInputTokens?: number
+                    outputTokens?: number
+                  }
+                }[]
                 finishReason?: string
                 runId?: string
               }) => {
@@ -1060,6 +1115,7 @@ const server = createServer(async (req, res) => {
               streamBudgetEvent ? { leaderStepBudget: streamBudgetEvent.data } : undefined,
             defaultOptions: {
               maxSteps: leaderMaxSteps,
+              abortSignal: abortController.signal,
               memory: {
                 thread: threadId,
                 resource: resourceId,
@@ -1069,13 +1125,10 @@ const server = createServer(async (req, res) => {
               untilIdle: true,
             } as never,
           })
-          for (const [k, v] of Object.entries(corsFor())) {
-            res.setHeader(k, v)
-          }
-          pipeUIMessageStreamToResponse({
-            response: res,
-            stream,
-          })
+          // The hub drains the stream regardless of this response's lifetime and
+          // buffers it for resume replay; this response is just the first subscriber.
+          const hub = registerChatRun(threadId, stream, abortController)
+          attachChatRunSubscriber(hub, res, corsFor())
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           const stack = e instanceof Error ? e.stack : undefined
