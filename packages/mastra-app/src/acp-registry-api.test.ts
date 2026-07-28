@@ -941,6 +941,44 @@ describe('acp-registry-api', () => {
     assert.deepEqual(findInstallationById(newInstallationId)?.workerIds, [worker.id])
   })
 
+  it('rolls back a legacy installation rebind when resource reconciliation fails', async () => {
+    const { prepared, worker, oldInstallationId, newInstallationId, materialized } =
+      await seedDuplicateLegacyInstallation()
+
+    const outcome = await apiProbeWorker(worker.id, {
+      prepareRegistryWorker: async () => ({
+        installation: materialized,
+        prepare: prepared.prepare,
+      }),
+      manager: {
+        deleteContextByWorker: () => {
+          throw new Error('forced reconciliation failure')
+        },
+      },
+      catalogStore: { deleteWorker: () => {} },
+      probeSpawnedAgent: async () => assert.fail('probe must not run after failed rebind'),
+    }).then(
+      () => ({ status: 'fulfilled' as const }),
+      (error: unknown) => ({ status: 'rejected' as const, error }),
+    )
+
+    assert.equal(outcome.status, 'rejected')
+    if (outcome.status === 'rejected') {
+      assert.equal(outcome.error instanceof RegistryApiError, true)
+      assert.equal((outcome.error as RegistryApiError).code, 'ACP_INSTALL_FAILED')
+    }
+    const currentWorker = getSharedStore()
+      .listWorkers()
+      .find((item) => item.id === worker.id)!
+    assert.equal(currentWorker.installationId, oldInstallationId)
+    assert.equal(currentWorker.source?.type, 'registry')
+    if (currentWorker.source?.type === 'registry') {
+      assert.equal(currentWorker.source.installationId, oldInstallationId)
+    }
+    assert.deepEqual(findInstallationById(oldInstallationId)?.workerIds, [worker.id])
+    assert.deepEqual(findInstallationById(newInstallationId)?.workerIds, [])
+  })
+
   it('persists auth-required probe diagnostics without marking the installation installed', async () => {
     resetInstallations()
     const worker = await registerSeededWorker({ installationId: 'inst-probe-auth' })

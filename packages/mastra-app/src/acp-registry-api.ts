@@ -421,7 +421,25 @@ async function ensureMaterializedRegistryWorker(
     removeWorkerReference(replacement.installationId, worker.id)
     throw error
   }
-  reconcileRegistryWorker(worker, healed, deps)
+  try {
+    reconcileRegistryWorker(worker, healed, deps)
+  } catch {
+    try {
+      compareAndSwapLifecycleWorker(lifecycle, healed, worker)
+      removeWorkerReference(replacement.installationId, worker.id)
+    } catch {
+      throw new RegistryApiError(
+        'ACP_INSTALL_FAILED',
+        'Registry installation rebind requires repair before retrying',
+        409,
+      )
+    }
+    throw new RegistryApiError(
+      'ACP_INSTALL_FAILED',
+      'Registry installation rebind resource reconciliation failed',
+      409,
+    )
+  }
   removeWorkerReference(current.installationId, worker.id)
   return healed
 }
