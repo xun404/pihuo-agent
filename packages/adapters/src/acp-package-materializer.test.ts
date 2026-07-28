@@ -13,6 +13,28 @@ const FAKE_NPM = fileURLToPath(new URL('./fixtures/fake-npm-installer.ts', impor
 const TSX_LOADER = fileURLToPath(import.meta.resolve('tsx'))
 const tempDirs: string[] = []
 
+function readTrace(traceFile: string): string {
+  try {
+    return readFileSync(traceFile, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+async function waitForTrace(
+  traceFile: string,
+  pattern: RegExp,
+  timeoutMs = 4_000,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const trace = readTrace(traceFile)
+    if (pattern.test(trace)) return trace
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error('fixture did not become ready before the test deadline')
+}
+
 function fixture(mode = 'success') {
   const root = mkdtempSync(join(tmpdir(), 'acp-package-materializer-'))
   tempDirs.push(root)
@@ -63,7 +85,10 @@ describe('materializeNpmPackage', () => {
 
   it('terminates a stalled installer at the materialization deadline', async () => {
     const { input, traceFile } = fixture('hang')
-    input.timeoutMs = 300
+    // The fake installer cold-starts through the tsx loader. Leave enough time
+    // for it to enter the hung state so this verifies termination, not startup
+    // contention with other test files.
+    input.timeoutMs = 2_000
 
     await assert.rejects(
       () => materializeNpmPackage(input),
@@ -71,22 +96,26 @@ describe('materializeNpmPackage', () => {
         error instanceof Error &&
         (error as Error & { code?: string }).code === 'ACP_INSTALL_TIMEOUT',
     )
-    assert.match(readFileSync(traceFile, 'utf8'), /signal:SIGTERM/u)
+    assert.match(await waitForTrace(traceFile, /signal:SIGTERM/u), /signal:SIGTERM/u)
   })
 
   it('terminates a stalled installer when registration is cancelled', async () => {
     const { input, traceFile } = fixture('hang')
     const controller = new AbortController()
     input.signal = controller.signal
-    setTimeout(() => controller.abort(), 300)
-
-    await assert.rejects(
-      () => materializeNpmPackage(input),
+    input.timeoutMs = 5_000
+    const pending = materializeNpmPackage(input)
+    const rejected = assert.rejects(
+      pending,
       (error: unknown) =>
         error instanceof Error &&
         (error as Error & { code?: string }).code === 'ACP_INSTALL_ABORTED',
     )
-    assert.match(readFileSync(traceFile, 'utf8'), /signal:SIGTERM/u)
+
+    await waitForTrace(traceFile, /start:hang/u)
+    controller.abort()
+    await rejected
+    assert.match(await waitForTrace(traceFile, /signal:SIGTERM/u), /signal:SIGTERM/u)
   })
 
   it(
@@ -96,11 +125,20 @@ describe('materializeNpmPackage', () => {
       const { input, traceFile } = fixture('tree-hang')
       const controller = new AbortController()
       input.signal = controller.signal
-      setTimeout(() => controller.abort(), 300)
+      input.timeoutMs = 5_000
+      const pending = materializeNpmPackage(input)
+      const rejected = assert.rejects(
+        pending,
+        (error: unknown) =>
+          error instanceof Error &&
+          (error as Error & { code?: string }).code === 'ACP_INSTALL_ABORTED',
+      )
 
-      await assert.rejects(() => materializeNpmPackage(input))
-      const descendant = Number(readFileSync(traceFile, 'utf8').match(/descendant:(\d+)/u)?.[1])
+      const trace = await waitForTrace(traceFile, /descendant:(\d+)/u)
+      const descendant = Number(trace.match(/descendant:(\d+)/u)?.[1])
       assert.ok(descendant > 0)
+      controller.abort()
+      await rejected
       assert.throws(() => process.kill(descendant, 0))
     },
   )

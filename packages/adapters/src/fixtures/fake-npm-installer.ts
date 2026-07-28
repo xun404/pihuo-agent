@@ -38,7 +38,9 @@ if (mode === 'tree-hang') {
   setInterval(() => {}, 1_000)
 } else if (mode === 'hang') {
   setInterval(() => {}, 1_000)
-  setTimeout(() => process.exit(0), 1_000)
+  // Safety valve for an orphaned fixture; normal tests terminate this process
+  // through the materializer's timeout or cancellation path first.
+  setTimeout(() => process.exit(0), 30_000)
 } else if (mode === 'exit-error') {
   process.stderr.write(`install failed at ${installDir} token=fixture-secret\n`)
   process.exit(17)
