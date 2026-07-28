@@ -1396,7 +1396,9 @@ async function probeAndCommitRegistryCandidate(input: {
         roles: input.before.roles,
         enabled: input.before.enabled,
       },
-      existingWorkers: store().listWorkers(),
+      existingWorkers: store()
+        .listWorkers()
+        .filter((worker) => worker.id !== input.before.id),
     })
   } finally {
     if (temporary) {
