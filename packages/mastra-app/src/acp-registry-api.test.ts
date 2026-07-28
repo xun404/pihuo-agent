@@ -754,6 +754,97 @@ describe('acp-registry-api', () => {
     assert.ok(Buffer.byteLength(result.message ?? '', 'utf8') <= 512)
   })
 
+  it('re-probes a custom Worker without a Registry installation', async () => {
+    resetInstallations()
+    const installationsBefore = structuredClone(loadAcpAgentInstallationIndex())
+    const executable = '/test/bin/opencode'
+    const worker = getSharedStore().upsertWorker({
+      id: 'worker_custom_reprobe',
+      name: 'OpenCode',
+      kind: 'custom',
+      command: executable,
+      args: ['acp'],
+      env: { CUSTOM_FLAG: 'worker-value' },
+      primaryRole: 'general',
+      roles: ['general'],
+      capabilities: ['general'],
+      enabled: true,
+      scope: 'global',
+      description: 'Custom OpenCode Worker',
+      defaultRoleType: 'general',
+      health: 'healthy',
+      source: {
+        type: 'custom',
+        launchKind: 'system',
+        launchDigest: 'a'.repeat(64),
+      },
+      launchSpec: {
+        distribution: 'custom',
+        executable,
+        runnerArgs: [],
+        agentArgs: ['acp'],
+        env: { CUSTOM_FLAG: 'worker-value' },
+      },
+      readiness: {
+        status: 'ready',
+        code: 'SESSION_READY',
+        message: 'previously ready',
+        checkedAt: '2026-07-28T00:00:00.000Z',
+        nextAction: 'none',
+      },
+    })
+    setWorkerSecret(worker.id, 'AGENT_API_KEY', 'custom-worker-secret')
+
+    let captured: SpawnedAcpSetupInput | undefined
+    try {
+      const result = await apiProbeWorker(worker.id, {
+        ambientEnv: {
+          PATH: '/usr/bin',
+          HOME: '/test/home',
+          SWARMDESK_AGENT_INTERNAL_TOKEN: 'must-never-forward',
+        },
+        terminalAuthReady: () => true,
+        probeSpawnedAgent: async (input) => {
+          captured = input
+          return probeResult(
+            {
+              status: 'ready',
+              code: 'SESSION_READY',
+              message: 'ready',
+              checkedAt: '2026-07-28T00:00:01.000Z',
+              nextAction: 'none',
+            },
+            {
+              capabilitySummary: {
+                protocolVersion: 1,
+                agentName: 'OpenCode',
+                agentVersion: '1.18.5',
+                probedAt: '2026-07-28T00:00:01.000Z',
+              },
+            },
+          )
+        },
+      })
+
+      assert.equal(captured?.command, executable)
+      assert.deepEqual(captured?.args, ['acp'])
+      assert.equal(captured?.cwd, process.cwd())
+      assert.equal(captured?.terminalAuthReady, false)
+      assert.equal(captured?.env.CUSTOM_FLAG, 'worker-value')
+      assert.equal(captured?.env.AGENT_API_KEY, 'custom-worker-secret')
+      assert.equal(captured?.env.SWARMDESK_AGENT_INTERNAL_TOKEN, undefined)
+      assert.equal(result.worker.readiness?.status, 'ready')
+      assert.equal(result.worker.capabilitySummary?.agentName, 'OpenCode')
+      assert.equal(
+        getSharedStore().listWorkers().find((item) => item.id === worker.id)?.readiness?.status,
+        'ready',
+      )
+      assert.deepEqual(loadAcpAgentInstallationIndex(), installationsBefore)
+    } finally {
+      apiDeleteWorker({ workerId: worker.id })
+    }
+  })
+
   it('probes the exact immutable launch with the scoped secret snapshot and promotes only ready', async () => {
     resetInstallations()
     const worker = await registerSeededWorker({ installationId: 'inst-probe-ready' })

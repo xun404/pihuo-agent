@@ -449,9 +449,26 @@ function spawnedSetupInput(
   deps: RegistryLifecycleDependencies,
   authenticateMethodId?: string,
 ): SpawnedAcpSetupInput {
+  const secretSnapshot = loadWorkerSecretsSnapshotForSpawn(worker.id)
+  if (worker.source?.type !== 'registry') {
+    const env = buildEffectiveWorkerEnv({
+      ambientEnv: deps.ambientEnv ?? process.env,
+      workerEnv: worker.env ?? {},
+      workerSecrets: secretSnapshot.secrets,
+    })
+    return {
+      command: worker.command,
+      args: [...worker.args],
+      cwd: process.cwd(),
+      env,
+      terminalAuthReady: false,
+      ...(deps.signal ? { signal: deps.signal } : {}),
+      ...(deps.timeoutMs !== undefined ? { timeoutMs: deps.timeoutMs } : {}),
+    }
+  }
+
   const installation = exactInstallationForWorker(worker)
   const launch = materializeInstallationLaunch(installation)
-  const secretSnapshot = loadWorkerSecretsSnapshotForSpawn(worker.id)
   const env = buildEffectiveWorkerEnv({
     ambientEnv: deps.ambientEnv ?? process.env,
     workerEnv: installation.launchSpec!.env,
@@ -922,8 +939,11 @@ export async function apiProbeWorker(workerId: string, deps: RegistryLifecycleDe
   // that a freshly registered worker can be validated before enabling.
   let before = findWorker(workerId)
   const lifecycle = beginWorkerLifecycle(workerId)
-  before = await ensureMaterializedRegistryWorker(before, lifecycle, deps)
-  const installation = exactInstallationForWorker(before)
+  if (before.source?.type === 'registry') {
+    before = await ensureMaterializedRegistryWorker(before, lifecycle, deps)
+  }
+  const installation =
+    before.source?.type === 'registry' ? exactInstallationForWorker(before) : undefined
   const setup = spawnedSetupInput(before, deps)
   const initializing = applyReadinessToWorker(before, {
     status: 'initializing',
@@ -940,15 +960,17 @@ export async function apiProbeWorker(workerId: string, deps: RegistryLifecycleDe
     capabilitySummary: publicCapabilitySummary(result),
   })
   compareAndSwapLifecycleWorker(lifecycle, initializing, after)
-  try {
-    persistInstallationProbe(installation.installationId, result.readiness)
-  } catch (error) {
+  if (installation) {
     try {
-      compareAndSwapLifecycleWorker(lifecycle, after, initializing)
-    } catch {
-      // A failed Store rollback leaves an explicit initializing repair boundary.
+      persistInstallationProbe(installation.installationId, result.readiness)
+    } catch (error) {
+      try {
+        compareAndSwapLifecycleWorker(lifecycle, after, initializing)
+      } catch {
+        // A failed Store rollback leaves an explicit initializing repair boundary.
+      }
+      throw error
     }
-    throw error
   }
   recordTerminalAuthProbeMethods({ worker: after, methods: result.authMethods })
   // Persist the probe outcome back to the worker store so that any reader
