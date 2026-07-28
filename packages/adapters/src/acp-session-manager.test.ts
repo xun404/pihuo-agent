@@ -999,7 +999,7 @@ describe('session reuse', () => {
     entry.driver.prompt = async () => ({
       ok: false,
       output: 'partial',
-      error: 'private transport failure',
+      error: 'connection closed',
     })
     entry.driver.close = () => {
       closed += 1
@@ -1015,7 +1015,7 @@ describe('session reuse', () => {
     })
 
     assert.equal(result.ok, false)
-    assert.equal(result.error, 'ACP agent failed while processing the task.')
+    assert.equal(result.error, 'ACP agent failed while processing the task: connection closed')
     assert.equal(manager.getDebugInfo().entries, 0)
     assert.equal(closed, 1)
   })
