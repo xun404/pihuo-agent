@@ -373,6 +373,7 @@ export type MessageKey =
   | 'sidebar.brand'
   | 'sidebar.confirmDeleteProject'
   | 'sidebar.confirmDeleteSession'
+  | 'sidebar.confirmDeleteAction'
   | 'sidebar.deleteProject'
   | 'sidebar.deleteSession'
   | 'sidebar.crews'
@@ -1004,6 +1005,7 @@ const zh: Dict = {
   'sidebar.brand': 'SwarmDesk',
   'sidebar.confirmDeleteProject': '删除项目「{name}」及其全部 Session？此操作不可撤销。',
   'sidebar.confirmDeleteSession': '删除 Session「{title}」？此操作不可撤销。',
+  'sidebar.confirmDeleteAction': '再次点击确认删除',
   'sidebar.deleteProject': '删除项目',
   'sidebar.deleteSession': '删除 Session',
   'sidebar.crews': '编组',
@@ -1664,8 +1666,9 @@ const en: Dict = {
   'settings.version': 'Version',
   'sidebar.brand': 'SwarmDesk',
   'sidebar.confirmDeleteProject':
-    'Delete project “{name}” and all its sessions? This cannot be undone.',
-  'sidebar.confirmDeleteSession': 'Delete session “{title}”? This cannot be undone.',
+    'Delete project "{name}" and all its sessions? This cannot be undone.',
+  'sidebar.confirmDeleteSession': 'Delete session "{title}"? This cannot be undone.',
+  'sidebar.confirmDeleteAction': 'Click again to confirm delete',
   'sidebar.deleteProject': 'Delete project',
   'sidebar.deleteSession': 'Delete session',
   'sidebar.crews': 'Crews',

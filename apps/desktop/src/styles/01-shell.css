@@ -348,6 +348,20 @@ html[data-theme='dark'] {
   background: var(--bg-hover);
   color: var(--danger);
 }
+.row-del.confirming {
+  opacity: 1 !important;
+  width: auto;
+  padding: 0 4px;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.row-del.confirming:hover {
+  background: var(--danger);
+  color: var(--bg-surface);
+}
 /* 任务行：时间居右；只有鼠标移到右侧时间区才出现红色 ×（避免整行 hover 误显） */
 .sess-trail {
   position: relative;
@@ -372,22 +386,19 @@ html[data-theme='dark'] {
 }
 .sess-trail .row-del {
   position: absolute;
-  top: 0;
-  bottom: 0;
   right: 0;
-  width: 100%;
-  min-width: 0;
-  height: 22px;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  font-weight: var(--fw-semibold);
-  background: color-mix(in srgb, var(--bg-sidebar) 88%, var(--bg-surface));
+  border: none;
+  background: transparent;
   border-radius: var(--r-sm);
   color: var(--text-3);
-  font-size: 15px;
   transition: opacity var(--dur-instant) ease, color var(--dur-instant) ease, background var(--dur-instant) ease;
 }
 /* 仅当鼠标进入右侧 trail 区域时才淡入删除按钮（并淡出时间让位） */
@@ -401,6 +412,32 @@ html[data-theme='dark'] {
 .sess-trail .row-del:hover {
   background: var(--bg-hover);
   color: var(--danger);
+}
+.sess-trail.confirming .time {
+  display: none;
+}
+.sess-trail .row-del.confirming {
+  position: static;
+  width: auto;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 4px;
+  min-height: 18px;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  border-radius: var(--r-sm);
+  opacity: 1 !important;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.sess-trail .row-del.confirming:hover {
+  background: var(--danger);
+  color: var(--bg-surface);
 }
 .sess.untitled .sess-title {
   color: var(--text-3);
@@ -501,11 +538,11 @@ html[data-theme='dark'] {
   min-height: 0;
   /* auto = 标题行；0fr/1fr = 内容区折叠/撑满（可动画，且不与 height 像素动画冲突） */
   display: grid;
-  grid-template-rows: auto 0fr;
+  grid-template-rows: max-content minmax(0, 0fr);
   transition: grid-template-rows 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .sidebar-section.sidebar-projects.is-open {
-  grid-template-rows: auto 1fr;
+  grid-template-rows: max-content minmax(0, 1fr);
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar-section.sidebar-projects {
@@ -716,7 +753,15 @@ html[data-theme='dark'] {
   width: 15px;
   height: 15px;
 }
-
+.proj-chevron-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.proj-chevron-icon.is-collapsed {
+  transform: rotate(-90deg);
+}
 .sess {
   display: flex;
   align-items: center;

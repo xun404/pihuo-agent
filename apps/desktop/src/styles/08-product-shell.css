@@ -606,7 +606,7 @@ body.is-resizing-panels * {
 .home-main .home,
 .home-main .composer-card,
 .home-main .home-composer,
-.chat-panel .messages,
+.chat-panel .messages-scroll,
 .chat-panel .composer-stack,
 .settings-main .settings-body,
 .settings-main .settings-form-card {

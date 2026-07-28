@@ -1,5 +1,7 @@
 /* —— Chat —— */
 .chat-head {
+  position: relative;
+  z-index: 1;
   height: 44px;
   display: flex;
   align-items: center;

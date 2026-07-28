@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   Project,
   Session,
@@ -16,13 +16,14 @@ import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
 import {
   IconChevronDown,
-  IconFolder,
   IconOpen,
   IconPlus,
   IconQueenBee,
   IconSettings,
+  IconTrash,
   IconWorkers,
 } from './Icons'
+import { Folder, FolderOpen } from './Icons'
 import { Modal } from './ui/Modal'
 import { Expandable } from './ui/Expandable'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
@@ -135,15 +136,38 @@ export function LeftSidebar({
   const { t } = useI18n()
   /** Per-project: reveal sessions beyond the first N. */
   const [sessionsExpanded, setSessionsExpanded] = useState<Set<string>>(() => new Set())
+  /** Per-project: collapse all sessions under a project. Default: visible. */
+  const [sessionsCollapsed, setSessionsCollapsed] = useState<Set<string>>(() => new Set())
   /** Crew section starts collapsed; expand to browse saved templates. */
   const [crewsCollapsed, setCrewsCollapsed] = useState(true)
   /** Projects section supports collapse; default expanded. */
   const [projectsCollapsed, setProjectsCollapsed] = useState(false)
   const [crewsListExpanded, setCrewsListExpanded] = useState(false)
+  /** Two-click delete: null → first click → second click fires actual delete. */
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [crewModal, setCrewModal] = useState<{ open: boolean; focusId: string | null }>({
     open: false,
     focusId: null,
   })
+  const confirmDeleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!confirmingDeleteId) return
+    confirmDeleteTimer.current = setTimeout(() => setConfirmingDeleteId(null), 3000)
+    return () => {
+      if (confirmDeleteTimer.current) clearTimeout(confirmDeleteTimer.current)
+    }
+  }, [confirmingDeleteId])
+  const handleDeleteClick = useCallback(
+    (id: string, onDelete: () => void) => {
+      if (confirmingDeleteId === id) {
+        setConfirmingDeleteId(null)
+        onDelete()
+      } else {
+        setConfirmingDeleteId(id)
+      }
+    },
+    [confirmingDeleteId],
+  )
   /**
    * Ticking clock for lamp expiry: the only time-dependent render is the
    * red lamp's 3s after-read grace. Schedule the next re-render exactly at
@@ -360,10 +384,19 @@ export function LeftSidebar({
             .sort((a, b) => sessionSortKey(b) - sessionSortKey(a))
           const showAllSessions = sessionsExpanded.has(project.id)
           const overflow = Math.max(0, projectSessions.length - SESSION_PREVIEW_LIMIT)
-          const visibleSessions =
+           const visibleSessions =
             overflow === 0 || showAllSessions
               ? projectSessions
               : projectSessions.slice(0, SESSION_PREVIEW_LIMIT)
+           const toggleSessions = () => {
+                setSessionsCollapsed((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(project.id)) next.delete(project.id)
+                  else next.add(project.id)
+                  return next
+                })
+              }
+          const isSessionsVisible = projectSessions.length > 0 && !sessionsCollapsed.has(project.id)
           return (
             <div className="proj" key={project.id}>
               <div
@@ -371,16 +404,17 @@ export function LeftSidebar({
                 role="button"
                 tabIndex={0}
                 title={project.rootPath}
-                onClick={() => onSelectProject(project)}
+                onClick={projectSessions.length > 0 ? toggleSessions : () => onSelectProject(project)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    onSelectProject(project)
+                    if (projectSessions.length > 0) toggleSessions()
+                    else onSelectProject(project)
                   }
                 }}
               >
                 <span className="ico" aria-hidden>
-                  <IconFolder size={15} />
+                  {isSessionsVisible ? <FolderOpen size={15} /> : <Folder size={15} />}
                 </span>
                 <span className="proj-name">{project.name}</span>
                 <button
@@ -398,23 +432,32 @@ export function LeftSidebar({
                 </button>
                 <button
                   type="button"
-                  className="row-del"
-                  title={t('sidebar.deleteProject')}
-                  aria-label={t('sidebar.deleteProject')}
+                  className={`row-del${confirmingDeleteId === project.id ? ' confirming' : ''}`}
+                  title={
+                    confirmingDeleteId === project.id
+                      ? t('sidebar.confirmDeleteAction')
+                      : t('sidebar.deleteProject')
+                  }
+                  aria-label={
+                    confirmingDeleteId === project.id
+                      ? t('sidebar.confirmDeleteAction')
+                      : t('sidebar.deleteProject')
+                  }
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    onDeleteProject(project)
+                    handleDeleteClick(project.id, () => onDeleteProject(project))
                   }}
+                  onMouseLeave={() => setConfirmingDeleteId(null)}
                 >
-                  ×
+                  {confirmingDeleteId === project.id ? t('common.confirm') : <IconTrash size={14} />}
                 </button>
               </div>
-              {projectSessions.length === 0 && (
+              {projectSessions.length === 0 ? (
                 <div className="empty-sess">{t('sidebar.noSessions')}</div>
-              )}
-              <div className="sess-list">
-                {visibleSessions.map((session) => {
+              ) : (
+                <Expandable open={!sessionsCollapsed.has(project.id)} contentClassName="sess-list">
+                  {visibleSessions.map((session) => {
                   // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
                   const busy = busySessionIds?.has(session.id)
                   const sc = sessionLampClass(session, busy ?? false, now)
@@ -434,22 +477,31 @@ export function LeftSidebar({
                     >
                       <span className="dot" aria-hidden title={t(statusTitleKey(sc))} />
                       <span className="sess-title">{displayTitle}</span>
-                      <span className="sess-trail">
+                      <span className={`sess-trail${confirmingDeleteId === session.id ? ' confirming' : ''}`}>
                         <span className="time">
                           {relTime(session.lastReplyAt ?? session.createdAt, t)}
                         </span>
                         <button
                           type="button"
-                          className="row-del"
-                          title={t('sidebar.deleteSession')}
-                          aria-label={t('sidebar.deleteSession')}
+                          className={`row-del${confirmingDeleteId === session.id ? ' confirming' : ''}`}
+                          title={
+                            confirmingDeleteId === session.id
+                              ? t('sidebar.confirmDeleteAction')
+                              : t('sidebar.deleteSession')
+                          }
+                          aria-label={
+                            confirmingDeleteId === session.id
+                              ? t('sidebar.confirmDeleteAction')
+                              : t('sidebar.deleteSession')
+                          }
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            onDeleteSession(session)
+                            handleDeleteClick(session.id, () => onDeleteSession(session))
                           }}
+                          onMouseLeave={() => setConfirmingDeleteId(null)}
                         >
-                          ×
+                          {confirmingDeleteId === session.id ? t('common.confirm') : <IconTrash size={14} />}
                         </button>
                       </span>
                     </div>
@@ -482,8 +534,9 @@ export function LeftSidebar({
                     </span>
                     {t('sidebar.showLess')}
                   </button>
-                )}
-              </div>
+                 )}
+                </Expandable>
+              )}
             </div>
           )
         })}

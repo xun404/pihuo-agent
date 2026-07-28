@@ -318,37 +318,11 @@ function AppShell({
   }
 
   const onDeleteProject = (project: Project) => {
-    setPendingConfirm({
-      title: t('sidebar.deleteProject'),
-      message: t('sidebar.confirmDeleteProject', { name: project.name }),
-      confirmLabel: t('common.confirmDelete'),
-      cancelLabel: t('common.cancel'),
-      danger: true,
-      onConfirm: async () => {
-        try {
-          await deleteProject(project.id)
-        } catch (e) {
-          toastError(String(e))
-        }
-      },
-    })
+    deleteProject(project.id).catch((e) => toastError(String(e)))
   }
 
   const onDeleteSession = (session: Session) => {
-    setPendingConfirm({
-      title: t('sidebar.deleteSession'),
-      message: t('sidebar.confirmDeleteSession', { title: session.title }),
-      confirmLabel: t('common.confirmDelete'),
-      cancelLabel: t('common.cancel'),
-      danger: true,
-      onConfirm: async () => {
-        try {
-          await deleteSession(session.id)
-        } catch (e) {
-          toastError(String(e))
-        }
-      },
-    })
+    deleteSession(session.id).catch((e) => toastError(String(e)))
   }
 
   const onModeChange = (mode: LeaderMode) => {

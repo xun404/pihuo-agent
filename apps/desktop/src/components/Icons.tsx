@@ -5,6 +5,8 @@ import { api } from '../lib/api'
 // 复用 lucide 真实 SVG path，保证视觉与官网一致；stroke 1.75 与本项目风格对齐。
 import {
   Brain,
+  Folder,
+  FolderOpen,
   Sparkle,
   Zap,
   ZapOff,
@@ -20,7 +22,7 @@ import {
 
 // re-export：新 UI 代码（footer / 思考块 / task 卡片）直接从本文件 import 这些名字，
 // 与项目原有 IconXxx 命名风格并存，避免大范围改动既有引用。
-export { Brain, Sparkle, Zap, ZapOff, Calendar, Circle, CircleCheck }
+export { Brain, Folder, FolderOpen, Sparkle, Zap, ZapOff, Calendar, Circle, CircleCheck }
 
 type IconProps = {
   className?: string
