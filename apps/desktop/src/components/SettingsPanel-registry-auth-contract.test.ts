@@ -55,7 +55,7 @@ test('Registry catalog updates are explicit and show active local snapshot metad
   assert.match(source, /checkForUpdates: checkWorkerRegistryUpdates/u)
   assert.match(source, /workers\.registryCheckUpdates/u)
   assert.match(source, /workerRegistryCatalog\?\.source/u)
-  assert.match(source, /workerRegistryCatalog\?\.fetchedAt/u)
+  assert.match(source, /workers\.registryUpdatedAt[\s\S]*?workerRegistryFetchedAt/u)
   assert.match(source, /workerRegistryCatalog\?\.agentCount/u)
   assert.doesNotMatch(source, /getWorkerRegistry\(signal, refresh\)/u)
 })

@@ -2611,8 +2611,8 @@ export function SettingsPanel({
                             onClick={() => void checkRegistryUpdates()}
                           >
                             {workerRegistryChecking
-                              ? t('workers.registryUpdateChecking')
-                              : t('workers.registryUpdate')}
+                              ? t('workers.registryCheckingUpdates')
+                              : t('workers.registryCheckUpdates')}
                           </button>
                         </div>
                         <WorkerRegistryCombobox
@@ -2646,7 +2646,9 @@ export function SettingsPanel({
                         />
                         {workerRegistryCatalog && (
                           <p className="settings-field-hint mono">
-                            {workerRegistrySource} · {t('workers.registryAgentCount', {
+                            {workerRegistrySource} · {t('workers.registryUpdatedAt')}:{' '}
+                            {workerRegistryFetchedAt} ·{' '}
+                            {t('workers.registryAgentCount', {
                               count: workerRegistryAgentCount,
                             })}
                           </p>
