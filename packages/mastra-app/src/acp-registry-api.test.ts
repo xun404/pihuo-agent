@@ -861,6 +861,37 @@ describe('acp-registry-api', () => {
     }
   })
 
+  it('keeps Registry Worker probes fail-closed when installation facts are missing', async () => {
+    resetInstallations()
+    const worker = await registerSeededWorker({ installationId: 'inst-probe-missing' })
+    const before = structuredClone(
+      getSharedStore()
+        .listWorkers()
+        .find((item) => item.id === worker.id),
+    )
+    resetInstallations()
+    let probeCalls = 0
+
+    await assert.rejects(
+      apiProbeWorker(worker.id, {
+        probeSpawnedAgent: async () => {
+          probeCalls += 1
+          return probeResult({ status: 'ready', code: 'SESSION_READY' })
+        },
+      }),
+      (error: unknown) =>
+        error instanceof RegistryApiError && error.code === 'ACP_INSTALL_FAILED',
+    )
+
+    assert.equal(probeCalls, 0)
+    assert.deepEqual(
+      getSharedStore()
+        .listWorkers()
+        .find((item) => item.id === worker.id),
+      before,
+    )
+  })
+
   it('probes the exact immutable launch with the scoped secret snapshot and promotes only ready', async () => {
     resetInstallations()
     const worker = await registerSeededWorker({ installationId: 'inst-probe-ready' })
@@ -1656,6 +1687,120 @@ describe('acp-registry-api', () => {
     } else {
       assert.fail('expected the newer Registry source to remain current')
     }
+  })
+
+  it('keeps a third Worker with the candidate Registry identity in duplicate validation', async () => {
+    resetInstallations()
+    const worker = await registerSeededWorker({ installationId: 'inst-upgrade-duplicate-old' })
+    const before = structuredClone(worker)
+    const candidate = await seedInstallation({
+      version: '2.0.0',
+      digest: manifestDigestV2,
+    })
+    const blocker = (
+      await apiRegisterRegistry({
+        registryId: 'api-agent',
+        version: '2.0.0',
+        distribution: 'npx',
+        manifestDigest: manifestDigestV2,
+        installationId: candidate.installation.installationId,
+        name: 'Existing V2 Worker',
+      })
+    ).worker
+    let probeCalls = 0
+
+    await assert.rejects(
+      apiUpgradeRegistryWorker(
+        {
+          workerId: worker.id,
+          version: '2.0.0',
+          distribution: 'npx',
+          manifestDigest: manifestDigestV2,
+        },
+        {
+          prepareRegistryWorker: async () => ({
+            installation: candidate.installation,
+            prepare: candidate.prepare,
+          }),
+          probeSpawnedAgent: async () => {
+            probeCalls += 1
+            return probeResult({ status: 'ready', code: 'SESSION_READY' })
+          },
+        },
+      ),
+      (error: unknown) =>
+        error instanceof RegistryRegistrationError &&
+        error.code === 'WORKER_DUPLICATE_REGISTRY',
+    )
+
+    assert.equal(probeCalls, 0)
+    assert.deepEqual(
+      getSharedStore()
+        .listWorkers()
+        .find((item) => item.id === worker.id),
+      before,
+    )
+    assert.deepEqual(findInstallationById(candidate.installation.installationId)?.workerIds, [
+      blocker.id,
+    ])
+  })
+
+  it('keeps a third Worker with the candidate name in duplicate validation', async () => {
+    resetInstallations()
+    const worker = await registerSeededWorker({ installationId: 'inst-upgrade-name-old' })
+    const before = getSharedStore().upsertWorker({ ...worker, name: 'Shared Candidate Name' })
+    getSharedStore().upsertWorker({
+      id: 'third-party-name-conflict',
+      name: before.name,
+      kind: 'custom',
+      command: '/third/worker',
+      args: [],
+      primaryRole: 'general',
+      roles: ['general'],
+      capabilities: ['general'],
+      enabled: true,
+      scope: 'global',
+      description: 'third-party name conflict',
+      health: 'unknown',
+      source: { type: 'custom' },
+    })
+    const candidate = await seedInstallation({
+      version: '2.0.0',
+      digest: manifestDigestV2,
+    })
+    let probeCalls = 0
+
+    await assert.rejects(
+      apiUpgradeRegistryWorker(
+        {
+          workerId: worker.id,
+          version: '2.0.0',
+          distribution: 'npx',
+          manifestDigest: manifestDigestV2,
+        },
+        {
+          prepareRegistryWorker: async () => ({
+            installation: candidate.installation,
+            prepare: candidate.prepare,
+          }),
+          probeSpawnedAgent: async () => {
+            probeCalls += 1
+            return probeResult({ status: 'ready', code: 'SESSION_READY' })
+          },
+        },
+      ),
+      (error: unknown) =>
+        error instanceof RegistryRegistrationError && error.code === 'WORKER_DUPLICATE_NAME',
+    )
+
+    assert.equal(probeCalls, 0)
+    assert.deepEqual(
+      getSharedStore()
+        .listWorkers()
+        .find((item) => item.id === worker.id),
+      before,
+    )
+    assert.deepEqual(findInstallationById(candidate.installation.installationId)?.workerIds, [])
   })
 
   it('probes an upgrade candidate before switching and leaves an unreferenced cleanup candidate on failure', async () => {
