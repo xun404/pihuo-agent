@@ -939,6 +939,7 @@ describe('acp-registry-api', () => {
     assert.deepEqual(captured?.args, [materialized.resolvedExecutable, '--acp'])
     assert.deepEqual(findInstallationById(oldInstallationId)?.workerIds, [])
     assert.deepEqual(findInstallationById(newInstallationId)?.workerIds, [worker.id])
+    apiDeleteWorker({ workerId: worker.id })
   })
 
   it('rolls back a legacy installation rebind when resource reconciliation fails', async () => {
@@ -977,6 +978,7 @@ describe('acp-registry-api', () => {
     }
     assert.deepEqual(findInstallationById(oldInstallationId)?.workerIds, [worker.id])
     assert.deepEqual(findInstallationById(newInstallationId)?.workerIds, [])
+    apiDeleteWorker({ workerId: worker.id })
   })
 
   it('persists auth-required probe diagnostics without marking the installation installed', async () => {
