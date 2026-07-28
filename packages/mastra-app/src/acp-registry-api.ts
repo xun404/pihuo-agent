@@ -350,6 +350,28 @@ function isLegacyNpxMarker(installation: AcpAgentInstallationRecord): boolean {
   )
 }
 
+function assertCompatibleMaterializedReplacement(
+  current: AcpAgentInstallationRecord,
+  replacement: AcpAgentInstallationRecord,
+): void {
+  if (
+    current.registryId !== replacement.registryId ||
+    current.registryVersion !== replacement.registryVersion ||
+    current.distribution !== replacement.distribution ||
+    current.manifestDigest !== replacement.manifestDigest ||
+    replacement.distribution !== 'npx' ||
+    !replacement.payloadDigest ||
+    !replacement.resolvedExecutable ||
+    replacement.launchSpec?.executable !== replacement.resolvedExecutable
+  ) {
+    throw new RegistryApiError(
+      'ACP_INSTALL_DIGEST_MISMATCH',
+      'Materialized replacement does not match the legacy installation',
+      409,
+    )
+  }
+}
+
 async function ensureMaterializedRegistryWorker(
   worker: WorkerRegistration,
   lifecycle: WorkerLifecycleToken,
@@ -370,24 +392,37 @@ async function ensureMaterializedRegistryWorker(
     signal: deps.signal,
   })
   assertWorkerLifecycle(lifecycle)
-  if (prepared.installation.installationId !== current.installationId) {
-    throw new RegistryApiError(
-      'ACP_INSTALL_DIGEST_MISMATCH',
-      'Legacy package migration changed installation identity',
-      409,
-    )
-  }
-  const launch = materializeInstallationLaunch(prepared.installation)
+  const replacement = prepared.installation
+  const changedInstallation = replacement.installationId !== current.installationId
+  if (changedInstallation) assertCompatibleMaterializedReplacement(current, replacement)
+  const launch = materializeInstallationLaunch(replacement)
   const healed: WorkerRegistration = {
     ...worker,
     command: launch.command,
     args: [...launch.args],
-    env: { ...prepared.installation.launchSpec!.env },
-    launchSpec: prepared.installation.launchSpec,
-    iconPath: prepared.installation.iconPath ?? worker.iconPath,
+    env: { ...replacement.launchSpec!.env },
+    launchSpec: replacement.launchSpec,
+    iconPath: replacement.iconPath ?? worker.iconPath,
+    ...(changedInstallation ? { installationId: replacement.installationId } : {}),
+    ...(worker.source?.type === 'registry' && changedInstallation
+      ? { source: { ...worker.source, installationId: replacement.installationId } }
+      : {}),
+  }
+  if (!changedInstallation) {
+    reconcileRegistryWorker(worker, healed, deps)
+    compareAndSwapLifecycleWorker(lifecycle, worker, healed)
+    return healed
+  }
+
+  addWorkerReference(replacement.installationId, worker.id)
+  try {
+    compareAndSwapLifecycleWorker(lifecycle, worker, healed)
+  } catch (error) {
+    removeWorkerReference(replacement.installationId, worker.id)
+    throw error
   }
   reconcileRegistryWorker(worker, healed, deps)
-  compareAndSwapLifecycleWorker(lifecycle, worker, healed)
+  removeWorkerReference(current.installationId, worker.id)
   return healed
 }
 

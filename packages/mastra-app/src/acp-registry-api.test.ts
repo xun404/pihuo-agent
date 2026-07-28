@@ -135,6 +135,49 @@ describe('acp-registry-api', () => {
     ).worker
   }
 
+  async function seedDuplicateLegacyInstallation() {
+    resetInstallations()
+    resetSharedStoreForTests()
+    const prepared = await seedInstallation({})
+    const worker = (
+      await apiRegisterRegistry({
+        registryId: 'api-agent',
+        version: '1.0.0',
+        distribution: 'npx',
+        manifestDigest,
+        installationId: prepared.installation.installationId,
+      })
+    ).worker
+    const oldInstallationId = worker.installationId!
+    const newInstallationId = 'inst_materialized_replacement'
+    const index = loadAcpAgentInstallationIndex()
+    const old = index.installations.find(
+      (item) => item.installationId === oldInstallationId,
+    )!
+    const materialized = {
+      ...structuredClone(old),
+      installationId: newInstallationId,
+      status: 'prepared' as const,
+      workerIds: [],
+    }
+    const legacyLaunch = { ...old.launchSpec! }
+    delete legacyLaunch.executable
+    delete legacyLaunch.interpreter
+    old.status = 'probe_failed'
+    old.resolvedExecutable = undefined
+    old.payloadDigest = 'legacy-marker-payload'
+    old.launchSpec = legacyLaunch
+    index.installations.push(materialized)
+    saveAcpAgentInstallationIndex(index)
+    getSharedStore().upsertWorker({
+      ...worker,
+      command: old.runnerCommand!,
+      args: [...legacyLaunch.runnerArgs, legacyLaunch.packageSpec!, ...legacyLaunch.agentArgs],
+      launchSpec: legacyLaunch,
+    })
+    return { prepared, worker, oldInstallationId, newInstallationId, materialized }
+  }
+
   function probeResult(
     readiness: WorkerReadiness,
     overrides: Partial<CapabilityProbeResult> = {},
@@ -860,6 +903,42 @@ describe('acp-registry-api', () => {
       migrated.launchSpec?.interpreter,
     )
     assert.deepEqual(migrated.workerIds, [worker.id])
+  })
+
+  it('rebinds a probe-failed legacy marker to its verified materialized installation', async () => {
+    const { prepared, worker, oldInstallationId, newInstallationId, materialized } =
+      await seedDuplicateLegacyInstallation()
+    let captured: SpawnedAcpSetupInput | undefined
+
+    const result = await apiProbeWorker(worker.id, {
+      prepareRegistryWorker: async () => ({
+        installation: materialized,
+        prepare: prepared.prepare,
+      }),
+      probeSpawnedAgent: async (input) => {
+        captured = input
+        return probeResult({
+          status: 'ready',
+          code: 'SESSION_READY',
+          message: 'ready',
+          checkedAt: '2026-07-28T00:00:00.000Z',
+          nextAction: 'none',
+        })
+      },
+    })
+
+    assert.equal(result.worker.id, worker.id)
+    assert.equal(result.worker.name, worker.name)
+    assert.deepEqual(result.worker.roles, worker.roles)
+    assert.equal(result.worker.installationId, newInstallationId)
+    assert.equal(result.worker.source?.type, 'registry')
+    if (result.worker.source?.type === 'registry') {
+      assert.equal(result.worker.source.installationId, newInstallationId)
+    }
+    assert.equal(captured?.command, materialized.launchSpec?.interpreter)
+    assert.deepEqual(captured?.args, [materialized.resolvedExecutable, '--acp'])
+    assert.deepEqual(findInstallationById(oldInstallationId)?.workerIds, [])
+    assert.deepEqual(findInstallationById(newInstallationId)?.workerIds, [worker.id])
   })
 
   it('persists auth-required probe diagnostics without marking the installation installed', async () => {
