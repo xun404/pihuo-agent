@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { describe, it, before, after } from 'node:test'
+import { describe, it, before, after, beforeEach, afterEach } from 'node:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -71,7 +71,9 @@ const FAKE_PACKAGE_INSTALLER = {
 
 describe('acp-registry-api', () => {
   let dir: string
+  let statePath: string
   const prevData = process.env.SWARMDESK_AGENT_DATA_DIR
+  const prevState = process.env.SWARMDESK_AGENT_AGENTS_STATE
   const prevCat = process.env.ACP_REGISTRY_CATALOG_PATH
   const prevInst = process.env.ACP_AGENT_INSTALLATIONS_PATH
 
@@ -192,7 +194,9 @@ describe('acp-registry-api', () => {
 
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'acp-api-'))
+    statePath = join(dir, 'state.json')
     process.env.SWARMDESK_AGENT_DATA_DIR = dir
+    process.env.SWARMDESK_AGENT_AGENTS_STATE = statePath
     process.env.ACP_REGISTRY_CATALOG_PATH = join(dir, 'acp-registry.json')
     process.env.ACP_AGENT_INSTALLATIONS_PATH = join(dir, 'installs.json')
     delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
@@ -247,11 +251,23 @@ describe('acp-registry-api', () => {
     })
   })
 
+  beforeEach(() => {
+    resetSharedStoreForTests()
+    rmSync(statePath, { force: true })
+  })
+
+  afterEach(() => {
+    resetSharedStoreForTests()
+    rmSync(statePath, { force: true })
+  })
+
   after(() => {
     setTestMasterKey(null)
     resetSharedStoreForTests()
     if (prevData === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
     else process.env.SWARMDESK_AGENT_DATA_DIR = prevData
+    if (prevState === undefined) delete process.env.SWARMDESK_AGENT_AGENTS_STATE
+    else process.env.SWARMDESK_AGENT_AGENTS_STATE = prevState
     if (prevCat === undefined) delete process.env.ACP_REGISTRY_CATALOG_PATH
     else process.env.ACP_REGISTRY_CATALOG_PATH = prevCat
     if (prevInst === undefined) delete process.env.ACP_AGENT_INSTALLATIONS_PATH
