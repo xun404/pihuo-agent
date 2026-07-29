@@ -653,3 +653,124 @@ html[data-theme='dark'] .send.stop {
   background: var(--bg-surface);
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
 }
+
+/* —— Branch switcher —— */
+.branch-switcher {
+  position: relative;
+}
+
+.branch-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  font-family: inherit;
+  line-height: var(--lh-snug);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.branch-trigger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.branch-trigger .caret {
+  font-size: 9px;
+  color: var(--text-3);
+  line-height: 1;
+}
+
+.branch-spinner {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  opacity: 0.6;
+  animation: send-spin 0.7s linear infinite;
+}
+
+.branch-menu {
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 200px;
+  max-width: 300px;
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.branch-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.branch-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.branch-search::placeholder {
+  color: var(--text-3);
+}
+
+.branch-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.branch-item {
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: var(--fs-sm);
+}
+
+.branch-item .branch-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-dirty {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.branch-empty {
+  padding: 14px 10px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  text-align: center;
+}
+
+.branch-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+/* dark-mode search input */
+html[data-theme='dark'] .branch-search {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
