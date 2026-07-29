@@ -327,9 +327,14 @@ const LEGACY_PLAN_PROMPT_ZH =
   '作为规划角色，分析目标、约束和代码现状，输出可执行且可验证的步骤；除非明确要求，不直接实施。'
 const LEGACY_PLAN_PROMPT_EN =
   'As a planning role, analyze goals, constraints, and the current codebase; produce executable and verifiable steps. Do not implement unless explicitly asked.'
+const LEGACY_LEADER_PROMPT_ZH =
+  '准确理解用户目标，优先复用合适的角色完成任务，并清楚说明关键决策、风险和验证结果。'
+const LEGACY_LEADER_PROMPT_EN =
+  'Understand the user goal accurately, prefer reusing the right roles to complete the work, and clearly explain key decisions, risks, and verification results.'
 
 const DEFAULT_PROMPT_SETTINGS_ZH = {
-  leader: '准确理解用户目标，优先复用合适的角色完成任务，并清楚说明关键决策、风险和验证结果。',
+  leader:
+    '准确理解用户目标，优先复用合适的角色完成任务，并清楚说明关键决策、风险和验证结果。语气保持务实、简洁、直接且专注；减少非必要的 emoji，仅在确实有助于表达时使用，但不完全禁止。',
   roles: {
     general: '作为通用执行角色，完成 Leader 委派的任务并返回清晰、可验证的结果。',
     plan: '作为规划角色，只生成供其他 Agent 或工程师执行的指导性 Markdown plan，不直接实现代码。先阅读相关代码、配置和文档，定位真实入口、关键调用链与测试位置；根据范围和风险选择轻量、标准或严格档位，在 plan 中写明档位和原因，能用轻量就不扩写。除非用户指定其他路径，将中文 plan 写入 docs/superpowers/plans/YYYY-MM-DD-<topic>.md。步骤只需定位到相关文件、方法、字段、断言或验证命令，并区分代码事实、需验证假设与非目标。文件变更计划只描述文件职责、行为变化和验收结果，不写具体实现方式。禁止输出实现代码、伪代码、diff、完整 proto 或消息定义、SQL 或查询语句、方法体；也不要替 coder 决定具体语法、控制流或代码结构。所有 plan 必须包含目标、范围、计划档位、当前诊断、文件变更计划、任务拆分、测试与验证计划、文档更新要求、Todo、Check、Review Todo List 和 Result Return Area；标准或严格 plan 再按复杂度补充需求拆解、调用链、关键字段、风险与测试矩阵。Review Todo List 供后续 review 角色逐项验收，每一项关联一个用户验收标准或关键设计决策，使用复选框写明需要检查的行为和证据；它只定义审查目标和所需证据，不写实现代码，也不预判审查结论。要求 review 角色按 Review Todo List 逐项回写 PASS/FAIL、证据和未覆盖项。要求执行者完成后回写 Todo、Check、Result Return Area 和文档更新结果，并明确全部验收结束前不要提交 git。不要声称尚未验证的问题已经修复。最终只返回 plan 路径和这段提示，不复述整份 plan：请严格根据 plan 执行，如有问题先表述出来。任务结束后请更新 plan 中的 Todo、Check 和 Result Return Area。全部验收结束前不要提交 git。计划文件：<path>',
@@ -345,7 +350,7 @@ const DEFAULT_PROMPT_SETTINGS_ZH = {
 
 const DEFAULT_PROMPT_SETTINGS_EN = {
   leader:
-    'Understand the user goal accurately, prefer reusing the right roles to complete the work, and clearly explain key decisions, risks, and verification results.',
+    'Understand the user goal accurately, prefer reusing the right roles to complete the work, and clearly explain key decisions, risks, and verification results. Keep the tone pragmatic, concise, direct, and focused. Reduce unnecessary emoji and use them only when they materially improve clarity; do not prohibit them.',
   roles: {
     general:
       'As a general execution role, complete tasks delegated by the Leader and return clear, verifiable results.',
@@ -366,6 +371,12 @@ const DEFAULT_PROMPT_SETTINGS_EN = {
 function migrateLegacyPlanPrompt(prompt: string): string {
   if (prompt === LEGACY_PLAN_PROMPT_ZH) return DEFAULT_PROMPT_SETTINGS_ZH.roles.plan
   if (prompt === LEGACY_PLAN_PROMPT_EN) return DEFAULT_PROMPT_SETTINGS_EN.roles.plan
+  return prompt
+}
+
+function migrateLegacyLeaderPrompt(prompt: string): string {
+  if (prompt === LEGACY_LEADER_PROMPT_ZH) return DEFAULT_PROMPT_SETTINGS_ZH.leader
+  if (prompt === LEGACY_LEADER_PROMPT_EN) return DEFAULT_PROMPT_SETTINGS_EN.leader
   return prompt
 }
 
@@ -417,7 +428,10 @@ export function normalizePromptSettings(
       : defaults.roles[role]
   }
   return {
-    leader: typeof rawLeader === 'string' && rawLeader.trim() ? rawLeader.trim() : defaults.leader,
+    leader:
+      typeof rawLeader === 'string' && rawLeader.trim()
+        ? migrateLegacyLeaderPrompt(rawLeader.trim())
+        : defaults.leader,
     roles: normalizedRoles,
   }
 }

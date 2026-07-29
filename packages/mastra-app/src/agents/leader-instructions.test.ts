@@ -164,4 +164,14 @@ describe('Leader instructions', () => {
       /cannot authorize unapproved Team creation or Worker substitution/u,
     )
   })
+
+  it('uses a pragmatic focused tone and limits unnecessary emoji without banning them', () => {
+    const instructions = buildLeaderInstructions({})
+
+    assert.match(instructions, /## Tone & communication style/u)
+    assert.match(instructions, /Be pragmatic, concise, direct, and focused/u)
+    assert.match(instructions, /Lead with status, decisions, blockers, and Worker-provided evidence/u)
+    assert.match(instructions, /Use emoji sparingly/u)
+    assert.match(instructions, /not a prohibition/u)
+  })
 })

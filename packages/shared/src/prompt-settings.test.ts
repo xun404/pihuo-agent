@@ -24,6 +24,34 @@ describe('prompt settings', () => {
     assert.equal(DEFAULT_PROMPT_SETTINGS.leader, defaultPromptSettings('zh').leader)
   })
 
+  it('gives Leader pragmatic focused tone defaults and upgrades only old built-in values', () => {
+    const zh = defaultPromptSettings('zh').leader
+    const en = defaultPromptSettings('en').leader
+
+    assert.match(zh, /务实、简洁、直接且专注/u)
+    assert.match(zh, /减少非必要的 emoji/u)
+    assert.match(zh, /不完全禁止/u)
+    assert.match(en, /pragmatic, concise, direct, and focused/u)
+    assert.match(en, /Reduce unnecessary emoji/u)
+    assert.match(en, /do not prohibit them/u)
+
+    const legacyZh = normalizePromptSettings({
+      leader: '准确理解用户目标，优先复用合适的角色完成任务，并清楚说明关键决策、风险和验证结果。',
+    })
+    const legacyEn = normalizePromptSettings(
+      {
+        leader:
+          'Understand the user goal accurately, prefer reusing the right roles to complete the work, and clearly explain key decisions, risks, and verification results.',
+      },
+      'en',
+    )
+    const custom = normalizePromptSettings({ leader: '自定义 Leader 提示' })
+
+    assert.equal(legacyZh.leader, zh)
+    assert.equal(legacyEn.leader, en)
+    assert.equal(custom.leader, '自定义 Leader 提示')
+  })
+
   it('constrains plan roles to produce a scoped, executable Markdown plan contract', () => {
     const zh = defaultPromptSettings('zh').roles.plan
     const en = defaultPromptSettings('en').roles.plan
