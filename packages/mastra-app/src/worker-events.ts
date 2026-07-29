@@ -38,6 +38,7 @@ export type WorkerEventIdentity = {
   workerKind?: WorkerKind
   role?: WorkerRole
   model?: string
+  reasoning?: string
 }
 
 export function enrichTerminalWorkerEvent(
@@ -51,6 +52,7 @@ export function enrichTerminalWorkerEvent(
     workerKind: event.workerKind ?? fallback.workerKind,
     role: event.role ?? fallback.role,
     model: event.model ?? fallback.model,
+    reasoning: (event as any).reasoning ?? fallback.reasoning,
   }
 }
 

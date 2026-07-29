@@ -1,5 +1,7 @@
 import { getSharedStore, type LocalStore } from '@swarmdesk-agent/core'
 import { getAcpSessionManager } from '@swarmdesk-agent/adapters'
+import { evaluateWorkerReasoningSelection } from './worker-reasoning.js'
+import { resolveModelCatalogScopeKey } from './worker-models.js'
 import type {
   ApplyTeamTemplateInput,
   CreateTeamMemberInput,
@@ -36,6 +38,7 @@ interface Dependencies {
   store: LocalStore
   withSessionAdmission<T>(sessionId: string, operation: () => Promise<T>): Promise<T>
   cleanupTeamMember(sessionId: string, memberId: string): Promise<void>
+  evaluateReasoning?: typeof evaluateWorkerReasoningSelection
 }
 
 function mappingFor(
@@ -56,6 +59,19 @@ function modelAvailable(worker: WorkerRegistration, model: string | undefined): 
   return worker.availableModels.some((candidate) => candidate.modelId === model)
 }
 
+function reasoningAvailable(
+  worker: WorkerRegistration,
+  model: string | undefined,
+  reasoning: string | undefined,
+  scopeKey: string | undefined,
+  evaluate: typeof evaluateWorkerReasoningSelection,
+): boolean {
+  if (!reasoning) return true
+  const effectiveModel = model || worker.model?.trim() || undefined
+  const result = evaluate(worker.id, effectiveModel, reasoning, { scopeKey })
+  return result.ok
+}
+
 export class TeamTemplateService {
   constructor(private readonly deps: Dependencies) {}
 
@@ -73,12 +89,30 @@ export class TeamTemplateService {
     if (!template) {
       throw new TeamTemplateServiceError('TEAM_TEMPLATE_NOT_FOUND', 'Team template not found')
     }
+    const workers = this.deps.store.listWorkers()
     const availability = evaluateTeamTemplateAvailability({
       template,
-      workers: this.deps.store.listWorkers(),
+      workers,
       projectId: project.id,
     })
-    if (!availability.ready) {
+    const scopeKey = resolveModelCatalogScopeKey(project.rootPath) || undefined
+    const reasoningReady = template.members.every((member) => {
+      const worker = workers.find((candidate) => candidate.id === member.preferredWorkerId)
+      return (
+        !member.reasoning ||
+        Boolean(
+          worker &&
+          reasoningAvailable(
+            worker,
+            member.model,
+            member.reasoning,
+            scopeKey,
+            this.deps.evaluateReasoning ?? evaluateWorkerReasoningSelection,
+          ),
+        )
+      )
+    })
+    if (!availability.ready || !reasoningReady) {
       throw new TeamTemplateServiceError(
         'TEAM_TEMPLATE_MAPPING_REQUIRED',
         'Team template Worker or model mapping is incomplete',
@@ -90,6 +124,7 @@ export class TeamTemplateService {
       roleType: member.roleType,
       instructions: member.instructions,
       model: member.model,
+      ...(member.reasoning?.trim() ? { reasoning: member.reasoning.trim() } : {}),
     }))
   }
 
@@ -109,6 +144,10 @@ export class TeamTemplateService {
       throw new TeamTemplateServiceError('TEAM_TEMPLATE_NOT_FOUND', 'Team template not found')
     }
     const workers = this.deps.store.listWorkers()
+    const project = this.deps.store
+      .listProjects()
+      .find((candidate) => candidate.id === session.projectId)
+    const scopeKey = resolveModelCatalogScopeKey(project?.rootPath) || undefined
     const members = template.members.map((member, memberIndex) => {
       const mapping = mappingFor(input.mappings, memberIndex)
       const workerId = mapping?.workerId || member.preferredWorkerId
@@ -117,6 +156,10 @@ export class TeamTemplateService {
         mapping && Object.prototype.hasOwnProperty.call(mapping, 'model')
           ? mapping.model?.trim() || undefined
           : member.model?.trim() || undefined
+      const reasoning =
+        mapping && Object.prototype.hasOwnProperty.call(mapping, 'reasoning')
+          ? mapping.reasoning?.trim() || undefined
+          : member.reasoning?.trim() || undefined
       const preview: TeamTemplateApplicationMemberPreview = {
         memberIndex,
         name: member.name,
@@ -125,11 +168,23 @@ export class TeamTemplateService {
         preferredWorkerId: member.preferredWorkerId,
         workerId: workerAvailable(worker, session.projectId) ? workerId : undefined,
         model,
+        reasoning,
       }
       if (!preview.workerId || !worker) {
         preview.issueCode = 'WORKER_MAPPING_REQUIRED'
       } else if (!modelAvailable(worker, model)) {
         preview.issueCode = 'MODEL_MAPPING_REQUIRED'
+      } else if (
+        reasoning &&
+        !reasoningAvailable(
+          worker,
+          model,
+          reasoning,
+          scopeKey,
+          this.deps.evaluateReasoning ?? evaluateWorkerReasoningSelection,
+        )
+      ) {
+        preview.issueCode = 'REASONING_MAPPING_REQUIRED'
       }
       return preview
     })
@@ -193,6 +248,7 @@ export class TeamTemplateService {
               roleType: member.roleType,
               instructions: member.instructions,
               model: member.model,
+              ...(member.reasoning?.trim() ? { reasoning: member.reasoning.trim() } : {}),
             })),
           })
         } catch (error) {

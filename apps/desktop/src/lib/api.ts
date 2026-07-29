@@ -137,6 +137,20 @@ export interface FilesResponse {
   error?: string
 }
 
+export interface WorkerReasoningOptionsResponse {
+  ok: boolean
+  supported: boolean
+  selector?: {
+    configId: string
+    currentValue?: string
+    options: Array<{ value: string; name: string; description?: string }>
+  }
+  cached: boolean
+  stale: boolean
+  errorCode?: string
+  error?: string
+}
+
 export type RegistryOperationStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 export interface ThreadMessagesResult {
@@ -711,6 +725,35 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({ model, projectId: projectId || undefined }),
+      },
+    ),
+  /** Fetch ACP reasoning options for a worker/model combination */
+  fetchWorkerReasoningOptions: (
+    id: string,
+    opts?: { model?: string; force?: boolean; projectId?: string | null },
+  ) => {
+    const params = new URLSearchParams()
+    if (opts?.model?.trim()) params.set('model', opts.model.trim())
+    if (opts?.force) params.set('force', '1')
+    if (opts?.projectId) params.set('projectId', opts.projectId)
+    const qs = params.toString()
+    return request<WorkerReasoningOptionsResponse>(
+      `/api/workers/${encodePathSegment(id)}/reasoning-options${qs ? `?${qs}` : ''}`,
+      undefined,
+      false,
+      120_000,
+    )
+  },
+  /** Atomically update worker model and reasoning in one request */
+  setWorkerExecutionConfig: (
+    id: string,
+    config: { model?: string | null; reasoning?: string | null; projectId?: string | null },
+  ) =>
+    request<{ worker: WorkerRegistration; snapshot?: AppSnapshot }>(
+      `/api/workers/${encodePathSegment(id)}/execution-config`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(config),
       },
     ),
   setLocale: (locale: Locale) =>

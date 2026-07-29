@@ -22,7 +22,7 @@ function worker(id: string, overrides: Partial<WorkerRegistration> = {}): Worker
   }
 }
 
-function template(preferredWorkerId: string, model?: string): TeamTemplate {
+function template(preferredWorkerId: string, model?: string, reasoning?: string): TeamTemplate {
   return {
     id: 'template-1',
     name: 'Delivery',
@@ -33,6 +33,7 @@ function template(preferredWorkerId: string, model?: string): TeamTemplate {
         roleType: 'coder',
         instructions: 'Implement and verify.',
         model,
+        reasoning,
       },
     ],
     createdAt: '2026-07-23T00:00:00.000Z',
@@ -95,5 +96,15 @@ describe('evaluateTeamTemplateAvailability', () => {
 
     assert.deepEqual(unavailable.issues, [{ memberIndex: 0, code: 'MODEL_MAPPING_REQUIRED' }])
     assert.equal(unknownCatalog.ready, true)
+  })
+
+  it('accepts reasoning on template members without blocking availability', () => {
+    const result = evaluateTeamTemplateAvailability({
+      template: template('worker-1', undefined, 'low'),
+      workers: [worker('worker-1')],
+      projectId: 'project-a',
+    })
+    assert.equal(result.ready, true)
+    assert.deepEqual(result.issues, [])
   })
 })

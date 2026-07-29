@@ -1,4 +1,5 @@
 import { evaluateWorkerModelPin } from './worker-models.js'
+import { evaluateWorkerReasoningSelection } from './worker-reasoning.js'
 
 export type RoleModelEvaluator = (
   workerId: string,
@@ -19,6 +20,24 @@ export function assertTeamMemberModelAccepted(
     throw new Error(
       `${result.errorCode ?? 'MODEL_SELECTION_UNVERIFIED'}: ${
         result.error ?? `Model is not available for Worker ${workerId}`
+      }`,
+    )
+  }
+}
+
+/** Validate role reasoning override; an empty reasoning means inheritance. */
+export function assertTeamMemberReasoningAccepted(
+  workerId: string,
+  model: string | undefined,
+  reasoning: string | null | undefined,
+  opts?: { cwd?: string; scopeKey?: string | null },
+): void {
+  if (!reasoning?.trim()) return
+  const result = evaluateWorkerReasoningSelection(workerId, model, reasoning, opts)
+  if (!result.ok) {
+    throw new Error(
+      `${result.errorCode ?? 'REASONING_SELECTION_UNVERIFIED'}: ${
+        result.error ?? `Reasoning value is not available for Worker ${workerId}`
       }`,
     )
   }

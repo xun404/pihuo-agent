@@ -180,6 +180,7 @@ export function buildTeamMemberDispatchSnapshot(
   | 'roleType'
   | 'teamMemberRevision'
   | 'effectiveModel'
+  | 'effectiveReasoning'
   | 'instructionsSnapshot'
   | 'effectivePrompt'
 > {
@@ -191,8 +192,31 @@ export function buildTeamMemberDispatchSnapshot(
     roleType: role.roleType,
     teamMemberRevision: role.revision,
     effectiveModel: role.model?.trim() || worker.model?.trim() || undefined,
+    effectiveReasoning: role.reasoning?.trim() || worker.reasoning?.trim() || undefined,
     instructionsSnapshot: instructions,
     effectivePrompt: instructions ? `${instructions}\n\nTask:\n${normalizedTask}` : normalizedTask,
+  }
+}
+
+export function buildWorkerExecutionSnapshot(
+  worker: Pick<WorkerRegistration, 'model' | 'reasoning'>,
+): Pick<WorkerJob, 'effectiveModel' | 'effectiveReasoning'> {
+  return {
+    effectiveModel: worker.model?.trim() || undefined,
+    effectiveReasoning: worker.reasoning?.trim() || undefined,
+  }
+}
+
+export function toPublicWorkerJobErrorCode(code: string | undefined): string | undefined {
+  switch (code) {
+    case 'acp_reasoning_unsupported':
+      return 'ACP_REASONING_UNSUPPORTED'
+    case 'acp_reasoning_value_unavailable':
+      return 'ACP_REASONING_VALUE_UNAVAILABLE'
+    case 'acp_reasoning_configuration_failed':
+      return 'ACP_REASONING_CONFIGURATION_FAILED'
+    default:
+      return code
   }
 }
 
@@ -639,6 +663,7 @@ export class WorkerScheduler {
           output: '',
           workerName: job.workerName,
           role: job.role,
+          reasoning: job.effectiveReasoning,
         } as WorkerRunEvent)
       }
       return { job }
@@ -653,6 +678,7 @@ export class WorkerScheduler {
       workerId: worker.id,
       workerName: worker.name,
       role: teamMember?.roleType ?? req.role,
+      ...buildWorkerExecutionSnapshot(worker),
       ...roleSnapshot,
       task,
       cwd,
@@ -1215,10 +1241,8 @@ export class WorkerScheduler {
     const workerSecretSnapshot = loadWorkerSecretsSnapshotForSpawn(worker.id)
     const workerSecrets = workerSecretSnapshot.secrets
     const eligibilityCandidates = resolveEligibilityCandidates(worker, catalog) ?? []
-    // Role model is snapshotted at enqueue time; absent means ACP default for legacy jobs.
-    const pin = job.teamMemberId
-      ? job.effectiveModel?.trim() || undefined
-      : worker.model?.trim() || undefined
+    // Execution config is snapshotted at enqueue time; absent means ACP default for legacy jobs.
+    const pin = job.effectiveModel?.trim() || undefined
     // Always re-merge evidence at dispatch (env + catalog providers). Empty catalog = fail-closed
     // for non-zen pins (same boundary as discovery/pin/execute).
     const providersFromCatalog: Record<string, 'free' | 'authenticated' | 'disabled' | 'unknown'> =
@@ -1357,6 +1381,7 @@ export class WorkerScheduler {
         command: config.command,
         args: [...config.args],
         model: config.model,
+        reasoning: job.effectiveReasoning,
         env: config.env,
         availableModels: config.availableModels,
         providers,
@@ -1426,7 +1451,7 @@ export class WorkerScheduler {
           workerName: worker.name,
           workerKind: worker.kind,
           role: job.role,
-          model: worker.model?.trim() || undefined,
+          model: job.effectiveModel,
         } as WorkerRunEvent,
         { retainRuntime: true },
       )
@@ -1463,7 +1488,8 @@ export class WorkerScheduler {
               workerName: worker.name,
               workerKind: worker.kind,
               role: job.role,
-              model: job.teamMemberId ? job.effectiveModel : worker.model?.trim() || undefined,
+              model: job.effectiveModel,
+              reasoning: job.effectiveReasoning,
               reusedSession: disposition !== 'new',
               sessionDisposition: disposition,
             } as WorkerRunEvent)
@@ -1600,7 +1626,7 @@ export class WorkerScheduler {
                     workerName: worker.name,
                     workerKind: worker.kind,
                     role: job.role,
-                    model: worker.model?.trim() || undefined,
+                    model: job.effectiveModel,
                   } as WorkerRunEvent)
                 },
                 finishFailed: () => {
@@ -1663,7 +1689,7 @@ export class WorkerScheduler {
         const err = formatWorkerModelError({
           workerName: worker.name,
           kind: worker.kind,
-          model: worker.model,
+          model: job.effectiveModel,
           rawError: result.error ?? 'ACP failed',
         })
         updateWorkerAcpHealthFromJob(worker.id, 'failed', { error: result.error ?? err })
@@ -1684,7 +1710,8 @@ export class WorkerScheduler {
             workerName: worker.name,
             workerKind: worker.kind,
             role: job.role,
-            model: worker.model?.trim() || undefined,
+            model: job.effectiveModel,
+            reasoning: job.effectiveReasoning,
           } as WorkerRunEvent,
         )
         return
@@ -1719,8 +1746,8 @@ export class WorkerScheduler {
         jobId,
         {
           status: 'succeeded',
-          message: worker.model
-            ? `Completed via ${job.workerName} (model=${worker.model}${result.reusedSession ? ', reused session' : ''})`
+          message: job.effectiveModel
+            ? `Completed via ${job.workerName} (model=${job.effectiveModel}${result.reusedSession ? ', reused session' : ''})`
             : `Completed via ${job.workerName}${result.reusedSession ? ' (reused session)' : ''}`,
           output: result.output?.slice(0, 32_000),
         },
@@ -1732,7 +1759,8 @@ export class WorkerScheduler {
           workerName: worker.name,
           workerKind: worker.kind,
           role: job.role,
-          model: worker.model?.trim() || undefined,
+          model: job.effectiveModel,
+          reasoning: job.effectiveReasoning,
         } as WorkerRunEvent,
       )
     } catch (e) {
@@ -1744,7 +1772,9 @@ export class WorkerScheduler {
         return
       }
       const failure = toPublicAcpFailure(e)
-      const runtimeCode = isAcpSessionRuntimeError(e) ? e.code : undefined
+      const runtimeCode = toPublicWorkerJobErrorCode(
+        isAcpSessionRuntimeError(e) ? e.code : undefined,
+      )
       updateWorkerAcpHealthFromJob(worker.id, 'failed', {
         error: failure.error,
         errorCode: runtimeCode,
@@ -1769,7 +1799,8 @@ export class WorkerScheduler {
           workerName: worker.name,
           workerKind: worker.kind,
           role: job.role,
-          model: worker.model?.trim() || undefined,
+          model: job.effectiveModel,
+          reasoning: job.effectiveReasoning,
           recoveryError: failure.recoveryError,
           canResetAcpContext: failure.canResetAcpContext,
         } as WorkerRunEvent,

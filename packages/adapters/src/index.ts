@@ -168,6 +168,11 @@ export {
 } from './acp-session.js'
 export { extractModelOptions, type ModelOptionsResult } from './acp-model-options.js'
 export {
+  extractReasoningSelector,
+  listAcpReasoningOptions,
+  type ListAcpReasoningOptionsResult,
+} from './acp-reasoning-options.js'
+export {
   computeShortlistedModels,
   type ShortlistEntry,
   type ShortlistReason,
@@ -189,7 +194,9 @@ export {
   computeExecutionFingerprint,
   computeKeyDigest,
   applyPinnedModelOrThrow,
+  applySessionConfigOrThrow,
   workerExecutionConfigChanged,
+  type SessionExecutionConfig,
   type AcpFingerprintInput,
   type AcpFingerprintFn,
   type SessionReuseKey,

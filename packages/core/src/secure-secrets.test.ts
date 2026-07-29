@@ -354,45 +354,45 @@ describe('computeAcpExecutionFingerprint', () => {
   it('same inputs across instances produce same digest', () => {
     const workerEnv = { MY_VAR: 'val' }
     const ambientEnv = { PATH: '/usr/bin', HOME: '/home/u' }
-    const f1 = computeAcpExecutionFingerprint('cmd', ['a', 'b'], 'm1', workerEnv, ambientEnv)
-    const f2 = computeAcpExecutionFingerprint('cmd', ['a', 'b'], 'm1', workerEnv, ambientEnv)
+    const f1 = computeAcpExecutionFingerprint('cmd', ['a', 'b'], 'm1', undefined, workerEnv, ambientEnv)
+    const f2 = computeAcpExecutionFingerprint('cmd', ['a', 'b'], 'm1', undefined, workerEnv, ambientEnv)
     assert.equal(f1, f2)
     assert.match(f1, /^[0-9a-f]{64}$/)
   })
 
   it('different command produces different digest', () => {
-    const f1 = computeAcpExecutionFingerprint('cmd-a', [], 'm1', {}, {})
-    const f2 = computeAcpExecutionFingerprint('cmd-b', [], 'm1', {}, {})
+    const f1 = computeAcpExecutionFingerprint('cmd-a', [], 'm1', undefined, {}, {})
+    const f2 = computeAcpExecutionFingerprint('cmd-b', [], 'm1', undefined, {}, {})
     assert.notEqual(f1, f2)
   })
 
   it('different args produce different digest', () => {
-    const f1 = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', {}, {})
-    const f2 = computeAcpExecutionFingerprint('cmd', ['b'], 'm1', {}, {})
+    const f1 = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', undefined, {}, {})
+    const f2 = computeAcpExecutionFingerprint('cmd', ['b'], 'm1', undefined, {}, {})
     assert.notEqual(f1, f2)
   })
 
   it('different model produces different digest', () => {
-    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', {}, {})
-    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm2', {}, {})
+    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, {}, {})
+    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm2', undefined, {}, {})
     assert.notEqual(f1, f2)
   })
 
   it('different worker env produces different digest', () => {
-    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', { K: 'v1' }, {})
-    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', { K: 'v2' }, {})
+    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, { K: 'v1' }, {})
+    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, { K: 'v2' }, {})
     assert.notEqual(f1, f2)
   })
 
   it('different ambient env (relevant var) produces different digest', () => {
-    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', {}, { PATH: '/a' })
-    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', {}, { PATH: '/b' })
+    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, {}, { PATH: '/a' })
+    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, {}, { PATH: '/b' })
     assert.notEqual(f1, f2)
   })
 
   it('irrelevant ambient env change does not affect digest', () => {
-    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', {}, { IGNORED: 'a' })
-    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', {}, { IGNORED: 'b' })
+    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, {}, { IGNORED: 'a' })
+    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, {}, { IGNORED: 'b' })
     assert.equal(f1, f2)
   })
 
@@ -401,6 +401,7 @@ describe('computeAcpExecutionFingerprint', () => {
       'cmd',
       [],
       'm1',
+      undefined,
       {},
       { OPENAI_API_KEY: 'sk-super-secret' },
     )
@@ -409,36 +410,36 @@ describe('computeAcpExecutionFingerprint', () => {
   })
 
   it('fingerprint is hex string', () => {
-    const fp = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', { K: 'v' }, { PATH: '/bin' })
+    const fp = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', undefined, { K: 'v' }, { PATH: '/bin' })
     assert.match(fp, /^[0-9a-f]{64}$/)
   })
 
   it('different master keys produce different digests for same inputs', () => {
     const workerEnv = { MY_VAR: 'val' }
     const ambientEnv = { PATH: '/usr/bin' }
-    const f1 = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', workerEnv, ambientEnv)
+    const f1 = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', undefined, workerEnv, ambientEnv)
 
     setTestMasterKey(randomBytes(32))
-    const f2 = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', workerEnv, ambientEnv)
+    const f2 = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', undefined, workerEnv, ambientEnv)
 
     assert.notEqual(f1, f2)
   })
 
   it('returns digest only, never exports master key', () => {
-    const fp = computeAcpExecutionFingerprint('cmd', [], 'm1', {}, {})
+    const fp = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, {}, {})
     assert.equal(typeof fp, 'string')
     assert.match(fp, /^[0-9a-f]+$/)
   })
 
   it('command containing | does not collide with args containing | (canonical collision fix)', () => {
-    const f1 = computeAcpExecutionFingerprint('a|b', ['c'], 'm1', {}, {})
-    const f2 = computeAcpExecutionFingerprint('a', ['b|c'], 'm1', {}, {})
+    const f1 = computeAcpExecutionFingerprint('a|b', ['c'], 'm1', undefined, {}, {})
+    const f2 = computeAcpExecutionFingerprint('a', ['b|c'], 'm1', undefined, {}, {})
     assert.notEqual(f1, f2)
   })
 
   it('env values containing delimiters cannot collide with additional env entries', () => {
-    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', { A: 'b|C=d' }, {})
-    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', { A: 'b', C: 'd' }, {})
+    const f1 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, { A: 'b|C=d' }, {})
+    const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, { A: 'b', C: 'd' }, {})
     assert.notEqual(f1, f2)
   })
 })

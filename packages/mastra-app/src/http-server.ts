@@ -88,7 +88,7 @@ import {
   terminalAuthAttemptPublicStatus,
 } from './acp-auth-terminal.js'
 import { getWorkerModels, evaluateWorkerModelPin, applyWorkerModelPin } from './worker-models.js'
-import { assertTeamMemberModelAccepted } from './team-members.js'
+import { assertTeamMemberModelAccepted, assertTeamMemberReasoningAccepted } from './team-members.js'
 import type {
   ApprovalDecision,
   LeaderMode,
@@ -122,9 +122,7 @@ import {
   detectLeaderStepBudgetExhaustion,
   createBudgetMarkerMessage,
 } from './leader-step-budget.js'
-import { generateSessionTitle, extractFirstUserText } from './session-title-generator.js'
 import { compressSessionContext } from './session-compressor.js'
-import { isPlaceholderSessionTitle } from '@swarmdesk-agent/core'
 import type { LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
 import { initializeAcpRuntime } from './acp-runtime.js'
 import { asAcpHttpFailure } from './acp-http-error.js'
@@ -919,6 +917,8 @@ const server = createServer(async (req, res) => {
             requestContext.set('routerSessionId', routerSession.id)
             requestContext.set('routerProjectId', routerSession.projectId)
             requestContext.set('memoryThreadId', routerSession.memoryThreadId)
+            requestContext.set('sessionTitle', routerSession.title)
+            requestContext.set('sessionTitleSource', routerSession.titleSource ?? 'auto')
             roleReviewPending = routerSession.roleReviewState === 'pending'
             requestContext.set('roleReviewPending', roleReviewPending)
             requestContext.set(
@@ -1053,34 +1053,6 @@ const server = createServer(async (req, res) => {
                   } catch (err) {
                     console.error(
                       '[session-usage] onFinish usage accumulation failed',
-                      err instanceof Error ? err.message : err,
-                    )
-                  }
-                }
-
-                // —— Delayed session naming ——
-                // After the first task completion, ask the leader model for a
-                // short title and persist it via store.autoTitleSession (which is
-                // a no-op for user-renamed sessions). Only fires while the title
-                // is still the placeholder, so second-turn runs are skipped.
-                // Failures are swallowed: naming must never break the chat flow.
-                if (routerSession && isPlaceholderSessionTitle(routerSession.title)) {
-                  try {
-                    const firstUserText = extractFirstUserText(
-                      (params as { messages?: unknown[] }).messages,
-                    )
-                    if (firstUserText) {
-                      const generated = await generateSessionTitle({
-                        firstUserText,
-                        requestContext,
-                      })
-                      if (generated) {
-                        store.autoTitleSession(routerSession.id, generated)
-                      }
-                    }
-                  } catch (err) {
-                    console.error(
-                      '[session-title] onFinish hook failed',
                       err instanceof Error ? err.message : err,
                     )
                   }
@@ -2243,6 +2215,147 @@ const server = createServer(async (req, res) => {
         return
       }
 
+      // Get reasoning options for a worker/model
+      const reasoningMatch = match(path, '/api/workers/:id/reasoning-options')
+      if (method === 'GET' && reasoningMatch) {
+        const worker = store.listWorkers().find((w) => w.id === reasoningMatch.id)
+        if (!worker) {
+          send(res, 404, { error: 'not found' })
+          return
+        }
+        try {
+          const model = url.searchParams.get('model')?.trim() || undefined
+          const force =
+            url.searchParams.get('force') === '1' || url.searchParams.get('force') === 'true'
+          const requestedProjectId = url.searchParams.get('projectId')?.trim() || undefined
+          const requestedProject = requestedProjectId
+            ? store.listProjects().find((project) => project.id === requestedProjectId)
+            : store.getActive().project
+          if (requestedProjectId && !requestedProject) {
+            send(res, 404, { error: 'project not found', projectId: requestedProjectId })
+            return
+          }
+
+          const { getWorkerReasoningOptionsWithWorker } = await import('./worker-reasoning.js')
+          const { resolveModelCatalogScopeKey } = await import('./worker-models.js')
+          const scopeKey = resolveModelCatalogScopeKey(requestedProject?.rootPath)
+          const result = await getWorkerReasoningOptionsWithWorker(worker, model, {
+            cwd: requestedProject?.rootPath,
+            force,
+            scopeKey: scopeKey || undefined,
+          })
+          send(res, 200, result)
+        } catch {
+          send(res, 500, {
+            error: 'Failed to load Worker reasoning options.',
+            errorCode: 'ACP_REASONING_CONFIGURATION_FAILED',
+          })
+        }
+        return
+      }
+
+      // Atomically set worker execution config (model + reasoning)
+      const execMatch = match(path, '/api/workers/:id/execution-config')
+      if (method === 'PUT' && execMatch) {
+        const body = (await readJson(req)) as {
+          model?: string | null
+          reasoning?: string | null
+          projectId?: string | null
+        }
+        try {
+          const previous = store.listWorkers().find((candidate) => candidate.id === execMatch.id)
+          if (!previous) {
+            send(res, 404, { error: 'not found' })
+            return
+          }
+
+          const requestedProjectId = body.projectId?.trim() || undefined
+          const requestedProject = requestedProjectId
+            ? store.listProjects().find((project) => project.id === requestedProjectId)
+            : store.getActive().project
+          if (requestedProjectId && !requestedProject) {
+            send(res, 404, { error: 'project not found', projectId: requestedProjectId })
+            return
+          }
+
+          if (typeof body.model === 'string' && body.model.trim()) {
+            const pinCheck = evaluateWorkerModelPin(execMatch.id!, body.model, {
+              cwd: requestedProject?.rootPath,
+            })
+            if (!pinCheck.ok) {
+              send(res, 400, {
+                error: formatPublicError(
+                  pinCheck.errorCode,
+                  pinCheck.error ?? 'Model pin rejected',
+                ),
+                errorCode: pinCheck.errorCode,
+              })
+              return
+            }
+          }
+
+          // Validate final model/reasoning combination
+          const effectiveModel =
+            body.model !== undefined
+              ? typeof body.model === 'string' && body.model.trim()
+                ? body.model.trim()
+                : undefined
+              : previous.model
+          const effectiveReasoning =
+            body.reasoning !== undefined
+              ? typeof body.reasoning === 'string' && body.reasoning.trim()
+                ? body.reasoning.trim()
+                : undefined
+              : previous.reasoning
+          if (effectiveReasoning) {
+            const { evaluateWorkerReasoningSelection } = await import('./worker-reasoning.js')
+            const { resolveModelCatalogScopeKey } = await import('./worker-models.js')
+            const scopeKey = resolveModelCatalogScopeKey(requestedProject?.rootPath)
+            const reasoningCheck = evaluateWorkerReasoningSelection(
+              execMatch.id!,
+              effectiveModel,
+              effectiveReasoning,
+              { scopeKey: scopeKey || undefined },
+            )
+            if (!reasoningCheck.ok) {
+              send(res, 400, {
+                error: formatPublicError(
+                  reasoningCheck.errorCode,
+                  reasoningCheck.error ?? 'Reasoning rejected',
+                ),
+                errorCode: reasoningCheck.errorCode,
+              })
+              return
+            }
+          }
+
+          reconcileWorkerRuntimeResources({
+            before: previous,
+            after: {
+              ...previous,
+              model: effectiveModel,
+              reasoning: effectiveReasoning,
+            },
+            manager: sessionMgr,
+            catalogStore: getWorkerModelCatalogStore(),
+          })
+
+          const worker = store.setWorkerExecutionConfig(execMatch.id!, {
+            model: body.model,
+            reasoning: body.reasoning,
+          })
+          globalActivityLog.append('worker', `Execution config set for ${worker.name}`, {
+            workerId: worker.id,
+            model: worker.model,
+            reasoning: worker.reasoning,
+          })
+          send(res, 200, { worker, snapshot: store.snapshot() })
+        } catch (e) {
+          sendAcpOrUnexpectedFailure(res, e, 'worker execution config')
+        }
+        return
+      }
+
       if (method === 'POST' && path === '/api/workers/health') {
         const body = (await readJson(req).catch(() => ({}))) as {
           workerIds?: string[]
@@ -2550,6 +2663,9 @@ const server = createServer(async (req, res) => {
             ? store.listProjects().find((project) => project.id === session.projectId)?.rootPath
             : undefined
           assertTeamMemberModelAccepted(body.workerId, body.model, projectRoot)
+          assertTeamMemberReasoningAccepted(body.workerId, body.model, body.reasoning, {
+            cwd: projectRoot,
+          })
           const teamMember = store.createTeamMember({
             ...body,
             chatSessionId: teamMembersMatch.sessionId!,
@@ -2613,6 +2729,31 @@ const server = createServer(async (req, res) => {
               body.workerId ?? current.workerId,
               body.model === undefined ? current.model : body.model,
               projectRoot,
+            )
+          }
+          if (
+            body.workerId !== undefined ||
+            body.model !== undefined ||
+            body.reasoning !== undefined
+          ) {
+            const effectiveWorkerId = body.workerId ?? current.workerId
+            const effectiveModel =
+              body.model === undefined
+                ? current.model
+                : typeof body.model === 'string' && body.model.trim()
+                  ? body.model.trim()
+                  : undefined
+            const effectiveReasoning =
+              body.reasoning === undefined
+                ? current.reasoning
+                : typeof body.reasoning === 'string' && body.reasoning.trim()
+                  ? body.reasoning.trim()
+                  : undefined
+            assertTeamMemberReasoningAccepted(
+              effectiveWorkerId,
+              effectiveModel,
+              effectiveReasoning,
+              { cwd: projectRoot },
             )
           }
           const teamMember = store.updateTeamMember(

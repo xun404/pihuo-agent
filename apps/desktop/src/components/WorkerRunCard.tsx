@@ -224,6 +224,11 @@ export const WorkerRunCard = memo(function WorkerRunCard({
             {shortModelId(state.model)}
           </span>
         )}
+        {state.reasoning && (
+          <span className="model mono reasoning-tag" title={state.reasoning.trim()}>
+            {state.reasoning}
+          </span>
+        )}
         {/* 角色 pill（node-cap 样式）——持久化在 WorkerJob.role，不随 session 设置变化 */}
         {state.role && (
           <span className="node-cap role-cap" data-role={state.role}>

@@ -113,6 +113,7 @@ ACP 权限请求出现在 Chat 与侧栏。Session 策略：手动 / 允许一�
 - **Git 与文件** — 真实 `git status` 与有界目录树
 - **步骤预算** — 可配置 Leader 最大步数，耗尽后可在同 thread 继续
 - **本地优先** — 数据在 `~/.config/swarmdesk-agent/`
+- **ACP 推理强度** — 从 Agent `configOptions` 发现原始推理档位（如 Codex 的 `reasoning_effort`、Claude 的 `effort`）。三级继承：TeamMember 覆盖 → Worker 默认 → ACP Agent 默认。Worker 或模型未声明推理 selector 时，未配置推理的角色正常运行；显式配置值在不支持时 fail closed，不会静默降级。
 
 ---
 

@@ -498,6 +498,7 @@ export class LocalStore {
         roleType: input.roleType,
         instructions,
         model: input.model?.trim() || undefined,
+        reasoning: input.reasoning?.trim() || undefined,
         enabled: input.enabled ?? true,
         revision: 1,
         createdAt: timestamp,
@@ -545,17 +546,25 @@ export class LocalStore {
           : typeof patch.model === 'string'
             ? patch.model.trim() || undefined
             : undefined
+      const nextReasoning =
+        patch.reasoning === undefined
+          ? role.reasoning
+          : typeof patch.reasoning === 'string'
+            ? patch.reasoning.trim() || undefined
+            : undefined
       const executionChanged =
         (patch.workerId !== undefined && patch.workerId !== role.workerId) ||
         (patch.roleType !== undefined && patch.roleType !== role.roleType) ||
         nextInstructions !== role.instructions ||
-        nextModel !== role.model
+        nextModel !== role.model ||
+        nextReasoning !== role.reasoning
 
       role.workerId = patch.workerId ?? role.workerId
       role.name = nextName
       role.roleType = patch.roleType ?? role.roleType
       role.instructions = nextInstructions
       role.model = nextModel
+      role.reasoning = nextReasoning
       role.enabled = patch.enabled ?? role.enabled
       if (executionChanged) role.revision += 1
       role.updatedAt = now()
@@ -691,6 +700,7 @@ export class LocalStore {
           roleType: member.roleType,
           instructions,
           model: member.model?.trim() || undefined,
+          reasoning: member.reasoning?.trim() || undefined,
           enabled: member.enabled ?? true,
           revision: 1,
           createdAt: timestamp,
@@ -732,6 +742,7 @@ export class LocalStore {
         roleType: member.roleType,
         instructions,
         model: member.model?.trim() || undefined,
+        reasoning: member.reasoning?.trim() || undefined,
       }
     })
   }
@@ -876,10 +887,10 @@ export class LocalStore {
   }
 
   /**
-   * Leader auto-naming hook, called by chat onFinish after the first task.
+   * Leader auto-naming hook for a session that still has its placeholder title.
    * Returns the updated session, or null if the session was deleted, the
-   * caller supplied an empty title, or the session is already user-named
-   * (locked) — in all those cases the title is left untouched.
+   * caller supplied an empty title, or the session already has a real title —
+   * in all those cases the title is left untouched.
    */
   autoTitleSession(sessionId: string, title: string): Session | null {
     const trimmed = title.trim()
@@ -888,8 +899,9 @@ export class LocalStore {
     this.commit((d) => {
       const s = d.sessions.find((x) => x.id === sessionId)
       if (!s) return
-      // Lock: a user-named session is never auto-overwritten.
-      if (s.titleSource === 'user') return
+      // The placeholder check is the atomic write gate. It protects user titles,
+      // legacy real titles without provenance, and an earlier auto-title winner.
+      if (s.titleSource === 'user' || !isPlaceholderSessionTitle(s.title)) return
       s.title = trimmed
       s.titleSource = 'auto'
       s.updatedAt = now()
@@ -1002,7 +1014,7 @@ export class LocalStore {
         // Empty/missing title → placeholder; Leader will auto-name on first task.
         title: providedTitle || DEFAULT_SESSION_TITLE,
         // User-supplied titles are locked; placeholder/auto titles may be
-        // overwritten by autoTitleSession on first task completion.
+        // overwritten by autoTitleSession when the Leader names its first response.
         titleSource: providedTitle ? 'user' : 'auto',
         status: 'idle',
         mode: input.mode ?? 'build',
@@ -1326,15 +1338,33 @@ export class LocalStore {
     model: string | null | undefined,
     availableModels?: WorkerRegistration['availableModels'],
   ): WorkerRegistration {
+    return this.setWorkerExecutionConfig(workerId, { model, availableModels })
+  }
+
+  /**
+   * Atomic set of worker model and reasoning config in one commit.
+   * Retained for backward compatibility with existing callers.
+   */
+  setWorkerExecutionConfig(
+    workerId: string,
+    config: {
+      model?: string | null | undefined
+      reasoning?: string | null | undefined
+      availableModels?: WorkerRegistration['availableModels']
+    },
+  ): WorkerRegistration {
     let worker!: WorkerRegistration
     this.commit((d) => {
       const w = d.workers.find((x) => x.id === workerId)
       if (!w) throw new Error(`Worker not found: ${workerId}`)
-      const trimmed = typeof model === 'string' ? model.trim() : ''
-      if (trimmed) w.model = trimmed
-      else delete w.model
-      if (availableModels !== undefined) {
-        w.availableModels = availableModels
+      const modelTrimmed = typeof config.model === 'string' ? config.model.trim() : ''
+      if (modelTrimmed) w.model = modelTrimmed
+      else if (config.model !== undefined) delete w.model
+      const reasoningTrimmed = typeof config.reasoning === 'string' ? config.reasoning.trim() : ''
+      if (reasoningTrimmed) w.reasoning = reasoningTrimmed
+      else if (config.reasoning !== undefined) delete w.reasoning
+      if (config.availableModels !== undefined) {
+        w.availableModels = config.availableModels
       }
       worker = w
     })

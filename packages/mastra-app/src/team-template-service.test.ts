@@ -49,6 +49,54 @@ describe('TeamTemplateService', () => {
     })
   }
 
+  it('validates template reasoning with the target project scope and preserves it on apply', async () => {
+    const worker = addWorker('worker', { model: 'model-a' })
+    const project = store.upsertProject({ name: 'P', rootPath: join(dir, 'project') })
+    const session = store.createSession({ projectId: project.id })
+    const template = store.createTeamTemplate({
+      name: 'Reasoning team',
+      members: [
+        {
+          name: 'Coder',
+          preferredWorkerId: worker.id,
+          roleType: 'coder',
+          instructions: 'Implement.',
+          reasoning: 'high',
+        },
+      ],
+    })
+    const evaluated: Array<{ model?: string; reasoning?: string; scopeKey?: string | null }> = []
+    const scopedService = new TeamTemplateService({
+      store,
+      withSessionAdmission: async (_sessionId, operation) => operation(),
+      cleanupTeamMember: async () => {},
+      evaluateReasoning: (
+        _workerId: string,
+        model: string | undefined,
+        reasoning: string | undefined,
+        opts?: { scopeKey?: string | null },
+      ) => {
+        evaluated.push({ model, reasoning, scopeKey: opts?.scopeKey })
+        return { ok: true }
+      },
+    } as never)
+
+    const preview = scopedService.preview({ sessionId: session.id, templateId: template.id })
+    assert.equal(preview.ready, true)
+    const result = await scopedService.apply({
+      sessionId: session.id,
+      templateId: template.id,
+      expectedTeamRevision: session.teamRevision,
+    })
+
+    assert.equal(result.members[0]?.reasoning, 'high')
+    assert.equal(evaluated.length >= 2, true)
+    assert.equal(
+      evaluated.every((entry) => Boolean(entry.scopeKey)),
+      true,
+    )
+  })
+
   it('previews hybrid Worker binding and explicit model repair requirements', () => {
     addWorker('preferred', { enabled: false })
     addWorker('replacement', {

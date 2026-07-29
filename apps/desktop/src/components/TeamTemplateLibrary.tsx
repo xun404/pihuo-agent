@@ -12,9 +12,11 @@ import { roleMessageKey } from '../i18n/locales'
 import { useToast } from './Toast'
 import { WorkerBrandLogo, workerBrandClass } from './Icons'
 import { Expandable } from './ui/Expandable'
+import { WorkerReasoningSelect } from './WorkerReasoningSelect'
 
 export type TeamTemplateLibraryProps = {
   workers: WorkerRegistration[]
+  projectId?: string | null
   /** Snapshot-backed list when available; library still refreshes via API after mutations. */
   initialTemplates?: TeamTemplate[]
   /** Called after create/update/delete so App snapshot stays warm. */
@@ -98,7 +100,8 @@ function membersEqual(a: TeamTemplateMember[], b: TeamTemplateMember[]): boolean
       member.preferredWorkerId === other.preferredWorkerId &&
       member.roleType === other.roleType &&
       member.instructions === other.instructions &&
-      (member.model ?? '') === (other.model ?? '')
+      (member.model ?? '') === (other.model ?? '') &&
+      (member.reasoning ?? '') === (other.reasoning ?? '')
     )
   })
 }
@@ -117,6 +120,7 @@ function templateReady(template: TeamTemplate, workers: WorkerRegistration[]): b
  */
 export function TeamTemplateLibrary({
   workers,
+  projectId,
   initialTemplates,
   onChanged,
   focusTemplateId,
@@ -193,10 +197,7 @@ export function TeamTemplateLibrary({
     setExpandedMembers(new Set())
   }, [selected])
 
-  const enabledWorkers = useMemo(
-    () => workers.filter((worker) => worker.enabled),
-    [workers],
-  )
+  const enabledWorkers = useMemo(() => workers.filter((worker) => worker.enabled), [workers])
 
   const toggleMemberExpanded = (index: number) => {
     setExpandedMembers((current) => {
@@ -267,6 +268,7 @@ export function TeamTemplateLibrary({
           roleType: member.roleType,
           instructions: member.instructions,
           ...(member.model?.trim() ? { model: member.model.trim() } : {}),
+          ...(member.reasoning?.trim() ? { reasoning: member.reasoning.trim() } : {}),
         }))
         .filter((member) => member.name && member.preferredWorkerId)
       if (members.length === 0) {
@@ -377,9 +379,7 @@ export function TeamTemplateLibrary({
         <>
           <div className="settings-provider-head team-library-provider-head">
             <div className="pname">{name.trim() || selected.name}</div>
-            <span className="tag-on">
-              {t('team.memberCount', { count: draftMembers.length })}
-            </span>
+            <span className="tag-on">{t('team.memberCount', { count: draftMembers.length })}</span>
             {uniqueRoles(draftMembers)
               .slice(0, 4)
               .map((role) => (
@@ -480,11 +480,7 @@ export function TeamTemplateLibrary({
                               className={`worker-logo ${workerBrandClass(worker?.kind, worker?.name)}`}
                               aria-hidden
                             >
-                              <WorkerBrandLogo
-                                kind={worker?.kind}
-                                name={worker?.name}
-                                size={12}
-                              />
+                              <WorkerBrandLogo kind={worker?.kind} name={worker?.name} size={12} />
                             </span>
                             <span>{worker?.name ?? member.preferredWorkerId}</span>
                           </span>
@@ -516,6 +512,21 @@ export function TeamTemplateLibrary({
                                 disabled={busy}
                                 onChange={(event) =>
                                   patchMember(index, { name: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className="settings-field" htmlFor={`${baseId}-reasoning`}>
+                              <span>{t('reasoning.intensity')}</span>
+                              <WorkerReasoningSelect
+                                id={`${baseId}-reasoning`}
+                                workerId={member.preferredWorkerId}
+                                model={member.model || worker?.model}
+                                projectId={projectId}
+                                value={member.reasoning ?? ''}
+                                inheritLabel={t('reasoning.inheritWorker')}
+                                disabled={busy}
+                                onChange={(reasoning) =>
+                                  patchMember(index, { reasoning: reasoning || undefined })
                                 }
                               />
                             </label>
@@ -565,8 +576,7 @@ export function TeamTemplateLibrary({
                                     const nextWorker = workerOf(workers, event.target.value)
                                     patchMember(index, {
                                       preferredWorkerId: event.target.value,
-                                      ...(member.name.trim() === '' ||
-                                      member.name === worker?.name
+                                      ...(member.name.trim() === '' || member.name === worker?.name
                                         ? { name: nextWorker?.name ?? member.name }
                                         : {}),
                                     })
@@ -575,9 +585,7 @@ export function TeamTemplateLibrary({
                                   {workerOptions.map((option) => (
                                     <option key={option.id} value={option.id}>
                                       {option.name}
-                                      {!option.enabled
-                                        ? ` (${t('team.workerDisabled')})`
-                                        : ''}
+                                      {!option.enabled ? ` (${t('team.workerDisabled')})` : ''}
                                     </option>
                                   ))}
                                 </select>

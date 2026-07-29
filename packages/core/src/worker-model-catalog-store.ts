@@ -16,6 +16,7 @@ import {
   workerModelCatalogStorageKey,
   type WorkerModelCatalog,
   type WorkerModelOption,
+  type WorkerReasoningCatalogEntry,
 } from '@swarmdesk-agent/shared'
 import { resolveRouterDataDir } from './router-data-paths.js'
 import { tryAcquireProcessFileLock } from './process-file-lock.js'
@@ -132,6 +133,68 @@ function parseCatalogEntry(raw: unknown, storageKey: string): WorkerModelCatalog
   const rawCandidateIds = Array.isArray(c.rawCandidateIds)
     ? (c.rawCandidateIds as unknown[]).filter((x): x is string => typeof x === 'string')
     : undefined
+  // Parse reasoning entries for v2 catalogs (optional field)
+  let reasoning: WorkerModelCatalog['reasoning'] | undefined
+  if (c.reasoning && typeof c.reasoning === 'object' && !Array.isArray(c.reasoning)) {
+    const reasoningEntries = c.reasoning as Record<string, Record<string, unknown>>
+    const parsed: Record<string, WorkerReasoningCatalogEntry> = {}
+    let hasCorruptReasoning = false
+    for (const [modelId, entry] of Object.entries(reasoningEntries)) {
+      if (!entry || typeof entry !== 'object') {
+        hasCorruptReasoning = true
+        continue
+      }
+      if (typeof modelId !== 'string' || !modelId.trim()) {
+        hasCorruptReasoning = true
+        continue
+      }
+      const e = entry as Record<string, unknown>
+      if (typeof e.supported !== 'boolean') {
+        hasCorruptReasoning = true
+        continue
+      }
+      if (typeof e.fetchedAt !== 'string' || typeof e.expiresAt !== 'string') {
+        hasCorruptReasoning = true
+        continue
+      }
+      const selector = e.selector
+      let parsedSelector: WorkerReasoningCatalogEntry['selector'] | undefined
+      if (selector !== undefined && selector !== null) {
+        if (typeof selector !== 'object' || Array.isArray(selector)) {
+          hasCorruptReasoning = true
+          continue
+        }
+        const s = selector as Record<string, unknown>
+        if (typeof s.configId !== 'string' || !Array.isArray(s.options)) {
+          hasCorruptReasoning = true
+          continue
+        }
+        const opts = (s.options as Array<Record<string, unknown>>).map((o) => ({
+          value: String(o.value ?? ''),
+          name: String(o.name ?? ''),
+          description: typeof o.description === 'string' ? o.description : undefined,
+        }))
+        parsedSelector = {
+          configId: String(s.configId),
+          currentValue: typeof s.currentValue === 'string' ? s.currentValue : undefined,
+          options: opts,
+        }
+      }
+      parsed[modelId] = {
+        model: typeof e.model === 'string' && e.model.trim() ? e.model.trim() : undefined,
+        supported: Boolean(e.supported),
+        selector: parsedSelector,
+        fetchedAt: String(e.fetchedAt),
+        expiresAt: String(e.expiresAt),
+        lastErrorCode: typeof e.lastErrorCode === 'string' ? e.lastErrorCode : undefined,
+        lastSuccessfulFetchedAt:
+          typeof e.lastSuccessfulFetchedAt === 'string' ? e.lastSuccessfulFetchedAt : undefined,
+      }
+    }
+    if (!hasCorruptReasoning && Object.keys(parsed).length > 0) {
+      reasoning = parsed
+    }
+  }
   const scopeKey = scopeKeyFromKey
   return {
     version: c.version === 2 ? 2 : 1,
@@ -149,6 +212,7 @@ function parseCatalogEntry(raw: unknown, storageKey: string): WorkerModelCatalog
     lastErrorCode: typeof c.lastErrorCode === 'string' ? c.lastErrorCode : undefined,
     lastSuccessfulFetchedAt:
       typeof c.lastSuccessfulFetchedAt === 'string' ? c.lastSuccessfulFetchedAt : undefined,
+    reasoning,
   }
 }
 

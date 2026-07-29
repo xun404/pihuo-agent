@@ -23,6 +23,7 @@ import { ApprovalActions } from './ApprovalActions'
 import { WorkerBrandLogo } from './Icons'
 import { Modal } from './ui/Modal'
 import { WorkerReadinessBadge } from './WorkerReadinessBadge'
+import { WorkerReasoningSelect } from './WorkerReasoningSelect'
 import { useToast } from './Toast'
 import { TeamTemplateManager } from './TeamTemplateManager'
 
@@ -91,6 +92,7 @@ type RoleDraft = {
   roleType: WorkerRole
   instructions: string
   model: string
+  reasoning: string
 }
 
 const EMPTY_ROLE_DRAFT: RoleDraft = {
@@ -99,6 +101,7 @@ const EMPTY_ROLE_DRAFT: RoleDraft = {
   roleType: 'general',
   instructions: '',
   model: '',
+  reasoning: '',
 }
 
 export function RightPanel({
@@ -130,6 +133,7 @@ export function RightPanel({
   const [roleDraft, setRoleDraft] = useState<RoleDraft>(EMPTY_ROLE_DRAFT)
   const [rolePrompts, setRolePrompts] = useState(() => normalizePromptSettings(undefined).roles)
   const [roleBusy, setRoleBusy] = useState(false)
+  const [roleReasoningValid, setRoleReasoningValid] = useState(true)
   const [roleJobs, setRoleJobs] = useState<WorkerJob[]>([])
   const gitRequestGen = useRef(0)
   const filesRequestGen = useRef(0)
@@ -247,7 +251,10 @@ export function RightPanel({
   const startCreateRole = () => {
     setEditingId('new')
     const worker = enabledWorkers[0]
-    setRoleDraft(worker ? roleDraftFromWorker(worker, rolePrompts) : EMPTY_ROLE_DRAFT)
+    setRoleDraft(
+      worker ? { ...roleDraftFromWorker(worker, rolePrompts), reasoning: '' } : EMPTY_ROLE_DRAFT,
+    )
+    setRoleReasoningValid(true)
   }
 
   const startEditRole = (role: TeamMember) => {
@@ -258,16 +265,25 @@ export function RightPanel({
       roleType: role.roleType,
       instructions: role.instructions,
       model: role.model ?? '',
+      reasoning: role.reasoning ?? '',
     })
+    setRoleReasoningValid(!role.reasoning)
   }
 
   const closeRoleEditor = () => {
     setEditingId(null)
     setRoleDraft(EMPTY_ROLE_DRAFT)
+    setRoleReasoningValid(true)
   }
 
   const saveRole = async () => {
-    if (!roleDraft.name.trim() || !roleDraft.workerId || !roleDraft.instructions.trim()) return
+    if (
+      !roleDraft.name.trim() ||
+      !roleDraft.workerId ||
+      !roleDraft.instructions.trim() ||
+      !roleReasoningValid
+    )
+      return
     setRoleBusy(true)
     try {
       if (editingId === 'new') {
@@ -277,6 +293,7 @@ export function RightPanel({
           roleType: roleDraft.roleType,
           instructions: roleDraft.instructions.trim(),
           model: roleDraft.model.trim() || undefined,
+          reasoning: roleDraft.reasoning.trim() || undefined,
           enabled: true,
         })
       } else if (editingId) {
@@ -288,6 +305,7 @@ export function RightPanel({
           roleType: roleDraft.roleType,
           instructions: roleDraft.instructions.trim(),
           model: roleDraft.model.trim() || null,
+          reasoning: roleDraft.reasoning.trim() || null,
           expectedRevision: role.revision,
         })
       }
@@ -341,6 +359,7 @@ export function RightPanel({
                 sessionId={sessionId}
                 teamMembers={teamMembers}
                 workers={workers}
+                projectId={projectId}
                 openJobCount={
                   roleJobs.filter((job) =>
                     ['queued', 'running', 'pending_approval'].includes(job.status),
@@ -411,7 +430,9 @@ export function RightPanel({
                     </div>
                     <span
                       className={`role-card-status${busy ? ' is-busy' : ' is-idle'}`}
-                      title={busy ? t('roles.openJobs', { count: openJobs.length }) : t('roles.idle')}
+                      title={
+                        busy ? t('roles.openJobs', { count: openJobs.length }) : t('roles.idle')
+                      }
                     >
                       <span className="role-card-status-dot" aria-hidden />
                       {busy ? t('roles.openJobs', { count: openJobs.length }) : t('roles.idle')}
@@ -551,7 +572,7 @@ export function RightPanel({
                       const worker = enabledWorkers.find((item) => item.id === workerId)
                       setRoleDraft((draft) =>
                         editingId === 'new' && worker
-                          ? roleDraftFromWorker(worker, rolePrompts)
+                          ? { ...roleDraftFromWorker(worker, rolePrompts), reasoning: '' }
                           : { ...draft, workerId },
                       )
                     }}
@@ -617,6 +638,23 @@ export function RightPanel({
                   }
                 />
               </div>
+              <div className="role-form-field">
+                <label htmlFor="role-reasoning">{t('reasoning.intensity')}</label>
+                <WorkerReasoningSelect
+                  id="role-reasoning"
+                  workerId={roleDraft.workerId}
+                  model={
+                    roleDraft.model.trim() ||
+                    enabledWorkers.find((worker) => worker.id === roleDraft.workerId)?.model
+                  }
+                  projectId={projectId}
+                  value={roleDraft.reasoning}
+                  inheritLabel={t('reasoning.inheritWorker')}
+                  disabled={roleBusy}
+                  onChange={(reasoning) => setRoleDraft((draft) => ({ ...draft, reasoning }))}
+                  onValidityChange={setRoleReasoningValid}
+                />
+              </div>
             </div>
             <div className="role-form-footer">
               <button
@@ -630,7 +668,7 @@ export function RightPanel({
               <button
                 className="settings-save-btn"
                 type="button"
-                disabled={roleBusy || !roleFormValid}
+                disabled={roleBusy || !roleFormValid || !roleReasoningValid}
                 onClick={() => void saveRole()}
               >
                 {roleBusy ? t('app.loading') : t('roles.save')}

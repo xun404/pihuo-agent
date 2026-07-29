@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type {
   LeaderMode,
@@ -354,6 +361,7 @@ function AppShell({
                 onClose={leaveSettings}
                 initialTab={settingsTab}
                 workers={snapshot.workers}
+                projectId={snapshot.activeProjectId}
                 onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
                 onSetWorkerDefaultRoleType={(id, role) => setWorkerDefaultRoleType(id, role)}
                 onHealthAllWorkers={() => healthAllWorkers()}
@@ -480,50 +488,50 @@ function AppShell({
                       exit={{ x: '100%', opacity: 0 }}
                       transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.32, 0.72, 0, 1] }}
                     >
-                    <div
-                      className="panel-resizer panel-resizer-right"
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label={t('layout.resizeInspector')}
-                      aria-valuenow={drawerWidth}
-                      aria-valuemin={260}
-                      aria-valuemax={480}
-                      onPointerDown={beginDrawerResize}
-                    />
-                    <div className="drawer-panel">
-                      <RightPanel
-                        workers={snapshot.workers}
-                        teamMembers={snapshot.teamMembers.filter(
-                          (role) => role.chatSessionId === activeSession?.id && !role.archivedAt,
-                        )}
-                        approvals={snapshot.approvals ?? []}
-                        projectId={activeProject?.id ?? null}
-                        sessionId={activeSession?.id ?? null}
-                        onCreateTeamMember={async (body) => {
-                          if (!activeSession) throw new Error('Chat session is required')
-                          await createTeamMember(activeSession.id, body)
-                        }}
-                        onUpdateTeamMember={async (id, body) => {
-                          if (!activeSession) throw new Error('Chat session is required')
-                          await updateTeamMember(activeSession.id, id, body)
-                        }}
-                        onArchiveTeamMember={async (id, expectedRevision) => {
-                          if (!activeSession) throw new Error('Chat session is required')
-                          await archiveTeamMember(activeSession.id, id, expectedRevision)
-                        }}
-                        onResetTeamMemberSession={async (id) => {
-                          if (!activeSession) throw new Error('Chat session is required')
-                          await resetTeamMemberSession(activeSession.id, id)
-                        }}
-                        onResolveApproval={(id, optionId, decision, surface) =>
-                          void resolveApproval(id, decision, optionId, surface).catch((e) =>
-                            toastError(String(e)),
-                          )
-                        }
-                        resolving={resolvingState}
-                        onRefreshSnapshot={() => void refresh()}
+                      <div
+                        className="panel-resizer panel-resizer-right"
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={t('layout.resizeInspector')}
+                        aria-valuenow={drawerWidth}
+                        aria-valuemin={260}
+                        aria-valuemax={480}
+                        onPointerDown={beginDrawerResize}
                       />
-                    </div>
+                      <div className="drawer-panel">
+                        <RightPanel
+                          workers={snapshot.workers}
+                          teamMembers={snapshot.teamMembers.filter(
+                            (role) => role.chatSessionId === activeSession?.id && !role.archivedAt,
+                          )}
+                          approvals={snapshot.approvals ?? []}
+                          projectId={activeProject?.id ?? null}
+                          sessionId={activeSession?.id ?? null}
+                          onCreateTeamMember={async (body) => {
+                            if (!activeSession) throw new Error('Chat session is required')
+                            await createTeamMember(activeSession.id, body)
+                          }}
+                          onUpdateTeamMember={async (id, body) => {
+                            if (!activeSession) throw new Error('Chat session is required')
+                            await updateTeamMember(activeSession.id, id, body)
+                          }}
+                          onArchiveTeamMember={async (id, expectedRevision) => {
+                            if (!activeSession) throw new Error('Chat session is required')
+                            await archiveTeamMember(activeSession.id, id, expectedRevision)
+                          }}
+                          onResetTeamMemberSession={async (id) => {
+                            if (!activeSession) throw new Error('Chat session is required')
+                            await resetTeamMemberSession(activeSession.id, id)
+                          }}
+                          onResolveApproval={(id, optionId, decision, surface) =>
+                            void resolveApproval(id, decision, optionId, surface).catch((e) =>
+                              toastError(String(e)),
+                            )
+                          }
+                          resolving={resolvingState}
+                          onRefreshSnapshot={() => void refresh()}
+                        />
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>

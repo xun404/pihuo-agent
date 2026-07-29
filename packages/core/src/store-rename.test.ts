@@ -129,7 +129,7 @@ describe('Session title — delayed naming', () => {
       assert.equal(store.autoTitleSession('sess-missing', 'X'), null)
     })
 
-    it('legacy snapshot without titleSource → eligible for auto-naming', () => {
+    it('legacy snapshot with a real title is not overwritten by auto-naming', () => {
       const ctx = freshStore()
       const project = ctx.store.snapshot().projects[0]!
       const legacyRaw = {
@@ -156,11 +156,11 @@ describe('Session title — delayed naming', () => {
       }
       writeFileSync(ctx.path, JSON.stringify(legacyRaw), 'utf8')
       const store2 = new LocalStore(ctx.path)
-      // titleSource undefined on disk → autoTitleSession may overwrite it
       const out = store2.autoTitleSession('s-legacy', 'Fresh Title')
-      assert.ok(out)
-      assert.equal(out!.title, 'Fresh Title')
-      assert.equal(out!.titleSource, 'auto')
+      assert.equal(out, null)
+      const after = store2.snapshot().sessions.find((session) => session.id === 's-legacy')
+      assert.equal(after?.title, 'Legacy Real Title')
+      assert.equal(after?.titleSource, undefined)
     })
   })
 })

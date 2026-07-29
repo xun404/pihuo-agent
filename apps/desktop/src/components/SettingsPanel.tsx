@@ -105,6 +105,7 @@ import { WorkerCommandField } from './WorkerCommandField'
 import { WorkerProbeConsole } from './WorkerProbeConsole'
 import { PromptSettingsEditor } from './PromptSettingsEditor'
 import { WorkerTimeoutSettingsEditor } from './WorkerTimeoutSettingsEditor'
+import { WorkerExecutionConfigEditor } from './WorkerExecutionConfigEditor'
 import {
   createWorkerDraftFromRegistry,
   resolveWorkerRegistrationRoute,
@@ -124,6 +125,7 @@ interface Props {
   /** Open a specific settings tab (e.g. deep-link from WORKER_AUTH_REQUIRED CTA). */
   initialTab?: TabId
   workers: WorkerRegistration[]
+  projectId?: string | null
   onToggleWorker: (id: string, enabled: boolean) => void
   onSetWorkerDefaultRoleType: (id: string, roleType: WorkerRole) => Promise<unknown>
   onHealthAllWorkers: () => void | Promise<unknown>
@@ -199,6 +201,7 @@ export function SettingsPanel({
   onClose,
   initialTab,
   workers,
+  projectId,
   onToggleWorker,
   onSetWorkerDefaultRoleType,
   onHealthAllWorkers,
@@ -255,10 +258,7 @@ export function SettingsPanel({
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
   // Rail focus drives the workers-tab right panel: which agent/crew is selected, or special views.
   const [railFocus, setRailFocus] = useState<
-    | { type: 'agent'; id: string }
-    | { type: 'crew'; id: string }
-    | { type: 'register' }
-    | null
+    { type: 'agent'; id: string } | { type: 'crew'; id: string } | { type: 'register' } | null
   >(null)
   // Team templates loaded for the Crews rail section + crew detail panel.
   const [teamTemplates, setTeamTemplates] = useState<TeamTemplate[]>([])
@@ -1333,8 +1333,7 @@ export function SettingsPanel({
     toastSuccess(t('workers.enablingProbe'))
     try {
       const { worker: after } = await api.probeRegistryWorker(workerId)
-      const ok =
-        after.readiness?.status === 'ready' || after.readiness?.status === 'degraded'
+      const ok = after.readiness?.status === 'ready' || after.readiness?.status === 'degraded'
       if (ok) {
         onToggleWorker?.(workerId, true)
       } else if (after.readiness?.status === 'auth_required') {
@@ -2190,8 +2189,17 @@ export function SettingsPanel({
                     className={`settings-rail-item${active ? ' active' : ''}`}
                     onClick={() => setRailFocus({ type: 'agent', id: w.id })}
                   >
-                    <span className={`settings-rail-icon worker-logo ${workerLogoClass(w.kind)}`} aria-hidden>
-                      <WorkerBrandLogo kind={w.kind} size={16} workerId={w.id} hasIcon={Boolean(w.iconPath)} iconAgentId={w.iconAgentId} />
+                    <span
+                      className={`settings-rail-icon worker-logo ${workerLogoClass(w.kind)}`}
+                      aria-hidden
+                    >
+                      <WorkerBrandLogo
+                        kind={w.kind}
+                        size={16}
+                        workerId={w.id}
+                        hasIcon={Boolean(w.iconPath)}
+                        iconAgentId={w.iconAgentId}
+                      />
                     </span>
                     <span className="settings-rail-text">
                       <span className="settings-rail-name">{w.name}</span>
@@ -2265,9 +2273,8 @@ export function SettingsPanel({
                       ? `registry · ${w.source.distribution}`
                       : w.source?.type === 'custom'
                         ? `custom · ${w.source.launchKind}`
-                        : sourceStr ?? '—'
-                  const pathLabel =
-                    w.launchSpec?.executable ?? w.command ?? '—'
+                        : (sourceStr ?? '—')
+                  const pathLabel = w.launchSpec?.executable ?? w.command ?? '—'
                   // Command shown to the user. If w.command is a bare name
                   // (no path separator), prefix it with the resolved executable
                   // path so the displayed command is unambiguous (e.g.
@@ -2287,7 +2294,13 @@ export function SettingsPanel({
                           title={w.name}
                           aria-hidden
                         >
-                          <WorkerBrandLogo kind={w.kind} size={20} workerId={w.id} hasIcon={Boolean(w.iconPath)} iconAgentId={w.iconAgentId} />
+                          <WorkerBrandLogo
+                            kind={w.kind}
+                            size={20}
+                            workerId={w.id}
+                            hasIcon={Boolean(w.iconPath)}
+                            iconAgentId={w.iconAgentId}
+                          />
                         </span>
                         <div className="worker-detail-titles">
                           <h3 className="settings-card-title">{w.name}</h3>
@@ -2357,9 +2370,7 @@ export function SettingsPanel({
                             <span className="worker-info-value">{sourceLabel}</span>
                           </div>
                           <div className="worker-info-row">
-                            <span className="worker-info-label">
-                              {t('workers.sectionAuth')}
-                            </span>
+                            <span className="worker-info-label">{t('workers.sectionAuth')}</span>
                             <span className="worker-info-value">
                               {cs?.authMethods && cs.authMethods.length > 0
                                 ? cs.authMethods
@@ -2390,7 +2401,9 @@ export function SettingsPanel({
                                   type="button"
                                   className="settings-btn-soft btn-sm"
                                   disabled={Boolean(agentAuthOperation)}
-                                  onClick={() => void startAgentAuthentication(w.id, agentMethod.id)}
+                                  onClick={() =>
+                                    void startAgentAuthentication(w.id, agentMethod.id)
+                                  }
                                 >
                                   {t('workers.authAgent')}
                                 </button>
@@ -2446,7 +2459,10 @@ export function SettingsPanel({
                                     placeholder={t('workers.secretPlaceholder')}
                                     value={secretDraft[name] ?? ''}
                                     onChange={(e) =>
-                                      setSecretDraft((prev) => ({ ...prev, [name]: e.target.value }))
+                                      setSecretDraft((prev) => ({
+                                        ...prev,
+                                        [name]: e.target.value,
+                                      }))
                                     }
                                   />
                                 </div>
@@ -2471,6 +2487,14 @@ export function SettingsPanel({
                           )}
                         </div>
 
+                        <WorkerExecutionConfigEditor
+                          worker={w}
+                          projectId={projectId}
+                          onSaved={onRefreshSnapshot}
+                          onError={toastError}
+                          onSuccess={toastSuccess}
+                        />
+
                         {/* Health card */}
                         <div className="worker-detail-card">
                           <div className="worker-detail-card-head">
@@ -2490,8 +2514,7 @@ export function SettingsPanel({
                             <span className="worker-health-label">{t('workers.healthCli')}</span>
                             <span
                               className={`worker-health-value ${
-                                w.commandHealth?.status === 'healthy' ||
-                                w.cliHealth === 'healthy'
+                                w.commandHealth?.status === 'healthy' || w.cliHealth === 'healthy'
                                   ? 'ok'
                                   : w.cliHealth === 'unhealthy'
                                     ? 'bad'
@@ -2518,27 +2541,24 @@ export function SettingsPanel({
                             </span>
                           </div>
                           <div className="worker-health-row">
-                            <span className="worker-health-label">
-                              {t('workers.healthProbed')}
-                            </span>
+                            <span className="worker-health-label">{t('workers.healthProbed')}</span>
                             <span className="worker-health-value">
                               {cs?.probedAt
-                                ? new Date(cs.probedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')
+                                ? new Date(cs.probedAt).toLocaleString(
+                                    locale === 'zh' ? 'zh-CN' : 'en-US',
+                                  )
                                 : '—'}
                             </span>
                           </div>
                           <div className="worker-health-row">
-                            <span className="worker-health-label">
-                              {t('workers.healthModels')}
-                            </span>
+                            <span className="worker-health-label">{t('workers.healthModels')}</span>
                             <span className="worker-health-value">
                               {w.availableModels?.length != null
                                 ? `${w.availableModels.length}`
-                                : w.modelCatalogState ?? '—'}
+                                : (w.modelCatalogState ?? '—')}
                             </span>
                           </div>
                         </div>
-
                       </div>
 
                       {/* Capability card — full width below the grid */}
@@ -2566,7 +2586,11 @@ export function SettingsPanel({
                       </div>
 
                       {/* Probe console — action + code-styled log */}
-                      <WorkerProbeConsole key={w.id} worker={w} onProbed={() => onRefreshSnapshot?.()} />
+                      <WorkerProbeConsole
+                        key={w.id}
+                        worker={w}
+                        onProbed={() => onRefreshSnapshot?.()}
+                      />
                     </div>
                   )
                 })()}
@@ -2667,9 +2691,7 @@ export function SettingsPanel({
                       {selectedRegistryOption && !regManifestDigest && (
                         <p className="settings-error">{t('workers.registryManifestUnavailable')}</p>
                       )}
-                      {regPrepareStatus && (
-                        <p className="settings-muted">{regPrepareStatus}</p>
-                      )}
+                      {regPrepareStatus && <p className="settings-muted">{regPrepareStatus}</p>}
                       {pendingRegistryPrepare && (
                         <WorkerPrepareProgress
                           initial={pendingRegistryPrepare.operation}
@@ -2686,7 +2708,9 @@ export function SettingsPanel({
                         />
                       )}
                       {isRegistryPath && !selectedRegistryOption && (
-                        <p className="settings-error">{t('workers.registrySelectionUnavailable')}</p>
+                        <p className="settings-error">
+                          {t('workers.registrySelectionUnavailable')}
+                        </p>
                       )}
                       <div className="settings-field">
                         <label htmlFor="worker-reg-name">{t('workers.formName')}</label>
@@ -2798,6 +2822,7 @@ export function SettingsPanel({
                   return (
                     <TeamTemplateLibrary
                       workers={workers}
+                      projectId={projectId}
                       initialTemplates={teamTemplates}
                       focusTemplateId={tmpl.id}
                       onChanged={() => {

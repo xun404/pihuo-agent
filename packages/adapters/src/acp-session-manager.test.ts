@@ -577,6 +577,16 @@ describe('stable fingerprint across instances', () => {
     assert.match(f, /^stable-cmd-a-b-m1$/)
   })
 
+  it('passes reasoning to an explicitly supplied fingerprintFn', () => {
+    let seenReasoning: string | undefined
+    computeExecutionFingerprint(mkConfig({ reasoning: 'high' }), (input) => {
+      seenReasoning = input.reasoning
+      return 'reasoning-aware-fingerprint'
+    })
+
+    assert.equal(seenReasoning, 'high')
+  })
+
   it('falls back to an in-memory HMAC when no fingerprintFn is supplied', () => {
     const f = computeExecutionFingerprint(mkConfig())
     assert.match(f, /^[0-9a-f]{64}$/)
@@ -707,6 +717,64 @@ describe('session reuse', () => {
     assert.ok(r2.ok)
     assert.equal(r2.reusedSession, true)
     assert.equal(manager.getDebugInfo().entries, 1)
+  })
+
+  it('re-applies the frozen model and reasoning before a reused prompt', async () => {
+    const configOptions = [
+      {
+        id: 'model',
+        type: 'select' as const,
+        name: 'Model',
+        category: 'model',
+        currentValue: 'other-model',
+        options: [
+          { value: 'openai/frozen-model', name: 'Frozen model' },
+          { value: 'other-model', name: 'Other model' },
+        ],
+      },
+      {
+        id: 'reasoning_effort',
+        type: 'select' as const,
+        name: 'Reasoning',
+        category: 'thought_level',
+        currentValue: 'low',
+        options: [
+          { value: 'low', name: 'Low' },
+          { value: 'high', name: 'High' },
+        ],
+      },
+    ]
+    const config = mkConfig({
+      model: 'openai/frozen-model',
+      reasoning: 'high',
+      env: { OPENAI_API_KEY: 'test-key' },
+      availableModels: [{ modelId: 'openai/frozen-model', name: 'Frozen model' }],
+    })
+    const key = mkKey({ executionFingerprint: computeExecutionFingerprint(config) })
+    const entry = makeFakeIdleEntry(key)
+    entry.sessionConfig = config
+    entry.configOptions = configOptions
+    const calls: string[] = []
+    entry.driver.configOptions = configOptions
+    entry.driver.setConfigOption = async (configId: string, value: string, sessionId?: string) => {
+      calls.push(`${configId}:${value}:${sessionId}`)
+      return configOptions
+    }
+    ;(manager as any).entries.set(keyToString(key), entry)
+
+    const result = await manager.enqueuePrompt({
+      key,
+      config,
+      kind: 'custom',
+      task: 'continue',
+      binding: { jobId: 'reapply-frozen-config', sequence: 0 },
+    })
+
+    assert.deepEqual(calls, [
+      'model:openai/frozen-model:fake-sid',
+      'reasoning_effort:high:fake-sid',
+    ])
+    assert.equal(result.ok, true)
   })
 
   it('keeps role prompts on distinct ACP sessions while sharing one worker process', async () => {

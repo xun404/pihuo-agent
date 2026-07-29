@@ -899,6 +899,7 @@ export function computeAcpExecutionFingerprint(
   command: string,
   args: string[],
   model: string | undefined,
+  reasoning: string | undefined,
   workerEnv: Record<string, string>,
   ambientEnv: Record<string, string>,
 ): string {
@@ -907,6 +908,7 @@ export function computeAcpExecutionFingerprint(
     command,
     args,
     model: model ?? null,
+    reasoning: reasoning ?? null,
     explicitEnv: normalizeEnvKeyValues(workerEnv),
     ambientEnv: normalizeEnvKeyValues(relevantAmbientEnv),
   })

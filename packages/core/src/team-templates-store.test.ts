@@ -118,4 +118,37 @@ describe('LocalStore Team templates', () => {
     )
     assert.deepEqual(store.listTeamMembers(session.id), before)
   })
+
+  it('preserves reasoning on template members through round-trip', () => {
+    addWorker('worker-1')
+    const created = store.createTeamTemplate({
+      name: 'Reasoning Team',
+      members: [
+        {
+          name: 'Planner',
+          preferredWorkerId: 'worker-1',
+          roleType: 'plan',
+          instructions: 'Plan carefully.',
+          reasoning: 'high',
+        },
+      ],
+    })
+    assert.equal(created.members[0]?.reasoning, 'high')
+
+    const updated = store.updateTeamTemplate(created.id, {
+      members: [
+        {
+          name: 'Planner',
+          preferredWorkerId: 'worker-1',
+          roleType: 'plan',
+          instructions: 'Plan carefully.',
+          reasoning: 'low',
+        },
+      ],
+    })
+    assert.equal(updated.members[0]?.reasoning, 'low')
+
+    const list = store.listTeamTemplates()
+    assert.equal(list[0]?.members[0]?.reasoning, 'low')
+  })
 })

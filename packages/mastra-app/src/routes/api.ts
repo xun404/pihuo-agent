@@ -28,7 +28,15 @@ import {
   registryCatalogApiPublicError,
 } from '../acp-registry-api.js'
 import { getWorkerModels, evaluateWorkerModelPin, applyWorkerModelPin } from '../worker-models.js'
-import { assertTeamMemberModelAccepted } from '../team-members.js'
+import { resolveModelCatalogScopeKey } from '../worker-models.js'
+import {
+  getWorkerReasoningOptionsWithWorker,
+  evaluateWorkerReasoningSelection,
+} from '../worker-reasoning.js'
+import {
+  assertTeamMemberModelAccepted,
+  assertTeamMemberReasoningAccepted,
+} from '../team-members.js'
 import { checkOneWorker, checkWorkersBatch } from '../workers-health.js'
 import { getWorkerScheduler } from '../scheduler.js'
 import type {
@@ -293,6 +301,9 @@ export const apiRoutes = [
               .find((project) => project.id === session.projectId)?.rootPath
           : undefined
         assertTeamMemberModelAccepted(body.workerId, body.model, projectRoot)
+        assertTeamMemberReasoningAccepted(body.workerId, body.model, body.reasoning, {
+          cwd: projectRoot,
+        })
         const teamMember = store().createTeamMember({
           ...body,
           chatSessionId: sessionId,
@@ -328,6 +339,28 @@ export const apiRoutes = [
             body.model === undefined ? current.model : body.model,
             projectRoot,
           )
+        }
+        if (
+          body.workerId !== undefined ||
+          body.model !== undefined ||
+          body.reasoning !== undefined
+        ) {
+          const effectiveWorkerId = body.workerId ?? current.workerId
+          const effectiveModel =
+            body.model === undefined
+              ? current.model
+              : typeof body.model === 'string' && body.model.trim()
+                ? body.model.trim()
+                : undefined
+          const effectiveReasoning =
+            body.reasoning === undefined
+              ? current.reasoning
+              : typeof body.reasoning === 'string' && body.reasoning.trim()
+                ? body.reasoning.trim()
+                : undefined
+          assertTeamMemberReasoningAccepted(effectiveWorkerId, effectiveModel, effectiveReasoning, {
+            cwd: projectRoot,
+          })
         }
         const teamMember = store().updateTeamMember(sessionId, teamMemberId, body)
         return c.json({ teamMember, snapshot: store().snapshot() })
@@ -789,6 +822,158 @@ export const apiRoutes = [
           })
         }
         const worker = applyWorkerModelPin(id, body.model)
+        return c.json({ worker, snapshot: store().snapshot() })
+      } catch (e) {
+        const failure = asAcpHttpFailure(e)
+        return failure
+          ? c.json(failure.body, failure.status)
+          : c.json({ error: e instanceof Error ? e.message : String(e) }, 404)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/reasoning-options', {
+    method: 'GET',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const worker = store()
+        .listWorkers()
+        .find((w) => w.id === id)
+      if (!worker) return c.json({ error: 'not found' }, 404)
+      try {
+        const model = c.req.query('model')?.trim() || undefined
+        const force = c.req.query('force') === '1' || c.req.query('force') === 'true'
+        const requestedProjectId = c.req.query('projectId')?.trim() || undefined
+        const requestedProject = requestedProjectId
+          ? store()
+              .listProjects()
+              .find((project) => project.id === requestedProjectId)
+          : store().getActive().project
+        if (requestedProjectId && !requestedProject) {
+          return c.json({ error: 'project not found', projectId: requestedProjectId }, 404)
+        }
+
+        const scopeKey = resolveModelCatalogScopeKey(requestedProject?.rootPath)
+        const result = await getWorkerReasoningOptionsWithWorker(worker, model, {
+          cwd: requestedProject?.rootPath,
+          force,
+          scopeKey: scopeKey || undefined,
+        })
+        return c.json(result)
+      } catch {
+        return c.json(
+          {
+            error: 'Failed to load Worker reasoning options.',
+            errorCode: 'ACP_REASONING_CONFIGURATION_FAILED',
+          },
+          500,
+        )
+      }
+    },
+  }),
+
+  registerApiRoute('/api/workers/:id/execution-config', {
+    method: 'PUT',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const body = (await c.req.json()) as {
+        model?: string | null
+        reasoning?: string | null
+        projectId?: string | null
+      }
+      try {
+        const previous = store()
+          .listWorkers()
+          .find((candidate) => candidate.id === id)
+        if (!previous) return c.json({ error: 'not found' }, 404)
+
+        const requestedProjectId = body.projectId?.trim() || undefined
+        const requestedProject = requestedProjectId
+          ? store()
+              .listProjects()
+              .find((project) => project.id === requestedProjectId)
+          : store().getActive().project
+        if (requestedProjectId && !requestedProject) {
+          return c.json({ error: 'project not found', projectId: requestedProjectId }, 404)
+        }
+
+        // Validate model
+        const nextModel =
+          typeof body.model === 'string' && body.model.trim() ? body.model.trim() : undefined
+        if (nextModel) {
+          const pinCheck = evaluateWorkerModelPin(id, nextModel, {
+            cwd: requestedProject?.rootPath,
+          })
+          if (!pinCheck.ok) {
+            return c.json(
+              {
+                error: formatPublicError(
+                  pinCheck.errorCode,
+                  pinCheck.error ?? 'Model pin rejected',
+                ),
+                errorCode: pinCheck.errorCode,
+              },
+              400,
+            )
+          }
+        }
+
+        // Validate final model/reasoning combination (model may change, reasoning may stay or change)
+        const effectiveModel = body.model !== undefined ? nextModel || undefined : previous.model
+        const effectiveReasoning =
+          body.reasoning !== undefined
+            ? typeof body.reasoning === 'string' && body.reasoning.trim()
+              ? body.reasoning.trim()
+              : undefined
+            : previous.reasoning
+        if (effectiveReasoning) {
+          const scopeKey = resolveModelCatalogScopeKey(requestedProject?.rootPath)
+          const reasoningCheck = evaluateWorkerReasoningSelection(
+            id,
+            effectiveModel,
+            effectiveReasoning,
+            { scopeKey: scopeKey || undefined },
+          )
+          if (!reasoningCheck.ok) {
+            return c.json(
+              {
+                error: formatPublicError(
+                  reasoningCheck.errorCode,
+                  reasoningCheck.error ?? 'Reasoning rejected',
+                ),
+                errorCode: reasoningCheck.errorCode,
+              },
+              400,
+            )
+          }
+        }
+
+        // Runtime reconciliation
+        reconcileWorkerRuntimeResources({
+          before: previous,
+          after: {
+            ...previous,
+            model:
+              body.model !== undefined
+                ? typeof body.model === 'string' && body.model.trim()
+                  ? body.model.trim()
+                  : undefined
+                : previous.model,
+            reasoning:
+              body.reasoning !== undefined
+                ? typeof body.reasoning === 'string' && body.reasoning.trim()
+                  ? body.reasoning.trim()
+                  : undefined
+                : previous.reasoning,
+          },
+          manager: getAcpSessionManager(),
+          catalogStore: getWorkerModelCatalogStore(),
+        })
+
+        const worker = store().setWorkerExecutionConfig(id, {
+          model: body.model,
+          reasoning: body.reasoning,
+        })
         return c.json({ worker, snapshot: store().snapshot() })
       } catch (e) {
         const failure = asAcpHttpFailure(e)

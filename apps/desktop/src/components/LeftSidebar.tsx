@@ -56,7 +56,12 @@ function sessionSortKey(s: Session): number {
 
 function statusTitleKey(
   sc: SessionLampClass,
-): 'sidebar.statusError' | 'sidebar.statusApprove' | 'sidebar.statusRun' | 'sidebar.statusDone' | 'sidebar.statusIdle' {
+):
+  | 'sidebar.statusError'
+  | 'sidebar.statusApprove'
+  | 'sidebar.statusRun'
+  | 'sidebar.statusDone'
+  | 'sidebar.statusIdle' {
   if (sc === 'error') return 'sidebar.statusError'
   if (sc === 'approve') return 'sidebar.statusApprove'
   if (sc === 'run') return 'sidebar.statusRun'
@@ -231,11 +236,7 @@ export function LeftSidebar({
           </span>
           <span className="nav-label">{t('sidebar.newTask')}</span>
         </button>
-        <button
-          type="button"
-          className="nav-item"
-          onClick={() => onOpenSettings('workers')}
-        >
+        <button type="button" className="nav-item" onClick={() => onOpenSettings('workers')}>
           <span className="glyph" aria-hidden>
             <IconWorkers />
           </span>
@@ -345,9 +346,7 @@ export function LeftSidebar({
         </Expandable>
       </div>
 
-      <div
-        className={`sidebar-section sidebar-projects${projectsCollapsed ? '' : ' is-open'}`}
-      >
+      <div className={`sidebar-section sidebar-projects${projectsCollapsed ? '' : ' is-open'}`}>
         <div className="section-label section-label-row">
           <button
             type="button"
@@ -374,177 +373,196 @@ export function LeftSidebar({
         */}
         <div className="sidebar-projects-collapse" aria-hidden={projectsCollapsed}>
           <div className="sidebar-projects-collapse-inner">
-      <div className="session-scroll">
-        {projects.length === 0 && <div className="empty-sess">{t('sidebar.empty')}</div>}
+            <div className="session-scroll">
+              {projects.length === 0 && <div className="empty-sess">{t('sidebar.empty')}</div>}
 
-        {projects.map((project) => {
-          const projectSessions = sessions
-            .filter((s) => s.projectId === project.id)
-            .slice()
-            .sort((a, b) => sessionSortKey(b) - sessionSortKey(a))
-          const showAllSessions = sessionsExpanded.has(project.id)
-          const overflow = Math.max(0, projectSessions.length - SESSION_PREVIEW_LIMIT)
-           const visibleSessions =
-            overflow === 0 || showAllSessions
-              ? projectSessions
-              : projectSessions.slice(0, SESSION_PREVIEW_LIMIT)
-           const toggleSessions = () => {
-                setSessionsCollapsed((prev) => {
-                  const next = new Set(prev)
-                  if (next.has(project.id)) next.delete(project.id)
-                  else next.add(project.id)
-                  return next
-                })
-              }
-          const isSessionsVisible = projectSessions.length > 0 && !sessionsCollapsed.has(project.id)
-          return (
-            <div className="proj" key={project.id}>
-              <div
-                className="proj-head"
-                role="button"
-                tabIndex={0}
-                title={project.rootPath}
-                onClick={projectSessions.length > 0 ? toggleSessions : () => onSelectProject(project)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    if (projectSessions.length > 0) toggleSessions()
-                    else onSelectProject(project)
-                  }
-                }}
-              >
-                <span className="ico" aria-hidden>
-                  {isSessionsVisible ? <FolderOpen size={15} /> : <Folder size={15} />}
-                </span>
-                <span className="proj-name">{project.name}</span>
-                <button
-                  type="button"
-                  className="proj-add"
-                  title={t('sidebar.newTask')}
-                  aria-label={t('sidebar.newTask')}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    onNewSessionForProject(project)
-                  }}
-                >
-                  <IconPlus size={14} />
-                </button>
-                <button
-                  type="button"
-                  className={`row-del${confirmingDeleteId === project.id ? ' confirming' : ''}`}
-                  title={
-                    confirmingDeleteId === project.id
-                      ? t('sidebar.confirmDeleteAction')
-                      : t('sidebar.deleteProject')
-                  }
-                  aria-label={
-                    confirmingDeleteId === project.id
-                      ? t('sidebar.confirmDeleteAction')
-                      : t('sidebar.deleteProject')
-                  }
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    handleDeleteClick(project.id, () => onDeleteProject(project))
-                  }}
-                  onMouseLeave={() => setConfirmingDeleteId(null)}
-                >
-                  {confirmingDeleteId === project.id ? t('common.confirm') : <IconTrash size={14} />}
-                </button>
-              </div>
-              {projectSessions.length === 0 ? (
-                <div className="empty-sess">{t('sidebar.noSessions')}</div>
-              ) : (
-                <div className={`proj-sessions${sessionsCollapsed.has(project.id) ? '' : ' is-open'}`}>
-                  <div className="proj-sessions-inner">
-                    <div className="sess-list">
-                {visibleSessions.map((session) => {
-                  // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
-                  const busy = busySessionIds?.has(session.id)
-                  const sc = sessionLampClass(session, busy ?? false, now)
-                  const active = session.id === activeSessionId
-                  const untitled = isPlaceholderSessionTitle(session.title)
-                  const displayTitle = untitled ? t('sidebar.untitledSession') : session.title
-                  return (
+              {projects.map((project) => {
+                const projectSessions = sessions
+                  .filter((s) => s.projectId === project.id)
+                  .slice()
+                  .sort((a, b) => sessionSortKey(b) - sessionSortKey(a))
+                const showAllSessions = sessionsExpanded.has(project.id)
+                const overflow = Math.max(0, projectSessions.length - SESSION_PREVIEW_LIMIT)
+                const visibleSessions =
+                  overflow === 0 || showAllSessions
+                    ? projectSessions
+                    : projectSessions.slice(0, SESSION_PREVIEW_LIMIT)
+                const toggleSessions = () => {
+                  setSessionsCollapsed((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(project.id)) next.delete(project.id)
+                    else next.add(project.id)
+                    return next
+                  })
+                }
+                const isSessionsVisible =
+                  projectSessions.length > 0 && !sessionsCollapsed.has(project.id)
+                return (
+                  <div className="proj" key={project.id}>
                     <div
-                      key={session.id}
-                      className={`sess${active ? ' active' : ''}${sc ? ` ${sc}` : ''}${untitled ? ' untitled' : ''}`}
-                      onClick={() => onSelectSession(session)}
+                      className="proj-head"
                       role="button"
                       tabIndex={0}
+                      title={project.rootPath}
+                      onClick={
+                        projectSessions.length > 0 ? toggleSessions : () => onSelectProject(project)
+                      }
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') onSelectSession(session)
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          if (projectSessions.length > 0) toggleSessions()
+                          else onSelectProject(project)
+                        }
                       }}
                     >
-                      <span className="dot" aria-hidden title={t(statusTitleKey(sc))} />
-                      <span className="sess-title">{displayTitle}</span>
-                      <span className={`sess-trail${confirmingDeleteId === session.id ? ' confirming' : ''}`}>
-                        <span className="time">
-                          {relTime(session.lastReplyAt ?? session.createdAt, t)}
-                        </span>
-                        <button
-                          type="button"
-                          className={`row-del${confirmingDeleteId === session.id ? ' confirming' : ''}`}
-                          title={
-                            confirmingDeleteId === session.id
-                              ? t('sidebar.confirmDeleteAction')
-                              : t('sidebar.deleteSession')
-                          }
-                          aria-label={
-                            confirmingDeleteId === session.id
-                              ? t('sidebar.confirmDeleteAction')
-                              : t('sidebar.deleteSession')
-                          }
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            handleDeleteClick(session.id, () => onDeleteSession(session))
-                          }}
-                          onMouseLeave={() => setConfirmingDeleteId(null)}
-                        >
-                          {confirmingDeleteId === session.id ? t('common.confirm') : <IconTrash size={14} />}
-                        </button>
+                      <span className="ico" aria-hidden>
+                        {isSessionsVisible ? <FolderOpen size={15} /> : <Folder size={15} />}
                       </span>
+                      <span className="proj-name">{project.name}</span>
+                      <button
+                        type="button"
+                        className="proj-add"
+                        title={t('sidebar.newTask')}
+                        aria-label={t('sidebar.newTask')}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          onNewSessionForProject(project)
+                        }}
+                      >
+                        <IconPlus size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className={`row-del${confirmingDeleteId === project.id ? ' confirming' : ''}`}
+                        title={
+                          confirmingDeleteId === project.id
+                            ? t('sidebar.confirmDeleteAction')
+                            : t('sidebar.deleteProject')
+                        }
+                        aria-label={
+                          confirmingDeleteId === project.id
+                            ? t('sidebar.confirmDeleteAction')
+                            : t('sidebar.deleteProject')
+                        }
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDeleteClick(project.id, () => onDeleteProject(project))
+                        }}
+                        onMouseLeave={() => setConfirmingDeleteId(null)}
+                      >
+                        {confirmingDeleteId === project.id ? (
+                          t('common.confirm')
+                        ) : (
+                          <IconTrash size={14} />
+                        )}
+                      </button>
                     </div>
-                  )
-                })}
-                {overflow > 0 && !showAllSessions && (
-                  <div className="sess-fade" aria-hidden>
-                    <button
-                      type="button"
-                      className="sess-toggle"
-                      onClick={() => toggleSessionsExpanded(project.id)}
-                      aria-label={t('sidebar.showMore', { count: overflow })}
-                      title={t('sidebar.showMore', { count: overflow })}
-                    >
-                      <span className="sess-toggle-chevron" aria-hidden>
-                        <IconChevronDown size={14} />
-                      </span>
-                    </button>
+                    {projectSessions.length === 0 ? (
+                      <div className="empty-sess">{t('sidebar.noSessions')}</div>
+                    ) : (
+                      <div
+                        className={`proj-sessions${sessionsCollapsed.has(project.id) ? '' : ' is-open'}`}
+                      >
+                        <div className="proj-sessions-inner">
+                          <div className="sess-list">
+                            {visibleSessions.map((session) => {
+                              // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
+                              const busy = busySessionIds?.has(session.id)
+                              const sc = sessionLampClass(session, busy ?? false, now)
+                              const active = session.id === activeSessionId
+                              const untitled = isPlaceholderSessionTitle(session.title)
+                              const displayTitle = untitled
+                                ? t('sidebar.untitledSession')
+                                : session.title
+                              return (
+                                <div
+                                  key={session.id}
+                                  className={`sess${active ? ' active' : ''}${sc ? ` ${sc}` : ''}${untitled ? ' untitled' : ''}`}
+                                  onClick={() => onSelectSession(session)}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') onSelectSession(session)
+                                  }}
+                                >
+                                  <span className="dot" aria-hidden title={t(statusTitleKey(sc))} />
+                                  <span className="sess-title">{displayTitle}</span>
+                                  <span
+                                    className={`sess-trail${confirmingDeleteId === session.id ? ' confirming' : ''}`}
+                                  >
+                                    <span className="time">
+                                      {relTime(session.lastReplyAt ?? session.createdAt, t)}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className={`row-del${confirmingDeleteId === session.id ? ' confirming' : ''}`}
+                                      title={
+                                        confirmingDeleteId === session.id
+                                          ? t('sidebar.confirmDeleteAction')
+                                          : t('sidebar.deleteSession')
+                                      }
+                                      aria-label={
+                                        confirmingDeleteId === session.id
+                                          ? t('sidebar.confirmDeleteAction')
+                                          : t('sidebar.deleteSession')
+                                      }
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        handleDeleteClick(session.id, () =>
+                                          onDeleteSession(session),
+                                        )
+                                      }}
+                                      onMouseLeave={() => setConfirmingDeleteId(null)}
+                                    >
+                                      {confirmingDeleteId === session.id ? (
+                                        t('common.confirm')
+                                      ) : (
+                                        <IconTrash size={14} />
+                                      )}
+                                    </button>
+                                  </span>
+                                </div>
+                              )
+                            })}
+                            {overflow > 0 && !showAllSessions && (
+                              <div className="sess-fade" aria-hidden>
+                                <button
+                                  type="button"
+                                  className="sess-toggle"
+                                  onClick={() => toggleSessionsExpanded(project.id)}
+                                  aria-label={t('sidebar.showMore', { count: overflow })}
+                                  title={t('sidebar.showMore', { count: overflow })}
+                                >
+                                  <span className="sess-toggle-chevron" aria-hidden>
+                                    <IconChevronDown size={14} />
+                                  </span>
+                                </button>
+                              </div>
+                            )}
+                            {overflow > 0 && showAllSessions && (
+                              <button
+                                type="button"
+                                className="sess-toggle sess-toggle-text"
+                                onClick={() => toggleSessionsExpanded(project.id)}
+                                aria-expanded={showAllSessions}
+                              >
+                                <span className="sess-toggle-chevron up" aria-hidden>
+                                  <IconChevronDown size={12} />
+                                </span>
+                                {t('sidebar.showLess')}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-                {overflow > 0 && showAllSessions && (
-                  <button
-                    type="button"
-                    className="sess-toggle sess-toggle-text"
-                    onClick={() => toggleSessionsExpanded(project.id)}
-                    aria-expanded={showAllSessions}
-                  >
-                    <span className="sess-toggle-chevron up" aria-hidden>
-                      <IconChevronDown size={12} />
-                    </span>
-                    {t('sidebar.showLess')}
-                  </button>
-                 )}
-                  </div>
-                  </div>
-                </div>
-              )}
+                )
+              })}
             </div>
-          )
-        })}
-      </div>
           </div>
         </div>
       </div>
@@ -569,6 +587,7 @@ export function LeftSidebar({
           <p className="settings-page-desc">{t('settings.descTeams')}</p>
           <TeamTemplateLibrary
             workers={workers}
+            projectId={activeProjectId}
             initialTemplates={teamTemplates}
             focusTemplateId={crewModal.focusId}
             onChanged={onTeamTemplatesChanged}

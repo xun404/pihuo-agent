@@ -10,11 +10,13 @@ import { api } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import { Modal } from './ui/Modal'
 import { useToast } from './Toast'
+import { WorkerReasoningSelect } from './WorkerReasoningSelect'
 
 interface Props {
   sessionId: string | null | undefined
   teamMembers: TeamMember[]
   workers: WorkerRegistration[]
+  projectId?: string | null
   openJobCount: number
   onApplied: () => void
 }
@@ -26,6 +28,7 @@ function templateMembers(teamMembers: TeamMember[]) {
     roleType: member.roleType,
     instructions: member.instructions,
     model: member.model,
+    reasoning: member.reasoning,
   }))
 }
 
@@ -33,6 +36,7 @@ export function TeamTemplateManager({
   sessionId,
   teamMembers,
   workers,
+  projectId,
   openJobCount,
   onApplied,
 }: Props) {
@@ -124,7 +128,7 @@ export function TeamTemplateManager({
   const setWorkerMapping = (memberIndex: number, workerId: string) => {
     const next = [
       ...mappings.filter((mapping) => mapping.memberIndex !== memberIndex),
-      { memberIndex, workerId, model: null },
+      { memberIndex, workerId, model: null, reasoning: null },
     ]
     setMappings(next)
   }
@@ -136,7 +140,28 @@ export function TeamTemplateManager({
     if (!workerId) return
     setMappings([
       ...mappings.filter((mapping) => mapping.memberIndex !== memberIndex),
-      { memberIndex, workerId, model: model.trim() || null },
+      {
+        ...existing,
+        memberIndex,
+        workerId,
+        model: model.trim() || null,
+      },
+    ])
+  }
+
+  const setReasoningMapping = (memberIndex: number, reasoning: string) => {
+    const existing = mappings.find((mapping) => mapping.memberIndex === memberIndex)
+    const member = preview?.members.find((candidate) => candidate.memberIndex === memberIndex)
+    const workerId = existing?.workerId ?? member?.workerId
+    if (!workerId) return
+    setMappings([
+      ...mappings.filter((mapping) => mapping.memberIndex !== memberIndex),
+      {
+        ...existing,
+        memberIndex,
+        workerId,
+        reasoning: reasoning.trim() || null,
+      },
     ])
   }
 
@@ -281,6 +306,10 @@ export function TeamTemplateManager({
                   mapping && Object.prototype.hasOwnProperty.call(mapping, 'model')
                     ? (mapping.model ?? '')
                     : (member.model ?? '')
+                const mappedReasoning =
+                  mapping && Object.prototype.hasOwnProperty.call(mapping, 'reasoning')
+                    ? (mapping.reasoning ?? '')
+                    : (member.reasoning ?? '')
                 return (
                   <article className="team-mapping-card" key={member.memberIndex}>
                     <div className="team-mapping-head">
@@ -314,6 +343,20 @@ export function TeamTemplateManager({
                           }
                           onBlur={() => void refreshPreview()}
                         />
+                        <WorkerReasoningSelect
+                          id={`team-template-reasoning-${member.memberIndex}`}
+                          workerId={workerId}
+                          model={
+                            mappedModel || workers.find((worker) => worker.id === workerId)?.model
+                          }
+                          projectId={projectId}
+                          value={mappedReasoning}
+                          inheritLabel={t('reasoning.inheritWorker')}
+                          disabled={!workerId || busy}
+                          onChange={(reasoning) =>
+                            setReasoningMapping(member.memberIndex, reasoning)
+                          }
+                        />
                       </div>
                     ) : (
                       <div className="team-mapping-meta">
@@ -325,6 +368,10 @@ export function TeamTemplateManager({
                           ·
                         </span>
                         <span>{mappedModel || t('team.inheritModel')}</span>
+                        <span className="team-mapping-dot" aria-hidden>
+                          ·
+                        </span>
+                        <span>{mappedReasoning || t('reasoning.inheritWorker')}</span>
                       </div>
                     )}
                   </article>

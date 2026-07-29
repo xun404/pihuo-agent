@@ -23,6 +23,7 @@ import {
   listTeamTemplatesTool,
   resetTeamMemberSessionTool,
   saveTeamTemplateTool,
+  setSessionTitleTool,
   updateTeamMemberTool,
 } from '../tools/session-tools.js'
 import { buildLeaderInstructions } from './leader-instructions.js'
@@ -155,6 +156,8 @@ export const leaderAgent = new Agent({
       roleReviewPending: requestContext?.get('roleReviewPending') === true,
       bootstrappedRoleCount: Number(requestContext?.get('bootstrappedRoleCount') ?? 0),
       leaderPrompt: prompts.leader,
+      sessionTitle: String(requestContext?.get('sessionTitle') ?? ''),
+      sessionTitleSource: String(requestContext?.get('sessionTitleSource') ?? ''),
     })
   },
   tools: {
@@ -174,6 +177,7 @@ export const leaderAgent = new Agent({
     getJobTool,
     listJobsTool,
     cancelJobTool,
+    setSessionTitleTool,
   },
   memory: leaderMemory,
   // TaskSignalProvider bundles task_write/update/complete/check + the

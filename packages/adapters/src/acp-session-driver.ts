@@ -79,6 +79,9 @@ export type AcpRuntimeErrorCode =
   | 'protocol_incompatible'
   | 'auth_required'
   | 'auth_failed'
+  | 'acp_reasoning_unsupported'
+  | 'acp_reasoning_value_unavailable'
+  | 'acp_reasoning_configuration_failed'
 
 export interface AcpRecoveryError {
   code: Extract<
@@ -149,6 +152,7 @@ export class AcpSessionDriver {
   private _outputAcc: string = ''
   private permissionError: AcpSessionRuntimeError | null = null
   private operationTail: Promise<void> = Promise.resolve()
+  private configOptionsObserver: ((sessionId: string, options: readonly SessionConfigOption[]) => void) | null = null
 
   private constructor(app: ClientApp, cwd: string) {
     this.app = app
@@ -218,13 +222,38 @@ export class AcpSessionDriver {
       })
       .onNotification(methods.client.session.update, (ctx) => {
         const notifSid = (ctx.params as Record<string, unknown>)?.sessionId
-        if (notifSid && notifSid !== drv._agentSessionId) return
         if (drv.isLoadPhase) return
+        try {
+          const update = ctx.params.update as {
+            sessionUpdate?: string
+            configOptions?: SessionConfigOption[]
+            content?: { type?: string; text?: unknown }
+          }
+          // Route config_option_update to the observer regardless of which
+          // session is "current" on this driver — shared processes can receive
+          // updates for multiple sessions.
+          if (update?.sessionUpdate === 'config_option_update') {
+            const observer = drv.configOptionsObserver
+            if (observer && notifSid) {
+              try {
+                observer(notifSid as string, update.configOptions ?? [])
+              } catch {
+                // Observer failures must not break transport
+              }
+            }
+            return
+          }
+        } catch {
+          // Malformed updates must not abort the stream.
+        }
+        // All other notifications require matching the current session.
+        if (notifSid && notifSid !== drv._agentSessionId) return
         const b = drv.currentBinding
         if (!b) return
         try {
           const update = ctx.params.update as {
             sessionUpdate?: string
+            configOptions?: SessionConfigOption[]
             content?: { type?: string; text?: unknown }
           }
           // Type-safe consumption: known types handled; unknown never throw.
@@ -267,6 +296,13 @@ export class AcpSessionDriver {
 
   get configOptions(): SessionConfigOption[] {
     return this._configOptions
+  }
+
+  /** Register an observer for config_option_update notifications routed by sessionId. */
+  setConfigOptionsObserver(
+    observer: ((sessionId: string, options: readonly SessionConfigOption[]) => void) | null,
+  ): void {
+    this.configOptionsObserver = observer
   }
 
   get capabilities(): AgentCapabilities {
@@ -381,15 +417,18 @@ export class AcpSessionDriver {
     configId: string,
     value: string,
     agentSessionId = this._agentSessionId,
-  ): Promise<void> {
+  ): Promise<SessionConfigOption[]> {
     return this.runExclusive(async () => {
       if (!agentSessionId) throw new Error('No active session')
       this._agentSessionId = agentSessionId
-      await this.agent.request(methods.agent.session.setConfigOption, {
+      const response = await this.agent.request(methods.agent.session.setConfigOption, {
         sessionId: agentSessionId,
         configId,
         value,
       })
+      const options = response.configOptions ?? []
+      this._configOptions = options
+      return options
     })
   }
 

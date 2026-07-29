@@ -133,4 +133,61 @@ describe('WorkerModelCatalogStore', () => {
     assert.throws(() => store.deleteWorker('worker-a'), /CATALOG_CORRUPT/)
     assert.throws(() => store.put(makeCatalog('worker-a', 'opencode/a')), /CATALOG_CORRUPT/)
   })
+
+  it('reads v2 catalog with reasoning entries, reads v1 without', () => {
+    store.put(makeCatalog('w1', 'opencode/a'))
+    const v1 = store.get('w1')
+    assert.ok(v1)
+    assert.equal(v1.reasoning, undefined)
+
+    const cat: WorkerModelCatalog = {
+      ...makeCatalog('w2', 'opencode/b'),
+      version: 2,
+      reasoning: {
+        'opencode/b': {
+          model: 'opencode/b',
+          supported: true,
+          selector: {
+            configId: 'reasoning_effort',
+            currentValue: 'medium',
+            options: [
+              { value: 'low', name: 'Low' },
+              { value: 'medium', name: 'Medium' },
+              { value: 'high', name: 'High' },
+            ],
+          },
+          fetchedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+        },
+      },
+    }
+    store.put(cat)
+    const v2 = store.get('w2')
+    assert.ok(v2)
+    assert.equal(v2.version, 2)
+    assert.ok(v2.reasoning)
+    const entry = v2.reasoning!['opencode/b']
+    assert.ok(entry)
+    assert.equal(entry.supported, true)
+    assert.equal(entry.selector?.configId, 'reasoning_effort')
+    assert.equal(entry.selector?.options.length, 3)
+  })
+
+  it('keeps the default reasoning catalog key out of the optional model field', () => {
+    const fetchedAt = new Date().toISOString()
+    store.put({
+      ...makeCatalog('w-default', 'opencode/a'),
+      version: 2,
+      reasoning: {
+        __default__: {
+          supported: false,
+          fetchedAt,
+          expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+          lastSuccessfulFetchedAt: fetchedAt,
+        },
+      },
+    })
+
+    assert.equal(store.get('w-default')?.reasoning?.__default__?.model, undefined)
+  })
 })

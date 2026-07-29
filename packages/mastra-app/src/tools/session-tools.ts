@@ -1,11 +1,19 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import { getSharedStore } from '@swarmdesk-agent/core'
-import { getWorkerScheduler, toPublicAcpFailure, workerTimeoutSnapshotFromJob } from '../scheduler.js'
+import {
+  getWorkerScheduler,
+  toPublicAcpFailure,
+  workerTimeoutSnapshotFromJob,
+} from '../scheduler.js'
 import { getRuntimeDispatchPort } from '../runtime-dispatch-port.js'
 import type { RuntimeDispatchPort } from '../runtime-dispatch-port.js'
 import type { WorkerJob, WorkerKind, WorkerRole, WorkerRunEvent } from '@swarmdesk-agent/shared'
-import { isJobOpen, isTerminalWorkerEvent } from '@swarmdesk-agent/shared'
+import {
+  isJobOpen,
+  isPlaceholderSessionTitle,
+  isTerminalWorkerEvent,
+} from '@swarmdesk-agent/shared'
 import {
   enrichTerminalWorkerEvent,
   MAX_TIMER_DELAY_MS,
@@ -64,6 +72,8 @@ export function jobToToolResult(job: WorkerJob) {
     teamMemberId: job.teamMemberId,
     teamMemberName: job.teamMemberName,
     role: job.role,
+    model: job.effectiveModel,
+    reasoning: job.effectiveReasoning,
     cwd: job.cwd,
     task: job.task,
     message: job.message ?? `Job ${job.status}`,
@@ -90,6 +100,8 @@ export function jobToTerminalEvent(job: WorkerJob): WorkerRunEvent {
       truncated: false,
       workerName: job.workerName,
       role: job.role,
+      model: job.effectiveModel,
+      reasoning: job.effectiveReasoning,
     }
   }
   const type =
@@ -103,6 +115,8 @@ export function jobToTerminalEvent(job: WorkerJob): WorkerRunEvent {
     truncated: false,
     workerName: job.workerName,
     role: job.role,
+    model: job.effectiveModel,
+    reasoning: job.effectiveReasoning,
     recoveryError: job.recoveryError,
     canResetAcpContext: job.canResetAcpContext,
   }
@@ -1067,6 +1081,71 @@ export const cancelJobTool = createTool({
         message: e instanceof Error ? e.message : String(e),
       }
     }
+  },
+})
+
+function cleanSessionTitle(raw: string): string {
+  return raw
+    .replace(/[\n\r\t]/g, ' ')
+    .replace(/^["'“”«»]+|["'“”«»]+$/g, '')
+    .replace(/^(title|标题)\s*[:：]\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.。]$/, '')
+    .trim()
+    .slice(0, 80)
+}
+
+export const setSessionTitleTool = createTool({
+  id: 'set-session-title',
+  description:
+    'Set the title of the current chat session. Call this once in your first response if the session is unnamed. Summarize the user task into 4-8 words, then pass it as title. Do not call if the session already has a real title — the tool will reject duplicates.',
+  inputSchema: z.object({
+    title: z
+      .string()
+      .min(1)
+      .max(100)
+      .describe('A 4-8 word concise title summarizing the user task'),
+  }),
+  outputSchema: z.object({
+    ok: z.boolean(),
+    title: z.string().optional(),
+    message: z.string().optional(),
+  }),
+  execute: async ({ title }, context) => {
+    const { routerSessionId } = resolveDispatchContext(context as never)
+    const trimmed = title.trim()
+    if (!trimmed) {
+      return { ok: false, message: 'Title cannot be empty.' }
+    }
+    const cleaned = cleanSessionTitle(trimmed)
+    if (!cleaned) {
+      return { ok: false, message: 'Title is empty after cleaning. Use plain text only.' }
+    }
+
+    const s = store()
+      .listSessions()
+      .find((x) => x.id === routerSessionId)
+    if (!s) {
+      return { ok: false, message: 'Session not found.' }
+    }
+    if (s.titleSource === 'user') {
+      return {
+        ok: false,
+        message: 'Session title was set by user and cannot be auto-changed.',
+      }
+    }
+    if (!isPlaceholderSessionTitle(s.title)) {
+      return {
+        ok: false,
+        message: `Session already has a title: "${s.title}". No action needed.`,
+      }
+    }
+
+    const updated = store().autoTitleSession(routerSessionId, cleaned)
+    if (!updated) {
+      return { ok: false, message: 'Failed to update session title.' }
+    }
+    return { ok: true, title: updated.title }
   },
 })
 

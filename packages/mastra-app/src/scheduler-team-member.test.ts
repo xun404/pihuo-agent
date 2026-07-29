@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { TeamMember, WorkerRegistration } from '@swarmdesk-agent/shared'
-import { buildTeamMemberDispatchSnapshot } from './scheduler.js'
+import {
+  buildTeamMemberDispatchSnapshot,
+  buildWorkerExecutionSnapshot,
+  toPublicWorkerJobErrorCode,
+} from './scheduler.js'
 
 const worker: WorkerRegistration = {
   id: 'worker-a',
@@ -39,6 +43,7 @@ test('role dispatch snapshots identity, instructions, revision, and inherited Wo
     roleType: 'coder',
     teamMemberRevision: 3,
     effectiveModel: 'worker-default-model',
+    effectiveReasoning: undefined,
     instructionsSnapshot: 'Implement carefully and verify the result.',
     effectivePrompt: 'Implement carefully and verify the result.\n\nTask:\nAdd the feature.',
   })
@@ -51,4 +56,50 @@ test('role model override wins over the Worker default model', () => {
     'Review the feature.',
   )
   assert.equal(snapshot.effectiveModel, 'role-specific-model')
+})
+
+test('role reasoning override wins over Worker default, TeamMember precedence first', () => {
+  const workerWithReasoning = { ...worker, reasoning: 'low' }
+  const roleWithReasoning = { ...role, reasoning: 'high' }
+
+  const roleWins = buildTeamMemberDispatchSnapshot(
+    roleWithReasoning,
+    workerWithReasoning,
+    'Plan it.',
+  )
+  assert.equal(roleWins.effectiveReasoning, 'high')
+
+  const workerDefault = buildTeamMemberDispatchSnapshot(role, workerWithReasoning, 'Code it.')
+  assert.equal(workerDefault.effectiveReasoning, 'low')
+
+  const agentDefault = buildTeamMemberDispatchSnapshot(role, worker, 'Test it.')
+  assert.equal(agentDefault.effectiveReasoning, undefined)
+})
+
+test('plain Worker dispatch freezes trimmed model and reasoning defaults', () => {
+  assert.deepEqual(
+    buildWorkerExecutionSnapshot({
+      ...worker,
+      model: '  worker-default-model  ',
+      reasoning: '  high  ',
+    }),
+    {
+      effectiveModel: 'worker-default-model',
+      effectiveReasoning: 'high',
+    },
+  )
+})
+
+test('reasoning runtime failures use stable public job error codes', () => {
+  assert.equal(toPublicWorkerJobErrorCode('acp_reasoning_unsupported'), 'ACP_REASONING_UNSUPPORTED')
+  assert.equal(
+    toPublicWorkerJobErrorCode('acp_reasoning_value_unavailable'),
+    'ACP_REASONING_VALUE_UNAVAILABLE',
+  )
+  assert.equal(
+    toPublicWorkerJobErrorCode('acp_reasoning_configuration_failed'),
+    'ACP_REASONING_CONFIGURATION_FAILED',
+  )
+  assert.equal(toPublicWorkerJobErrorCode('auth_failed'), 'auth_failed')
+  assert.equal(toPublicWorkerJobErrorCode(undefined), undefined)
 })

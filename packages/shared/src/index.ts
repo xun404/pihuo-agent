@@ -171,6 +171,9 @@ export const ACP_PUBLIC_ERROR_CODES = [
   'WORKER_REFERENCED_BY_ROLE',
   'WORKER_DUPLICATE_REGISTRY',
   'WORKER_DUPLICATE_NAME',
+  'ACP_REASONING_UNSUPPORTED',
+  'ACP_REASONING_VALUE_UNAVAILABLE',
+  'ACP_REASONING_CONFIGURATION_FAILED',
 ] as const
 
 export type AcpPublicErrorCode = (typeof ACP_PUBLIC_ERROR_CODES)[number]
@@ -320,11 +323,16 @@ export interface WorkerTimeoutSettings {
 /** Locale used only for built-in default prompt text (UI language). */
 export type PromptLocale = 'zh' | 'en'
 
+const LEGACY_PLAN_PROMPT_ZH =
+  '作为规划角色，分析目标、约束和代码现状，输出可执行且可验证的步骤；除非明确要求，不直接实施。'
+const LEGACY_PLAN_PROMPT_EN =
+  'As a planning role, analyze goals, constraints, and the current codebase; produce executable and verifiable steps. Do not implement unless explicitly asked.'
+
 const DEFAULT_PROMPT_SETTINGS_ZH = {
   leader: '准确理解用户目标，优先复用合适的角色完成任务，并清楚说明关键决策、风险和验证结果。',
   roles: {
     general: '作为通用执行角色，完成 Leader 委派的任务并返回清晰、可验证的结果。',
-    plan: '作为规划角色，分析目标、约束和代码现状，输出可执行且可验证的步骤；除非明确要求，不直接实施。',
+    plan: '作为规划角色，只生成供其他 Agent 或工程师执行的指导性 Markdown plan，不直接实现代码。先阅读相关代码、配置和文档，定位真实入口、关键调用链与测试位置；根据范围和风险选择轻量、标准或严格档位，在 plan 中写明档位和原因，能用轻量就不扩写。除非用户指定其他路径，将中文 plan 写入 docs/superpowers/plans/YYYY-MM-DD-<topic>.md。步骤只需定位到相关文件、方法、字段、断言或验证命令，并区分代码事实、需验证假设与非目标。文件变更计划只描述文件职责、行为变化和验收结果，不写具体实现方式。禁止输出实现代码、伪代码、diff、完整 proto 或消息定义、SQL 或查询语句、方法体；也不要替 coder 决定具体语法、控制流或代码结构。所有 plan 必须包含目标、范围、计划档位、当前诊断、文件变更计划、任务拆分、测试与验证计划、文档更新要求、Todo、Check、Review Todo List 和 Result Return Area；标准或严格 plan 再按复杂度补充需求拆解、调用链、关键字段、风险与测试矩阵。Review Todo List 供后续 review 角色逐项验收，每一项关联一个用户验收标准或关键设计决策，使用复选框写明需要检查的行为和证据；它只定义审查目标和所需证据，不写实现代码，也不预判审查结论。要求 review 角色按 Review Todo List 逐项回写 PASS/FAIL、证据和未覆盖项。要求执行者完成后回写 Todo、Check、Result Return Area 和文档更新结果，并明确全部验收结束前不要提交 git。不要声称尚未验证的问题已经修复。最终只返回 plan 路径和这段提示，不复述整份 plan：请严格根据 plan 执行，如有问题先表述出来。任务结束后请更新 plan 中的 Todo、Check 和 Result Return Area。全部验收结束前不要提交 git。计划文件：<path>',
     coder: '作为实现角色，根据任务修改代码，遵循现有架构，并运行相关验证后返回结果。',
     review: '作为审查角色，优先发现正确性、安全性、兼容性和测试缺口，按严重程度给出可定位的问题。',
     test: '作为测试角色，设计并执行与风险匹配的测试，报告可复现的失败、覆盖范围和验证结果。',
@@ -341,7 +349,7 @@ const DEFAULT_PROMPT_SETTINGS_EN = {
   roles: {
     general:
       'As a general execution role, complete tasks delegated by the Leader and return clear, verifiable results.',
-    plan: 'As a planning role, analyze goals, constraints, and the current codebase; produce executable and verifiable steps. Do not implement unless explicitly asked.',
+    plan: 'As a planning role, produce only a guidance-only Markdown plan for another Agent or engineer; do not implement code, and read the relevant code, configuration, and documentation first to locate real entry points, the key call chain, and test locations. Select a lightweight, standard, or strict tier from scope and risk, state the tier and reason in the plan, and prefer the smallest sufficient tier. Unless the user provides another path, write the plan in Chinese to docs/superpowers/plans/YYYY-MM-DD-<topic>.md. Locate steps to relevant files, methods, fields, assertions, or verification commands, and distinguish code facts, hypotheses requiring verification, and non-goals. The File Change Plan describes only file responsibilities, behavior changes, and acceptance outcomes, not concrete implementation. Do not output implementation code, pseudocode, diffs, complete proto or message definitions, SQL or query statements, or method bodies; do not decide concrete syntax, control flow, or code structure for the coder. Every plan must include Goal, Scope, Plan Tier, Current Diagnosis, File Change Plan, Task Breakdown, Test and Verification Plan, Documentation Update Requirements, Todo, Check, and Result Return Area, plus a Review Todo List; add requirements, call chain, key fields, risks, and a test matrix only when the standard or strict tier needs them. The Review Todo List is for downstream review. Each checkbox maps to one user acceptance criterion or key design decision and states the behavior and evidence to inspect; it defines review targets and required evidence only, contains no implementation code, and does not prejudge the review outcome. The review role processes every Review Todo List item and records PASS/FAIL, evidence, and uncovered gaps. Require the executor to update Todo, Check, Result Return Area, and the documentation update result after execution. Do not claim an unverified issue is fixed. Do not commit git changes before all acceptance checks pass. In the final response, return only the plan path and this execution reminder without repeating the plan: 请严格根据 plan 执行，如有问题先表述出来。任务结束后请更新 plan 中的 Todo、Check 和 Result Return Area。全部验收结束前不要提交 git。计划文件：<path>',
     coder:
       'As an implementation role, modify code according to the task, follow the existing architecture, run relevant verification, and return results.',
     review:
@@ -353,6 +361,12 @@ const DEFAULT_PROMPT_SETTINGS_EN = {
 } as const satisfies {
   leader: string
   roles: Readonly<Record<WorkerRole, string>>
+}
+
+function migrateLegacyPlanPrompt(prompt: string): string {
+  if (prompt === LEGACY_PLAN_PROMPT_ZH) return DEFAULT_PROMPT_SETTINGS_ZH.roles.plan
+  if (prompt === LEGACY_PLAN_PROMPT_EN) return DEFAULT_PROMPT_SETTINGS_EN.roles.plan
+  return prompt
 }
 
 /** Built-in defaults (Chinese). Prefer `defaultPromptSettings(locale)` for locale-aware UI. */
@@ -377,9 +391,7 @@ export function promptsMatchLocaleDefaults(
 ): boolean {
   const defaults = defaultPromptSettings(locale)
   if (prompts.leader.trim() !== defaults.leader.trim()) return false
-  return WORKER_ROLES.every(
-    (role) => prompts.roles[role].trim() === defaults.roles[role].trim(),
-  )
+  return WORKER_ROLES.every((role) => prompts.roles[role].trim() === defaults.roles[role].trim())
 }
 
 export function normalizePromptSettings(
@@ -397,16 +409,15 @@ export function normalizePromptSettings(
   const normalizedRoles = {} as Record<WorkerRole, string>
   for (const role of WORKER_ROLES) {
     const candidate = rawRoles[role]
-    normalizedRoles[role] =
-      typeof candidate === 'string' && candidate.trim()
-        ? candidate.trim()
-        : defaults.roles[role]
+    const normalizedCandidate = typeof candidate === 'string' ? candidate.trim() : ''
+    normalizedRoles[role] = normalizedCandidate
+      ? role === 'plan'
+        ? migrateLegacyPlanPrompt(normalizedCandidate)
+        : normalizedCandidate
+      : defaults.roles[role]
   }
   return {
-    leader:
-      typeof rawLeader === 'string' && rawLeader.trim()
-        ? rawLeader.trim()
-        : defaults.leader,
+    leader: typeof rawLeader === 'string' && rawLeader.trim() ? rawLeader.trim() : defaults.leader,
     roles: normalizedRoles,
   }
 }
@@ -445,6 +456,8 @@ export interface TeamMember {
   instructions: string
   /** Optional role override; absent means inherit the Worker's default model. */
   model?: string
+  /** Optional ACP reasoning override; absent means inherit Worker default. */
+  reasoning?: string
   enabled: boolean
   /** Increments only when execution semantics change. */
   revision: number
@@ -460,6 +473,7 @@ export interface CreateTeamMemberInput {
   roleType: WorkerRole
   instructions: string
   model?: string
+  reasoning?: string
   enabled?: boolean
 }
 
@@ -469,6 +483,7 @@ export interface UpdateTeamMemberInput {
   roleType?: WorkerRole
   instructions?: string
   model?: string | null
+  reasoning?: string | null
   enabled?: boolean
   expectedRevision?: number
 }
@@ -479,6 +494,7 @@ export interface TeamTemplateMember {
   roleType: WorkerRole
   instructions: string
   model?: string
+  reasoning?: string
 }
 
 export interface TeamTemplate {
@@ -506,6 +522,7 @@ export interface TeamTemplateMemberMapping {
   memberIndex: number
   workerId: string
   model?: string | null
+  reasoning?: string | null
 }
 
 export interface ApplyTeamTemplateInput {
@@ -522,7 +539,8 @@ export interface TeamTemplateApplicationMemberPreview {
   preferredWorkerId: string
   workerId?: string
   model?: string
-  issueCode?: 'WORKER_MAPPING_REQUIRED' | 'MODEL_MAPPING_REQUIRED'
+  reasoning?: string
+  issueCode?: 'WORKER_MAPPING_REQUIRED' | 'MODEL_MAPPING_REQUIRED' | 'REASONING_MAPPING_REQUIRED'
 }
 
 export interface TeamTemplateApplicationPreview {
@@ -535,7 +553,7 @@ export interface TeamTemplateApplicationPreview {
 
 export interface TeamTemplateAvailabilityIssue {
   memberIndex: number
-  code: 'WORKER_MAPPING_REQUIRED' | 'MODEL_MAPPING_REQUIRED'
+  code: 'WORKER_MAPPING_REQUIRED' | 'MODEL_MAPPING_REQUIRED' | 'REASONING_MAPPING_REQUIRED'
 }
 
 export interface TeamTemplateAvailability {
@@ -721,7 +739,7 @@ export interface Session {
  * one. The UI renders this via i18n (`sidebar.untitledSession`); the raw value
  * is also the gate for auto-naming: only sessions whose title is still the
  * placeholder (or explicitly `titleSource === 'auto'`) are eligible for Leader
- * auto-naming on first task completion.
+ * auto-naming during the first Leader response.
  */
 export const DEFAULT_SESSION_TITLE = 'New session'
 
@@ -808,9 +826,31 @@ export interface WorkerModelPinState {
   reasonCode?: string
 }
 
+export interface WorkerReasoningOption {
+  value: string
+  name: string
+  description?: string
+}
+
+export interface WorkerReasoningSelector {
+  configId: string
+  currentValue?: string
+  options: WorkerReasoningOption[]
+}
+
+export interface WorkerReasoningCatalogEntry {
+  model?: string
+  supported: boolean
+  selector?: WorkerReasoningSelector
+  fetchedAt: string
+  expiresAt: string
+  lastErrorCode?: string
+  lastSuccessfulFetchedAt?: string
+}
+
 /** Full worker model catalog (shortlist + search index). Not part of app snapshot. */
 export interface WorkerModelCatalog {
-  /** v1: shortlist/search only; v2: raw candidates + evidence revision */
+  /** v1: shortlist/search only; v2: raw candidates + evidence revision + reasoning entries */
   version: 1 | 2
   workerId: string
   /**
@@ -832,6 +872,8 @@ export interface WorkerModelCatalog {
   evidenceRevision?: string
   lastErrorCode?: string
   lastSuccessfulFetchedAt?: string
+  /** Per-model ACP reasoning catalog entries (v2 only). Key = model id. */
+  reasoning?: Record<string, WorkerReasoningCatalogEntry>
 }
 
 /** Build catalog map key: workerId or workerId::scopeKey */
@@ -910,6 +952,11 @@ export interface WorkerRegistration {
    * Never stores secret values.
    */
   authRevision?: number
+  /**
+   * Default ACP reasoning intensity value (raw Agent string).
+   * Absent means use ACP Agent default.
+   */
+  reasoning?: string
   /** Non-sensitive capability / auth probe summary for UI. */
   capabilitySummary?: {
     protocolVersion?: number
@@ -986,6 +1033,8 @@ export interface WorkerJob {
   roleType?: WorkerRole
   teamMemberRevision?: number
   effectiveModel?: string
+  /** ACP reasoning value frozen at dispatch time (TeamMember override → Worker default → Agent default). */
+  effectiveReasoning?: string
   instructionsSnapshot?: string
   effectivePrompt?: string
   task: string
@@ -1044,6 +1093,7 @@ export type WorkerRunEvent =
       workerKind: WorkerKind
       role?: WorkerRole
       model?: string
+      reasoning?: string
       reusedSession: boolean
       sessionDisposition?: string
     }
@@ -1063,6 +1113,7 @@ export type WorkerRunEvent =
       workerKind?: WorkerKind
       role?: WorkerRole
       model?: string
+      reasoning?: string
       errorCode?: string
     }
   | {
@@ -1078,6 +1129,7 @@ export type WorkerRunEvent =
       workerKind?: WorkerKind
       role?: WorkerRole
       model?: string
+      reasoning?: string
       recoveryError?: string
       canResetAcpContext?: boolean
     }
@@ -1131,6 +1183,7 @@ export interface WorkerRunState {
   workerKind: WorkerKind
   role?: WorkerRole
   model?: string
+  reasoning?: string
   reusedSession: boolean
   sequence: number
   output: string

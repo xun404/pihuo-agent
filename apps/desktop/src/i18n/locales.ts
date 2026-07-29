@@ -192,6 +192,16 @@ export type MessageKey =
   | 'roles.factWorker'
   | 'roles.factModel'
   | 'roles.archived'
+  | 'reasoning.agentDefault'
+  | 'reasoning.executionConfig'
+  | 'reasoning.model'
+  | 'reasoning.intensity'
+  | 'reasoning.loading'
+  | 'reasoning.stale'
+  | 'reasoning.unsupported'
+  | 'reasoning.unavailable'
+  | 'reasoning.saved'
+  | 'reasoning.inheritWorker'
   | 'team.templates'
   | 'team.templatesHint'
   | 'team.savedTemplates'
@@ -798,6 +808,16 @@ const zh: Dict = {
   'roles.instructions': '成员提示词',
   'roles.idle': '空闲',
   'roles.model': '模型覆盖（可选）',
+  'reasoning.agentDefault': '使用 Agent 默认值',
+  'reasoning.executionConfig': '执行配置',
+  'reasoning.model': '默认模型',
+  'reasoning.intensity': '思考 / 推理强度',
+  'reasoning.loading': '正在读取 ACP 可用值…',
+  'reasoning.stale': '当前显示上次成功读取的缓存值',
+  'reasoning.unsupported': '此 Worker / 模型未提供推理强度配置',
+  'reasoning.unavailable': '{value}（当前不可用）',
+  'reasoning.saved': 'Worker 执行配置已保存',
+  'reasoning.inheritWorker': '继承 Worker 默认值',
   'roles.modelInherit': '留空以继承 Worker 默认模型',
   'roles.name': '成员名称',
   'roles.needSession': '请先打开一个会话。',
@@ -1448,6 +1468,16 @@ const en: Dict = {
   'roles.instructions': 'Member prompt',
   'roles.idle': 'Idle',
   'roles.model': 'Model override (optional)',
+  'reasoning.agentDefault': 'Use Agent default',
+  'reasoning.executionConfig': 'Execution configuration',
+  'reasoning.model': 'Default model',
+  'reasoning.intensity': 'Thinking / reasoning intensity',
+  'reasoning.loading': 'Loading ACP values…',
+  'reasoning.stale': 'Showing the last successfully cached values',
+  'reasoning.unsupported': 'This Worker/model does not expose reasoning intensity',
+  'reasoning.unavailable': '{value} (currently unavailable)',
+  'reasoning.saved': 'Worker execution configuration saved',
+  'reasoning.inheritWorker': 'Inherit Worker default',
   'roles.modelInherit': 'Leave empty to inherit the Worker default model',
   'roles.name': 'Member name',
   'roles.needSession': 'Open a session first.',
@@ -1456,8 +1486,7 @@ const en: Dict = {
   'roles.resetSession': 'Reset session',
   'roles.confirmResetSession':
     'Reset the session for “{name}”? This clears the member’s Worker-side context and cannot be undone.',
-  'roles.confirmArchive':
-    'Archive member “{name}”? It will be removed from the current crew.',
+  'roles.confirmArchive': 'Archive member “{name}”? It will be removed from the current crew.',
   'roles.confirmArchiveTitle': 'Archive member',
   'roles.resetBlocked': 'Finish or cancel this member’s open jobs first.',
   'roles.save': 'Save',
@@ -1615,7 +1644,8 @@ const en: Dict = {
   'settings.runtime.leaderMaxStepsDesc': 'Max steps per task, default 500',
   'settings.runtime.leaderMaxStepsError': 'Please enter an integer between 10 and 1000',
   'settings.runtime.npmRegistry': 'npm registry',
-  'settings.runtime.npmRegistryDesc': 'Registry for npx package installs. Leave empty for system default.',
+  'settings.runtime.npmRegistryDesc':
+    'Registry for npx package installs. Leave empty for system default.',
   'settings.runtime.npmRegistryUrl': 'Registry URL',
   'settings.runtime.npmRegistryPh': 'https://registry.npmmirror.com',
   'settings.runtime.npmRegistryErrorHttps': 'Must start with https://',
@@ -1733,7 +1763,8 @@ const en: Dict = {
   'workers.confirmAddNew': 'Add as a new CLI',
   'workers.confirmReuseExisting': 'Reuse existing',
   'workers.confirmAuthRequired': 'This CLI requires authentication before it can be used.',
-  'workers.confirmAuthRequiredHint': 'Please log in to this CLI in your terminal first, then come back.',
+  'workers.confirmAuthRequiredHint':
+    'Please log in to this CLI in your terminal first, then come back.',
   'workers.confirmProbeFailed': 'Could not connect to the ACP agent.',
   'workers.confirmProbeFailedHint': 'You can still force-add it (probe can be retried later).',
   'workers.capYes': 'yes',
@@ -1788,9 +1819,12 @@ const en: Dict = {
   'workers.deleted': 'Deleted',
   'workers.deletedWithArchived':
     'Deleted. {count} team member(s) auto-archived — affected sessions need re-teaming.',
-  'workers.deleteErrorOpenJobs': 'This worker has in-progress jobs. Cancel or finish them before deleting.',
-  'workers.deleteErrorReferenced': 'This worker is in use by team sessions. Archive the related members first.',
-  'workers.deleteErrorGeneric': 'Failed to delete — the worker may still be in use. Please try again later.',
+  'workers.deleteErrorOpenJobs':
+    'This worker has in-progress jobs. Cancel or finish them before deleting.',
+  'workers.deleteErrorReferenced':
+    'This worker is in use by team sessions. Archive the related members first.',
+  'workers.deleteErrorGeneric':
+    'Failed to delete — the worker may still be in use. Please try again later.',
   'workers.formEnabled': 'Enabled',
   'workers.enablingProbe': 'Probing; will enable once it passes',
   'workers.enablingAuthRequired': 'This agent requires authentication before it can be enabled',

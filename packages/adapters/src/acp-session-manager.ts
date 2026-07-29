@@ -6,6 +6,7 @@ import { Writable, Readable } from 'node:stream'
 import { type SessionConfigOption, type AgentCapabilities } from '@agentclientprotocol/sdk'
 import type { WorkerKind, WorkerModelOption } from '@swarmdesk-agent/shared'
 import { extractModelOptions } from './acp-model-options.js'
+import { extractReasoningSelector } from './acp-reasoning-options.js'
 import { prepareOpenCodeAcpEnv, OPENCODE_ZEN_FREE_MODELS } from './opencode-acp-env.js'
 import { buildProviderEvidenceMap } from './model-eligibility.js'
 import { buildEffectiveWorkerEnv } from './worker-env.js'
@@ -44,6 +45,7 @@ export interface AcpFingerprintInput {
   command: string
   args: readonly string[]
   model?: string
+  reasoning?: string
   explicitEnv: Readonly<Record<string, string>>
   ambientEnv: Readonly<Record<string, string | undefined>>
 }
@@ -54,6 +56,7 @@ export interface SessionEntryConfig {
   command: string
   args: string[]
   model?: string
+  reasoning?: string
   env: Record<string, string>
   /** Spawn-only worker-scoped credentials; excluded from canonical fingerprints. */
   workerSecrets?: Record<string, string>
@@ -130,6 +133,7 @@ export interface WorkerExecutionConfig {
   args: string[]
   env?: Record<string, string>
   model?: string
+  reasoning?: string
   kind?: WorkerKind
   enabled?: boolean
   installationId?: string
@@ -184,6 +188,7 @@ export function computeExecutionFingerprint(
       command: cfg.command,
       args: [...cfg.args],
       model: cfg.model,
+      reasoning: cfg.reasoning,
       explicitEnv: { ...boundaryEnv },
       ambientEnv: { ...ambientEnv },
     })
@@ -192,6 +197,7 @@ export function computeExecutionFingerprint(
     command: cfg.command,
     args: cfg.args,
     model: cfg.model ?? null,
+    reasoning: cfg.reasoning ?? null,
     workerKind: cfg.workerKind ?? null,
     eligibilityRevision: cfg.eligibilityRevision ?? null,
     installationId: cfg.installationId ?? null,
@@ -233,6 +239,7 @@ export function workerExecutionConfigChanged(
   return (
     before.command !== after.command ||
     before.model !== after.model ||
+    before.reasoning !== after.reasoning ||
     before.kind !== after.kind ||
     before.enabled !== after.enabled ||
     before.args.length !== after.args.length ||
@@ -313,48 +320,103 @@ export type {
   SessionDisposition,
 } from './acp-session-driver.js'
 
-type ModelConfigDriver = Pick<AcpSessionDriver, 'configOptions' | 'setConfigOption'>
+// ── session config (model + reasoning in correct order) ──
+
+type ConfigDriver = Pick<AcpSessionDriver, 'configOptions' | 'setConfigOption'>
+
+export interface SessionExecutionConfig {
+  model?: string
+  reasoning?: string
+}
 
 export async function applyPinnedModelOrThrow(
-  driver: ModelConfigDriver,
+  driver: ConfigDriver,
   configuredModel: string | undefined,
   agentSessionId?: string,
   configOptions: SessionConfigOption[] = driver.configOptions,
 ): Promise<void> {
-  const model = configuredModel?.trim()
-  if (!model) return
+  await applySessionConfigOrThrow(driver, { model: configuredModel }, agentSessionId, configOptions)
+}
 
-  const modelOptions = extractModelOptions(configOptions)
-  const declared = modelOptions.ok && modelOptions.models.some((option) => option.modelId === model)
-  const configOption = configOptions.find(
-    (option) =>
-      option.type === 'select' &&
-      'options' in option &&
-      Array.isArray(option.options) &&
-      option.options.some((entry) =>
-        'group' in entry
-          ? entry.options.some((nested) => nested.value === model)
-          : 'value' in entry && entry.value === model,
-      ),
-  )
-  if (!declared || !configOption) {
-    throw new AcpSessionRuntimeError(
-      'model_configuration_failed',
-      'The configured ACP model is unavailable. Update the worker model and retry.',
-      false,
+export async function applySessionConfigOrThrow(
+  driver: ConfigDriver,
+  configured: SessionExecutionConfig,
+  agentSessionId?: string,
+  configOptions: SessionConfigOption[] = driver.configOptions,
+): Promise<SessionConfigOption[]> {
+  let currentOptions = configOptions
+  const model = configured.model?.trim()
+  const reasoning = configured.reasoning?.trim()
+
+  // Phase 1: set model first
+  if (model) {
+    const modelOptions = extractModelOptions(currentOptions)
+    const declared =
+      modelOptions.ok && modelOptions.models.some((option) => option.modelId === model)
+    const configOption = currentOptions.find(
+      (option) =>
+        option.type === 'select' &&
+        'options' in option &&
+        Array.isArray(option.options) &&
+        option.options.some((entry) =>
+          'group' in entry
+            ? entry.options.some((nested) => nested.value === model)
+            : 'value' in entry && entry.value === model,
+        ),
     )
+    if (!declared || !configOption) {
+      throw new AcpSessionRuntimeError(
+        'model_configuration_failed',
+        'The configured ACP model is unavailable. Update the worker model and retry.',
+        false,
+      )
+    }
+
+    try {
+      currentOptions = await driver.setConfigOption(configOption.id, model, agentSessionId)
+    } catch (cause) {
+      throw new AcpSessionRuntimeError(
+        'model_configuration_failed',
+        'The configured ACP model could not be applied. Update the worker model and retry.',
+        false,
+        { cause },
+      )
+    }
   }
 
-  try {
-    await driver.setConfigOption(configOption.id, model, agentSessionId)
-  } catch (cause) {
-    throw new AcpSessionRuntimeError(
-      'model_configuration_failed',
-      'The configured ACP model could not be applied. Update the worker model and retry.',
-      false,
-      { cause },
-    )
+  // Phase 2: set reasoning (only after model is confirmed)
+  if (reasoning) {
+    const selector = extractReasoningSelector(currentOptions)
+    if (!selector) {
+      throw new AcpSessionRuntimeError(
+        'acp_reasoning_unsupported',
+        'ACP reasoning is not supported for this configuration. Clear the reasoning value and retry.',
+        false,
+      )
+    }
+
+    const valid = selector.options.some((o) => o.value === reasoning)
+    if (!valid) {
+      throw new AcpSessionRuntimeError(
+        'acp_reasoning_value_unavailable',
+        `The configured ACP reasoning value "${reasoning}" is not available for the current model.`,
+        false,
+      )
+    }
+
+    try {
+      currentOptions = await driver.setConfigOption(selector.configId, reasoning, agentSessionId)
+    } catch (cause) {
+      throw new AcpSessionRuntimeError(
+        'acp_reasoning_configuration_failed',
+        'The configured ACP reasoning value could not be applied. Update the reasoning value and retry.',
+        false,
+        { cause },
+      )
+    }
   }
+
+  return currentOptions
 }
 
 // ── request / result ──
@@ -567,6 +629,22 @@ export class AcpSessionManager {
     // driver that arrived late and never commit or prompt the retired session.
     this.closeEntry(entry)
     throw new Error('ACP session closed during startup')
+  }
+
+  private setupDriverObserver(driver: AcpSessionDriver): void {
+    if (typeof (driver as any).setConfigOptionsObserver !== 'function') return
+    driver.setConfigOptionsObserver((sessionId, options) => {
+      for (const entry of this.entries.values()) {
+        if (
+          entry.agentSessionId === sessionId &&
+          entry.driver === driver &&
+          entry.state !== 'closed' &&
+          entry.state !== 'broken'
+        ) {
+          entry.configOptions = [...options]
+        }
+      }
+    })
   }
 
   setSessionProject(routerSessionId: string, projectId: string): void {
@@ -912,6 +990,7 @@ export class AcpSessionManager {
         Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>,
       )
       entry.driver = driver
+      this.setupDriverObserver(driver)
       this.assertEntryActive(keyStr, entry)
 
       await driver.initialize()
@@ -927,7 +1006,12 @@ export class AcpSessionManager {
 
       entry.agentSessionId = agentSessionId
       entry.configOptions = [...(sessionResponse.configOptions ?? [])]
-      await applyPinnedModelOrThrow(driver, config.model, agentSessionId, entry.configOptions)
+      entry.configOptions = await applySessionConfigOrThrow(
+        driver,
+        { model: config.model, reasoning: config.reasoning },
+        agentSessionId,
+        entry.configOptions,
+      )
       this.assertEntryActive(keyStr, entry)
 
       try {
@@ -1084,6 +1168,7 @@ export class AcpSessionManager {
       )
       entry.driver = driver
       processGroup.driver = driver
+      this.setupDriverObserver(driver)
       this.assertEntryActive(keyStr, entry)
 
       await driver.initialize()
@@ -1095,7 +1180,12 @@ export class AcpSessionManager {
       entry.agentSessionId = newResp.sessionId
       this.assertEntryActive(keyStr, entry)
       entry.configOptions = [...(newResp.configOptions ?? [])]
-      await applyPinnedModelOrThrow(driver, config.model, newResp.sessionId, entry.configOptions)
+      entry.configOptions = await applySessionConfigOrThrow(
+        driver,
+        { model: config.model, reasoning: config.reasoning },
+        newResp.sessionId,
+        entry.configOptions,
+      )
       this.assertEntryActive(keyStr, entry)
 
       try {
@@ -1277,9 +1367,9 @@ export class AcpSessionManager {
       checkAlive()
       this.assertEntryActive(keyStr, entry)
       entry.configOptions = [...(newResp.configOptions ?? [])]
-      await applyPinnedModelOrThrow(
+      entry.configOptions = await applySessionConfigOrThrow(
         sibling.driver,
-        config.model,
+        { model: config.model, reasoning: config.reasoning },
         newResp.sessionId,
         entry.configOptions,
       )
@@ -1427,6 +1517,36 @@ export class AcpSessionManager {
         }
       }
     }
+
+    // Live reuse: re-apply the complete frozen execution config so Agent-side
+    // config_option_update notifications cannot change this job's model or reasoning.
+    if (
+      reusedSession &&
+      (entry.sessionConfig?.model?.trim() || entry.sessionConfig?.reasoning?.trim())
+    ) {
+      try {
+        entry.configOptions = await applySessionConfigOrThrow(
+          entry.driver!,
+          {
+            model: entry.sessionConfig.model,
+            reasoning: entry.sessionConfig.reasoning,
+          },
+          entry.agentSessionId ?? undefined,
+          entry.configOptions,
+        )
+      } catch (error) {
+        this.releaseClaim(entry, binding)
+        this.evictEntry(keyStr, entry)
+        if (isAcpSessionRuntimeError(error)) throw error
+        throw new AcpSessionRuntimeError(
+          'acp_reasoning_configuration_failed',
+          'The frozen ACP execution configuration could not be restored before reuse.',
+          false,
+          { cause: error },
+        )
+      }
+    }
+
     try {
       binding.onSessionReady?.(sessionDisposition ?? 'new')
     } catch {

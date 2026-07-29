@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useReducedMotion } from 'framer-motion'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import type {
@@ -10,6 +11,7 @@ import type {
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
 import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
+import { shouldAnimateSessionTitleTransition } from '../lib/session-title-animation'
 import type { PendingNewSession } from '../hooks/useAppState'
 import { api, abortChatRun, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
 import { ThrottledChat } from '../lib/throttled-chat'
@@ -220,6 +222,7 @@ export function ChatPanel({
   createSession,
 }: Props) {
   const { t, locale } = useI18n()
+  const reduceMotion = useReducedMotion()
   const { sendShortcut } = useSendShortcut()
   const { composing, onCompositionStart, onCompositionEnd } = useComposing()
   const [input, setInput] = useState('')
@@ -250,6 +253,15 @@ export function ChatPanel({
   /** Inline title editing in the chat header */
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
+  /** Typewriter effect for auto-named titles */
+  const [typingTitle, setTypingTitle] = useState<string | null>(null)
+  const typingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const typingFullRef = useRef('')
+  const prevSessionTitleRef = useRef({
+    id: session.id,
+    title: session.title,
+    titleSource: session.titleSource,
+  })
   /** Compaction separators in the timeline (one per compress action). Each
    * carries an `afterMessageId` so it renders at the right spot in the stream. */
   const [compactionMarkers, setCompactionMarkers] = useState<CompactionMarkerData[]>([])
@@ -1201,10 +1213,61 @@ export function ChatPanel({
   // —— Inline title editing (chat header) ——
   // Begin editing: seed the draft from the *raw* session title (not the
   // "Untitled" placeholder shown in the UI), so users can clear/replace it.
+
+  const stopTyping = useCallback(() => {
+    if (typingTimerRef.current) {
+      clearInterval(typingTimerRef.current)
+      typingTimerRef.current = null
+    }
+    setTypingTitle(null)
+  }, [])
+
+  // Typewriter effect: when session.title transitions from placeholder to a
+  // real title (auto-named by the Leader), animate it character by character.
+  useEffect(() => {
+    const previous = prevSessionTitleRef.current
+    const next = { id: session.id, title: session.title, titleSource: session.titleSource }
+    prevSessionTitleRef.current = next
+    if (previous.id !== next.id) {
+      typingFullRef.current = ''
+      stopTyping()
+      return
+    }
+    if (!shouldAnimateSessionTitleTransition(previous, next) || reduceMotion) return
+    const clean = session.title
+      .replace(/[\n\r\t]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!clean) return
+    if (typingFullRef.current === clean) return
+    stopTyping()
+    typingFullRef.current = clean
+    let i = 0
+    setTypingTitle('')
+    typingTimerRef.current = setInterval(() => {
+      i++
+      setTypingTitle(clean.slice(0, i))
+      if (i >= clean.length) {
+        if (typingTimerRef.current) {
+          clearInterval(typingTimerRef.current)
+          typingTimerRef.current = null
+        }
+        setTypingTitle(null)
+      }
+    }, 60)
+    return () => {
+      if (typingTimerRef.current) {
+        clearInterval(typingTimerRef.current)
+        typingTimerRef.current = null
+      }
+    }
+  }, [session.title, session.titleSource, session.id, reduceMotion, stopTyping])
+
   const beginEditTitle = useCallback(() => {
     if (!onRenameSession) return
     setTitleDraft(session.title)
     setEditingTitle(true)
+    stopTyping()
   }, [onRenameSession, session.title])
 
   // Focus + select-all once the input mounts.
@@ -1519,7 +1582,9 @@ export function ChatPanel({
             >
               {isPlaceholderSessionTitle(session.title)
                 ? t('sidebar.untitledSession')
-                : session.title}
+                : typingTitle !== null
+                  ? typingTitle
+                  : session.title}
             </span>
             {onRenameSession && (
               <button

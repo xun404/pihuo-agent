@@ -12,10 +12,10 @@ export function buildRoleReviewInstruction(context: RoleReviewPromptContext): st
   return `
 
 ## One-time role review
-- Continue the current request only with existing enabled Team members and their current Worker and model bindings.
-- If the request needs a Team change or a Worker is unavailable, ask the user to approve the exact role and Worker before dispatching. This safety confirmation takes precedence over the one-time review question.
-- If no earlier safety confirmation is required, at the very end of this response ask exactly once: “${question}”
-- Do not add, update, archive, or replace Team members unless the user explicitly asks in a later message.
+- Before dispatching any Worker or starting the requested task, call list-team and ask the user to confirm the bootstrapped Team. Show each enabled member's name, roleType, Worker, and model binding, then ask exactly once: “${question}”
+- If the current user message already explicitly names the exact roles and Workers, treat that composition as confirmed. Apply only those authorized Team choices and continue the requested task without asking the generic review question.
+- Do not execute the task or create its task list until the user confirms. Do not append the review question after completing the task.
+- Do not add, update, archive, replace, or rebind Team members unless the user explicitly authorizes the exact role and Worker.
 `
 }
 

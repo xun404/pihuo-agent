@@ -12,6 +12,26 @@ describe('Team shared contracts', () => {
     assert.match(source, /preferredWorkerId:\s*string/u)
   })
 
+  it('supports optional reasoning fields on Worker, TeamMember, Job, and template mapping', () => {
+    assert.match(source, /export interface WorkerReasoningOption\s*\{/u)
+    assert.match(source, /export interface WorkerReasoningSelector\s*\{/u)
+    assert.match(source, /export interface WorkerReasoningCatalogEntry\s*\{/u)
+    // WorkerRegistration optional reasoning field
+    assert.match(source, /reasoning\?\s*:\s*string/u)
+    // TeamMember optional reasoning override
+    assert.match(source, /TeamMember\s*\{.*reasoning\?\s*:/su)
+    // WorkerJob.effectiveReasoning
+    assert.match(source, /effectiveReasoning\?\s*:\s*string/u)
+    // TeamTemplateMemberMapping reasoning
+    assert.match(source, /TeamTemplateMemberMapping\s*\{.*reasoning\?\s*:/su)
+    // REASONING_MAPPING_REQUIRED issue code
+    assert.match(source, /REASONING_MAPPING_REQUIRED/u)
+    // ACP reasoning error codes
+    assert.match(source, /ACP_REASONING_UNSUPPORTED/u)
+    assert.match(source, /ACP_REASONING_VALUE_UNAVAILABLE/u)
+    assert.match(source, /ACP_REASONING_CONFIGURATION_FAILED/u)
+  })
+
   it('stores only a default role type on each Worker', () => {
     assert.match(source, /defaultRoleType:\s*WorkerRole/u)
     assert.doesNotMatch(source, /export interface WorkerDefaultRole/u)
