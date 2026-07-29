@@ -12,8 +12,9 @@ export function buildRoleReviewInstruction(context: RoleReviewPromptContext): st
   return `
 
 ## One-time role review
-- Complete the user's current request normally; do not block on role confirmation.
-- At the very end of this response, ask exactly once: “${question}”
+- Continue the current request only with existing enabled Team members and their current Worker and model bindings.
+- If the request needs a Team change or a Worker is unavailable, ask the user to approve the exact role and Worker before dispatching. This safety confirmation takes precedence over the one-time review question.
+- If no earlier safety confirmation is required, at the very end of this response ask exactly once: “${question}”
 - Do not add, update, archive, or replace Team members unless the user explicitly asks in a later message.
 `
 }

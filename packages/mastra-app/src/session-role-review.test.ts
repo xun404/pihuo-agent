@@ -19,10 +19,20 @@ test('Team review prompt distinguishes bootstrapped and empty Sessions and only 
     }) => boolean
   }
 
+  const bootstrappedInstruction = module.buildRoleReviewInstruction({
+    roleReviewPending: true,
+    bootstrappedRoleCount: 2,
+  })
+  assert.match(bootstrappedInstruction, /Worker 默认角色创建 Team.*是否需要调整 Team/u)
   assert.match(
-    module.buildRoleReviewInstruction({ roleReviewPending: true, bootstrappedRoleCount: 2 }),
-    /Worker 默认角色创建 Team.*是否需要调整 Team/u,
+    bootstrappedInstruction,
+    /Continue the current request only with existing enabled Team members and their current Worker and model bindings/u,
   )
+  assert.match(
+    bootstrappedInstruction,
+    /ask the user to approve the exact role and Worker before dispatching/u,
+  )
+  assert.doesNotMatch(bootstrappedInstruction, /do not block on role confirmation/u)
   assert.match(
     module.buildRoleReviewInstruction({ roleReviewPending: true, bootstrappedRoleCount: 0 }),
     /当前没有可用的默认 Team 成员.*是否需要配置 Team/u,

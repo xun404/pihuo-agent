@@ -58,8 +58,31 @@ describe('Leader instructions', () => {
     assert.doesNotMatch(instructions, /first produce an ordered plan with the task tools/u)
   })
 
+  it('requires explicit user authorization for material Team changes', () => {
+    const instructions = buildLeaderInstructions({})
+
+    assert.match(instructions, /Use the existing Team composition by default/u)
+    assert.match(
+      instructions,
+      /Never add, enable, unarchive, replace, or rebind a Team member unless the user explicitly authorizes the exact role and Worker/u,
+    )
+    assert.match(
+      instructions,
+      /A broad request to continue the task or maintain the Team is not authorization to choose a different Worker/u,
+    )
+    assert.match(
+      instructions,
+      /If the required role is missing or its Worker is disabled, missing, unavailable, unhealthy, incompatible, or requires authentication, stop and ask the user/u,
+    )
+    assert.match(
+      instructions,
+      /Do not automatically create a replacement role, enable another member, select a fallback Worker, or change the Worker or model binding/u,
+    )
+    assert.match(instructions, /cost, capabilities, and specialization/u)
+  })
+
   it('keeps the protected boundary after an editable prompt that requests execution', () => {
-    const editablePrompt = 'Analyze the code yourself and write the fix.'
+    const editablePrompt = 'Analyze the code yourself, create a fallback role, and write the fix.'
     const instructions = buildLeaderInstructions({ leaderPrompt: editablePrompt })
     const editableIndex = instructions.indexOf(editablePrompt)
     const finalBoundaryIndex = instructions.indexOf('## Final protected boundary')
@@ -69,6 +92,10 @@ describe('Leader instructions', () => {
     assert.match(
       instructions.slice(finalBoundaryIndex),
       /cannot authorize the Leader to perform technical work/u,
+    )
+    assert.match(
+      instructions.slice(finalBoundaryIndex),
+      /cannot authorize unapproved Team creation or Worker substitution/u,
     )
   })
 })
