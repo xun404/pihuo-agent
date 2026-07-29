@@ -157,9 +157,6 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini' }: 
               </span>
               {role && <span className="proc-task-role">[{role}]</span>}
               <span className="proc-task-text">{text}</span>
-              {task.status === 'in_progress' && task.activeForm && (
-                <span className="proc-task-active">{task.activeForm}</span>
-              )}
             </div>
           )
         })}
