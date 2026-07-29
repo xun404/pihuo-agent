@@ -623,6 +623,8 @@
   max-width: min(520px, 85%);
   width: fit-content;
   align-self: flex-end;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 /* Leader：无气泡壳；正文层级高于过程层（思考/工具） */
 .msg.leader .bubble {
