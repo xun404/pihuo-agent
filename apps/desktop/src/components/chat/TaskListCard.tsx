@@ -12,7 +12,7 @@
  * 全用 CSS 变量，三套主题（warm/classic/dark）自动适配。
  */
 import { memo } from 'react'
-import { Circle, CircleCheck, IconClock } from '../Icons'
+import { IconClock } from '../Icons'
 
 /** Mastra TaskItem（本地结构类型，避免依赖 @mastra/core 内部 d.ts） */
 export type TaskItem = {
@@ -40,54 +40,27 @@ function roleClass(role: string | null): string {
 }
 
 function TaskListCardImpl({ tasks }: { tasks: TaskItem[] }) {
-  const total = tasks.length
-  const completed = tasks.filter((t) => t.status === 'completed').length
-  const hasInProgress = tasks.some((t) => t.status === 'in_progress')
-  const allDone = total > 0 && completed === total
-  const pct = total > 0 ? Math.round((completed / total) * 100) : 0
+  const inProgress = tasks.filter((t) => t.status === 'in_progress')
+  if (inProgress.length === 0) return null
 
   return (
     <div className="task-card" role="group" aria-label="任务进度">
-      <div className="task-card-head">
-        <span className="task-card-title">
-          <CircleCheck size={13} />
-          <span>{allDone ? '任务完成' : '任务进度'}</span>
-        </span>
-        <span className="task-card-count">
-          {completed} / {total}
-        </span>
-        <span className="task-card-bar" aria-hidden>
-          <i style={{ width: `${pct}%` }} />
-        </span>
-        {hasInProgress && (
-          <span className="task-card-live">
-            <span className="task-card-live-dot" />
-            执行中
-          </span>
-        )}
-      </div>
       <div className="task-card-body">
-        {tasks.map((task) => {
+        {inProgress.map((task) => {
           const { role, text } = parseRole(task.content)
           const rc = roleClass(role)
           return (
             <div
               key={task.id}
-              className={`task-row task-${task.status}${rc ? ` ${rc}` : ''}`}
-              data-status={task.status}
+              className={`task-row task-in_progress${rc ? ` ${rc}` : ''}`}
+              data-status="in_progress"
             >
               <span className="task-row-icon" aria-hidden>
-                {task.status === 'completed' ? (
-                  <CircleCheck size={14} />
-                ) : task.status === 'in_progress' ? (
-                  <IconClock size={14} />
-                ) : (
-                  <Circle size={14} />
-                )}
+                <IconClock size={14} />
               </span>
               {role && <span className="task-row-role">[{role}]</span>}
               <span className="task-row-text">{text}</span>
-              {task.status === 'in_progress' && task.activeForm && (
+              {task.activeForm && (
                 <span className="task-row-active">{task.activeForm}</span>
               )}
             </div>
