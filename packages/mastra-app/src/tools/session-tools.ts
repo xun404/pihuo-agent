@@ -704,14 +704,25 @@ export const dispatchTeamMemberTool = createTool({
       wait: false,
     })
 
-    // Chat/observer abort must NOT cancel the agent job — only explicit cancel-job does.
-    // We still stop waiting/streaming when abort fires (via port.events signal).
-    const abortSignal = ctx?.abortSignal as AbortSignal | undefined
-    const detachAbort = abortSignal
-      ? subscribeAbort(abortSignal, () => {
-          /* observer disconnect: do not port.cancel */
+    // Idempotent cancel shared by chat abort and deadline timeout.
+    // Both paths call the same function so only one port.cancel fires.
+    let cancelPromise: Promise<void> | undefined
+    const requestJobCancel = (): Promise<void> => {
+      cancelPromise ??= Promise.resolve()
+        .then(() => port.cancel(job.id))
+        .catch((error) => {
+          console.error(`[dispatchTeamMemberTool] failed to cancel ${job.id}`, error)
         })
-      : () => {}
+      return cancelPromise
+    }
+
+    const abortSignal = ctx?.abortSignal as AbortSignal | undefined
+    const detachAbort =
+      sync && abortSignal
+        ? subscribeAbort(abortSignal, () => {
+            void requestJobCancel()
+          })
+        : () => {}
 
     try {
       // Preflight / already-terminal from dispatch — no events stream needed.
@@ -830,12 +841,12 @@ export const dispatchTeamMemberTool = createTool({
           }
           return jobToToolResult(applyTerminalEventToJob(job, terminalEvent))
         } catch (e) {
-          // Only cancel on total deadline. Chat/observer abort stops observation only —
-          // explicit cancel-job / UI cancel terminates the agent.
+          // Deadline cancels the job. Chat abort is handled by the subscribeAbort
+          // handler above (which also calls requestJobCancel for wait=true).
           const msg = e instanceof Error ? e.message : String(e)
           const isDeadline = e instanceof WorkerJobWaitTimeoutError
           if (isDeadline) {
-            await port.cancel(jid).catch(() => {})
+            await requestJobCancel()
           }
           // Recovery failures (session_not_found / recovery_failed thrown by
           // enqueuePrompt) must surface recoveryError + canResetAcpContext so
@@ -879,7 +890,7 @@ export const dispatchTeamMemberTool = createTool({
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           const isDeadline = e instanceof WorkerJobWaitTimeoutError
-          if (isDeadline) await port.cancel(job.id).catch(() => {})
+          if (isDeadline) await requestJobCancel()
           const failure = toPublicAcpFailure(e)
           return {
             ok: false,
@@ -914,6 +925,7 @@ export const dispatchTeamMemberTool = createTool({
       }
     } finally {
       detachAbort()
+      if (cancelPromise) await cancelPromise
     }
   },
 })

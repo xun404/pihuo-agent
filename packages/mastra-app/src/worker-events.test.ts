@@ -5,6 +5,9 @@
  * Tests 4-7: Integration-style bridge pattern verification (writer resilience,
  *            abort→cancel, wait=false, router session context).
  *
+ * Note: Real Chat-abort → Scheduler.cancel → ACP session/cancel propagation
+ * is tested in runtime-dispatch-port.test.ts §dispatchTeamMemberTool.
+ *
  * Run: node --import tsx --test packages/mastra-app/src/worker-events.test.ts
  */
 import { describe, it, beforeEach } from 'node:test'
@@ -625,10 +628,15 @@ describe('Spec §8.2.4 — Writer calls awaited; missing/misbehaving writer', ()
 })
 
 // ---------------------------------------------------------------------------
-// Spec §8.2 Test 5: Tool abort cancels Job and evicts session
+// Spec §8.2.5 — Emitter terminal dedup: cancelled event finality and dedup
+//
+// These tests verify the WorkerEventEmitter's terminal event uniqueness and
+// auto-unsubscribe behaviour when a cancelled event is emitted. They do NOT
+// assert the full Chat-abort → Scheduler.cancel propagation chain; real
+// end-to-end cancel propagation tests live in runtime-dispatch-port.test.ts.
 // ---------------------------------------------------------------------------
 
-describe('Spec §8.2.5 — Tool abort cancels Job and emits terminal cancelled', () => {
+describe('Spec §8.2.5 — Emitter terminal dedup: cancelled event finality and dedup', () => {
   let emitter: WorkerEventEmitter
 
   beforeEach(() => {

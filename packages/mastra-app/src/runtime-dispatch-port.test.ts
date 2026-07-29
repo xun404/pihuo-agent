@@ -1083,4 +1083,422 @@ describe('dispatchTeamMemberTool via RuntimeDispatchPort', () => {
     assert.equal(observerAborted, true)
     assert.equal(cancelCalls, 1)
   })
+
+  it('wait=true chat abort calls port.cancel exactly once (non-streaming)', async () => {
+    const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
+    const { dispatchTeamMemberTool } = await import('./tools/session-tools.js')
+    const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-abort-'))
+    const job = makeJob({
+      id: 'job_abort_cancel',
+      status: 'running',
+      task: 'long running task',
+      cwd: projectRoot,
+    })
+    const abortController = new AbortController()
+    let cancelCalls = 0
+    let observerAborted = false
+
+    const port: RuntimeDispatchPort = {
+      resolveSessionContext: async () => null,
+      dispatch: async () => job,
+      events: async function* (_jobId: string, signal?: AbortSignal) {
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            observerAborted = true
+            resolve()
+            return
+          }
+          signal?.addEventListener(
+            'abort',
+            () => {
+              observerAborted = true
+              resolve()
+            },
+            { once: true },
+          )
+        })
+      },
+      cancel: async () => {
+        cancelCalls += 1
+      },
+      resolveApproval: async () => {},
+    }
+    setRuntimeDispatchPort(port)
+
+    const ctx = {
+      requestContext: {
+        get(key: string) {
+          const values: Record<string, string> = {
+            routerSessionId: job.sessionId,
+            routerProjectId: job.projectId,
+            routerProjectRoot: projectRoot,
+            memoryThreadId: job.threadId!,
+          }
+          return values[key]
+        },
+      },
+      abortSignal: abortController.signal,
+    }
+
+    const p = dispatchTeamMemberTool.execute!(
+      { teamMemberId: 'role_abort', task: job.task, wait: true },
+      ctx as never,
+    )
+
+    abortController.abort()
+    const result = (await p) as { status?: string; jobId?: string; error?: string }
+
+    assert.equal(cancelCalls, 1, 'chat abort must call port.cancel exactly once')
+    assert.equal(observerAborted, true, 'events observer must be aborted')
+    assert.equal(result.status, 'failed')
+    assert.equal(result.jobId, job.id)
+  })
+
+  it('wait=true chat abort does not finish before the shared cancel request settles', async () => {
+    const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
+    const { dispatchTeamMemberTool } = await import('./tools/session-tools.js')
+    const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-abort-wait-'))
+    const job = makeJob({
+      id: 'job_abort_waits_for_cancel',
+      status: 'running',
+      task: 'wait for cancellation delivery',
+      cwd: projectRoot,
+    })
+    const abortController = new AbortController()
+    let releaseCancel!: () => void
+    const cancelSettled = new Promise<void>((resolve) => {
+      releaseCancel = resolve
+    })
+    let cancelCalls = 0
+
+    const port: RuntimeDispatchPort = {
+      resolveSessionContext: async () => null,
+      dispatch: async () => job,
+      events: async function* (_jobId: string, signal?: AbortSignal) {
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            resolve()
+            return
+          }
+          signal?.addEventListener('abort', () => resolve(), { once: true })
+        })
+      },
+      cancel: async () => {
+        cancelCalls += 1
+        await cancelSettled
+      },
+      resolveApproval: async () => {},
+    }
+    setRuntimeDispatchPort(port)
+
+    const ctx = {
+      requestContext: {
+        get(key: string) {
+          const values: Record<string, string> = {
+            routerSessionId: job.sessionId,
+            routerProjectId: job.projectId,
+            routerProjectRoot: projectRoot,
+            memoryThreadId: job.threadId!,
+          }
+          return values[key]
+        },
+      },
+      abortSignal: abortController.signal,
+    }
+
+    const execution = dispatchTeamMemberTool.execute!(
+      { teamMemberId: 'role_abort_wait', task: job.task, wait: true },
+      ctx as never,
+    )
+    abortController.abort()
+
+    const beforeCancelSettles = await Promise.race([
+      execution.then(() => 'finished' as const),
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 20)),
+    ])
+    assert.equal(beforeCancelSettles, 'pending', 'tool must await cancellation delivery')
+    assert.equal(cancelCalls, 1)
+
+    releaseCancel()
+    const result = (await execution) as { status?: string; jobId?: string }
+    assert.equal(result.status, 'failed')
+    assert.equal(result.jobId, job.id)
+    assert.equal(cancelCalls, 1, 'all cancellation paths must share one request')
+  })
+
+  it('wait=true chat abort reports one cancel delivery failure without rejecting the tool', async () => {
+    const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
+    const { dispatchTeamMemberTool } = await import('./tools/session-tools.js')
+    const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-abort-error-'))
+    const job = makeJob({
+      id: 'job_abort_cancel_error',
+      status: 'running',
+      task: 'report failed cancellation delivery',
+      cwd: projectRoot,
+    })
+    const abortController = new AbortController()
+    let cancelCalls = 0
+
+    const port: RuntimeDispatchPort = {
+      resolveSessionContext: async () => null,
+      dispatch: async () => job,
+      events: async function* (_jobId: string, signal?: AbortSignal) {
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            resolve()
+            return
+          }
+          signal?.addEventListener('abort', () => resolve(), { once: true })
+        })
+      },
+      cancel: async () => {
+        cancelCalls += 1
+        throw new Error('owner unavailable')
+      },
+      resolveApproval: async () => {},
+    }
+    setRuntimeDispatchPort(port)
+
+    const ctx = {
+      requestContext: {
+        get(key: string) {
+          const values: Record<string, string> = {
+            routerSessionId: job.sessionId,
+            routerProjectId: job.projectId,
+            routerProjectRoot: projectRoot,
+            memoryThreadId: job.threadId!,
+          }
+          return values[key]
+        },
+      },
+      abortSignal: abortController.signal,
+    }
+
+    const errors: unknown[][] = []
+    const originalConsoleError = console.error
+    console.error = (...args: unknown[]) => {
+      errors.push(args)
+    }
+    try {
+      const execution = dispatchTeamMemberTool.execute!(
+        { teamMemberId: 'role_abort_error', task: job.task, wait: true },
+        ctx as never,
+      )
+      abortController.abort()
+      const result = (await execution) as { status?: string; jobId?: string }
+
+      assert.equal(result.status, 'failed')
+      assert.equal(result.jobId, job.id)
+      assert.equal(cancelCalls, 1)
+      assert.equal(errors.length, 1, 'cancel delivery failure must be reported exactly once')
+      assert.match(String(errors[0]?.[0]), new RegExp(job.id))
+      assert.match(String(errors[0]?.[1]), /owner unavailable/)
+    } finally {
+      console.error = originalConsoleError
+    }
+  })
+
+  it('wait=true with pre-aborted signal cancels immediately on binding', async () => {
+    const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
+    const { dispatchTeamMemberTool } = await import('./tools/session-tools.js')
+    const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-preabort-'))
+    const job = makeJob({
+      id: 'job_pre_aborted',
+      status: 'running',
+      task: 'already aborted',
+      cwd: projectRoot,
+    })
+    const abortController = new AbortController()
+    abortController.abort()
+    let cancelCalls = 0
+
+    const port: RuntimeDispatchPort = {
+      resolveSessionContext: async () => null,
+      dispatch: async () => job,
+      events: async function* (_jobId: string, signal?: AbortSignal) {
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            resolve()
+            return
+          }
+          signal?.addEventListener('abort', () => resolve(), { once: true })
+        })
+      },
+      cancel: async () => {
+        cancelCalls += 1
+      },
+      resolveApproval: async () => {},
+    }
+    setRuntimeDispatchPort(port)
+
+    const ctx = {
+      requestContext: {
+        get(key: string) {
+          const values: Record<string, string> = {
+            routerSessionId: job.sessionId,
+            routerProjectId: job.projectId,
+            routerProjectRoot: projectRoot,
+            memoryThreadId: job.threadId!,
+          }
+          return values[key]
+        },
+      },
+      abortSignal: abortController.signal,
+    }
+
+    const result = (await dispatchTeamMemberTool.execute!(
+      { teamMemberId: 'role_pre', task: job.task, wait: true },
+      ctx as never,
+    )) as { status?: string; jobId?: string }
+
+    assert.equal(cancelCalls, 1, 'pre-aborted signal must trigger cancel')
+    assert.equal(result.status, 'failed')
+    assert.equal(result.jobId, job.id)
+  })
+
+  it('wait=false does not cancel on chat abort', async () => {
+    const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
+    const { dispatchTeamMemberTool } = await import('./tools/session-tools.js')
+    const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-nocancel-'))
+    const job = makeJob({
+      id: 'job_no_cancel',
+      status: 'queued',
+      task: 'fire and forget',
+      cwd: projectRoot,
+    })
+    const abortController = new AbortController()
+    let cancelCalls = 0
+
+    const port: RuntimeDispatchPort = {
+      resolveSessionContext: async () => null,
+      dispatch: async () => job,
+      events: async function* () {
+        yield {
+          type: 'completed',
+          jobId: job.id,
+          output: 'done',
+          truncated: false,
+          workerName: job.workerName,
+          role: job.role,
+        }
+      },
+      cancel: async () => {
+        cancelCalls += 1
+      },
+      resolveApproval: async () => {},
+    }
+    setRuntimeDispatchPort(port)
+
+    const ctx = {
+      requestContext: {
+        get(key: string) {
+          const values: Record<string, string> = {
+            routerSessionId: job.sessionId,
+            routerProjectId: job.projectId,
+            routerProjectRoot: projectRoot,
+            memoryThreadId: job.threadId!,
+          }
+          return values[key]
+        },
+      },
+      abortSignal: abortController.signal,
+    }
+
+    abortController.abort()
+    const result = (await dispatchTeamMemberTool.execute!(
+      { teamMemberId: 'role_async', task: job.task, wait: false },
+      ctx as never,
+    )) as { status?: string; jobId?: string }
+
+    assert.equal(cancelCalls, 0, 'wait=false must not call port.cancel on abort')
+    assert.equal(result.jobId, job.id)
+  })
+
+  it('wait=true streaming path abort calls cancel and returns failed', async () => {
+    const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
+    const { dispatchTeamMemberTool } = await import('./tools/session-tools.js')
+    const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-stream-abort-'))
+    const job = makeJob({
+      id: 'job_stream_abort',
+      status: 'running',
+      task: 'stream then abort',
+      cwd: projectRoot,
+    })
+    const abortController = new AbortController()
+    let cancelCalls = 0
+    let observerAborted = false
+    const written: unknown[] = []
+
+    const port: RuntimeDispatchPort = {
+      resolveSessionContext: async () => null,
+      dispatch: async () => job,
+      events: async function* (_jobId: string, signal?: AbortSignal) {
+        yield {
+          type: 'started',
+          jobId: job.id,
+          workerId: job.workerId,
+          workerName: job.workerName,
+          workerKind: 'opencode' as const,
+          role: job.role,
+          reusedSession: false,
+        }
+        yield { type: 'delta', jobId: job.id, sequence: 1, delta: 'partial...' }
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            observerAborted = true
+            resolve()
+            return
+          }
+          signal?.addEventListener(
+            'abort',
+            () => {
+              observerAborted = true
+              resolve()
+            },
+            { once: true },
+          )
+        })
+      },
+      cancel: async () => {
+        cancelCalls += 1
+      },
+      resolveApproval: async () => {},
+    }
+    setRuntimeDispatchPort(port)
+
+    const ctx = {
+      requestContext: {
+        get(key: string) {
+          const values: Record<string, string> = {
+            routerSessionId: job.sessionId,
+            routerProjectId: job.projectId,
+            routerProjectRoot: projectRoot,
+            memoryThreadId: job.threadId!,
+          }
+          return values[key]
+        },
+      },
+      abortSignal: abortController.signal,
+      writer: {
+        custom: async (opts: { type: string; data: unknown }) => {
+          written.push(opts)
+        },
+      },
+    }
+
+    const p = dispatchTeamMemberTool.execute!(
+      { teamMemberId: 'role_stream_abort', task: job.task, wait: true },
+      ctx as never,
+    )
+
+    await new Promise((r) => setTimeout(r, 30))
+    abortController.abort()
+    const result = (await p) as { status?: string; jobId?: string; error?: string }
+
+    assert.equal(cancelCalls, 1, 'streaming abort must call port.cancel exactly once')
+    assert.equal(observerAborted, true)
+    assert.equal(result.status, 'failed')
+    assert.equal(result.jobId, job.id)
+    assert.ok(written.length >= 1, 'writer should receive at least the started event')
+  })
 })
