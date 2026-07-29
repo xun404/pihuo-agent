@@ -1,4 +1,15 @@
+---
+name: development-cdp
+description: Use when inspecting, debugging, or automating this project's Electron development renderer through Chrome DevTools Protocol (CDP), especially for startup readiness, new-task UI flows, renderer or API state checks, React controlled inputs, multiple mounted ChatPanels, stale processes, or scripts/cdp-check.mjs commands.
+---
+
 # Development CDP
+
+## Overview
+
+Use the Electron renderer as the authoritative UI automation target and use
+in-page API calls for stateful inspection. Verify the renderer, API, and CDP
+processes independently before diagnosing application code.
 
 The Electron development launcher enables the Chrome DevTools Protocol (CDP)
 by default for local inspection and UI automation. This page documents the
@@ -6,7 +17,7 @@ by default for local inspection and UI automation. This page documents the
 a "new task → run" flow over CDP. Commands below were validated against a live
 `npm run desktop` session.
 
-## Process map (know what you are talking to)
+## Process map
 
 Three independent processes make up a dev session — they restart and reload
 **separately**, which is the root cause of most "my change didn't apply"

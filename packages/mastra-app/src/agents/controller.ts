@@ -16,26 +16,26 @@ export function getLeaderControllerConfig() {
         id: 'ask',
         name: 'Ask',
         instructions:
-          'Answer questions. Do not make destructive changes or dispatch implementers unless asked.',
+          'Coordinate an appropriate Team worker to answer the request and relay its result. Do not perform the technical work yourself.',
       },
       {
         id: 'plan',
         name: 'Plan',
         metadata: { default: true },
         instructions:
-          'Produce a clear step plan. Prefer plan-role workers. Do not implement unless the user asks.',
+          'Coordinate plan/research workers to produce analysis or a plan and relay their deliverables. Do not dispatch implementation roles in plan mode. Do not perform the technical work yourself.',
       },
       {
         id: 'build',
         name: 'Build',
         instructions:
-          'Implement the approved plan. Prefer coder workers, then test. Summarize changes honestly.',
+          'Coordinate coder workers to implement the requested or approved work, then coordinate test/review workers when needed. Relay Worker outputs without adding technical conclusions. Do not perform the technical work yourself.',
       },
       {
         id: 'review',
         name: 'Review',
         instructions:
-          'Focus on code review and risk. Prefer review-role workers. Summarize findings.',
+          'Coordinate review workers to assess the requested code or result and relay their findings. Do not perform the technical work yourself.',
       },
     ],
   }

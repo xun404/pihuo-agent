@@ -1,0 +1,4 @@
+interface:
+  display_name: "Development CDP"
+  short_description: "Inspect and automate the Electron app with CDP"
+  default_prompt: "Use $development-cdp to inspect or automate the Electron development app safely."

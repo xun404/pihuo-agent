@@ -29,8 +29,8 @@ npm run clean
 ```
 
 The development Electron launcher enables loopback-only CDP by default. See
-[Development CDP](./docs/development-cdp.md) for the port, overrides, and
-inspection commands.
+the [Development CDP skill](./.agents/skills/development-cdp/SKILL.md) for the
+port, overrides, and inspection commands.
 
 ## Before opening a pull request
 
