@@ -1797,7 +1797,7 @@
 
 /* —— panel 模式（完整列表）—— */
 .proc-panel {
-  width: 450px;
+  width: 300px;
   max-width: calc(100vw - 28px);
   max-height: min(64dvh, 32rem);
   display: flex;
