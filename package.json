@@ -36,6 +36,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "restart": "node scripts/restart-dev.mjs",
     "clean": "rm -rf dist-electron release apps/desktop/dist apps/desktop/dist-electron apps/desktop/dist-runtime packages/shared/dist packages/mastra-app/dist packages/mastra-app/.mastra",
     "test:acp-registry-contract": "node --import tsx --test scripts/acp-registry-contract.test.ts",
     "smoke:acp-registry": "node scripts/acp-registry-smoke.mjs"
