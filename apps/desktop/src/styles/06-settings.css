@@ -3801,9 +3801,8 @@ button.prompt-role-summary {
   color: var(--accent, var(--text-1));
   font-size: 12px;
 }
-/* Capability card (full width, below the 2-column detail grid) */
+/* Capability card (inside the 2-column detail grid) */
 .worker-cap-card {
-  margin-top: 16px;
 }
 .worker-cap-card .worker-cap-row {
   flex-wrap: wrap;

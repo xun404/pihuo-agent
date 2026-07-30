@@ -2487,14 +2487,6 @@ export function SettingsPanel({
                           )}
                         </div>
 
-                        <WorkerExecutionConfigEditor
-                          worker={w}
-                          projectId={projectId}
-                          onSaved={onRefreshSnapshot}
-                          onError={toastError}
-                          onSuccess={toastSuccess}
-                        />
-
                         {/* Health card */}
                         <div className="worker-detail-card">
                           <div className="worker-detail-card-head">
@@ -2559,30 +2551,38 @@ export function SettingsPanel({
                             </span>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Capability card — full width below the grid */}
-                      <div className="worker-detail-card worker-cap-card">
-                        <h4 className="worker-detail-card-title">
-                          {t('workers.sectionCapability')}
-                        </h4>
-                        <div className="worker-cap-row">
-                          {(
-                            [
-                              ['capSessionLoad', cs?.sessionLoad],
-                              ['capSessionResume', cs?.sessionResume],
-                              ['capSessionList', cs?.sessionList],
-                              ['capLogout', cs?.authLogout],
-                            ] as const
-                          ).map(([key, val]) => (
-                            <div key={key} className="worker-cap-item">
-                              <span className={`worker-cap-check ${val ? 'on' : 'off'}`}>
-                                {val ? '✓' : '✗'}
-                              </span>
-                              {t(`workers.${key}`)}
-                            </div>
-                          ))}
+                        {/* Capability card */}
+                        <div className="worker-detail-card">
+                          <h4 className="worker-detail-card-title">
+                            {t('workers.sectionCapability')}
+                          </h4>
+                          <div className="worker-cap-row">
+                            {(
+                              [
+                                ['capSessionLoad', cs?.sessionLoad],
+                                ['capSessionResume', cs?.sessionResume],
+                                ['capSessionList', cs?.sessionList],
+                                ['capLogout', cs?.authLogout],
+                              ] as const
+                            ).map(([key, val]) => (
+                              <div key={key} className="worker-cap-item">
+                                <span className={`worker-cap-check ${val ? 'on' : 'off'}`}>
+                                  {val ? '✓' : '✗'}
+                                </span>
+                                {t(`workers.${key}`)}
+                              </div>
+                            ))}
+                          </div>
                         </div>
+
+                        <WorkerExecutionConfigEditor
+                          worker={w}
+                          projectId={projectId}
+                          onSaved={onRefreshSnapshot}
+                          onError={toastError}
+                          onSuccess={toastSuccess}
+                        />
                       </div>
 
                       {/* Probe console — action + code-styled log */}

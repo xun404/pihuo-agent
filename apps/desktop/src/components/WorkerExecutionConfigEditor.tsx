@@ -61,7 +61,17 @@ export function WorkerExecutionConfigEditor({
 
   return (
     <div className="worker-detail-card">
-      <h4 className="worker-detail-card-title">{t('reasoning.executionConfig')}</h4>
+      <div className="worker-detail-card-head">
+        <h4 className="worker-detail-card-title">{t('reasoning.executionConfig')}</h4>
+        <button
+          type="button"
+          className="settings-save-btn"
+          disabled={saving || !dirty || !reasoningValid}
+          onClick={() => void save()}
+        >
+          {saving ? t('app.loading') : t('settings.save')}
+        </button>
+      </div>
       <div className="settings-field">
         <label className="field-label" htmlFor={`worker-model-${worker.id}`}>
           {t('reasoning.model')}
@@ -95,16 +105,6 @@ export function WorkerExecutionConfigEditor({
           onChange={setReasoning}
           onValidityChange={setReasoningValid}
         />
-      </div>
-      <div className="model-edit-actions">
-        <button
-          type="button"
-          className="settings-save-btn"
-          disabled={saving || !dirty || !reasoningValid}
-          onClick={() => void save()}
-        >
-          {saving ? t('app.loading') : t('settings.save')}
-        </button>
       </div>
     </div>
   )
