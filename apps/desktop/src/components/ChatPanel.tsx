@@ -1468,7 +1468,13 @@ export function ChatPanel({
           className="composer-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={hasMessages ? t('chat.placeholder') : t('chat.placeholderHome')}
+          placeholder={
+            hasMessages
+              ? t('chat.placeholder', {
+                  shortcut: sendShortcut === 'enter' ? '↵' : '⌘↵',
+                })
+              : t('chat.placeholderHome')
+          }
           rows={hasMessages ? 2 : 3}
           onKeyDown={(e) => {
             if (isComposerSendKey(e, sendShortcut, composing())) {

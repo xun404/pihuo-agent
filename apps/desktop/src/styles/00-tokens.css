@@ -57,9 +57,10 @@
 
   /* —— Typography —— */
   --font:
-    'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --mono: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'PingFang SC',
+    'Microsoft YaHei', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  --mono: ui-monospace, 'SF Mono', 'Menlo', 'Cascadia Code', 'JetBrains Mono',
+    'Consolas', monospace;
 
   /* 字号阶梯：在 v3 基准上整体 +1px，聊天/设置更易读 */
   --fs-2xs: 11px;
