@@ -14,6 +14,12 @@ export function isActiveWorkerStatus(status: WorkerRunState['status']): boolean 
   return status === 'running' || status === 'pending_approval'
 }
 
+function taskFromUnknown(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const task = (value as { task?: unknown }).task
+  return typeof task === 'string' && task.trim() ? task : undefined
+}
+
 function cursorForApproval(approval: ApprovalItem): ApprovalCursor {
   return {
     approvalId: approval.id,
@@ -103,6 +109,7 @@ export function terminalWorkerEventFromToolPart(part: {
     role: typeof value.role === 'string' ? (value.role as WorkerRole) : undefined,
     model: typeof value.model === 'string' ? value.model : undefined,
     reasoning: typeof value.reasoning === 'string' ? value.reasoning : undefined,
+    task: typeof value.task === 'string' ? value.task : undefined,
     output: typeof value.output === 'string' ? value.output : '',
     error: typeof value.error === 'string' ? value.error : undefined,
     errorCode: typeof value.errorCode === 'string' ? value.errorCode : undefined,
@@ -214,7 +221,8 @@ export function workerRunReducer(
         workerKind: event.workerKind,
         role: event.role,
         model: event.model,
-        reasoning: (event as any).reasoning,
+        reasoning: (event as { reasoning?: string }).reasoning,
+        task: typeof event.task === 'string' ? event.task : undefined,
         reusedSession: event.reusedSession,
         sequence: 0,
         output: '',
@@ -270,15 +278,17 @@ export function workerRunReducer(
                     ? 'opencode'
                     : (prev.workerKind ?? 'custom')))
         const end = times?.lastDeltaAt ?? Date.now()
+        const eventTask = taskFromUnknown(event)
         next.set(event.jobId, {
           ...prev,
           workerName: event.workerName ?? prev.workerName,
           teamMemberName: event.teamMemberName ?? prev.teamMemberName,
           workerKind: kind,
+          task: eventTask ?? prev.task,
           output: event.output,
           status: 'completed',
           truncated: event.truncated,
-          reasoning: (event as any).reasoning ?? prev.reasoning,
+          reasoning: (event as { reasoning?: string }).reasoning ?? prev.reasoning,
           startedAt: times?.startedAt ?? prev.startedAt,
           lastDeltaAt: Math.max(end, times?.startedAt ?? prev.startedAt),
           pendingApproval: undefined,
@@ -303,6 +313,7 @@ export function workerRunReducer(
           workerKind: kind,
           role: event.role,
           model: event.model,
+          task: taskFromUnknown(event),
           reusedSession: false,
           sequence: 0,
           output: event.output,
@@ -590,7 +601,17 @@ export function seedWorkerStatesFromSnapshot(
     }
 
     if (job.status !== 'running' && job.status !== 'pending_approval') continue
-    if (next.has(job.id)) continue
+
+    // Refresh missing task/identity on an already-live card from durable job.
+    if (next.has(job.id)) {
+      const existing = next.get(job.id)!
+      const task = job.task?.trim() || existing.task
+      if (task && task !== existing.task) {
+        if (next === state) next = new Map(state)
+        next.set(job.id, { ...existing, task, snapshotHydrated: true })
+      }
+      continue
+    }
 
     const worker = workers.get(job.workerId)
     const startedAt = timestampOrNow(job.startedAt ?? job.createdAt)
@@ -604,10 +625,11 @@ export function seedWorkerStatesFromSnapshot(
       role: job.role,
       model: job.effectiveModel?.trim() || worker?.model?.trim() || undefined,
       reasoning: job.effectiveReasoning?.trim() || worker?.reasoning?.trim() || undefined,
+      task: job.task?.trim() || undefined,
       reusedSession: false,
       sequence: 0,
       output: job.output ?? '',
-      status: 'running',
+      status: job.status === 'pending_approval' ? 'pending_approval' : 'running',
       truncated: false,
       startedAt,
       lastDeltaAt: startedAt,

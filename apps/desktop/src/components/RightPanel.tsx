@@ -20,19 +20,12 @@ import {
   roleDraftWithType,
 } from '../lib/role-prompt-defaults'
 import { ApprovalActions } from './ApprovalActions'
-import { WorkerBrandLogo } from './Icons'
+import { resolveWorkerIconAgentId, WorkerBrandLogo, workerBrandClass } from './Icons'
 import { Modal } from './ui/Modal'
 import { WorkerReadinessBadge } from './WorkerReadinessBadge'
 import { WorkerReasoningSelect } from './WorkerReasoningSelect'
 import { useToast } from './Toast'
 import { TeamTemplateManager } from './TeamTemplateManager'
-
-function workerLogoClass(kind?: string): string {
-  if (kind === 'claude' || kind === 'codex' || kind === 'opencode' || kind === 'gemini') {
-    return kind
-  }
-  return 'custom'
-}
 
 type Tab = 'roles' | 'git' | 'files' | 'approvals'
 
@@ -411,11 +404,18 @@ export function RightPanel({
                 >
                   <header className="role-card-header">
                     <span
-                      className={`worker-logo role-card-avatar ${workerLogoClass(worker?.kind)}`}
+                      className={`worker-logo role-card-avatar ${workerBrandClass(worker?.kind, worker?.name)}`}
                       title={workerLabel}
                       aria-hidden
                     >
-                      <WorkerBrandLogo kind={worker?.kind ?? 'custom'} size={15} />
+                      <WorkerBrandLogo
+                        kind={worker?.kind ?? 'custom'}
+                        name={worker?.name}
+                        size={15}
+                        workerId={worker?.id}
+                        hasIcon={worker ? Boolean(worker.iconPath) : false}
+                        iconAgentId={resolveWorkerIconAgentId(worker)}
+                      />
                     </span>
                     <div className="role-card-identity">
                       <div className="role-card-title-row">

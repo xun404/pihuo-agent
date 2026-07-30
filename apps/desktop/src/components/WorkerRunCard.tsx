@@ -82,7 +82,7 @@ interface Props {
   registryIdentity?: string
   /**
    * When this card represents a merged dispatchWorkerTool call, the task prompt
-   * from the tool input is rendered as the first body section ("提示词").
+   * from the tool input is rendered as the first body section ("Input").
    * Absent for standalone worker cards.
    */
   taskPrompt?: string
@@ -224,8 +224,8 @@ export const WorkerRunCard = memo(function WorkerRunCard({
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
       >
-        {/* 图标槽：worker-logo ↔ chevron 交叉淡入（对齐工具/思考的 .tr-icon-slot 模式）
-            折叠态显 logo，hover 时 logo 淡出 + chevron 淡入，展开态 chevron 旋转 90°。*/}
+        {/* Icon slot: logo ↔ chevron cross-fade (same pattern as tool/thinking .tr-icon-slot).
+            Collapsed shows logo; hover fades logo out and chevron in; open rotates chevron. */}
         <span className="worker-icon-slot process-icon-slot" aria-hidden>
           <span
             className={`worker-logo process-icon-type ${kindClass(state.workerKind, state.workerName)}`}
@@ -290,10 +290,11 @@ export const WorkerRunCard = memo(function WorkerRunCard({
               transition: 'opacity 180ms ease-out, transform 180ms ease-out',
             }}
           >
-            {/* 只按真实 WorkerRunState 数据渲染动作；当前没有 thinking 内容数据源，不伪造。 */}
-            {taskPrompt && (
+            {/* Input: taskPrompt from dispatch merge, or state.task from started/job hydrate.
+                Shown while running — do not wait for terminal output. */}
+            {(taskPrompt || state.task) && (
               <WorkerActionSection kind="input" label={t('workers.runInput')} marker="$">
-                {taskPrompt}
+                {taskPrompt || state.task}
               </WorkerActionSection>
             )}
             {isPendingApproval && approval && (
@@ -379,7 +380,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 </div>
               </WorkerActionSection>
             )}
-            {/* 运行中无输出：显示运行提示行 */}
+            {/* Running with no output yet: keep a short live hint line. */}
             {isRunning && !state.output && !publicError && !isPendingApproval && (
               <div className="line">
                 <span className="mk" aria-hidden>
@@ -388,7 +389,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 <span className="tx">{t('chat.runningShort')}</span>
               </div>
             )}
-            {/* 已完成但无输出 */}
+            {/* Completed with empty output. */}
             {status === 'completed' && !state.output && (
               <div className="line ok">
                 <span className="mk" aria-hidden>

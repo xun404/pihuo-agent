@@ -92,6 +92,23 @@ export type MessageKey =
   | 'chat.think.xhigh'
   | 'chat.thinking'
   | 'chat.thinkingLive'
+  | 'chat.activity.thinking'
+  | 'chat.activity.composing'
+  | 'chat.activity.command'
+  | 'chat.activity.searching'
+  | 'chat.activity.reading'
+  | 'chat.activity.editing'
+  | 'chat.activity.delegating'
+  | 'chat.activity.updatingTodos'
+  | 'chat.activity.listingWorkers'
+  | 'chat.activity.listingTeam'
+  | 'chat.activity.listingProjects'
+  | 'chat.activity.managingTeam'
+  | 'chat.activity.managingJobs'
+  | 'chat.activity.managingTemplates'
+  | 'chat.activity.readingContext'
+  | 'chat.activity.web'
+  | 'chat.activity.namingSession'
   | 'chat.taskLabel'
   | 'chat.taskProgress'
   | 'chat.process.allDone'
@@ -211,6 +228,9 @@ export type MessageKey =
   | 'reasoning.unavailable'
   | 'reasoning.saved'
   | 'reasoning.inheritWorker'
+  | 'reasoning.searchModel'
+  | 'reasoning.searchIntensity'
+  | 'reasoning.noMatches'
   | 'team.templates'
   | 'team.templatesHint'
   | 'team.savedTemplates'
@@ -750,6 +770,23 @@ const zh: Dict = {
   'chat.process.doneFoldCollapse': '收起 {count} 项已完成',
   'chat.thinking': '思考',
   'chat.thinkingLive': '思考中',
+  'chat.activity.thinking': '思考中',
+  'chat.activity.composing': '撰写中',
+  'chat.activity.command': '执行命令',
+  'chat.activity.searching': '搜索内容',
+  'chat.activity.reading': '读取文件',
+  'chat.activity.editing': '编辑文件',
+  'chat.activity.delegating': '委派任务',
+  'chat.activity.updatingTodos': '更新任务列表',
+  'chat.activity.listingWorkers': '查看 Worker',
+  'chat.activity.listingTeam': '查看协作组',
+  'chat.activity.listingProjects': '查看项目',
+  'chat.activity.managingTeam': '维护协作组',
+  'chat.activity.managingJobs': '查询任务',
+  'chat.activity.managingTemplates': '管理编组模板',
+  'chat.activity.readingContext': '读取会话上下文',
+  'chat.activity.web': '访问网络',
+  'chat.activity.namingSession': '生成会话标题',
   'chat.tool': '工具',
   'chat.toolError': '失败',
   'chat.you': '你',
@@ -840,6 +877,9 @@ const zh: Dict = {
   'reasoning.unavailable': '{value}（当前不可用）',
   'reasoning.saved': 'Worker 执行配置已保存',
   'reasoning.inheritWorker': '继承 Worker 默认值',
+  'reasoning.searchModel': '搜索模型…',
+  'reasoning.searchIntensity': '搜索推理强度…',
+  'reasoning.noMatches': '无匹配项',
   'roles.modelInherit': '留空以继承 Worker 默认模型',
   'roles.name': '成员名称',
   'roles.needSession': '请先打开一个会话。',
@@ -1417,6 +1457,23 @@ const en: Dict = {
   'chat.process.doneFoldCollapse': 'Hide {count} completed',
   'chat.thinking': 'Thinking',
   'chat.thinkingLive': 'Thinking',
+  'chat.activity.thinking': 'thinking',
+  'chat.activity.composing': 'composing',
+  'chat.activity.command': 'running command',
+  'chat.activity.searching': 'searching content',
+  'chat.activity.reading': 'reading file',
+  'chat.activity.editing': 'editing file',
+  'chat.activity.delegating': 'delegating task',
+  'chat.activity.updatingTodos': 'updating todos',
+  'chat.activity.listingWorkers': 'listing workers',
+  'chat.activity.listingTeam': 'listing team',
+  'chat.activity.listingProjects': 'listing projects',
+  'chat.activity.managingTeam': 'updating team',
+  'chat.activity.managingJobs': 'checking jobs',
+  'chat.activity.managingTemplates': 'managing templates',
+  'chat.activity.readingContext': 'reading context',
+  'chat.activity.web': 'searching web',
+  'chat.activity.namingSession': 'naming session',
   'chat.tool': 'tool',
   'chat.toolError': 'error',
   'chat.you': 'You',
@@ -1514,6 +1571,9 @@ const en: Dict = {
   'reasoning.unavailable': '{value} (currently unavailable)',
   'reasoning.saved': 'Worker execution configuration saved',
   'reasoning.inheritWorker': 'Inherit Worker default',
+  'reasoning.searchModel': 'Search models…',
+  'reasoning.searchIntensity': 'Search reasoning intensity…',
+  'reasoning.noMatches': 'No matches',
   'roles.modelInherit': 'Leave empty to inherit the Worker default model',
   'roles.name': 'Member name',
   'roles.needSession': 'Open a session first.',

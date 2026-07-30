@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 import { api } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
+import { SettingsSearchCombobox, type SettingsSearchOption } from './SettingsSearchCombobox'
 import { WorkerReasoningSelect } from './WorkerReasoningSelect'
 
 interface Props {
@@ -31,12 +32,18 @@ export function WorkerExecutionConfigEditor({
     setReasoningValid(!worker.reasoning)
   }, [worker.id, worker.model, worker.reasoning])
 
-  const models = useMemo(() => {
+  const modelOptions = useMemo((): SettingsSearchOption[] => {
     const values = [...(worker.availableModels ?? [])]
     if (model && !values.some((candidate) => candidate.modelId === model)) {
       values.unshift({ modelId: model, name: model })
     }
-    return values
+    return values.map((option) => ({
+      value: option.modelId,
+      label: option.name || option.modelId,
+      description: option.description,
+      secondary:
+        option.name && option.name !== option.modelId ? option.modelId : undefined,
+    }))
   }, [model, worker.availableModels])
   const dirty =
     model.trim() !== (worker.model ?? '') || reasoning.trim() !== (worker.reasoning ?? '')
@@ -76,20 +83,16 @@ export function WorkerExecutionConfigEditor({
         <label className="field-label" htmlFor={`worker-model-${worker.id}`}>
           {t('reasoning.model')}
         </label>
-        <select
+        <SettingsSearchCombobox
           id={`worker-model-${worker.id}`}
-          className="settings-select"
+          options={modelOptions}
           value={model}
           disabled={saving}
-          onChange={(event) => setModel(event.target.value)}
-        >
-          <option value="">{t('reasoning.agentDefault')}</option>
-          {models.map((option) => (
-            <option key={option.modelId} value={option.modelId}>
-              {option.name || option.modelId}
-            </option>
-          ))}
-        </select>
+          placeholder={t('reasoning.searchModel')}
+          emptyLabel={t('reasoning.noMatches')}
+          clearOption={{ label: t('reasoning.agentDefault') }}
+          onChange={setModel}
+        />
       </div>
       <div className="settings-field">
         <label className="field-label" htmlFor={`worker-reasoning-${worker.id}`}>

@@ -120,7 +120,12 @@ export function BranchSwitcher({ project, snapshotWorkers, snapshotJobs, onAfter
       <button
         type="button"
         className="branch-trigger"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() =>
+          setOpen((v) => {
+            if (!v) setQuery('')
+            return !v
+          })
+        }
         disabled={git.mutationPending}
         title={t('git.branchSwitcher.trigger.ariaLabel')}
       >

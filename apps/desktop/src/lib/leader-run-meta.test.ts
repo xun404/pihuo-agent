@@ -188,26 +188,56 @@ describe('leader-run-meta', () => {
     assert.equal(asLastTurn.endedAt, Date.parse('2026-07-29T13:07:07.560Z'))
   })
 
-  it('resolveLeaderActivity reports the active tool category and falls back to Thinking', () => {
-    const resolveLeaderActivity = (
-      leaderRunMetaModule as typeof leaderRunMetaModule & {
-        resolveLeaderActivity?: (parts: Array<Record<string, unknown>>) => string
-      }
-    ).resolveLeaderActivity
-    assert.equal(typeof resolveLeaderActivity, 'function')
+  it('resolveLeaderActivity maps tools to activity keys and falls back to thinking', () => {
+    const {
+      resolveLeaderActivity,
+      mapToolNameToLeaderActivity,
+      normalizeLeaderToolName,
+    } = leaderRunMetaModule as typeof leaderRunMetaModule & {
+      resolveLeaderActivity: (parts: Array<Record<string, unknown>>) => string
+      mapToolNameToLeaderActivity: (name: string) => string
+      normalizeLeaderToolName: (name: string) => string
+    }
+
+    assert.equal(normalizeLeaderToolName('tool-dispatchTeamMemberTool'), 'dispatch-team-member')
+    assert.equal(mapToolNameToLeaderActivity('dispatch-team-member'), 'chat.activity.delegating')
+    assert.equal(mapToolNameToLeaderActivity('task_write'), 'chat.activity.updatingTodos')
+    assert.equal(mapToolNameToLeaderActivity('bash'), 'chat.activity.command')
+    assert.equal(mapToolNameToLeaderActivity('grep'), 'chat.activity.searching')
+    assert.equal(mapToolNameToLeaderActivity('list-workers'), 'chat.activity.listingWorkers')
+    assert.equal(mapToolNameToLeaderActivity('unknown-xyz'), 'chat.activity.thinking')
+
     assert.equal(
-      resolveLeaderActivity!([{ type: 'tool-bash', state: 'input-streaming' }]),
-      'Command',
+      resolveLeaderActivity([{ type: 'tool-bash', state: 'input-streaming' }]),
+      'chat.activity.command',
     )
     assert.equal(
-      resolveLeaderActivity!([{ type: 'tool-task_write', state: 'input-streaming' }]),
-      'Task',
+      resolveLeaderActivity([{ type: 'tool-task_write', state: 'input-streaming' }]),
+      'chat.activity.updatingTodos',
     )
     assert.equal(
-      resolveLeaderActivity!([{ type: 'reasoning', state: 'streaming', text: 'working' }]),
-      'Thinking',
+      resolveLeaderActivity([
+        { type: 'tool-dispatch-team-member', state: 'input-streaming', toolName: 'dispatch-team-member' },
+      ]),
+      'chat.activity.delegating',
     )
-    assert.equal(resolveLeaderActivity!([{ type: 'text', text: '' }]), 'Thinking')
+    assert.equal(
+      resolveLeaderActivity([{ type: 'reasoning', state: 'streaming', text: 'working' }]),
+      'chat.activity.thinking',
+    )
+    assert.equal(
+      resolveLeaderActivity([{ type: 'text', state: 'streaming', text: 'Hello' }]),
+      'chat.activity.composing',
+    )
+    assert.equal(resolveLeaderActivity([{ type: 'text', text: '' }]), 'chat.activity.thinking')
+    // Newest active part wins: text after a finished tool → composing
+    assert.equal(
+      resolveLeaderActivity([
+        { type: 'tool-bash', state: 'output-available', output: 'ok' },
+        { type: 'text', state: 'streaming', text: 'done' },
+      ]),
+      'chat.activity.composing',
+    )
   })
 
   it('formatClockTime uses CST (Asia/Shanghai) and i18n label', () => {

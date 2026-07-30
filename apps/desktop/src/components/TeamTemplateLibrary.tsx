@@ -10,7 +10,7 @@ import { api } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
 import { useToast } from './Toast'
-import { WorkerBrandLogo, workerBrandClass } from './Icons'
+import { resolveWorkerIconAgentId, WorkerBrandLogo, workerBrandClass } from './Icons'
 import { Expandable } from './ui/Expandable'
 import { WorkerReasoningSelect } from './WorkerReasoningSelect'
 
@@ -480,7 +480,14 @@ export function TeamTemplateLibrary({
                               className={`worker-logo ${workerBrandClass(worker?.kind, worker?.name)}`}
                               aria-hidden
                             >
-                              <WorkerBrandLogo kind={worker?.kind} name={worker?.name} size={12} />
+                              <WorkerBrandLogo
+                                kind={worker?.kind}
+                                name={worker?.name}
+                                size={12}
+                                workerId={worker?.id}
+                                hasIcon={worker ? Boolean(worker.iconPath) : false}
+                                iconAgentId={resolveWorkerIconAgentId(worker)}
+                              />
                             </span>
                             <span>{worker?.name ?? member.preferredWorkerId}</span>
                           </span>
@@ -564,6 +571,9 @@ export function TeamTemplateLibrary({
                                       kind={worker.kind}
                                       name={worker.name}
                                       size={14}
+                                      workerId={worker.id}
+                                      hasIcon={Boolean(worker.iconPath)}
+                                      iconAgentId={resolveWorkerIconAgentId(worker)}
                                     />
                                   </span>
                                 ) : null}

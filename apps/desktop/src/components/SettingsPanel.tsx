@@ -93,6 +93,7 @@ import {
   IconSettings,
   IconTrash,
   IconWorkers,
+  resolveWorkerIconAgentId,
   WorkerBrandLogo,
 } from './Icons'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
@@ -2195,10 +2196,11 @@ export function SettingsPanel({
                     >
                       <WorkerBrandLogo
                         kind={w.kind}
+                        name={w.name}
                         size={16}
                         workerId={w.id}
                         hasIcon={Boolean(w.iconPath)}
-                        iconAgentId={w.iconAgentId}
+                        iconAgentId={resolveWorkerIconAgentId(w)}
                       />
                     </span>
                     <span className="settings-rail-text">
@@ -2296,10 +2298,11 @@ export function SettingsPanel({
                         >
                           <WorkerBrandLogo
                             kind={w.kind}
+                            name={w.name}
                             size={20}
                             workerId={w.id}
                             hasIcon={Boolean(w.iconPath)}
-                            iconAgentId={w.iconAgentId}
+                            iconAgentId={resolveWorkerIconAgentId(w)}
                           />
                         </span>
                         <div className="worker-detail-titles">

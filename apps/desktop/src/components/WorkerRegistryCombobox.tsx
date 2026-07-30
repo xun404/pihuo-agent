@@ -87,15 +87,23 @@ export function WorkerRegistryCombobox({
     onQueryChangeRef.current?.(next)
   }
 
+  // When closed, show the committed selection; when open, keep the search box empty for typing.
   useEffect(() => {
-    if (!selected) return
-    setQuery(selected.name)
-    onQueryChangeRef.current?.(selected.name)
-  }, [selected])
+    if (open) return
+    const label = selected?.name ?? ''
+    setQuery(label)
+    onQueryChangeRef.current?.(label)
+  }, [open, selected])
 
   useEffect(() => {
     setHighlighted(filtered.length > 0 ? 0 : -1)
   }, [filtered])
+
+  const openMenu = () => {
+    if (open) return
+    updateQuery('')
+    setOpen(true)
+  }
 
   useLayoutEffect(() => {
     if (!open || !rootRef.current) return
@@ -135,7 +143,10 @@ export function WorkerRegistryCombobox({
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
-      setOpen(true)
+      if (!open) {
+        updateQuery('')
+        setOpen(true)
+      }
       setHighlighted((current) => moveWorkerRegistryHighlight(current, event.key, filtered.length))
       return
     }
@@ -148,6 +159,7 @@ export function WorkerRegistryCombobox({
     if (event.key === 'Escape') {
       setOpen(false)
       setHighlighted(-1)
+      updateQuery(selected?.name ?? '')
     }
   }
 
@@ -159,6 +171,7 @@ export function WorkerRegistryCombobox({
     }
     setOpen(false)
     setHighlighted(-1)
+    updateQuery(selected?.name ?? '')
   }
 
   const listBody = (
@@ -229,7 +242,11 @@ export function WorkerRegistryCombobox({
       className={`worker-registry-combobox${open ? ' is-open' : ''}`}
       onBlur={onBlur}
     >
-      <div className={`worker-registry-input-wrap${open ? ' open' : ''}${query.trim() ? ' has-value' : ''}`}>
+      <div
+        className={`worker-registry-input-wrap${open ? ' open' : ''}${
+          query.trim() ? ' has-value' : ''
+        }`}
+      >
         <input
           className="settings-input ui-font worker-registry-input"
           role="combobox"
@@ -243,12 +260,12 @@ export function WorkerRegistryCombobox({
           placeholder={placeholder}
           autoComplete="off"
           spellCheck={false}
-          onFocus={() => setOpen(true)}
-          onClick={() => setOpen(true)}
+          onFocus={() => openMenu()}
+          onClick={() => openMenu()}
           onKeyDown={onKeyDown}
           onChange={(event) => {
             updateQuery(event.target.value)
-            setOpen(true)
+            if (!open) setOpen(true)
             if (selectedId) onSelect(null)
           }}
         />

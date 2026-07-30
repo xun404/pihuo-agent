@@ -738,6 +738,18 @@ export function ChatPanel({
   /** On session open/switch/reload, reveal the tail instantly — never animate
    *  a top-to-bottom smooth scroll through the whole history. */
   const jumpToTailRef = useRef(true)
+  /** Cheap signature of live worker output growth (deltas often skip `messages`). */
+  const workerTailSig = useMemo(() => {
+    let out = 0
+    let n = 0
+    for (const s of workerStates.values()) {
+      if (s.status !== 'running' && s.status !== 'pending_approval') continue
+      n += 1
+      out += s.output?.length ?? 0
+      out += s.task?.length ?? 0
+    }
+    return `${n}:${out}`
+  }, [workerStates])
   useEffect(() => {
     jumpToTailRef.current = true
     followTailRef.current = true
@@ -758,8 +770,10 @@ export function ChatPanel({
     // Typewriter follow: lock the view to the tail on every update. Instant,
     // not smooth — retargeting a smooth scroll on every chunk makes the
     // viewport oscillate (the visible "jumping" while streaming).
+    // Also re-run when workerStates grow: ACP deltas update worker cards without
+    // always rewriting `messages`, which previously left the tail off-screen.
     bottomRef.current?.scrollIntoView({ behavior: 'instant' })
-  }, [messages, status, isActive])
+  }, [messages, status, isActive, workerTailSig, hasRunningWorker, tick])
 
   /**
    * Supervisor 本轮计时：
@@ -1385,7 +1399,10 @@ export function ChatPanel({
             key={wp.jobId}
             state={wp.state}
             registryIdentity={registryIdentityFor(wp.state)}
-            open={isMetaOpen(wp.jobId, true)}
+            open={isMetaOpen(
+              wp.jobId,
+              wp.state.status === 'running' || wp.state.status === 'pending_approval',
+            )}
             onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, wp.jobId, o))}
             tick={tick}
             resolving={resolving}

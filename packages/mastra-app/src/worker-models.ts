@@ -623,6 +623,39 @@ export async function refreshWorkerModels(
   })
 }
 
+/** True when the catalog row carries any model membership data for pin/execute. */
+export function catalogHasModelCandidates(
+  catalog?: Pick<WorkerModelCatalog, 'rawCandidateIds' | 'searchIndex' | 'shortlist'> | null,
+): boolean {
+  if (!catalog) return false
+  if (catalog.rawCandidateIds && catalog.rawCandidateIds.length > 0) return true
+  if (catalog.searchIndex && catalog.searchIndex.length > 0) return true
+  if (catalog.shortlist && catalog.shortlist.length > 0) return true
+  return false
+}
+
+/**
+ * Resolve the catalog used for pin validation.
+ * Reasoning-only shells (empty shortlist/searchIndex/rawCandidateIds) must not
+ * fail-closed over last-known-good global catalogs or worker.availableModels.
+ */
+export function resolveCatalogForModelPin(
+  workerId: string,
+  cwd: string | undefined,
+  catalogStore: WorkerModelCatalogStore,
+): WorkerModelCatalog | undefined {
+  const scopeKey = resolveModelCatalogScopeKey(cwd)
+  const scoped = catalogStore.get(workerId, scopeKey || undefined)
+  if (catalogHasModelCandidates(scoped)) return scoped
+  if (scopeKey) {
+    const global = catalogStore.get(workerId)
+    if (catalogHasModelCandidates(global)) return global
+  }
+  // No usable model data — treat as missing so resolveEligibilityCandidates can
+  // fall back to worker.availableModels (legacy) instead of empty fail-closed.
+  return undefined
+}
+
 export function evaluateWorkerModelPin(
   workerId: string,
   modelId: string | null | undefined,
@@ -643,9 +676,8 @@ export function evaluateWorkerModelPin(
   const worker = store.listWorkers().find((w) => w.id === workerId)
   if (!worker) return { ok: false, error: `Worker not found: ${workerId}` }
 
-  const scopeKey = resolveModelCatalogScopeKey(opts?.cwd)
   const catalogStore = opts?.catalogStore ?? getWorkerModelCatalogStore()
-  const catalog = catalogStore.get(workerId, scopeKey || undefined)
+  const catalog = resolveCatalogForModelPin(workerId, opts?.cwd, catalogStore)
   const candidates = resolveEligibilityCandidates(worker, catalog) ?? []
 
   let providers = providersToRecord(catalog?.providers)
@@ -664,14 +696,18 @@ export function evaluateWorkerModelPin(
   })
 }
 
-/** Exact catalog lookup used by dispatch; scoped jobs never fall back to the global row. */
+/**
+ * Catalog used by dispatch for execute eligibility.
+ * Prefers project-scoped rows when they carry real model membership; skips
+ * reasoning-only empty shells and falls back to the global last-known-good
+ * catalog so pin/save and execute share the same eligibility set.
+ */
 export function getWorkerCatalogForDispatch(
   workerId: string,
   cwd?: string,
   catalogStore: WorkerModelCatalogStore = getWorkerModelCatalogStore(),
 ): WorkerModelCatalog | undefined {
-  const scopeKey = resolveModelCatalogScopeKey(cwd)
-  return catalogStore.get(workerId, scopeKey || undefined)
+  return resolveCatalogForModelPin(workerId, cwd, catalogStore)
 }
 
 /**

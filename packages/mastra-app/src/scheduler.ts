@@ -1469,6 +1469,7 @@ export class WorkerScheduler {
               role: job.role,
               model: job.effectiveModel,
               reasoning: job.effectiveReasoning,
+              task: job.task,
               reusedSession: disposition !== 'new',
               sessionDisposition: disposition,
             } as WorkerRunEvent)

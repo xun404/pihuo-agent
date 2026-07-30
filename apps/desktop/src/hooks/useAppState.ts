@@ -168,9 +168,16 @@ export function useAppState() {
     await refresh()
   }
 
-  const activateProject = async (projectId: string) => {
-    // Clear any pending new session when switching projects
-    setPendingNewSession(null)
+  const activateProject = async (
+    projectId: string,
+    opts?: {
+      /** When true, keep pending new-session (used after project "+" creates a local draft). */
+      keepPending?: boolean
+    },
+  ) => {
+    // Selecting a project from the sidebar cancels a draft session; creating a
+    // draft *for* a project must not wipe itself.
+    if (!opts?.keepPending) setPendingNewSession(null)
     const { snapshot: next } = await api.activateProject(projectId)
     applySnapshot(next, ++applyGenRef.current)
   }
@@ -369,9 +376,23 @@ export function useAppState() {
       mode,
       memoryThreadId,
     })
+    // Point home / active project at the draft target immediately so greeting,
+    // context bar, and first-message createSession all bind the same project —
+    // not the previous session's project.
+    setSnapshot((prev) =>
+      prev.activeProjectId === projectId ? prev : { ...prev, activeProjectId: projectId },
+    )
     // Note: do NOT set activeSessionId=null here — server polling would overwrite it.
     // ChatWorkspace checks pendingNewSession to decide whether to show empty composer.
-  }, [])
+    void api
+      .activateProject(projectId)
+      .then(({ snapshot: next }) => {
+        applySnapshot(next, ++applyGenRef.current)
+      })
+      .catch(() => {
+        // Local draft + optimistic activeProjectId still work offline.
+      })
+  }, [applySnapshot])
 
   /** Clear pending session (e.g. when user selects another session). */
   const clearPendingSession = useCallback(() => {

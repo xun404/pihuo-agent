@@ -162,4 +162,52 @@ describe('project-scoped model catalogs', () => {
       'B/model',
     )
   })
+
+  it('reasoning-only empty scoped shell does not block pin against global catalog', () => {
+    const fetchedAt = new Date().toISOString()
+    const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString()
+    // Global last-known-good models (from unscoped refresh)
+    catalogStore.put({
+      version: 2,
+      workerId: 'w1',
+      source: 'acp_config_options',
+      fetchedAt,
+      expiresAt,
+      providers: [{ providerId: 'sonnet', state: 'authenticated' }],
+      shortlist: [{ modelId: 'sonnet', name: 'Sonnet', group: 'shortlist' }],
+      searchIndex: [{ modelId: 'sonnet', name: 'Sonnet', group: 'shortlist' }],
+      rawCandidateIds: ['sonnet'],
+    })
+    // Poisoned shell written by reasoning cache (empty model lists under project scope)
+    catalogStore.put({
+      version: 2,
+      workerId: 'w1',
+      scopeKey: resolveModelCatalogScopeKey(cwdA),
+      projectRoot: cwdA,
+      source: 'acp_config_options',
+      fetchedAt,
+      expiresAt,
+      providers: [],
+      shortlist: [],
+      searchIndex: [],
+      reasoning: {
+        __default__: {
+          supported: true,
+          fetchedAt,
+          expiresAt,
+          lastSuccessfulFetchedAt: fetchedAt,
+        },
+      },
+    })
+
+    assert.equal(
+      evaluateWorkerModelPin('w1', 'sonnet', { cwd: cwdA, store, catalogStore }).ok,
+      true,
+      'empty scoped shell must fall back to global catalog for pin',
+    )
+    assert.equal(
+      evaluateWorkerModelPin('w1', 'missing/model', { cwd: cwdA, store, catalogStore }).ok,
+      false,
+    )
+  })
 })

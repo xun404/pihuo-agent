@@ -255,14 +255,21 @@ function AppShell({
     return (async () => {
       setCreatingFromComposer(true)
       try {
-        let projectId = activeProject?.id ?? snapshot.activeProjectId ?? undefined
+        // Prefer the project the draft was opened for (sidebar "+" on a project),
+        // not whatever the previous active session belonged to.
+        let projectId =
+          pendingNewSession?.projectId ??
+          activeProject?.id ??
+          snapshot.activeProjectId ??
+          undefined
         if (!projectId) {
           const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
           if (!path) return false
           const project = await openProject(path)
           projectId = project.id
         }
-        // Clear any pending local-only session (sidebar button flow)
+        // Clear any pending local-only session (sidebar button flow) after
+        // capturing its projectId.
         clearPendingSession()
         const session = await createSession(
           undefined,

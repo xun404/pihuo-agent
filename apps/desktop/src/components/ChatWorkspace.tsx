@@ -207,13 +207,14 @@ export function ChatWorkspace({
     void loadPresetModels()
   }, [loadPresetModels])
 
+  const draftProjectId = pendingNewSession?.projectId ?? project?.id
   const teamTemplateOptions = useMemo<TeamTemplateOption[]>(
     () =>
       snapshotTeamTemplates.map((template) => {
         const availability = evaluateTeamTemplateAvailability({
           template,
           workers: snapshotWorkers,
-          projectId: project?.id,
+          projectId: draftProjectId,
         })
         return {
           id: template.id,
@@ -222,7 +223,7 @@ export function ChatWorkspace({
           reason: availability.ready ? undefined : t('chat.teamNeedsMapping'),
         }
       }),
-    [project?.id, snapshotTeamTemplates, snapshotWorkers, t],
+    [draftProjectId, snapshotTeamTemplates, snapshotWorkers, t],
   )
 
   useEffect(() => {
@@ -314,6 +315,17 @@ export function ChatWorkspace({
   // persisted), so the chat shows an empty "home" placeholder forever. Instead we
   // render the panels hidden and overlay the empty composer on top.
   const showEmptyComposer = !session || pendingNewSession
+  // Home draft must show the project the "+" was clicked on, not the previous
+  // active session's project (activeProjectId may lag until activate completes).
+  const homeProject = useMemo(() => {
+    if (pendingNewSession?.projectId) {
+      return (
+        projects.find((p) => p.id === pendingNewSession.projectId) ??
+        (project?.id === pendingNewSession.projectId ? project : null)
+      )
+    }
+    return project
+  }, [pendingNewSession?.projectId, project, projects])
   const submitFirstMessage = async () => {
     const text = firstMessage.trim()
     if (!text || creatingFromComposer || !serverUp || !onComposeFirstMessage) return
@@ -333,10 +345,10 @@ export function ChatWorkspace({
           <BrandLogo size={88} />
         </div>
         <h1 className="greeting">
-          {project ? (
+          {homeProject ? (
             <>
               {t('chat.greeting', { project: '\uE000' }).split('\uE000')[0]}
-              <em>{project.name}</em>
+              <em>{homeProject.name}</em>
               {t('chat.greeting', { project: '\uE000' }).split('\uE000')[1]}
             </>
           ) : (
@@ -353,7 +365,7 @@ export function ChatWorkspace({
             }}
           >
             <div className="context-bar">
-              {!project && onPickFolder && (
+              {!homeProject && onPickFolder && (
                 <button
                   type="button"
                   className="ctx"
@@ -366,14 +378,14 @@ export function ChatWorkspace({
                   {t('chat.openFolder')}
                 </button>
               )}
-              {project && (
+              {homeProject && (
                 <>
-                  <span className="ctx" title={project.rootPath}>
+                  <span className="ctx" title={homeProject.rootPath}>
                     <IconFolder size={13} />
-                    {project.name}
+                    {homeProject.name}
                   </span>
                   <BranchSwitcher
-                    project={project}
+                    project={homeProject}
                     snapshotWorkers={snapshotWorkers}
                     snapshotJobs={snapshotJobs}
                     onAfterSwitch={onRefreshGit}

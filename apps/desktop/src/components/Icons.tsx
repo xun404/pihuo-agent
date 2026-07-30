@@ -368,6 +368,24 @@ export function workerBrandClass(kind?: string | null, name?: string | null): st
   return resolveWorkerBrand(kind, name)
 }
 
+/**
+ * Best registry agent id for icon resolution:
+ * explicit iconAgentId → registry source id → undefined (brand fallback by name).
+ */
+export function resolveWorkerIconAgentId(worker?: {
+  iconAgentId?: string
+  source?: { type?: string; registryId?: string } | null
+} | null): string | undefined {
+  if (!worker) return undefined
+  const explicit = worker.iconAgentId?.trim()
+  if (explicit) return explicit
+  if (worker.source?.type === 'registry') {
+    const id = worker.source.registryId?.trim()
+    if (id) return id
+  }
+  return undefined
+}
+
 // Module-level cache of fetched registry icons: workerId → sanitized SVG text.
 // Icons rarely change, so caching avoids re-fetching on every render.
 const iconCache = new Map<string, string>()
@@ -390,9 +408,12 @@ function useCachedIcon(
   key: string | undefined,
   fetcher: (signal?: AbortSignal) => Promise<string | null>,
 ): string | null {
-  const [svg, setSvg] = useState<string | null>(() =>
-    key ? (iconCache.get(key) ?? null) : null,
-  )
+  const [svg, setSvg] = useState<string | null>(() => {
+    if (!key) return null
+    const cached = iconCache.get(key)
+    // Cache stores '' for "known miss" — surface as null so callers can fall through.
+    return cached || null
+  })
   useEffect(() => {
     if (!key) {
       setSvg(null)
@@ -400,7 +421,7 @@ function useCachedIcon(
     }
     const cached = iconCache.get(key)
     if (cached !== undefined) {
-      setSvg(cached)
+      setSvg(cached || null)
       return
     }
     let cancelled = false
@@ -490,7 +511,8 @@ export function WorkerBrandLogo({
             : undefined
       : undefined
   const brandSvg = useRegistryAgentIcon(brandFallbackAgentId)
-  const svg = workerSvg ?? registrySvg ?? brandSvg
+  // Do not use ?? alone: a cached miss is '', which would block brandSvg.
+  const svg = workerSvg || registrySvg || brandSvg || null
   if (svg) {
     return (
       <span

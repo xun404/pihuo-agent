@@ -1126,6 +1126,8 @@ export type WorkerRunEvent =
       role?: WorkerRole
       model?: string
       reasoning?: string
+      /** Dispatch task text — shown as worker card input while running. */
+      task?: string
       reusedSession: boolean
       sessionDisposition?: string
     }
@@ -1220,6 +1222,11 @@ export interface WorkerRunState {
   role?: WorkerRole
   model?: string
   reasoning?: string
+  /**
+   * Dispatch task / prompt shown as the worker card "input" section.
+   * Available from started event, durable job, or tool payload — not only at completion.
+   */
+  task?: string
   reusedSession: boolean
   sequence: number
   output: string

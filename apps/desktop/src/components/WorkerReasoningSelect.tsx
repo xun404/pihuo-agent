@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, type WorkerReasoningOptionsResponse } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
+import { SettingsSearchCombobox, type SettingsSearchOption } from './SettingsSearchCombobox'
 
 interface Props {
   id: string
@@ -71,12 +72,23 @@ export function WorkerReasoningSelect({
       })
   }, [model, projectId, workerId])
 
-  const options = result?.selector?.options ?? []
-  const selectedUnavailable = useMemo(
-    () => Boolean(value && !options.some((option) => option.value === value)),
-    [options, value],
-  )
   const fallbackLabel = inheritLabel ?? t('reasoning.agentDefault')
+  const options = useMemo((): SettingsSearchOption[] => {
+    const rows: SettingsSearchOption[] = (result?.selector?.options ?? []).map((option) => ({
+      value: option.value,
+      label: option.name || option.value,
+      secondary: option.name && option.name !== option.value ? option.value : undefined,
+    }))
+    if (value && !rows.some((option) => option.value === value)) {
+      rows.unshift({
+        value,
+        label: t('reasoning.unavailable', { value }),
+        secondary: value,
+      })
+    }
+    return rows
+  }, [result?.selector?.options, t, value])
+
   const valid = isWorkerReasoningSelectionValid(value, result, loading)
 
   useEffect(() => {
@@ -85,23 +97,16 @@ export function WorkerReasoningSelect({
 
   return (
     <>
-      <select
+      <SettingsSearchCombobox
         id={id}
-        className="settings-select"
+        options={options}
         value={value}
         disabled={disabled || loading || !workerId}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{fallbackLabel}</option>
-        {selectedUnavailable && (
-          <option value={value}>{t('reasoning.unavailable', { value })}</option>
-        )}
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.name || option.value}
-          </option>
-        ))}
-      </select>
+        placeholder={t('reasoning.searchIntensity')}
+        emptyLabel={t('reasoning.noMatches')}
+        clearOption={{ label: fallbackLabel }}
+        onChange={onChange}
+      />
       <span className={`settings-field-hint${result?.stale ? ' is-warn' : ''}`}>
         {loading
           ? t('reasoning.loading')

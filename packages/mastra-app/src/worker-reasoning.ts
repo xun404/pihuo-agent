@@ -146,32 +146,28 @@ export async function getWorkerReasoningOptionsWithWorker(
   // Live discovery
   const result = await listAcpReasoningOptions(worker, model, { cwd: opts?.cwd })
 
-  // Update cache if discovery succeeded
+  // Update cache if discovery succeeded.
+  // Never invent a model-catalog row with empty shortlist/searchIndex solely for
+  // reasoning — those shells poison pin validation (empty candidates → MODEL_REFRESH_FAILED).
+  // Only attach reasoning onto an existing catalog (scoped preferred, else global).
   if (result.ok) {
     const fetchedAt = nowISO()
     const entry = buildSuccessfulReasoningCatalogEntry(model, result, fetchedAt)
     try {
       const store = getWorkerModelCatalogStore()
-      const cat = store.get(worker.id, scopeKey)
-      const catalogEntry = cat
-        ? {
-            ...cat,
-            version: 2 as const,
-            reasoning: { ...(cat.reasoning ?? {}), [model?.trim() ?? '__default__']: entry },
-          }
-        : {
-            version: 2 as const,
-            workerId: worker.id,
-            scopeKey: scopeKey ?? undefined,
-            source: 'acp_config_options' as const,
-            fetchedAt,
-            expiresAt: entry.expiresAt,
-            providers: [],
-            shortlist: [],
-            searchIndex: [],
-            reasoning: { [model?.trim() ?? '__default__']: entry },
-          }
-      store.put(catalogEntry)
+      const scoped = store.get(worker.id, scopeKey)
+      const global = scopeKey ? store.get(worker.id) : undefined
+      const cat = scoped ?? global
+      if (cat) {
+        store.put({
+          ...cat,
+          version: 2 as const,
+          reasoning: {
+            ...(cat.reasoning ?? {}),
+            [model?.trim() || '__default__']: entry,
+          },
+        })
+      }
     } catch {
       // Non-critical: cache write failure should not fail the request
     }

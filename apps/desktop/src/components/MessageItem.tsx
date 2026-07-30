@@ -247,7 +247,6 @@ function MessageItemImpl({
                   toolPart.toolName ||
                   (toolPart.type === 'dynamic-tool' ? 'tool' : toolPart.type.replace(/^tool-/, ''))
                 const key = metaKey(message.id, i)
-                const open = isMetaOpen(key, false)
                 const toolOutput =
                   toolPart.output && typeof toolPart.output === 'object'
                     ? (toolPart.output as Record<string, unknown>)
@@ -291,26 +290,23 @@ function MessageItemImpl({
                 const showDuration =
                   finalDuration != null ? finalDuration : liveMs > 0 ? liveMs / 1000 : null
 
-                // dispatch 流式中：tool 还没返回 output.jobId → 抑制 tool-row。
-                // 此时 worker 由 livePlacements 独立渲染（在末尾），
-                // 若此处也渲染 tool-row 会和 worker-card 分离，中间产生大片空白。
-                // tool 返回后（有 output.jobId），下方 isDispatchMerge 生效，显示合并节点。
+                // While dispatch is still streaming without output.jobId, suppress the
+                // tool row — the worker is rendered by livePlacements at the tail.
+                // Rendering both would split tool-row and worker-card with a large gap.
+                // Once jobId exists, isDispatchMerge below merges them into one node.
                 if (/dispatch/i.test(name) && !workerJobId && !isDone) {
                   return null
                 }
 
-                // dispatchWorkerTool: merge the tool row + worker card into a single
-                // node (the tool's task prompt becomes the first body section, and
-                // the worker output/approval flows underneath). Avoids the previous
-                // duplicate render of [tool-row with task, worker-card with output].
-                const isDispatchMerge =
-                  showWorkerCard &&
-                  !!cardPlacement &&
-                  /dispatch/i.test(name) &&
+                // dispatch-team-member: merge tool row + worker card. The tool task
+                // becomes the input section; worker output/approval flow underneath.
+                const toolTask =
                   typeof (toolPart.input as { task?: unknown } | null)?.task === 'string'
-                const taskPrompt = isDispatchMerge
-                  ? (toolPart.input as { task: string }).task
-                  : undefined
+                    ? (toolPart.input as { task: string }).task
+                    : undefined
+                const isDispatchMerge =
+                  showWorkerCard && !!cardPlacement && /dispatch/i.test(name) && Boolean(toolTask)
+                const taskPrompt = toolTask
 
                 if (isDispatchMerge && cardPlacement) {
                   return (
@@ -333,6 +329,9 @@ function MessageItemImpl({
                   )
                 }
 
+                // Expand while the tool is still running; collapse when done unless
+                // the user sticky-toggled open via metaOpen.
+                const toolOpen = isMetaOpen(key, !isDone)
                 const toolShell = (
                   <ToolCallRow
                     name={name}
@@ -341,7 +340,7 @@ function MessageItemImpl({
                     errorText={toolPart.errorText}
                     durationSec={showDuration}
                     running={!isDone}
-                    open={open}
+                    open={toolOpen}
                     onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, key as string, o))}
                     errorLabel={t('chat.toolError')}
                   />
@@ -366,6 +365,7 @@ function MessageItemImpl({
                         resolving={resolving}
                         onResolveApproval={onResolveApproval}
                         onResetContext={onResetContext}
+                        taskPrompt={taskPrompt}
                       />
                     </div>
                   )
@@ -448,8 +448,7 @@ function MessageItemImpl({
             {showErrorInThisBubble && errorBlock}
           </div>
           {/* /sup-body */}
-          {/* footer：运行中仅显示「模型 · 当前动作」；结束后显示
-              「模型 · 思考强度 · 耗时 · 开始时间」。 */}
+          {/* Footer: live shows "model · activity"; done shows model · thinking · duration · start. */}
           {(leaderMeta.modelLabel ||
             leaderMeta.thinkLabel ||
             leaderMeta.durationLabel ||
@@ -465,7 +464,9 @@ function MessageItemImpl({
               {leaderMeta.live ? (
                 <>
                   {leaderMeta.modelLabel && <span className="lead-footer-separator">·</span>}
-                  <span className="lead-footer-action">{leaderMeta.currentActivity || 'Thinking'}</span>
+                  <span className="lead-footer-action">
+                    {t((leaderMeta.currentActivity || 'chat.activity.thinking') as MessageKey)}
+                  </span>
                 </>
               ) : (
                 <>

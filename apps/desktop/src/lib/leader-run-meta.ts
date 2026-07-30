@@ -149,31 +149,188 @@ function precedingUserTimestamp(messages: RunMessage[], assistantIndex: number):
   return undefined
 }
 
-/** Current Leader footer activity. Unknown or idle states deliberately fall back to Thinking. */
-export function resolveLeaderActivity(parts: Array<Record<string, unknown>>): string {
+/**
+ * Footer activity codes while the Leader turn is live.
+ * OpenChamber-style phrases (searching / delegating / composing …) are the
+ * reference set; values are i18n keys under chat.activity.*.
+ * Unknown tools and empty parts deliberately fall back to thinking.
+ */
+export type LeaderActivityKey =
+  | 'chat.activity.thinking'
+  | 'chat.activity.composing'
+  | 'chat.activity.command'
+  | 'chat.activity.searching'
+  | 'chat.activity.reading'
+  | 'chat.activity.editing'
+  | 'chat.activity.delegating'
+  | 'chat.activity.updatingTodos'
+  | 'chat.activity.listingWorkers'
+  | 'chat.activity.listingTeam'
+  | 'chat.activity.listingProjects'
+  | 'chat.activity.managingTeam'
+  | 'chat.activity.managingJobs'
+  | 'chat.activity.managingTemplates'
+  | 'chat.activity.readingContext'
+  | 'chat.activity.web'
+  | 'chat.activity.namingSession'
+
+/** Normalize AI SDK / Mastra tool ids: tool-dispatch-team-member → dispatch-team-member */
+export function normalizeLeaderToolName(typeOrName: string): string {
+  return typeOrName
+    .trim()
+    .replace(/^tool-/i, '')
+    .replace(/Tool$/i, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[_\s]+/g, '-')
+    .toLowerCase()
+}
+
+/**
+ * Map a concrete tool name to a footer activity.
+ * Order matters: more specific router tools before broad CLI patterns.
+ */
+export function mapToolNameToLeaderActivity(toolName: string): LeaderActivityKey {
+  const n = normalizeLeaderToolName(toolName)
+  if (!n) return 'chat.activity.thinking'
+
+  // —— Router session tools (exact / specific) ——
+  if (n.includes('dispatch') && (n.includes('team') || n.includes('member') || n.includes('worker')))
+    return 'chat.activity.delegating'
+  if (n.includes('dispatch')) return 'chat.activity.delegating'
+
+  if (n.includes('list') && n.includes('worker')) return 'chat.activity.listingWorkers'
+  if (n.includes('list') && n.includes('team') && n.includes('template'))
+    return 'chat.activity.managingTemplates'
+  if (n.includes('list') && n.includes('team')) return 'chat.activity.listingTeam'
+  if (n.includes('list') && n.includes('project')) return 'chat.activity.listingProjects'
+  if (n.includes('list') && n.includes('job')) return 'chat.activity.managingJobs'
+
+  if (
+    (n.includes('add') || n.includes('update') || n.includes('archive') || n.includes('reset')) &&
+    n.includes('team') &&
+    n.includes('member')
+  )
+    return 'chat.activity.managingTeam'
+  if (
+    (n.includes('save') || n.includes('delete') || n.includes('apply')) &&
+    n.includes('template')
+  )
+    return 'chat.activity.managingTemplates'
+
+  if (n.includes('get') && n.includes('job')) return 'chat.activity.managingJobs'
+  if (n.includes('cancel') && n.includes('job')) return 'chat.activity.managingJobs'
+  if (n.includes('context')) return 'chat.activity.readingContext'
+  if (n.includes('session') && n.includes('title')) return 'chat.activity.namingSession'
+
+  // —— Mastra task list signals (TaskSignalProvider) ——
+  if (
+    n.includes('task-write') ||
+    n.includes('task-update') ||
+    n.includes('task-complete') ||
+    n.includes('task-check') ||
+    n.includes('task_write') ||
+    n.includes('task_update') ||
+    n.includes('task_complete') ||
+    n.includes('todowrite') ||
+    n.includes('todoread') ||
+    n.includes('todo-write') ||
+    n.includes('todo-read')
+  )
+    return 'chat.activity.updatingTodos'
+
+  // —— Generic ACP / CLI tools (OpenChamber reference) ——
+  if (
+    n.includes('bash') ||
+    n.includes('shell') ||
+    n.includes('terminal') ||
+    n.includes('exec') ||
+    n.includes('command')
+  )
+    return 'chat.activity.command'
+  if (
+    n.includes('grep') ||
+    n.includes('glob') ||
+    n.includes('search') ||
+    n.includes('find') ||
+    n.includes('codesearch')
+  )
+    return 'chat.activity.searching'
+  if (
+    n.includes('webfetch') ||
+    n.includes('websearch') ||
+    n.includes('web-fetch') ||
+    n.includes('web-search') ||
+    (n.includes('fetch') && n.includes('url')) ||
+    n.includes('http') ||
+    n.includes('curl')
+  )
+    return 'chat.activity.web'
+  if (
+    n.includes('write') ||
+    n.includes('edit') ||
+    n.includes('patch') ||
+    n.includes('multiedit') ||
+    n.includes('str-replace') ||
+    n.includes('str_replace') ||
+    n.includes('apply-patch')
+  )
+    return 'chat.activity.editing'
+  if (
+    n.includes('read') ||
+    n.includes('view') ||
+    n.includes('cat') ||
+    n.includes('list') ||
+    n.includes('ls')
+  )
+    return 'chat.activity.reading'
+  if (n.includes('task') || n.includes('agent')) return 'chat.activity.delegating'
+
+  // Unknown tool — still show thinking rather than a raw tool id
+  return 'chat.activity.thinking'
+}
+
+function isToolPartDone(part: Record<string, unknown>): boolean {
+  return (
+    part.state === 'result' ||
+    part.state === 'output-available' ||
+    part.state === 'output-error' ||
+    part.output != null ||
+    Boolean(part.errorText)
+  )
+}
+
+/**
+ * Current Leader footer activity while the turn is live.
+ * Scan newest → oldest; active tool / reasoning / streaming text win;
+ * empty or unknown states fall back to thinking.
+ */
+export function resolveLeaderActivity(parts: Array<Record<string, unknown>>): LeaderActivityKey {
   for (let index = parts.length - 1; index >= 0; index -= 1) {
     const part = parts[index]
+    if (!part) continue
     const type = typeof part.type === 'string' ? part.type : ''
-    if (type === 'reasoning' && part.state === 'streaming') return 'Thinking'
-    if (!type.startsWith('tool-') && type !== 'dynamic-tool') continue
 
-    const done =
-      part.state === 'result' ||
-      part.state === 'output-available' ||
-      part.state === 'output-error' ||
-      part.output != null ||
-      Boolean(part.errorText)
-    if (done) continue
+    if (type === 'reasoning') {
+      if (part.state === 'streaming') return 'chat.activity.thinking'
+      continue
+    }
 
-    const toolName =
-      (typeof part.toolName === 'string' && part.toolName) || type.replace(/^tool-/, '')
-    if (/(?:bash|shell|command|exec|terminal)/i.test(toolName)) return 'Command'
-    if (/(?:task|dispatch|worker|team)/i.test(toolName)) return 'Task'
-    if (/(?:read|get|list|search|find|grep|glob|fetch)/i.test(toolName)) return 'Read'
-    if (/(?:write|edit|patch|create|update|set)/i.test(toolName)) return 'Edit'
-    return 'Thinking'
+    if (type.startsWith('tool-') || type === 'dynamic-tool') {
+      if (isToolPartDone(part)) continue
+      const toolName =
+        (typeof part.toolName === 'string' && part.toolName) || type.replace(/^tool-/i, '')
+      return mapToolNameToLeaderActivity(toolName)
+    }
+
+    if (type === 'text') {
+      // Composing reply body (OpenChamber: "composing").
+      const text = typeof part.text === 'string' ? part.text : ''
+      if (part.state === 'streaming' || (text.trim() && part.state !== 'done')) {
+        return 'chat.activity.composing'
+      }
+    }
   }
-  return 'Thinking'
+  return 'chat.activity.thinking'
 }
 
 function userTextFromMessage(msg: { parts?: Array<{ type?: string; text?: string }> }): string {
@@ -201,13 +358,13 @@ export function extractPrecedingUserMeta(
   return {}
 }
 
-/** 统一用中国标准时间（Asia/Shanghai, UTC+8）展示 */
+/** Display clock times in China Standard Time (Asia/Shanghai, UTC+8). */
 export const DISPLAY_TIME_ZONE = 'Asia/Shanghai'
 
 /**
- * 开始时间：年月日 + 时分秒 + 时区标签（默认 CST）。
- * 数值始终按 Asia/Shanghai 换算；文案 locale / tzLabel 支持国际化。
- * 例：2026/07/16 18:51:33 CST
+ * Format a run start time as date + time + timezone label (default CST).
+ * Always converts with Asia/Shanghai; locale / tzLabel are i18n-friendly.
+ * Example: 2026/07/16 18:51:33 CST
  */
 export function formatClockTime(
   ts: number,
