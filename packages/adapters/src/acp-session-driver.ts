@@ -17,7 +17,7 @@ import {
   type AuthMethod,
   type ClientCapabilities,
 } from '@agentclientprotocol/sdk'
-import { readContainedText, writeContainedText } from './acp-filesystem.js'
+import { readAcpTextFile, writeAcpTextFileWithPermission } from './acp-filesystem.js'
 import {
   InvalidAcpApprovalOptionsError,
   type AcpPermissionRequest,
@@ -211,12 +211,25 @@ export class AcpSessionDriver {
         return { outcome: { outcome: 'selected' as const, optionId: r.optionId } }
       })
       .onRequest(methods.client.fs.readTextFile, async (ctx) => {
-        const r = readContainedText(cwd, ctx.params.path)
+        if (ctx.params.sessionId !== drv._agentSessionId) {
+          throw new Error('Filesystem request session mismatch')
+        }
+        const r = readAcpTextFile(cwd, ctx.params.path)
         if (!r.ok) throw new Error(r.error)
         return { content: r.content }
       })
       .onRequest(methods.client.fs.writeTextFile, async (ctx) => {
-        const r = writeContainedText(cwd, ctx.params.path, ctx.params.content)
+        if (ctx.params.sessionId !== drv._agentSessionId) {
+          throw new Error('Filesystem request session mismatch')
+        }
+        const binding = drv.currentBinding
+        const r = await writeAcpTextFileWithPermission({
+          projectRoot: cwd,
+          target: ctx.params.path,
+          content: ctx.params.content,
+          signal: binding?.signal,
+          requestPermission: binding?.onPermissionRequest,
+        })
         if (!r.ok) throw new Error(r.error)
         return {}
       })

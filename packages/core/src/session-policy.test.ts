@@ -4,7 +4,11 @@ import { LocalStore } from './store.js'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { SessionApprovalPolicy, WorkerJob } from '@swarmdesk-agent/shared'
+import type {
+  SessionApprovalPolicy,
+  SessionPermissionMode,
+  WorkerJob,
+} from '@swarmdesk-agent/shared'
 
 const VALID_POLICIES: SessionApprovalPolicy[] = [
   'manual',
@@ -27,7 +31,7 @@ describe('Session approval policy', () => {
     }
   })
 
-  it('old snapshot without approvalPolicy migrates sessions to manual', () => {
+  it('old snapshot without permission fields migrates fail-closed', () => {
     const project = store.upsertProject({
       name: 'P',
       rootPath: join(dir, 'proj'),
@@ -59,9 +63,10 @@ describe('Session approval policy', () => {
     const sessions = store2.snapshot().sessions
     assert.equal(sessions.length, 1)
     assert.equal(sessions[0]!.approvalPolicy, 'manual')
+    assert.equal(sessions[0]!.permissionMode, 'default')
   })
 
-  it('createSession without policy defaults to manual', () => {
+  it('creates build sessions with default permission unless auto is explicit', () => {
     const project = store.upsertProject({
       name: 'Q',
       rootPath: join(dir, 'proj2'),
@@ -72,6 +77,35 @@ describe('Session approval policy', () => {
       title: 'No Policy',
     })
     assert.equal(session.approvalPolicy, 'manual')
+    assert.equal(session.permissionMode, 'default')
+    assert.equal(session.mode, 'build')
+
+    const auto = store.createSession({
+      projectId: project.id,
+      title: 'Auto Permission',
+      mode: 'review',
+      permissionMode: 'auto',
+    })
+    assert.equal(auto.permissionMode, 'auto')
+    assert.equal(auto.mode, 'build')
+  })
+
+  it('updates permission mode atomically and rejects invalid values', () => {
+    const project = store.upsertProject({ name: 'Permission Mode', rootPath: join(dir, 'mode') })
+    const session = store.createSession({ projectId: project.id })
+
+    const updated = store.updateSessionPermissionMode(session.id, 'auto')
+    assert.equal(updated.permissionMode, 'auto')
+    assert.equal(store.snapshot().sessions.find((s) => s.id === session.id)?.permissionMode, 'auto')
+
+    assert.throws(
+      () => store.updateSessionPermissionMode(session.id, 'manual' as SessionPermissionMode),
+      /Invalid permission mode/i,
+    )
+    assert.throws(
+      () => store.updateSessionPermissionMode('missing', 'default'),
+      /Session not found/i,
+    )
   })
 
   it('updateSessionApprovalPolicy rejects invalid values', () => {
@@ -110,15 +144,16 @@ describe('Session approval policy', () => {
       title: 'Keep Fields',
       mode: 'review',
     })
-    assert.equal(session.mode, 'review')
+    assert.equal(session.mode, 'build')
 
     const updated = store.updateSessionApprovalPolicy(session.id, 'allow_always')
 
     assert.equal(updated.id, session.id)
-    assert.equal(updated.mode, 'review')
+    assert.equal(updated.mode, 'build')
     assert.equal(updated.activeWorkerIds.length, session.activeWorkerIds.length)
     assert.equal(updated.memoryThreadId, session.memoryThreadId)
     assert.equal(updated.approvalPolicy, 'allow_always')
+    assert.equal(updated.permissionMode, 'auto')
   })
 
   it('updateSessionApprovalPolicy accepts all 5 valid policies', () => {
@@ -134,6 +169,10 @@ describe('Session approval policy', () => {
     for (const policy of VALID_POLICIES) {
       const updated = store.updateSessionApprovalPolicy(session.id, policy)
       assert.equal(updated.approvalPolicy, policy)
+      assert.equal(
+        updated.permissionMode,
+        policy === 'allow_once' || policy === 'allow_always' ? 'auto' : 'default',
+      )
       const snap = store.snapshot().sessions.find((s) => s.id === session.id)
       assert.equal(snap?.approvalPolicy, policy)
     }
@@ -254,7 +293,40 @@ describe('Session approval policy', () => {
 
     const migrated = new LocalStore(path).snapshot()
     assert.equal(migrated.sessions[0]?.approvalPolicy, 'manual')
+    assert.equal(migrated.sessions[0]?.permissionMode, 'default')
     assert.equal(migrated.jobs?.[0]?.approvalPolicy, 'manual')
+  })
+
+  it('migrates explicit legacy policies to the two permission modes', () => {
+    const project = store.upsertProject({ name: 'Legacy Matrix', rootPath: join(dir, 'legacy') })
+    const createdAt = new Date().toISOString()
+    const policies = VALID_POLICIES
+    const raw = {
+      projects: [project],
+      sessions: policies.map((approvalPolicy, index) => ({
+        id: `legacy-${index}`,
+        projectId: project.id,
+        title: approvalPolicy,
+        status: 'idle',
+        mode: 'build',
+        activeWorkerIds: [],
+        memoryThreadId: `thread-${index}`,
+        approvalPolicy,
+        createdAt,
+        updatedAt: createdAt,
+      })),
+      workers: [],
+      approvals: [],
+      jobs: [],
+      activeProjectId: project.id,
+      activeSessionId: null,
+    }
+    writeFileSync(path, JSON.stringify(raw), 'utf8')
+
+    const modes = new LocalStore(path)
+      .snapshot()
+      .sessions.map((session) => session.permissionMode)
+    assert.deepEqual(modes, ['default', 'auto', 'auto', 'default', 'default'])
   })
 
   it('updateSessionApprovalPolicy is atomic (snapshot consistent after save)', () => {

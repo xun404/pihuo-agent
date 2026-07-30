@@ -6,13 +6,15 @@
  *
  * 视觉（线稿 icon-spec-v3 / floating-process）：
  *   - 标题行：任务进度 + N/M 计数 + 进度条 + live 标签
- *   - 每行任务：状态图标（Circle/Clock/CircleCheck）+ role 标签（从 content 前缀 [role] 解析）+ 文本
- *   - role 配色复用现有 worker-card-head .node-cap 规则：plan紫/coder蓝/review橙/research绿
+ *   - 折叠：中性 ListTodo 图标 + “任务 role”纯文本标题 + activeForm 预览
+ *   - 展开：箭头 + “任务 role”标题；完整 content 放在下方导轨内
  *
  * 全用 CSS 变量，三套主题（warm/classic/dark）自动适配。
  */
-import { memo } from 'react'
-import { IconClock } from '../Icons'
+import { memo, useCallback, useState } from 'react'
+import { ChevronRight, ListTodo } from 'lucide-react'
+import { useI18n } from '../../i18n/I18nProvider'
+import { useCollapsible } from './useCollapsible'
 
 /** Mastra TaskItem（本地结构类型，避免依赖 @mastra/core 内部 d.ts） */
 export type TaskItem = {
@@ -29,44 +31,97 @@ function parseRole(content: string): { role: string | null; text: string } {
   return { role: m[1].toLowerCase(), text: m[2] || content }
 }
 
-/** role → node-cap 语义类名（复用 worker role 配色） */
-function roleClass(role: string | null): string {
-  if (!role) return ''
-  if (role.includes('plan') || role.includes('arch')) return 'role-plan'
-  if (role.includes('cod') || role.includes('dev')) return 'role-coder'
-  if (role.includes('rev')) return 'role-review'
-  if (role.includes('test') || role.includes('res') || role.includes('search')) return 'role-research'
-  return ''
+type TaskProcessRowProps = {
+  task: TaskItem
+  /** Controlled open state. Omit to let the row manage its own state. */
+  open?: boolean
+  onToggle?: (open: boolean) => void
+}
+
+/** A single active task rendered with the shared thinking/tool process-row contract. */
+export function TaskProcessRow({ task, open, onToggle }: TaskProcessRowProps) {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isOpen = open ?? internalOpen
+  const { t } = useI18n()
+  const { role, text } = parseRole(task.content)
+  const detail = text.trim()
+  const summary = task.activeForm?.trim() || detail
+  const hasDetail = Boolean(detail)
+  const { shouldRender, contentRef } = useCollapsible({ open: isOpen })
+
+  const toggle = useCallback(() => {
+    if (!hasDetail) return
+    const next = !isOpen
+    if (open === undefined) setInternalOpen(next)
+    onToggle?.(next)
+  }, [hasDetail, isOpen, onToggle, open])
+
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      event.preventDefault()
+      toggle()
+    },
+    [toggle],
+  )
+
+  return (
+    <div className={`task-process-row${isOpen ? ' is-open' : ''}`} data-status="in_progress">
+      <div
+        className="task-row task-in_progress process-row-summary"
+        role={hasDetail ? 'button' : undefined}
+        tabIndex={hasDetail ? 0 : undefined}
+        aria-expanded={hasDetail ? isOpen : undefined}
+        onClick={hasDetail ? toggle : undefined}
+        onKeyDown={hasDetail ? onKeyDown : undefined}
+      >
+        <span className="task-row-icon process-icon-slot" aria-hidden>
+          <span className="task-row-icon-type process-icon-type">
+            <ListTodo size={14} />
+          </span>
+          <span className="task-row-icon-chevron process-icon-chevron">
+            <ChevronRight size={10} />
+          </span>
+        </span>
+        <span className="task-row-heading">
+          <span className="task-row-label">{t('chat.taskLabel')}</span>
+          {role && <span className="task-row-role-text">{role}</span>}
+        </span>
+        {!isOpen && summary ? (
+          <span className="task-row-preview" title={summary}>
+            {summary}
+          </span>
+        ) : null}
+      </div>
+
+      {shouldRender && hasDetail && (
+        <div ref={contentRef} aria-hidden={!isOpen} className="task-row-collapse">
+          <div
+            className="task-row-detail process-collapse-body"
+            style={{
+              opacity: isOpen ? 1 : 0,
+              transform: isOpen ? 'translateY(0)' : 'translateY(-4px)',
+              transition: 'opacity 180ms ease-out, transform 180ms ease-out',
+            }}
+          >
+            {detail}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function TaskListCardImpl({ tasks }: { tasks: TaskItem[] }) {
+  const { t } = useI18n()
   const inProgress = tasks.filter((t) => t.status === 'in_progress')
   if (inProgress.length === 0) return null
 
   return (
-    <div className="task-card" role="group" aria-label="任务进度">
-      <div className="task-card-body">
-        {inProgress.map((task) => {
-          const { role, text } = parseRole(task.content)
-          const rc = roleClass(role)
-          return (
-            <div
-              key={task.id}
-              className={`task-row task-in_progress${rc ? ` ${rc}` : ''}`}
-              data-status="in_progress"
-            >
-              <span className="task-row-icon" aria-hidden>
-                <IconClock size={14} />
-              </span>
-              {role && <span className="task-row-role">[{role}]</span>}
-              <span className="task-row-text">{text}</span>
-              {task.activeForm && (
-                <span className="task-row-active">{task.activeForm}</span>
-              )}
-            </div>
-          )
-        })}
-      </div>
+    <div className="task-list" role="group" aria-label={t('chat.taskProgress')}>
+      {inProgress.map((task) => (
+        <TaskProcessRow key={task.id} task={task} />
+      ))}
     </div>
   )
 }

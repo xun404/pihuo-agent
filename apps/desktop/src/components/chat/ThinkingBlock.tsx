@@ -1,4 +1,5 @@
 import { memo, useCallback } from 'react'
+import { Brain } from 'lucide-react'
 import { useCollapsible } from './useCollapsible'
 
 type Props = {
@@ -31,21 +32,6 @@ function ChevronIcon() {
         d="M6 3.5L10.5 8L6 12.5"
         stroke="currentColor"
         strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function BrainIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" />
-      <path
-        d="M8 5v3.2l2.2 1.4"
-        stroke="currentColor"
-        strokeWidth="1.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -86,18 +72,18 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   return (
     <div className={`thinking-block${streaming ? ' live' : ''}${isOpen ? ' is-open' : ''}`}>
       <div
-        className="thinking-block-summary"
+        className="thinking-block-summary process-row-summary"
         role="button"
         tabIndex={0}
         aria-expanded={isOpen}
         onClick={toggle}
         onKeyDown={onKeyDown}
       >
-        <span className="tb-icon-slot" aria-hidden>
-          <span className="tb-icon tb-icon-type">
-            <BrainIcon />
+        <span className="tb-icon-slot process-icon-slot" aria-hidden>
+          <span className="tb-icon tb-icon-type process-icon-type">
+            <Brain aria-hidden="true" />
           </span>
-          <span className="tb-icon tb-icon-chevron">
+          <span className="tb-icon tb-icon-chevron process-icon-chevron">
             <ChevronIcon />
           </span>
         </span>
@@ -112,7 +98,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
       {shouldRender && (
         <div ref={contentRef} aria-hidden={!isOpen} className="thinking-block-collapse">
           <div
-            className="thinking-block-inner"
+            className="thinking-block-inner process-collapse-body"
             style={{
               opacity: isOpen ? 1 : 0,
               transform: isOpen ? 'translateY(0)' : 'translateY(-4px)',

@@ -5,7 +5,7 @@ import type {
   LeaderMode,
   Project,
   Session,
-  SessionApprovalPolicy,
+  SessionPermissionMode,
   TeamTemplate,
   WorkerJob,
   WorkerRegistration,
@@ -42,7 +42,6 @@ interface Props {
   sessions: Session[]
   projects: Project[]
   serverUp: boolean
-  onModeChange?: (mode: LeaderMode) => void
   /** Inline rename from chat header: (sessionId, newTitle) */
   onRenameSession?: (sessionId: string, title: string) => void
   onOpenSettings?: (tab?: 'general' | 'model' | 'prompts' | 'workers' | 'about') => void
@@ -51,7 +50,10 @@ interface Props {
   onRefreshSnapshot?: () => void
   settingsOpen?: boolean
   onBusySessionsChange?: (busyIds: Set<string>) => void
-  onSetApprovalPolicy?: (sessionId: string, policy: SessionApprovalPolicy) => void
+  onSetPermissionMode?: (
+    sessionId: string,
+    permissionMode: SessionPermissionMode,
+  ) => void | Promise<void>
   onSessionStatusChange?: (
     sessionId: string,
     status: Session['status'],
@@ -74,12 +76,11 @@ interface Props {
   /** Fired after a git branch switch so parents can refresh git panels. */
   onRefreshGit?: () => void
   /** Empty-state composer: fired with the user's first message text + the
-   *  preselected mode / approval policy from the toolbar. */
+   *  preselected permission mode from the toolbar. */
   onComposeFirstMessage?: (
     text: string,
     preset: {
-      mode: LeaderMode
-      approvalPolicy: SessionApprovalPolicy
+      permissionMode: SessionPermissionMode
       teamTemplateId?: string
     },
   ) => Promise<boolean>
@@ -114,13 +115,12 @@ export function ChatWorkspace({
   sessions,
   projects,
   serverUp,
-  onModeChange,
   onRenameSession,
   onOpenSettings,
   onRefreshSnapshot,
   settingsOpen,
   onBusySessionsChange,
-  onSetApprovalPolicy,
+  onSetPermissionMode,
   onSessionStatusChange,
   snapshotApprovals,
   snapshotJobs,
@@ -149,11 +149,11 @@ export function ChatWorkspace({
   const lastBusyKeyRef = useRef('')
   const [firstMessage, setFirstMessage] = useState('')
   const [selectedTeamTemplateId, setSelectedTeamTemplateId] = useState('')
-  // —— Empty-state ComposerToolbar presets (mode / approval / model / thinking) ——
+  // —— Empty-state ComposerToolbar presets (permission / model / thinking) ——
   // Loaded from settings once; selections here are passed to onComposeFirstMessage
   // so the new session inherits them.
-  const [presetMode, setPresetMode] = useState<LeaderMode>('build')
-  const [presetPolicy, setPresetPolicy] = useState<SessionApprovalPolicy>('manual')
+  const [presetPermissionMode, setPresetPermissionMode] =
+    useState<SessionPermissionMode>('default')
   const [presetModel, setPresetModel] = useState('')
   const [presetThinking, setPresetThinking] = useState<ThinkingIntensity>('medium')
   const [presetModels, setPresetModels] = useState<ModelOption[]>([])
@@ -318,8 +318,7 @@ export function ChatWorkspace({
     const text = firstMessage.trim()
     if (!text || creatingFromComposer || !serverUp || !onComposeFirstMessage) return
     const sent = await onComposeFirstMessage(text, {
-      mode: presetMode,
-      approvalPolicy: presetPolicy,
+      permissionMode: presetPermissionMode,
       teamTemplateId: selectedTeamTemplateId || undefined,
     })
     if (sent) setFirstMessage('')
@@ -400,8 +399,7 @@ export function ChatWorkspace({
             />
             <div className="composer-tools">
               <ComposerToolbar
-                mode={presetMode}
-                approvalPolicy={presetPolicy}
+                permissionMode={presetPermissionMode}
                 selectedModel={presetModel}
                 thinkingIntensity={presetThinking}
                 models={presetModels}
@@ -409,8 +407,7 @@ export function ChatWorkspace({
                 tokenCount={0}
                 locale={locale}
                 persistThinking={false}
-                onModeChange={setPresetMode}
-                onApprovalPolicyChange={setPresetPolicy}
+                onPermissionModeChange={setPresetPermissionMode}
                 onModelChange={setPresetModel}
                 onThinkingChange={setPresetThinking}
                 onOpenSettings={onOpenSettings}
@@ -472,7 +469,6 @@ export function ChatWorkspace({
               onInitialInputConsumed={
                 pendingComposerForSession?.sessionId === s.id ? onInitialInputConsumed : undefined
               }
-              onModeChange={isActive ? onModeChange : undefined}
               onRenameSession={
                 isActive && onRenameSession ? (title) => onRenameSession(s.id, title) : undefined
               }
@@ -482,9 +478,9 @@ export function ChatWorkspace({
               onBusyChange={(busy) =>
                 setBusyMap((prev) => (prev[s.id] === busy ? prev : { ...prev, [s.id]: busy }))
               }
-              approvalPolicy={s.approvalPolicy}
-              onSetApprovalPolicy={
-                onSetApprovalPolicy ? (policy) => onSetApprovalPolicy(s.id, policy) : undefined
+              permissionMode={s.permissionMode}
+              onSetPermissionMode={
+                onSetPermissionMode ? (mode) => onSetPermissionMode(s.id, mode) : undefined
               }
               onSessionStatusChange={
                 onSessionStatusChange

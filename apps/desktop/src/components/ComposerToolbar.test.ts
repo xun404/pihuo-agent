@@ -13,7 +13,11 @@
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { clampThink } from './ComposerToolbar.js'
+
+const toolbarSource = readFileSync(new URL('./ComposerToolbar.tsx', import.meta.url), 'utf8')
+const chatPanelSource = readFileSync(new URL('./ChatPanel.tsx', import.meta.url), 'utf8')
 
 describe('clampThink', () => {
   it('returns "off" when supported is empty AND THINKING_INTENSITY_OPTIONS has no levels', () => {
@@ -60,5 +64,24 @@ describe('clampThink', () => {
   it('ignores unsupported levels not in THINKING_INTENSITY_OPTIONS', () => {
     // Unknown levels get indexOf = -1, never win over real ones.
     assert.equal(clampThink(undefined, ['bogus', 'low', 'high']), 'high')
+  })
+})
+
+describe('Composer toolbar permission contract', () => {
+  it('uses the shared permission action and retains the existing right-side controls', () => {
+    assert.match(toolbarSource, /<PermissionModeAction/u)
+    assert.match(toolbarSource, /<ContextRing/u)
+    assert.match(toolbarSource, /thinkingIntensity/u)
+    assert.match(toolbarSource, /selectedModel/u)
+  })
+
+  it('does not render the legacy access menu or hidden Leader modes', () => {
+    assert.doesNotMatch(toolbarSource, /ACCESS_MODES|resolveAccessMode|access-mode/u)
+    assert.doesNotMatch(toolbarSource, /full_access|auto_edit/u)
+  })
+
+  it('normalizes the hidden Leader mode to build on the chat wire', () => {
+    assert.match(chatPanelSource, /mode: 'build'/u)
+    assert.doesNotMatch(chatPanelSource, /mode:\s*modeRef\.current/u)
   })
 })

@@ -6,6 +6,7 @@ import {
   cleanupTerminalWorkers,
   seedApprovalsFromSnapshot,
   seedWorkerStatesFromSnapshot,
+  terminalWorkerEventFromToolPart,
 } from './worker-run-reducer.js'
 import type {
   WorkerRunEvent,
@@ -161,14 +162,58 @@ function get(state: Map<string, WorkerRunState>, jobId: string): WorkerRunState 
 }
 
 describe('workerRunReducer', () => {
+  it('restores model and reasoning from a persisted terminal tool result', () => {
+    const event = terminalWorkerEventFromToolPart({
+      type: 'tool-dispatchTeamMemberTool',
+      output: {
+        jobId: 'job-1',
+        workerName: 'OpenCode',
+        status: 'succeeded',
+        model: 'opencode-go/deepseek-v4-pro',
+        reasoning: 'high',
+        output: 'done',
+      },
+    })
+
+    assert.equal(event?.model, 'opencode-go/deepseek-v4-pro')
+    assert.equal(event?.reasoning, 'high')
+  })
+
+  it('restores the dispatched Team member name from a persisted terminal tool result', () => {
+    const event = terminalWorkerEventFromToolPart({
+      type: 'tool-dispatchTeamMemberTool',
+      output: {
+        jobId: 'job-member',
+        workerName: 'Codex CLI',
+        teamMemberName: 'Implementation Member',
+        status: 'succeeded',
+        output: 'done',
+      },
+    })
+
+    assert.equal(
+      (event as (WorkerRunEvent & { teamMemberName?: string }) | null)?.teamMemberName,
+      'Implementation Member',
+    )
+  })
+
   describe('started event', () => {
     it('creates a new entry with worker identity', () => {
-      const s = workerRunReducer(new Map(), makeStarted())
+      const s = workerRunReducer(
+        new Map(),
+        makeStarted({ teamMemberName: 'Implementation Member' } as Partial<
+          WorkerRunEvent & { type: 'started'; teamMemberName?: string }
+        >),
+      )
       const entry = get(s, 'job-1')
       assert.equal(entry.jobId, 'job-1')
       assert.equal((entry as WorkerRunState & { workerId?: string }).workerId, 'w-1')
       assert.equal(entry.workerName, 'Codex')
       assert.equal(entry.workerKind, 'codex')
+      assert.equal(
+        (entry as WorkerRunState & { teamMemberName?: string }).teamMemberName,
+        'Implementation Member',
+      )
       assert.equal(entry.role, 'coder')
       assert.equal(entry.model, 'gpt-5')
       assert.equal(entry.reusedSession, false)
@@ -1203,6 +1248,37 @@ describe('workerRunReducer', () => {
   })
 
   describe('seedWorkerStatesFromSnapshot', () => {
+    it('hydrates the immutable Team member name from the durable job', () => {
+      const result = seedWorkerStatesFromSnapshot(new Map(), {
+        sessionId: 'session-1',
+        jobs: [makeJob({ teamMemberName: 'Implementation Member' })],
+        workers: [makeWorker()],
+        approvals: [],
+      })
+
+      assert.equal(
+        (get(result, 'job-1') as WorkerRunState & { teamMemberName?: string }).teamMemberName,
+        'Implementation Member',
+      )
+    })
+
+    it('hydrates the immutable job model and reasoning instead of current worker defaults', () => {
+      const result = seedWorkerStatesFromSnapshot(new Map(), {
+        sessionId: 'session-1',
+        jobs: [
+          makeJob({
+            effectiveModel: 'opencode-go/deepseek-v4-pro',
+            effectiveReasoning: 'xhigh',
+          }),
+        ],
+        workers: [makeWorker({ model: 'worker-current-model', reasoning: 'low' })],
+        approvals: [],
+      })
+
+      assert.equal(get(result, 'job-1').model, 'opencode-go/deepseek-v4-pro')
+      assert.equal(get(result, 'job-1').reasoning, 'xhigh')
+    })
+
     it('hydrates only active jobs for the current session with worker identity and approval', () => {
       const jobs = [
         makeJob({ id: 'running', status: 'running' }),

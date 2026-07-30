@@ -104,6 +104,7 @@ function jobToTerminalEvent(job: WorkerJob, jobId: string): WorkerRunEvent | nul
       output: job.output ?? '',
       truncated: false,
       workerName: job.workerName,
+      teamMemberName: job.teamMemberName,
       role: job.role,
     }
   }
@@ -120,6 +121,7 @@ function jobToTerminalEvent(job: WorkerJob, jobId: string): WorkerRunEvent | nul
     errorCode: job.errorCode,
     truncated: false,
     workerName: job.workerName,
+    teamMemberName: job.teamMemberName,
     role: job.role,
   }
 }

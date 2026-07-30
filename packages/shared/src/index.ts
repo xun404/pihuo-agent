@@ -279,6 +279,20 @@ export type PermissionOptionKind = 'allow_once' | 'allow_always' | 'reject_once'
 
 export type SessionApprovalPolicy = 'manual' | PermissionOptionKind
 
+export type SessionPermissionMode = 'default' | 'auto'
+
+export type PermissionTargetScope = 'inside_project' | 'outside_project' | 'unknown'
+
+export const SESSION_PERMISSION_MODES: SessionPermissionMode[] = ['default', 'auto']
+
+export function isValidSessionPermissionMode(v: unknown): v is SessionPermissionMode {
+  return typeof v === 'string' && (SESSION_PERMISSION_MODES as string[]).includes(v)
+}
+
+export function permissionModeFromLegacyPolicy(value: unknown): SessionPermissionMode {
+  return value === 'allow_once' || value === 'allow_always' ? 'auto' : 'default'
+}
+
 export type SessionDisposition = 'new' | 'live_reused' | 'resumed' | 'loaded'
 
 export const SESSION_APPROVAL_POLICIES: SessionApprovalPolicy[] = [
@@ -688,6 +702,8 @@ export interface Session {
   activeWorkerIds: string[]
   memoryThreadId: string
   approvalPolicy: SessionApprovalPolicy
+  /** Authoritative runtime permission state. Legacy approvalPolicy is compatibility-only. */
+  permissionMode: SessionPermissionMode
   /** Increments once for every persisted Team mutation. */
   teamRevision: number
   /** New Sessions ask once whether the bootstrapped Team needs adjustment. */
@@ -1104,6 +1120,8 @@ export type WorkerRunEvent =
       jobId: string
       workerId: string
       workerName: string
+      /** Immutable Chat Team member display name captured at dispatch time. */
+      teamMemberName?: string
       workerKind: WorkerKind
       role?: WorkerRole
       model?: string
@@ -1124,6 +1142,7 @@ export type WorkerRunEvent =
       output: string
       truncated: boolean
       workerName?: string
+      teamMemberName?: string
       workerKind?: WorkerKind
       role?: WorkerRole
       model?: string
@@ -1140,6 +1159,7 @@ export type WorkerRunEvent =
       errorCode?: string
       truncated: boolean
       workerName?: string
+      teamMemberName?: string
       workerKind?: WorkerKind
       role?: WorkerRole
       model?: string
@@ -1194,6 +1214,8 @@ export interface WorkerRunState {
   /** Stable Worker identity retained for Registry/auth deep links. */
   workerId?: string
   workerName: string
+  /** Chat Team member display name; falls back to workerName for legacy jobs. */
+  teamMemberName?: string
   workerKind: WorkerKind
   role?: WorkerRole
   model?: string

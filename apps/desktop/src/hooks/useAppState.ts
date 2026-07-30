@@ -6,7 +6,7 @@ import type {
   LeaderMode,
   Locale,
   Session,
-  SessionApprovalPolicy,
+  SessionPermissionMode,
   UpdateTeamMemberInput,
   WorkerRole,
 } from '@swarmdesk-agent/shared'
@@ -97,6 +97,7 @@ export function useAppState() {
     explicitProjectId?: string,
     memoryThreadId?: string,
     teamTemplateId?: string,
+    permissionMode?: SessionPermissionMode,
   ) => {
     const projectId = explicitProjectId ?? snapshot.activeProjectId ?? snapshot.projects[0]?.id
     // Surface a stable code for UI handling; user-facing copy lives in i18n.
@@ -106,6 +107,7 @@ export function useAppState() {
       title,
       mode,
       memoryThreadId,
+      permissionMode,
       ...(teamTemplateId?.trim() ? { teamTemplateId: teamTemplateId.trim() } : {}),
     })
     if (snap) applySnapshot(snap, ++applyGenRef.current)
@@ -173,22 +175,18 @@ export function useAppState() {
     applySnapshot(next, ++applyGenRef.current)
   }
 
-  const setSessionMode = async (sessionId: string, mode: LeaderMode) => {
-    // Supersede an older refresh before starting the mutation. The server snapshot
-    // carries the authoritative revision, so an out-of-order poll cannot revert it.
+  const setSessionPermissionMode = async (
+    sessionId: string,
+    permissionMode: SessionPermissionMode,
+  ) => {
     const gen = ++applyGenRef.current
     abortRef.current?.abort()
-    const { session, snapshot: next } = await api.setSessionMode(sessionId, mode)
+    const { session, snapshot: next } = await api.setSessionPermissionMode(
+      sessionId,
+      permissionMode,
+    )
     applySnapshot(next, gen)
     return session
-  }
-
-  const setSessionApprovalPolicy = async (
-    sessionId: string,
-    approvalPolicy: SessionApprovalPolicy,
-  ) => {
-    const { snapshot: next } = await api.setSessionApprovalPolicy(sessionId, approvalPolicy)
-    applySnapshot(next, ++applyGenRef.current)
   }
 
   const setSessionStatus = async (
@@ -399,7 +397,6 @@ export function useAppState() {
     clearPendingSession,
     activateSession,
     activateProject,
-    setSessionMode,
     setSessionStatus,
     markSessionRead,
     renameSession,
@@ -418,7 +415,7 @@ export function useAppState() {
     updateTeamMember,
     archiveTeamMember,
     resetTeamMemberSession,
-    setSessionApprovalPolicy,
+    setSessionPermissionMode,
     resetAcpContext,
     resolvingState,
   }

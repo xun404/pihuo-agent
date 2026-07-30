@@ -11,15 +11,13 @@ const toolbarSource = readFileSync(new URL('./ComposerToolbar.tsx', import.meta.
 const appSource = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
 
 const baseProps = {
-  mode: 'build' as const,
-  approvalPolicy: 'manual' as const,
+  permissionMode: 'default' as const,
   selectedModel: '',
   thinkingIntensity: 'medium' as const,
   models: [],
   locale: 'zh' as const,
   persistThinking: false,
-  onModeChange: () => {},
-  onApprovalPolicyChange: () => {},
+  onPermissionModeChange: () => {},
   onModelChange: () => {},
   onThinkingChange: () => {},
 }

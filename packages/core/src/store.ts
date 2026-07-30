@@ -30,6 +30,7 @@ import type {
   WorkerJob,
   JobStatus,
   SessionApprovalPolicy,
+  SessionPermissionMode,
   WorkerSource,
   WorkerRuntimeProfile,
   TeamMember,
@@ -53,6 +54,8 @@ import {
   normalizeWorkerDefaultRoleType,
   WORKER_ROLES,
   isValidSessionApprovalPolicy,
+  isValidSessionPermissionMode,
+  permissionModeFromLegacyPolicy,
 } from '@swarmdesk-agent/shared'
 import { createId } from './id.js'
 import {
@@ -205,11 +208,19 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
   const projectIds = new Set(projects.map((p) => p.id))
   const sessions = (raw.sessions ?? [])
     .filter((s) => projectIds.has(s.projectId))
-    .map((s) => ({
-      ...s,
-      approvalPolicy: isValidSessionApprovalPolicy((s as Partial<Session>).approvalPolicy)
+    .map((s) => {
+      const legacyPolicy = isValidSessionApprovalPolicy((s as Partial<Session>).approvalPolicy)
         ? (s as Partial<Session>).approvalPolicy
-        : 'manual',
+        : 'manual'
+      const permissionMode = isValidSessionPermissionMode(
+        (s as Partial<Session>).permissionMode,
+      )
+        ? (s as Partial<Session>).permissionMode
+        : permissionModeFromLegacyPolicy((s as Partial<Session>).approvalPolicy)
+      return {
+      ...s,
+      approvalPolicy: legacyPolicy,
+      permissionMode,
       // Legacy snapshots have no read watermark: treat "last modified" as the
       // last time the user saw the session so old sessions don't all light up
       // unread error/done lamps after upgrade.
@@ -220,7 +231,7 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
         ((s as Partial<Session>).teamRevision ?? 0) > 0
           ? (s as Partial<Session>).teamRevision!
           : 1,
-    })) as Session[]
+    }}) as Session[]
   const sessionIds = new Set(sessions.map((session) => session.id))
   const workerIds = new Set(workers.map((worker) => worker.id))
   const teamMembers = (raw.teamMembers ?? []).filter(
@@ -861,6 +872,23 @@ export class LocalStore {
       const s = d.sessions.find((x) => x.id === sessionId)
       if (!s) throw new Error(`Session not found: ${sessionId}`)
       s.approvalPolicy = policy
+      s.permissionMode = permissionModeFromLegacyPolicy(policy)
+      s.updatedAt = now()
+      session = s
+    })
+    return structuredClone(session)
+  }
+
+  updateSessionPermissionMode(sessionId: string, permissionMode: SessionPermissionMode): Session {
+    if (!isValidSessionPermissionMode(permissionMode)) {
+      throw new Error(`Invalid permission mode: ${String(permissionMode)}`)
+    }
+    let session!: Session
+    this.commit((d) => {
+      const s = d.sessions.find((x) => x.id === sessionId)
+      if (!s) throw new Error(`Session not found: ${sessionId}`)
+      s.permissionMode = permissionMode
+      s.approvalPolicy = permissionMode === 'auto' ? 'allow_always' : 'manual'
       s.updatedAt = now()
       session = s
     })
@@ -998,6 +1026,7 @@ export class LocalStore {
     projectId: string
     title?: string
     mode?: LeaderMode
+    permissionMode?: SessionPermissionMode
     memoryThreadId?: string
     rolePrompts?: Readonly<PromptSettings['roles']>
     initialTeamMembers?: Array<Omit<CreateTeamMemberInput, 'chatSessionId'>>
@@ -1017,10 +1046,11 @@ export class LocalStore {
         // overwritten by autoTitleSession when the Leader names its first response.
         titleSource: providedTitle ? 'user' : 'auto',
         status: 'idle',
-        mode: input.mode ?? 'build',
+        mode: 'build',
         activeWorkerIds: [...project.workerIds],
         memoryThreadId: input.memoryThreadId || createId('thread'),
-        approvalPolicy: 'manual',
+        approvalPolicy: input.permissionMode === 'auto' ? 'allow_always' : 'manual',
+        permissionMode: input.permissionMode ?? 'default',
         teamRevision: 1,
         roleReviewState: 'pending',
         createdAt: timestamp,

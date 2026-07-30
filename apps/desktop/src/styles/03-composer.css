@@ -12,6 +12,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  transition:
+    border-color var(--dur-instant) ease,
+    box-shadow var(--dur-instant) ease;
+}
+.composer-card:focus-within {
+  border-color: color-mix(in srgb, var(--blue) 50%, var(--border-soft));
+  box-shadow: var(--shadow-composer), 0 0 0 3px var(--blue-soft);
 }
 .context-bar {
   display: flex;
@@ -62,6 +69,93 @@
   min-width: 8px;
 }
 
+.permission-mode-control {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.permission-mode-action {
+  box-sizing: border-box;
+  width: var(--h-sm);
+  height: var(--h-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    color var(--dur-instant) ease,
+    background var(--dur-instant) ease;
+}
+.permission-mode-action:hover:not(:disabled) {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+.permission-mode-action.is-auto {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.permission-mode-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent);
+  outline-offset: 2px;
+}
+.permission-mode-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.permission-mode-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--text-1);
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px);
+  transition:
+    opacity var(--dur-instant) ease,
+    transform var(--dur-instant) ease,
+    visibility 0s linear var(--dur-instant);
+}
+.permission-mode-control:hover .permission-mode-tooltip,
+.permission-mode-control:focus-within .permission-mode-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+.permission-mode-tooltip-title,
+.permission-mode-tooltip-description {
+  display: block;
+}
+.permission-mode-tooltip-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+.permission-mode-tooltip-description {
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+}
+
 .chip {
   box-sizing: border-box;
   display: inline-flex;
@@ -91,17 +185,6 @@
 .chip.warn {
   color: var(--accent);
   font-weight: var(--fw-semibold);
-}
-/* 完全访问：橙色强调 */
-.chip.access {
-  color: var(--accent);
-  font-weight: var(--fw-semibold);
-}
-.chip.access .i {
-  color: var(--accent);
-}
-.chip.access .caret {
-  color: color-mix(in srgb, var(--accent) 70%, var(--text-3));
 }
 .chip.plus {
   width: var(--h-sm);
@@ -407,11 +490,6 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
 }
 .pop-item.on .pi {
   color: var(--text-1);
-}
-/* 完全访问：橙色盾标 */
-.pop-item .pi.accent,
-.pop-item.access .pi {
-  color: var(--accent);
 }
 .pop-item .pi-body {
   flex: 1;
@@ -773,4 +851,23 @@ html[data-theme='dark'] .send.stop {
 html[data-theme='dark'] .branch-search {
   background: var(--bg-hover);
   border-color: var(--border);
+}
+
+@media (max-width: 720px) {
+  .composer-card {
+    padding-inline: var(--sp-2);
+  }
+  .composer-tools {
+    align-items: center;
+  }
+  .composer-tools .spacer {
+    min-width: 0;
+  }
+  .composer-tools .model-wrap {
+    min-width: 0;
+    max-width: calc(100% - 76px);
+  }
+  .composer-tools .chip.menu {
+    max-width: min(180px, 42vw);
+  }
 }

@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  isValidSessionPermissionMode,
+  permissionModeFromLegacyPolicy,
   isModelCacheFresh,
   WORKER_MODELS_TTL_MS,
   COMMAND_HEALTH_TTL_MS,
@@ -12,6 +14,25 @@ import {
   shouldSkipWorkerDispatch,
   workerHealthRank,
 } from './index.js'
+
+describe('Session permission mode', () => {
+  it('accepts only the two public permission modes', () => {
+    assert.equal(isValidSessionPermissionMode('default'), true)
+    assert.equal(isValidSessionPermissionMode('auto'), true)
+    assert.equal(isValidSessionPermissionMode('manual'), false)
+    assert.equal(isValidSessionPermissionMode(undefined), false)
+  })
+
+  it('maps every legacy approval policy and unknown input fail-closed', () => {
+    assert.equal(permissionModeFromLegacyPolicy('manual'), 'default')
+    assert.equal(permissionModeFromLegacyPolicy('reject_once'), 'default')
+    assert.equal(permissionModeFromLegacyPolicy('reject_always'), 'default')
+    assert.equal(permissionModeFromLegacyPolicy('allow_once'), 'auto')
+    assert.equal(permissionModeFromLegacyPolicy('allow_always'), 'auto')
+    assert.equal(permissionModeFromLegacyPolicy('allow_everything'), 'default')
+    assert.equal(permissionModeFromLegacyPolicy(undefined), 'default')
+  })
+})
 
 describe('isModelCacheFresh', () => {
   it('returns false when modelsFetchedAt is undefined', () => {

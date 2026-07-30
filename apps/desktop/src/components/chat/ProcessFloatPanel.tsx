@@ -13,6 +13,7 @@
  */
 import { memo, useState } from 'react'
 import { Minimize2, Maximize2 } from 'lucide-react'
+import { useI18n } from '../../i18n/I18nProvider'
 import { Circle, CircleCheck, IconClock } from '../Icons'
 import type { TaskItem } from './TaskListCard'
 
@@ -45,6 +46,7 @@ interface Props {
 function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini' }: Props) {
   const [modeState, setModeState] = useState<Mode>(defaultMode)
   const mode = modeProp ?? modeState
+  const { t } = useI18n()
 
   if (tasks.length === 0) return null
 
@@ -60,7 +62,7 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini' }: 
     const activeText = activeTask
       ? activeTask.activeForm || parseRole(activeTask.content).text
       : allDone
-        ? '全部完成'
+        ? t('chat.process.allDone')
         : ''
     return (
       <div
@@ -68,11 +70,11 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini' }: 
         className="proc-float proc-mini"
         role="button"
         tabIndex={0}
-        aria-label="进程（点击展开）"
+        aria-label={t('chat.process.miniAria')}
         onClick={() => setModeState('panel')}
       >
         <CircleCheck size={13} />
-        <span className="proc-mini-label">进程</span>
+        <span className="proc-mini-label">{t('chat.process.label')}</span>
         <span className="proc-mini-count">
           {completed}/{total}
         </span>
@@ -101,12 +103,12 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini' }: 
   const focusTasks = compact ? pendingTasks : tasks
 
   return (
-    <div key="proc-panel" className="proc-float proc-panel" role="complementary" aria-label="任务进程">
+    <div key="proc-panel" className="proc-float proc-panel" role="complementary" aria-label={t('chat.process.panelAria')}>
       {/* header */}
       <div className="proc-head">
         <span className="proc-head-title">
           <CircleCheck size={14} />
-          <span>进程</span>
+          <span>{t('chat.process.label')}</span>
         </span>
         <span className={`proc-head-count${allDone ? ' all-done' : ''}`}>
           {completed} / {total}
@@ -117,15 +119,15 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini' }: 
         {hasInProgress && (
           <span className="proc-head-live">
             <span className="proc-head-live-dot" aria-hidden />
-            执行中
+            {t('chat.process.live')}
           </span>
         )}
         <span className="proc-head-acts">
           <button
             type="button"
             className="proc-head-btn"
-            aria-label="折叠为迷你"
-            title="折叠"
+            aria-label={t('chat.process.minimizeAria')}
+            title={t('chat.process.minimize')}
             onClick={() => setModeState('mini')}
           >
             <Minimize2 size={12} />
@@ -167,6 +169,7 @@ function ProcessFloatPanelImpl({ tasks, mode: modeProp, defaultMode = 'mini' }: 
 
 /** 折叠的「已完成 N 项」分组行 */
 function DoneFold({ count }: { count: number }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   return (
     <button
@@ -178,7 +181,9 @@ function DoneFold({ count }: { count: number }) {
       <span className={`proc-fold-chev${open ? ' open' : ''}`} aria-hidden>
         <ChevronRight />
       </span>
-      <span className="proc-fold-label">{open ? `收起 ${count} 项已完成` : `已完成 ${count} 项`}</span>
+      <span className="proc-fold-label">
+        {open ? t('chat.process.doneFoldCollapse', { count }) : t('chat.process.doneFold', { count })}
+      </span>
     </button>
   )
 }

@@ -1,18 +1,18 @@
-export type AcpToolKind =
-  | 'delete'
-  | 'read'
-  | 'search'
-  | 'think'
-  | 'edit'
-  | 'move'
-  | 'execute'
-  | 'fetch'
-  | 'switch_mode'
-  | 'other'
+import type {
+  AcpToolKind,
+  PermissionOptionKind,
+  PermissionTargetScope,
+  SessionApprovalPolicy,
+  SessionPermissionMode,
+} from '@swarmdesk-agent/shared'
 
-export type PermissionOptionKind = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always'
-
-export type SessionApprovalPolicy = PermissionOptionKind | 'manual'
+export type {
+  AcpToolKind,
+  PermissionOptionKind,
+  PermissionTargetScope,
+  SessionApprovalPolicy,
+  SessionPermissionMode,
+}
 
 export interface PermissionOption {
   optionId: string
@@ -23,13 +23,14 @@ export interface PermissionOption {
 export interface DecidePermissionInput {
   toolKind: AcpToolKind
   options: PermissionOption[]
-  sessionPolicy: SessionApprovalPolicy
+  permissionMode: SessionPermissionMode
+  targetScope: PermissionTargetScope
 }
 
 export interface AutomaticDecision {
   mode: 'automatic'
-  option: { optionId: string; name: string; kind: PermissionOptionKind }
-  decision: 'allow' | 'deny'
+  option: PermissionOption
+  decision: 'allow'
   reason: string
 }
 
@@ -38,79 +39,12 @@ export interface ManualDecision {
   reason: string
 }
 
-export type PermissionDecision = AutomaticDecision | ManualDecision
-
-/**
- * Decide whether a permission request can be auto-approved based on
- * toolKind, available options, and session approval policy.
- *
- * Decision order (§7.2):
- * 1. `delete` → always manual (priority 1, no exceptions)
- * 2. `read/search/think` → prefer allow_once, then allow_always, else manual
- *    (priority 2, regardless of session policy)
- * 3. `edit/move/execute/fetch/switch_mode/other` → match exact option.kind
- *    against sessionPolicy; allow_* → allow, reject_* → deny; manual if no match
- * 4. Never infer kind from option name/ID text
- * 5. Unknown ToolKind → `other`; unknown option.kind → manual
- */
-export function decidePermission(input: DecidePermissionInput): PermissionDecision {
-  const { toolKind, options, sessionPolicy } = input
-
-  const kind: AcpToolKind = KNOWN_TOOL_KINDS.has(toolKind) ? toolKind : 'other'
-
-  // Priority 1: delete is always manual (no exceptions)
-  if (kind === 'delete') {
-    return { mode: 'manual', reason: 'delete operations require manual approval' }
-  }
-
-  // Priority 2: read/search/think have readonly whitelist
-  // These prefer allow_once/allow_always regardless of session policy
-  if (kind === 'read' || kind === 'search' || kind === 'think') {
-    const allowOnce = options.find((o) => o.kind === 'allow_once')
-    if (allowOnce) {
-      return {
-        mode: 'automatic',
-        option: allowOnce,
-        decision: 'allow',
-        reason: `auto-approved ${kind} with allow_once`,
-      }
-    }
-    const allowAlways = options.find((o) => o.kind === 'allow_always')
-    if (allowAlways) {
-      return {
-        mode: 'automatic',
-        option: allowAlways,
-        decision: 'allow',
-        reason: `auto-approved ${kind} with allow_always`,
-      }
-    }
-    return {
-      mode: 'manual',
-      reason: `no allow_once or allow_always option available for ${kind}`,
-    }
-  }
-
-  // Priority 3: controlled group — match sessionPolicy against exact option.kind
-  if (sessionPolicy === 'manual') {
-    return { mode: 'manual', reason: 'manual session approval policy' }
-  }
-
-  const match = options.find((o) => o.kind === sessionPolicy)
-  if (match) {
-    const decision = sessionPolicy.startsWith('allow') ? 'allow' : 'deny'
-    return {
-      mode: 'automatic',
-      option: match,
-      decision,
-      reason: `auto-approved ${kind} matching session policy ${sessionPolicy}`,
-    }
-  }
-
-  return {
-    mode: 'manual',
-    reason: `no option matching session policy ${sessionPolicy} for ${kind}`,
-  }
+export interface CancelledDecision {
+  mode: 'cancelled'
+  reason: string
 }
+
+export type PermissionDecision = AutomaticDecision | ManualDecision | CancelledDecision
 
 const KNOWN_TOOL_KINDS = new Set<AcpToolKind>([
   'delete',
@@ -124,3 +58,53 @@ const KNOWN_TOOL_KINDS = new Set<AcpToolKind>([
   'switch_mode',
   'other',
 ])
+
+const READ_ONLY_KINDS = new Set<AcpToolKind>(['read', 'search', 'think', 'fetch'])
+const SCOPED_MUTATION_KINDS = new Set<AcpToolKind>(['edit', 'move', 'delete', 'execute'])
+
+function preferredAllowOption(options: PermissionOption[]): PermissionOption | undefined {
+  return (
+    options.find((option) => option.kind === 'allow_once') ??
+    options.find((option) => option.kind === 'allow_always')
+  )
+}
+
+export function decidePermission(input: DecidePermissionInput): PermissionDecision {
+  const kind = KNOWN_TOOL_KINDS.has(input.toolKind) ? input.toolKind : 'other'
+  const allow = preferredAllowOption(input.options)
+  if (!allow) {
+    return { mode: 'cancelled', reason: `no allow option available for ${kind}` }
+  }
+
+  if (input.permissionMode === 'auto') {
+    return {
+      mode: 'automatic',
+      option: allow,
+      decision: 'allow',
+      reason: `auto permission mode selected ${allow.kind} for ${kind}`,
+    }
+  }
+
+  if (READ_ONLY_KINDS.has(kind)) {
+    return {
+      mode: 'automatic',
+      option: allow,
+      decision: 'allow',
+      reason: `default permission mode allows non-changing ${kind} with ${allow.kind}`,
+    }
+  }
+
+  if (SCOPED_MUTATION_KINDS.has(kind) && input.targetScope === 'inside_project') {
+    return {
+      mode: 'automatic',
+      option: allow,
+      decision: 'allow',
+      reason: `default permission mode allows project-local ${kind} with ${allow.kind}`,
+    }
+  }
+
+  return {
+    mode: 'manual',
+    reason: `default permission mode requires approval for ${kind} scope ${input.targetScope}`,
+  }
+}

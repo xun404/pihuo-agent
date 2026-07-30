@@ -4,10 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
-  decidePermission,
   ApprovalWaitRegistry,
-  type PermissionOption,
-  type SessionApprovalPolicy,
   LocalStore,
   getSharedStore,
   resetSharedStoreForTests,
@@ -34,128 +31,6 @@ describe('scheduler detached run boundary', () => {
     assert.equal(observed.length, 1)
     assert.equal(observed[0]?.jobId, 'job-detached')
     assert.match(String(observed[0]?.error), /startup failure/)
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Tests: Policy Engine (decidePermission) — pure function tests
-// ---------------------------------------------------------------------------
-
-describe('decidePermission — auto-allow', () => {
-  const allowOnce: PermissionOption = { optionId: 'ao', name: 'Allow Once', kind: 'allow_once' }
-  const allowAlways: PermissionOption = {
-    optionId: 'aa',
-    name: 'Allow Always',
-    kind: 'allow_always',
-  }
-
-  it('read auto-allows with allow_once', () => {
-    const r = decidePermission({
-      toolKind: 'read',
-      options: [allowOnce],
-      sessionPolicy: 'allow_always',
-    })
-    assert.equal(r.mode, 'automatic')
-    if (r.mode === 'automatic') {
-      assert.equal(r.decision, 'allow')
-      assert.equal(r.option.kind, 'allow_once')
-    }
-  })
-
-  it('search auto-allows with allow_always', () => {
-    const r = decidePermission({
-      toolKind: 'search',
-      options: [allowAlways],
-      sessionPolicy: 'allow_always',
-    })
-    assert.equal(r.mode, 'automatic')
-    if (r.mode === 'automatic') {
-      assert.equal(r.option.kind, 'allow_always')
-    }
-  })
-
-  it('think auto-allows with allow_always', () => {
-    const r = decidePermission({
-      toolKind: 'think',
-      options: [allowAlways],
-      sessionPolicy: 'allow_once',
-    })
-    assert.equal(r.mode, 'automatic')
-  })
-
-  it('read with only reject options goes manual', () => {
-    const r = decidePermission({
-      toolKind: 'read',
-      options: [], // no allow_* options
-      sessionPolicy: 'allow_once',
-    })
-    assert.equal(r.mode, 'manual')
-  })
-})
-
-describe('decidePermission — delete always manual', () => {
-  const allowOnce: PermissionOption = { optionId: 'ao', name: 'Allow Once', kind: 'allow_once' }
-  const allowAlways: PermissionOption = {
-    optionId: 'aa',
-    name: 'Allow Always',
-    kind: 'allow_always',
-  }
-
-  it('delete with allow_always policy is still manual', () => {
-    const r = decidePermission({
-      toolKind: 'delete',
-      options: [allowAlways],
-      sessionPolicy: 'allow_always',
-    })
-    assert.equal(r.mode, 'manual')
-  })
-
-  it('delete with allow_once options is manual', () => {
-    const r = decidePermission({
-      toolKind: 'delete',
-      options: [allowOnce],
-      sessionPolicy: 'allow_once',
-    })
-    assert.equal(r.mode, 'manual')
-  })
-})
-
-describe('decidePermission — controlled group', () => {
-  const allowOnce: PermissionOption = { optionId: 'ao', name: 'Allow Once', kind: 'allow_once' }
-  const allowAlways: PermissionOption = {
-    optionId: 'aa',
-    name: 'Allow Always',
-    kind: 'allow_always',
-  }
-  const rejectOnce: PermissionOption = { optionId: 'rj1', name: 'Reject Once', kind: 'reject_once' }
-
-  it('edit matches allow_always policy', () => {
-    const r = decidePermission({
-      toolKind: 'edit',
-      options: [allowAlways, allowOnce],
-      sessionPolicy: 'allow_always',
-    })
-    assert.equal(r.mode, 'automatic')
-    if (r.mode === 'automatic') assert.equal(r.option.kind, 'allow_always')
-  })
-
-  it('edit does not match allow_always when only allow_once present', () => {
-    const r = decidePermission({
-      toolKind: 'edit',
-      options: [allowOnce],
-      sessionPolicy: 'allow_always',
-    })
-    assert.equal(r.mode, 'manual')
-  })
-
-  it('execute matches reject_once policy with deny decision', () => {
-    const r = decidePermission({
-      toolKind: 'execute',
-      options: [rejectOnce],
-      sessionPolicy: 'reject_once',
-    })
-    assert.equal(r.mode, 'automatic')
-    if (r.mode === 'automatic') assert.equal(r.decision, 'deny')
   })
 })
 
@@ -304,10 +179,10 @@ describe('store.resolveApproval — validation', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Tests: Job policy freeze
+// Tests: Legacy Job policy snapshot compatibility
 // ---------------------------------------------------------------------------
 
-describe('job policy freeze', () => {
+describe('legacy job policy snapshot', () => {
   let tmpDir: string
   before(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'router-test-'))
@@ -348,101 +223,6 @@ describe('job policy freeze', () => {
     store.updateSessionApprovalPolicy(session.id, 'manual')
     const reloaded = store.getJob(job.id)
     assert.equal(reloaded?.approvalPolicy, 'allow_always')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Tests: Policy engine — NEVER uses option name for decisions
-// ---------------------------------------------------------------------------
-
-describe('policy engine — never uses option name', () => {
-  it('edit with allow_once option named "Allow Always" goes manual (name not used)', () => {
-    const opt: PermissionOption = { optionId: 'x', name: 'Allow Always', kind: 'allow_once' }
-    const r = decidePermission({
-      toolKind: 'edit',
-      options: [opt],
-      sessionPolicy: 'allow_always',
-    })
-    // Should be manual because kind 'allow_once' ≠ policy 'allow_always'
-    assert.equal(r.mode, 'manual')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// P0-1: manual / reject policies must NOT degrade to allow_once
-// ---------------------------------------------------------------------------
-
-describe('P0-1 — manual / reject policies are NOT auto-allow', () => {
-  const allowOnce: PermissionOption = { optionId: 'ao', name: 'Allow Once', kind: 'allow_once' }
-  const allowAlways: PermissionOption = {
-    optionId: 'aa',
-    name: 'Allow Always',
-    kind: 'allow_always',
-  }
-  const rejectOnce: PermissionOption = { optionId: 'rj1', name: 'Reject Once', kind: 'reject_once' }
-
-  it('manual policy → edit goes manual even with allow_once option present', () => {
-    const r = decidePermission({
-      toolKind: 'edit',
-      options: [allowOnce],
-      sessionPolicy: 'manual' as SessionApprovalPolicy,
-    })
-    assert.equal(r.mode, 'manual')
-  })
-
-  it('manual policy → execute goes manual', () => {
-    const r = decidePermission({
-      toolKind: 'execute',
-      options: [rejectOnce],
-      sessionPolicy: 'manual' as SessionApprovalPolicy,
-    })
-    assert.equal(r.mode, 'manual')
-  })
-
-  it('manual policy → fetch goes manual', () => {
-    const r = decidePermission({
-      toolKind: 'fetch',
-      options: [allowOnce],
-      sessionPolicy: 'manual' as SessionApprovalPolicy,
-    })
-    assert.equal(r.mode, 'manual')
-  })
-
-  it('reject_once → edit matches reject option with deny decision', () => {
-    const r = decidePermission({
-      toolKind: 'edit',
-      options: [allowOnce, rejectOnce],
-      sessionPolicy: 'reject_once' as SessionApprovalPolicy,
-    })
-    assert.equal(r.mode, 'automatic')
-    if (r.mode === 'automatic') assert.equal(r.decision, 'deny')
-  })
-
-  it('reject_always → execute goes manual when no matching reject option', () => {
-    const r = decidePermission({
-      toolKind: 'execute',
-      options: [rejectOnce],
-      sessionPolicy: 'reject_always' as SessionApprovalPolicy,
-    })
-    assert.equal(r.mode, 'manual')
-  })
-
-  it('manual policy → read still auto-allows (whitelist)', () => {
-    const r = decidePermission({
-      toolKind: 'read',
-      options: [allowOnce],
-      sessionPolicy: 'manual' as SessionApprovalPolicy,
-    })
-    assert.equal(r.mode, 'automatic')
-  })
-
-  it('reject_once → search still auto-allows (whitelist)', () => {
-    const r = decidePermission({
-      toolKind: 'search',
-      options: [allowOnce],
-      sessionPolicy: 'reject_once' as SessionApprovalPolicy,
-    })
-    assert.equal(r.mode, 'automatic')
   })
 })
 

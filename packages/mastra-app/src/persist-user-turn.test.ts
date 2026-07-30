@@ -5,6 +5,7 @@ import {
   persistUserTurnUpFront,
   type UserTurnMemoryStore,
 } from './persist-user-turn.js'
+import * as persistUserTurnModule from './persist-user-turn.js'
 
 const NOW = new Date('2026-07-28T08:00:00.000Z')
 
@@ -108,5 +109,51 @@ describe('persistUserTurnUpFront', () => {
     })
     assert.equal(saved, 0)
     assert.deepEqual(memory.calls, [])
+  })
+})
+
+describe('buildLeaderRunMetaDbMessage', () => {
+  it('builds a durable assistant marker with the actual model, thinking and timing', () => {
+    const buildLeaderRunMetaDbMessage = (
+      persistUserTurnModule as typeof persistUserTurnModule & {
+        buildLeaderRunMetaDbMessage?: (input: Record<string, unknown>) => Record<string, unknown>
+      }
+    ).buildLeaderRunMetaDbMessage
+    assert.equal(typeof buildLeaderRunMetaDbMessage, 'function')
+
+    const startedAt = new Date('2026-07-30T02:08:17.000Z')
+    const completedAt = new Date('2026-07-30T02:09:30.000Z')
+    const row = buildLeaderRunMetaDbMessage!({
+      runId: 'run-1',
+      threadId: 'thread-1',
+      resourceId: 'proj-1',
+      model: 'opencode-go/deepseek-v4-flash',
+      thinking: 'max',
+      startedAt,
+      completedAt,
+    })
+
+    assert.deepEqual(row, {
+      id: 'leader-run-meta:run-1',
+      role: 'assistant',
+      createdAt: completedAt,
+      threadId: 'thread-1',
+      resourceId: 'proj-1',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'data-leader-run-meta',
+            data: {
+              runId: 'run-1',
+              startedAt: startedAt.toISOString(),
+              completedAt: completedAt.toISOString(),
+              model: 'opencode-go/deepseek-v4-flash',
+              thinking: 'max',
+            },
+          },
+        ],
+      },
+    })
   })
 })

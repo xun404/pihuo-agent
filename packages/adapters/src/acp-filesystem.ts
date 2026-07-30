@@ -1,8 +1,115 @@
 import { realpathSync, statSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname, isAbsolute } from 'node:path'
+import type { ApprovalOption } from '@swarmdesk-agent/shared'
+import { classifyAcpFilePath } from './acp-path-scope.js'
 
 export const DEFAULT_MAX_FILE_BYTES = 1_000_000
 export const DEFAULT_WRITE_MAX_BYTES = 2_000_000
+
+export interface AcpFilesystemPermissionRequest {
+  source: 'client_fs'
+  kind: 'edit'
+  title: string
+  locations: Array<{ path: string }>
+  options: ApprovalOption[]
+}
+
+export type AcpFilesystemPermissionResult = {
+  outcome: 'selected' | 'cancelled'
+  optionId?: string
+}
+
+export interface WriteAcpTextFileInput {
+  projectRoot: string
+  target: string
+  content: string
+  maxBytes?: number
+  signal?: AbortSignal
+  requestPermission?: (
+    request: AcpFilesystemPermissionRequest,
+  ) => Promise<AcpFilesystemPermissionResult>
+}
+
+const FILESYSTEM_ALLOW_ONCE_ID = 'router_fs_allow_once'
+const FILESYSTEM_REJECT_ONCE_ID = 'router_fs_reject_once'
+
+const FILESYSTEM_PERMISSION_OPTIONS: ApprovalOption[] = [
+  { optionId: FILESYSTEM_ALLOW_ONCE_ID, name: 'Allow once', kind: 'allow_once' },
+  { optionId: FILESYSTEM_REJECT_ONCE_ID, name: 'Reject once', kind: 'reject_once' },
+]
+
+export function readAcpTextFile(
+  projectRoot: string,
+  target: string,
+  maxBytes: number = DEFAULT_MAX_FILE_BYTES,
+): { ok: true; content: string } | { ok: false; error: string } {
+  const classification = classifyAcpFilePath({ projectRoot, path: target })
+  if (!classification.resolvedPath) return { ok: false, error: 'Cannot resolve file path' }
+
+  try {
+    const stat = statSync(classification.resolvedPath)
+    if (!stat.isFile()) return { ok: false, error: 'Target is not a regular file' }
+    if (stat.size > maxBytes) return { ok: false, error: `File exceeds ${maxBytes} bytes` }
+    return { ok: true, content: readFileSync(classification.resolvedPath, 'utf8') }
+  } catch {
+    return { ok: false, error: 'Cannot read file' }
+  }
+}
+
+export async function writeAcpTextFileWithPermission(
+  input: WriteAcpTextFileInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const maxBytes = input.maxBytes ?? DEFAULT_WRITE_MAX_BYTES
+  if (Buffer.byteLength(input.content, 'utf8') > maxBytes) {
+    return { ok: false, error: `Content exceeds ${maxBytes} bytes` }
+  }
+  if (input.signal?.aborted) return { ok: false, error: 'Write cancelled' }
+
+  const initial = classifyAcpFilePath({ projectRoot: input.projectRoot, path: input.target })
+  if (initial.scope === 'unknown' || !initial.resolvedPath) {
+    return { ok: false, error: 'Cannot verify target path' }
+  }
+
+  if (initial.scope === 'outside_project') {
+    if (!input.requestPermission) return { ok: false, error: 'Permission required' }
+    let permission: AcpFilesystemPermissionResult
+    try {
+      permission = await input.requestPermission({
+        source: 'client_fs',
+        kind: 'edit',
+        title: 'Write file outside project',
+        locations: [{ path: initial.resolvedPath }],
+        options: FILESYSTEM_PERMISSION_OPTIONS.map((option) => ({ ...option })),
+      })
+    } catch {
+      return { ok: false, error: 'Permission request failed' }
+    }
+    if (
+      permission.outcome !== 'selected' ||
+      permission.optionId !== FILESYSTEM_ALLOW_ONCE_ID
+    ) {
+      return { ok: false, error: 'Write not allowed' }
+    }
+  }
+
+  if (input.signal?.aborted) return { ok: false, error: 'Write cancelled' }
+  const final = classifyAcpFilePath({ projectRoot: input.projectRoot, path: input.target })
+  if (
+    final.scope === 'unknown' ||
+    !final.resolvedPath ||
+    final.scope !== initial.scope ||
+    final.resolvedPath !== initial.resolvedPath
+  ) {
+    return { ok: false, error: 'Target path changed before write' }
+  }
+
+  try {
+    writeFileSync(final.resolvedPath, input.content, 'utf8')
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Cannot write file' }
+  }
+}
 
 export interface ResolveContainedResult {
   ok: true

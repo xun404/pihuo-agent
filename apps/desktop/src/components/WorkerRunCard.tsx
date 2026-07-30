@@ -107,9 +107,36 @@ function kindClass(kind?: WorkerKind | string, name?: string): string {
   return resolveWorkerBrand(kind, name)
 }
 
+type WorkerActionKind = 'input' | 'approval' | 'error' | 'output'
+
+function WorkerActionSection({
+  kind,
+  label,
+  marker,
+  children,
+}: {
+  kind: WorkerActionKind
+  label: string
+  marker: string
+  children: React.ReactNode
+}) {
+  const toolBlockKind = kind === 'error' ? 'error' : kind === 'output' ? 'output' : 'input'
+  return (
+    <section className={`worker-action-section worker-action-${kind}`}>
+      <div className="worker-action-label">{label}</div>
+      <div className={`tool-row-block tool-row-block-${toolBlockKind} worker-action-block`}>
+        <span className="tool-row-block-marker" aria-hidden>
+          {marker}
+        </span>
+        <div className="tool-row-block-content worker-action-content">{children}</div>
+      </div>
+    </section>
+  )
+}
+
 /**
- * Wireframe «对话+Worker»：worker-card 嵌在 Leader 气泡流中。
- * 结构 1:1 → worker-card / head(logo·name·role·status) / body / approval-row
+ * Worker process row embedded in the Leader flow.
+ * The worker-run root deliberately differs from Settings' worker-card class.
  */
 export const WorkerRunCard = memo(function WorkerRunCard({
   state,
@@ -146,10 +173,11 @@ export const WorkerRunCard = memo(function WorkerRunCard({
   const durationSec =
     startMs != null && endMs != null && endMs >= startMs ? (endMs - startMs) / 1000 : 0
   const showDuration = isRunning || (isTerminal && durationSec > 0)
-  const label =
+  const workerLabel =
     state.workerKind === 'custom'
       ? state.workerName
       : (KIND_LABELS[state.workerKind] ?? state.workerName)
+  const memberLabel = state.teamMemberName?.trim() || state.workerName || workerLabel
   const statusText = STATUS_LABELS[status]?.zh ?? status
   const approval = state.pendingApproval ?? null
   const publicError = state.recoveryError ?? state.error
@@ -187,9 +215,9 @@ export const WorkerRunCard = memo(function WorkerRunCard({
           : ''
 
   return (
-    <div className={`worker-card worker-card-${status}${isOpen ? ' is-open' : ''}`}>
+    <div className={`worker-run worker-run-${status}${isOpen ? ' is-open' : ''}`}>
       <div
-        className="worker-card-head"
+        className="worker-card-head process-row-summary"
         role="button"
         tabIndex={0}
         aria-expanded={isOpen}
@@ -198,19 +226,24 @@ export const WorkerRunCard = memo(function WorkerRunCard({
       >
         {/* 图标槽：worker-logo ↔ chevron 交叉淡入（对齐工具/思考的 .tr-icon-slot 模式）
             折叠态显 logo，hover 时 logo 淡出 + chevron 淡入，展开态 chevron 旋转 90°。*/}
-        <span className="worker-icon-slot" aria-hidden>
+        <span className="worker-icon-slot process-icon-slot" aria-hidden>
           <span
-            className={`worker-logo ${kindClass(state.workerKind, state.workerName)}`}
-            title={label}
+            className={`worker-logo process-icon-type ${kindClass(state.workerKind, state.workerName)}`}
+            title={state.workerName || workerLabel}
           >
-            <WorkerBrandLogo kind={state.workerKind} name={state.workerName} size={10} />
+            <WorkerBrandLogo
+              kind={state.workerKind}
+              name={state.workerName}
+              size={10}
+              workerId={state.workerId}
+            />
           </span>
-          <span className="worker-chevron">
+          <span className="worker-chevron process-icon-chevron">
             <ChevronIcon />
           </span>
         </span>
         <span className="name">
-          {label}
+          {memberLabel}
           {isRunning && (
             <span className="busy-dots" aria-hidden>
               <span className="d" />
@@ -219,20 +252,26 @@ export const WorkerRunCard = memo(function WorkerRunCard({
             </span>
           )}
         </span>
-        {state.model && (
-          <span className="model mono" title={state.model.trim()}>
-            {shortModelId(state.model)}
-          </span>
-        )}
-        {state.reasoning && (
-          <span className="model mono reasoning-tag" title={state.reasoning.trim()}>
-            {state.reasoning}
-          </span>
-        )}
-        {/* 角色 pill（node-cap 样式）——持久化在 WorkerJob.role，不随 session 设置变化 */}
         {state.role && (
           <span className="node-cap role-cap" data-role={state.role}>
             {ROLE_LABELS[state.role] ?? state.role}
+          </span>
+        )}
+        {(state.model || state.reasoning) && (
+          <span className="worker-card-config mono">
+            {state.model && (
+              <span className="model" title={state.model.trim()}>
+                {shortModelId(state.model)}
+              </span>
+            )}
+            {state.model && state.reasoning && (
+              <span className="worker-card-config-separator">·</span>
+            )}
+            {state.reasoning && (
+              <span className="model reasoning-tag" title={state.reasoning.trim()}>
+                {state.reasoning}
+              </span>
+            )}
           </span>
         )}
         <span className={`status${statusClass ? ` ${statusClass}` : ''}`}>
@@ -244,30 +283,26 @@ export const WorkerRunCard = memo(function WorkerRunCard({
       {shouldRender && (
         <div ref={contentRef} aria-hidden={!isOpen} className="worker-card-collapse">
           <div
-            className="node-body-inner"
+            className="node-body-inner process-collapse-body"
             style={{
               opacity: isOpen ? 1 : 0,
               transform: isOpen ? 'translateY(0)' : 'translateY(-4px)',
               transition: 'opacity 180ms ease-out, transform 180ms ease-out',
             }}
           >
-            {/* .line 事件流（线稿 node-body-inner .line 1:1）
-            数据诚实映射：task=派发任务行，approval=审批行，error=失败行，output=完成行。
-            thinking / 子工具调用历史无数据源，不伪造。*/}
+            {/* 只按真实 WorkerRunState 数据渲染动作；当前没有 thinking 内容数据源，不伪造。 */}
             {taskPrompt && (
-              <div className="line">
-                <span className="mk" aria-hidden>
-                  ▸
-                </span>
-                <span className="tx">{taskPrompt}</span>
-              </div>
+              <WorkerActionSection kind="input" label={t('workers.runInput')} marker="$">
+                {taskPrompt}
+              </WorkerActionSection>
             )}
             {isPendingApproval && approval && (
-              <div className="line">
-                <span className="mk" aria-hidden>
-                  ▸
-                </span>
-                <span className="tx">
+              <WorkerActionSection
+                kind="approval"
+                label={t('workers.runApproval')}
+                marker="!"
+              >
+                <div className="worker-action-approval-detail">
                   {approval.toolKind
                     ? `${TOOL_KIND_LABELS[approval.toolKind] ?? approval.toolKind} · `
                     : ''}
@@ -276,15 +311,23 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                   {approval.locations && approval.locations.length > 0
                     ? ` · ${formatLocations(approval.locations)}`
                     : ''}
-                </span>
-              </div>
+                </div>
+                {onResolveApproval && (
+                  <div className="approval-row worker-action-approval-controls">
+                    <ApprovalActions
+                      approval={approval}
+                      surface="chat"
+                      resolving={resolving}
+                      onResolve={onResolveApproval}
+                      variant="wireframe"
+                    />
+                  </div>
+                )}
+              </WorkerActionSection>
             )}
             {publicError && (
-              <div className="line">
-                <span className="mk err" aria-hidden>
-                  ✗
-                </span>
-                <span className="tx">
+              <WorkerActionSection kind="error" label={t('workers.runError')} marker="✗">
+                <div>
                   {publicError}
                   {state.errorCode === 'WORKER_AUTH_REQUIRED' && (
                     <>
@@ -322,29 +365,19 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                       {t('workers.runRestartContext')}
                     </button>
                   )}
-                </span>
-              </div>
+                </div>
+              </WorkerActionSection>
             )}
-            {/* 完成态：渲染最终回复。长回复用 markdown（块结构），短回复用单行 ✓。*/}
-            {state.output && isTerminal && status === 'completed' && (
-              <div className="line ok worker-reply">
-                <span className="mk" aria-hidden>
-                  ✓
-                </span>
-                <span className="tx">
+            {state.output && (
+              <WorkerActionSection
+                kind="output"
+                label={t('workers.runOutput')}
+                marker={status === 'completed' ? '✓' : '›'}
+              >
+                <div className="worker-action-markdown">
                   <MarkdownContent>{state.output}</MarkdownContent>
-                </span>
-              </div>
-            )}
-            {state.output && !isTerminal && (
-              <div className="line worker-reply">
-                <span className="mk" aria-hidden>
-                  ▸
-                </span>
-                <span className="tx">
-                  <MarkdownContent>{state.output}</MarkdownContent>
-                </span>
-              </div>
+                </div>
+              </WorkerActionSection>
             )}
             {/* 运行中无输出：显示运行提示行 */}
             {isRunning && !state.output && !publicError && !isPendingApproval && (
@@ -373,17 +406,6 @@ export const WorkerRunCard = memo(function WorkerRunCard({
               </div>
             )}
 
-            {isPendingApproval && approval && onResolveApproval && (
-              <div className="approval-row">
-                <ApprovalActions
-                  approval={approval}
-                  surface="chat"
-                  resolving={resolving}
-                  onResolve={onResolveApproval}
-                  variant="wireframe"
-                />
-              </div>
-            )}
           </div>
         </div>
       )}

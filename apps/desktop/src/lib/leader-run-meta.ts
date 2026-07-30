@@ -19,6 +19,50 @@ export type ClientTurnMeta = {
   thinking?: string
 }
 
+type RunMetaPartData = {
+  startedAt?: unknown
+  completedAt?: unknown
+  model?: unknown
+  thinking?: unknown
+}
+
+type RunMessage = {
+  id: string
+  role: string
+  metadata?: unknown
+  parts?: Array<{
+    type?: string
+    text?: string
+    state?: string
+    toolName?: string
+    output?: unknown
+    errorText?: string
+    data?: unknown
+  }>
+}
+
+/**
+ * Return only an assistant that belongs to the latest user turn. While a new
+ * request is waiting for its first assistant chunk, this deliberately returns
+ * undefined instead of reusing (and overwriting timing for) the previous turn.
+ */
+export function findCurrentTurnAssistant<T extends { role: string }>(
+  messages: T[],
+): T | undefined {
+  let lastUserIndex = -1
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') {
+      lastUserIndex = index
+      break
+    }
+  }
+  if (lastUserIndex < 0) return undefined
+  for (let index = messages.length - 1; index > lastUserIndex; index -= 1) {
+    if (messages[index]?.role === 'assistant') return messages[index]
+  }
+  return undefined
+}
+
 export function shortModelId(model?: string): string {
   if (!model?.trim()) return ''
   const m = model.trim()
@@ -44,6 +88,92 @@ export function parseMessageTimestamp(msg: unknown): number | null {
     }
   }
   return null
+}
+
+function parseTimestampValue(value: unknown): number | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.getTime()
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value < 1e12 ? value * 1000 : value
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Date.parse(value)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+  return null
+}
+
+function durableRunMeta(msg: RunMessage): LeaderRunMeta {
+  const parts = Array.isArray(msg.parts) ? msg.parts : []
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index]
+    if (part?.type !== 'data-leader-run-meta' || !part.data || typeof part.data !== 'object') {
+      continue
+    }
+    const data = part.data as RunMetaPartData
+    return {
+      startedAt: parseTimestampValue(data.startedAt) ?? undefined,
+      endedAt: parseTimestampValue(data.completedAt) ?? undefined,
+      model: typeof data.model === 'string' && data.model.trim() ? data.model.trim() : undefined,
+      thinking:
+        typeof data.thinking === 'string' && data.thinking.trim()
+          ? data.thinking.trim()
+          : undefined,
+    }
+  }
+  return {}
+}
+
+function assistantMetadataModel(msg: RunMessage): string | undefined {
+  if (!msg.metadata || typeof msg.metadata !== 'object') return undefined
+  const metadata = msg.metadata as Record<string, unknown>
+  const provider =
+    typeof metadata.provider === 'string' && metadata.provider.trim()
+      ? metadata.provider.trim()
+      : undefined
+  const modelId =
+    typeof metadata.modelId === 'string' && metadata.modelId.trim()
+      ? metadata.modelId.trim()
+      : typeof metadata.modelID === 'string' && metadata.modelID.trim()
+        ? metadata.modelID.trim()
+        : undefined
+  if (!modelId) return undefined
+  return provider ? `${provider}/${modelId}` : modelId
+}
+
+function precedingUserTimestamp(messages: RunMessage[], assistantIndex: number): number | undefined {
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message?.role !== 'user') continue
+    return parseMessageTimestamp(message) ?? undefined
+  }
+  return undefined
+}
+
+/** Current Leader footer activity. Unknown or idle states deliberately fall back to Thinking. */
+export function resolveLeaderActivity(parts: Array<Record<string, unknown>>): string {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index]
+    const type = typeof part.type === 'string' ? part.type : ''
+    if (type === 'reasoning' && part.state === 'streaming') return 'Thinking'
+    if (!type.startsWith('tool-') && type !== 'dynamic-tool') continue
+
+    const done =
+      part.state === 'result' ||
+      part.state === 'output-available' ||
+      part.state === 'output-error' ||
+      part.output != null ||
+      Boolean(part.errorText)
+    if (done) continue
+
+    const toolName =
+      (typeof part.toolName === 'string' && part.toolName) || type.replace(/^tool-/, '')
+    if (/(?:bash|shell|command|exec|terminal)/i.test(toolName)) return 'Command'
+    if (/(?:task|dispatch|worker|team)/i.test(toolName)) return 'Task'
+    if (/(?:read|get|list|search|find|grep|glob|fetch)/i.test(toolName)) return 'Read'
+    if (/(?:write|edit|patch|create|update|set)/i.test(toolName)) return 'Edit'
+    return 'Thinking'
+  }
+  return 'Thinking'
 }
 
 function userTextFromMessage(msg: { parts?: Array<{ type?: string; text?: string }> }): string {
@@ -107,16 +237,12 @@ export function formatClockTime(
 
 /**
  * Seed / update timings from message list + optional live client map.
- * - History: startedAt from message createdAt; endedAt ≈ next message createdAt
+ * - History: startedAt from the preceding user; endedAt from the persisted assistant timestamp
  * - Client map: wall-clock + model/thinking captured at turn start
  *   (local user bubbles strip wire [context], so client seal is primary for first chats)
  */
 export function resolveLeaderRunMeta(
-  messages: Array<{
-    id: string
-    role: string
-    parts?: Array<{ type?: string; text?: string }>
-  }>,
+  messages: RunMessage[],
   assistantIndex: number,
   clientTimings: Map<string, ClientTurnMeta>,
   opts: {
@@ -132,10 +258,20 @@ export function resolveLeaderRunMeta(
 
   const fromUser = extractPrecedingUserMeta(messages, assistantIndex)
   const client = clientTimings.get(msg.id)
+  const durable = durableRunMeta(msg)
   const msgTs = parseMessageTimestamp(msg)
 
-  const startedAt = client?.startedAt ?? msgTs ?? undefined
-  let endedAt = client?.endedAt
+  const startedAt =
+    durable.startedAt ?? client?.startedAt ?? precedingUserTimestamp(messages, assistantIndex) ?? msgTs ?? undefined
+  let endedAt = durable.endedAt ?? client?.endedAt
+
+  // Legacy history has no data-leader-run-meta marker. Mastra persists the
+  // assistant message when the run completes, so its createdAt is the closest
+  // durable completion boundary. Prefer it over the next user message: the
+  // latter includes arbitrary time the user spent reading before sending again.
+  if (endedAt == null && !opts.live && msgTs != null && (startedAt == null || msgTs >= startedAt)) {
+    endedAt = msgTs
+  }
 
   if (endedAt == null && !opts.live) {
     for (let j = assistantIndex + 1; j < messages.length; j++) {
@@ -153,8 +289,13 @@ export function resolveLeaderRunMeta(
   }
 
   return {
-    model: fromUser.model || client?.model || opts.fallbackModel,
-    thinking: fromUser.thinking || client?.thinking || opts.fallbackThinking,
+    model:
+      durable.model ||
+      assistantMetadataModel(msg) ||
+      fromUser.model ||
+      client?.model ||
+      opts.fallbackModel,
+    thinking: durable.thinking || fromUser.thinking || client?.thinking || opts.fallbackThinking,
     startedAt,
     endedAt,
   }

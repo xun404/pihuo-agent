@@ -31,11 +31,9 @@ import {
   globalActivityLog,
   mapAcpPermissionToEnqueue,
   globalApprovalWaiters,
-  decidePermission,
   loadSettings,
   loadWorkerSecretsSnapshotForSpawn,
   resolveWorkerTimeoutSettings,
-  type AcpToolKind,
   type ApprovalWaitOutcome,
   type WorkerTimeoutSettings,
 } from '@swarmdesk-agent/core'
@@ -48,8 +46,8 @@ import {
   type ApprovalLocation,
   type JobSource,
   type JobStatus,
+  type SessionPermissionMode,
   type TeamMember,
-  type SessionApprovalPolicy,
   type WorkerJob,
   type WorkerRegistration,
   type WorkerRole,
@@ -57,6 +55,11 @@ import {
 } from '@swarmdesk-agent/shared'
 import { emitWorkerEvent, getWorkerEventEmitter, MAX_TIMER_DELAY_MS } from './worker-events.js'
 import { getWorkerCatalogForDispatch } from './worker-models.js'
+import {
+  decidePermissionForJobInStore,
+  setSessionPermissionModeInStore,
+} from './session-permission-mode.js'
+export { decidePermissionForJobInStore, setSessionPermissionModeInStore }
 
 function store() {
   return getSharedStore()
@@ -322,48 +325,6 @@ export function capacityRetryDelay(
   return Math.min(Math.max(1, Math.floor(parsed)), MAX_TIMER_DELAY_MS)
 }
 
-const ACP_TOOL_KIND_MAP: Record<string, AcpToolKind> = {
-  read: 'read',
-  search: 'search',
-  grep: 'search',
-  glob: 'search',
-  think: 'think',
-  delete: 'delete',
-  remove: 'delete',
-  edit: 'edit',
-  write: 'edit',
-  patch: 'edit',
-  move: 'move',
-  rename: 'move',
-  execute: 'execute',
-  bash: 'execute',
-  exec: 'execute',
-  run: 'execute',
-  fetch: 'fetch',
-  web: 'fetch',
-  http: 'fetch',
-  switch_mode: 'switch_mode',
-}
-
-function resolveAcpToolKind(kind: string | undefined): AcpToolKind {
-  if (!kind) return 'other'
-  const lower = kind.toLowerCase().trim()
-  return ACP_TOOL_KIND_MAP[lower] ?? 'other'
-}
-
-function normalizePolicyForEngine(raw: string | undefined): SessionApprovalPolicy {
-  if (!raw) return 'manual'
-  const valid = new Set<string>([
-    'manual',
-    'allow_once',
-    'allow_always',
-    'reject_once',
-    'reject_always',
-  ])
-  if (valid.has(raw)) return raw as SessionApprovalPolicy
-  return 'manual' // unknown → safe default (manual requires human approval)
-}
-
 export class WorkerScheduler {
   private maxGlobal = envInt('WORKER_MAX_GLOBAL', 2)
   private maxPerWorker = envInt('WORKER_MAX_PER_WORKER', 1)
@@ -466,6 +427,22 @@ export class WorkerScheduler {
 
   getLifecycleState(): 'accepting' | 'shutting_down' | 'closed' {
     return this.lifecycle
+  }
+
+  setSessionPermissionMode(sessionId: string, permissionMode: SessionPermissionMode) {
+    return setSessionPermissionModeInStore({
+      store: store(),
+      sessionId,
+      permissionMode,
+      onApprovalResolved: (approval) => {
+        if (!approval.jobId) return
+        emitWorkerEvent(approval.jobId, {
+          type: 'approval_resolved',
+          jobId: approval.jobId,
+          approval,
+        })
+      },
+    })
   }
 
   /** Stop admission synchronously, then terminalize open work on graceful shutdown. */
@@ -1449,6 +1426,7 @@ export class WorkerScheduler {
           error: `Timed out after ${workerTimeouts.jobTimeoutMs}ms`,
           truncated: false,
           workerName: worker.name,
+          teamMemberName: job.teamMemberName,
           workerKind: worker.kind,
           role: job.role,
           model: job.effectiveModel,
@@ -1486,6 +1464,7 @@ export class WorkerScheduler {
               jobId,
               workerId: worker.id,
               workerName: worker.name,
+              teamMemberName: job.teamMemberName,
               workerKind: worker.kind,
               role: job.role,
               model: job.effectiveModel,
@@ -1500,14 +1479,15 @@ export class WorkerScheduler {
               return { outcome: 'cancelled' as const }
             }
 
-            const frozenPolicy = cur.approvalPolicy
-            const enginePolicy = normalizePolicyForEngine(frozenPolicy)
-            const toolKind = resolveAcpToolKind(request.kind)
-            const decision = decidePermission({
-              toolKind,
-              options: request.options,
-              sessionPolicy: enginePolicy,
+            const { decision, toolKind } = decidePermissionForJobInStore({
+              store: store(),
+              jobId,
+              request,
             })
+
+            if (decision.mode === 'cancelled') {
+              return { outcome: 'cancelled' as const }
+            }
 
             if (decision.mode === 'automatic') {
               const locs: ApprovalLocation[] = (request.locations ?? []).map((l) => ({
@@ -1624,6 +1604,7 @@ export class WorkerScheduler {
                     error: 'Approval timed out',
                     truncated: false,
                     workerName: worker.name,
+                    teamMemberName: job.teamMemberName,
                     workerKind: worker.kind,
                     role: job.role,
                     model: job.effectiveModel,
@@ -1708,6 +1689,7 @@ export class WorkerScheduler {
             error: result.error,
             truncated,
             workerName: worker.name,
+            teamMemberName: job.teamMemberName,
             workerKind: worker.kind,
             role: job.role,
             model: job.effectiveModel,
@@ -1757,6 +1739,7 @@ export class WorkerScheduler {
           output: result.output?.slice(0, 32_000) ?? '',
           truncated,
           workerName: worker.name,
+          teamMemberName: job.teamMemberName,
           workerKind: worker.kind,
           role: job.role,
           model: job.effectiveModel,
@@ -1797,6 +1780,7 @@ export class WorkerScheduler {
           errorCode: runtimeCode,
           truncated: false,
           workerName: worker.name,
+          teamMemberName: job.teamMemberName,
           workerKind: worker.kind,
           role: job.role,
           model: job.effectiveModel,

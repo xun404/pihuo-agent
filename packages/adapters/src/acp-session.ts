@@ -13,7 +13,7 @@ import {
 import type { ApprovalOption, ApprovalOptionKind } from '@swarmdesk-agent/shared'
 import type { AcpSpawnConfig } from './acp-config.js'
 import { extractModelOptions, type ModelOptionsResult } from './acp-model-options.js'
-import { readContainedText, writeContainedText } from './acp-filesystem.js'
+import { readAcpTextFile, writeAcpTextFileWithPermission } from './acp-filesystem.js'
 
 export interface AcpSessionConfig {
   spawn: AcpSpawnConfig
@@ -22,6 +22,7 @@ export interface AcpSessionConfig {
 }
 
 export interface AcpPermissionRequest {
+  source: 'agent' | 'client_fs'
   toolCallId?: string
   kind?: string
   title?: string
@@ -114,6 +115,7 @@ export function mapPermissionRequest(params: {
   const opts = parseApprovalOptions(params.options)
 
   return {
+    source: 'agent',
     toolCallId: toolCall.toolCallId ?? undefined,
     kind,
     title,
@@ -305,6 +307,7 @@ export async function withAcpSession<T>(
     const output = Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>
     const stream = ndJsonStream(input, output)
 
+    let activeSessionId: string | undefined
     const app = client({ name: `swarmdesk-agent-${config.spawn.workerId}` })
       .onRequest(methods.client.session.requestPermission, async (ctx) => {
         if (!callbacks.onPermissionRequest) {
@@ -322,12 +325,24 @@ export async function withAcpSession<T>(
         }
       })
       .onRequest(methods.client.fs.readTextFile, async (ctx) => {
-        const r = readContainedText(cwd, ctx.params.path)
+        if (activeSessionId && ctx.params.sessionId !== activeSessionId) {
+          throw new Error('Filesystem request session mismatch')
+        }
+        const r = readAcpTextFile(cwd, ctx.params.path)
         if (!r.ok) throw new Error(r.error)
         return { content: r.content }
       })
       .onRequest(methods.client.fs.writeTextFile, async (ctx) => {
-        const r = writeContainedText(cwd, ctx.params.path, ctx.params.content)
+        if (activeSessionId && ctx.params.sessionId !== activeSessionId) {
+          throw new Error('Filesystem request session mismatch')
+        }
+        const r = await writeAcpTextFileWithPermission({
+          projectRoot: cwd,
+          target: ctx.params.path,
+          content: ctx.params.content,
+          signal,
+          requestPermission: callbacks.onPermissionRequest,
+        })
         if (!r.ok) throw new Error(r.error)
         return {}
       })
@@ -341,6 +356,7 @@ export async function withAcpSession<T>(
       })
 
       const session = await ctx.buildSession(cwd).start()
+      activeSessionId = session.sessionId
 
       // Wire abort signal: send ACP session/cancel first, then TERM/KILL
       if (signal) {

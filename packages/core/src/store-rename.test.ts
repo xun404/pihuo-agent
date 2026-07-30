@@ -62,12 +62,13 @@ describe('Session title — delayed naming', () => {
       assert.ok(renamed.updatedAt >= s.updatedAt)
     })
 
-    it('preserves mode, activeWorkerIds, memoryThreadId, approvalPolicy', () => {
+    it('preserves build mode, activeWorkerIds, memoryThreadId, and permission state', () => {
       const { store, projectId } = freshStore()
       const s = store.createSession({ projectId, mode: 'review' })
       const renamed = store.renameSession(s.id, 'Other')
-      assert.equal(renamed.mode, 'review')
+      assert.equal(renamed.mode, 'build')
       assert.equal(renamed.approvalPolicy, s.approvalPolicy)
+      assert.equal(renamed.permissionMode, s.permissionMode)
       assert.equal(renamed.memoryThreadId, s.memoryThreadId)
       assert.deepEqual(renamed.activeWorkerIds, s.activeWorkerIds)
     })

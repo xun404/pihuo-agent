@@ -1,6 +1,10 @@
 import { memo, useCallback } from 'react'
 import { formatElapsedSeconds } from '../../lib/format-elapsed'
-import { buildToolTerminalView, toolCommandPreview } from '../../lib/tool-terminal-display'
+import {
+  buildToolTerminalView,
+  toolCommandPreview,
+  type ToolField,
+} from '../../lib/tool-terminal-display'
 import { useCollapsible } from './useCollapsible'
 import { getToolIcon } from '../Icons'
 
@@ -54,6 +58,31 @@ function ToolIcon() {
   )
 }
 
+function ToolFields({ fields }: { fields: ToolField[] }) {
+  return (
+    <div className="tool-field-list">
+      {fields.map((field) =>
+        field.children ? (
+          <section className="tool-field-group" key={field.key}>
+            <div className="tool-field-group-title">{field.key}</div>
+            {field.children.map((child) => (
+              <div className="tool-field-row" key={child.key}>
+                <span className="tool-field-key">{child.key}</span>
+                <span className="tool-field-value">{child.value}</span>
+              </div>
+            ))}
+          </section>
+        ) : (
+          <div className="tool-field-row" key={field.key}>
+            <span className="tool-field-key">{field.key}</span>
+            <span className="tool-field-value">{field.value}</span>
+          </div>
+        ),
+      )}
+    </div>
+  )
+}
+
 /**
  * Compact tool-call row: `[icon] Name 1.3s <command preview>`.
  * Expanded body renders like a terminal: `$ command` then raw stdout text.
@@ -74,7 +103,13 @@ export const ToolCallRow = memo(function ToolCallRow({
 }: Props) {
   const cmdPreview = toolCommandPreview(input)
   const view = buildToolTerminalView(input, output, errorText)
-  const hasDetail = Boolean(view.command || view.stdout || view.stderr)
+  const hasDetail = Boolean(
+    view.command ||
+      view.stdout ||
+      view.stderr ||
+      view.inputFields.length ||
+      view.outputFields.length,
+  )
   const isOpen = open
   const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: running })
   const ToolIconComp = getToolIcon(name)
@@ -99,18 +134,18 @@ export const ToolCallRow = memo(function ToolCallRow({
       className={`tool-row${errorText ? ' is-error' : ''}${running ? ' is-running' : ''}${isOpen ? ' is-open' : ''}`}
     >
       <div
-        className="tool-row-summary"
+        className="tool-row-summary process-row-summary"
         role={hasDetail ? 'button' : undefined}
         tabIndex={hasDetail ? 0 : undefined}
         aria-expanded={hasDetail ? isOpen : undefined}
         onClick={hasDetail ? toggle : undefined}
         onKeyDown={hasDetail ? onKeyDown : undefined}
       >
-        <span className="tr-icon-slot" aria-hidden>
-          <span className="tr-icon tr-icon-type">
+        <span className="tr-icon-slot process-icon-slot" aria-hidden>
+          <span className="tr-icon tr-icon-type process-icon-type">
             <ToolIconComp size={14} />
           </span>
-          <span className="tr-icon tr-icon-chevron">
+          <span className="tr-icon tr-icon-chevron process-icon-chevron">
             <ChevronIcon />
           </span>
         </span>
@@ -140,53 +175,44 @@ export const ToolCallRow = memo(function ToolCallRow({
       {shouldRender && hasDetail && (
         <div ref={contentRef} aria-hidden={!isOpen} className="tool-row-collapse">
           <div
-            className="node-body-inner"
+            className="node-body-inner process-collapse-body"
             style={{
               opacity: isOpen ? 1 : 0,
               transform: isOpen ? 'translateY(0)' : 'translateY(-4px)',
               transition: 'opacity 180ms ease-out, transform 180ms ease-out',
             }}
           >
-            {/* .line 事件流（线稿 node-body-inner .line 1:1）
-                command=$ 行，stdout=▸ 行（每行一条），stderr=✗ 行，完成=✓ 行。*/}
+            {/* OpenChamber 风格：输入/输出各自是完整内容块，多行文本只显示一个标记。 */}
             {view.command && (
-              <div className="line">
-                <span className="mk" aria-hidden>
+              <div className="tool-row-block tool-row-block-input">
+                <span className="tool-row-block-marker" aria-hidden>
                   $
                 </span>
-                <span className="tx">{view.command}</span>
+                <pre className="tool-row-block-content">{view.command}</pre>
               </div>
             )}
-            {view.stdout &&
-              view.stdout
-                .split('\n')
-                .filter(Boolean)
-                .map((line, idx) => (
-                  <div className="line" key={`o${idx}`}>
-                    <span className="mk" aria-hidden>
-                      ▸
-                    </span>
-                    <span className="tx">{line}</span>
-                  </div>
-                ))}
-            {view.stderr &&
-              view.stderr
-                .split('\n')
-                .filter(Boolean)
-                .map((line, idx) => (
-                  <div className="line" key={`e${idx}`}>
-                    <span className="mk err" aria-hidden>
-                      ✗
-                    </span>
-                    <span className="tx">{line}</span>
-                  </div>
-                ))}
-            {!running && !errorText && view.stdout && (
-              <div className="line ok">
-                <span className="mk" aria-hidden>
-                  ✓
+            {view.inputFields.length > 0 && <ToolFields fields={view.inputFields} />}
+            {view.stdout && (
+              <div className="tool-row-block tool-row-block-output">
+                <span className="tool-row-block-marker" aria-hidden>
+                  ›
                 </span>
-                <span className="tx">done</span>
+                <pre className="tool-row-block-content">{view.stdout}</pre>
+              </div>
+            )}
+            {view.outputFields.length > 0 && <ToolFields fields={view.outputFields} />}
+            {view.stderr && (
+              <div className="tool-row-block tool-row-block-error">
+                <span className="tool-row-block-marker" aria-hidden>
+                  ✗
+                </span>
+                <pre className="tool-row-block-content">{view.stderr}</pre>
+              </div>
+            )}
+            {!running && !errorText && (view.stdout || view.outputFields.length > 0) && (
+              <div className="tool-row-status is-success">
+                <span aria-hidden>✓</span>
+                <span>done</span>
               </div>
             )}
           </div>

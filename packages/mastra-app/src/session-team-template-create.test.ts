@@ -23,6 +23,15 @@ test('Owner and Studio resolve a selected Team template before Session creation'
   }
 })
 
+test('Owner and Studio atomically pass permissionMode into Session creation', () => {
+  for (const source of [owner, studio]) {
+    const block = sessionCreateBlock(source)
+    assert.match(block, /permissionMode\?: SessionPermissionMode/u)
+    assert.match(block, /permissionMode: body\.permissionMode/u)
+    assert.ok(block.indexOf('permissionMode: body.permissionMode') < block.indexOf('snapshot'))
+  }
+})
+
 test('Session creation maps template failures to stable public codes', () => {
   for (const source of [owner, studio]) {
     const block = sessionCreateBlock(source)

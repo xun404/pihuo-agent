@@ -7,6 +7,7 @@ import {
   Brain,
   Folder,
   FolderOpen,
+  Origami,
   Sparkle,
   Zap,
   ZapOff,
@@ -22,7 +23,7 @@ import {
 
 // re-export：新 UI 代码（footer / 思考块 / task 卡片）直接从本文件 import 这些名字，
 // 与项目原有 IconXxx 命名风格并存，避免大范围改动既有引用。
-export { Brain, Folder, FolderOpen, Sparkle, Zap, ZapOff, Calendar, Circle, CircleCheck }
+export { Brain, Folder, FolderOpen, Origami, Sparkle, Zap, ZapOff, Calendar, Circle, CircleCheck }
 
 type IconProps = {
   className?: string
@@ -197,15 +198,7 @@ export function IconProject(p: IconProps) {
   )
 }
 
-export function IconShield(p: IconProps) {
-  return (
-    <svg {...baseProps({ ...p, size: p.size ?? 13 })}>
-      <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" />
-    </svg>
-  )
-}
-
-/** Auto-edit (wireframe i-edit) */
+/** Edit pencil */
 export function IconEdit(p: IconProps) {
   return (
     <svg {...baseProps({ ...p, size: p.size ?? 14 })}>
@@ -213,38 +206,6 @@ export function IconEdit(p: IconProps) {
       <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </svg>
   )
-}
-
-/** Plan mode — list/checklist (distinct from edit pencil) */
-export function IconPlan(p: IconProps) {
-  return (
-    <svg {...baseProps({ ...p, size: p.size ?? 14 })}>
-      <path d="M9 6h12M9 12h12M9 18h8" />
-      <path d="M4 6h.01M4 12h.01M4 18h.01" />
-    </svg>
-  )
-}
-
-/** Access mode icons for Composer 访问模式 menu (wireframe §5.3) */
-export function AccessModeIcon({
-  id,
-  size = 14,
-  className,
-}: {
-  id: 'confirm' | 'auto_edit' | 'plan' | 'full_access'
-  size?: number
-  className?: string
-}) {
-  switch (id) {
-    case 'confirm':
-      return <IconShield size={size} className={className} />
-    case 'auto_edit':
-      return <IconEdit size={size} className={className} />
-    case 'plan':
-      return <IconPlan size={size} className={className} />
-    case 'full_access':
-      return <IconShield size={size} className={className} />
-  }
 }
 
 export function IconCheck(p: IconProps) {
@@ -503,16 +464,16 @@ export function WorkerBrandLogo({
   kind?: string
   name?: string
   size?: number
-  /** When set, fetch the registry icon and render it inline. */
+  /** When set, fetch the prepared worker icon and render it inline. */
   workerId?: string
-  /** Hint that an icon may exist (worker.iconPath truthy). Avoids a 404 fetch when false. */
+  /** Explicit false skips the request; undefined lets chat rows probe by stable workerId. */
   hasIcon?: boolean
   /** Registry agent id to resolve an icon when no prepared worker icon exists. */
   iconAgentId?: string
 }) {
   // Prefer the worker's own prepared icon; fall back to a registry-agent icon
   // matched at registration time (e.g. custom-added CLI).
-  const shouldFetch = Boolean(workerId && hasIcon)
+  const shouldFetch = Boolean(workerId && hasIcon !== false)
   const workerSvg = useWorkerIcon(shouldFetch ? workerId : undefined)
   const registrySvg = useRegistryAgentIcon(!workerSvg ? iconAgentId : undefined)
   // Brand fallback：当 workerSvg/registrySvg 都没有时，按 brand 拉对应 registry

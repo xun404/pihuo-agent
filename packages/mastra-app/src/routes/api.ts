@@ -49,6 +49,11 @@ import type {
   CreateTeamTemplateInput,
   UpdateTeamTemplateInput,
   ApplyTeamTemplateInput,
+  SessionPermissionMode,
+} from '@swarmdesk-agent/shared'
+import {
+  isValidSessionPermissionMode,
+  permissionModeFromLegacyPolicy,
 } from '@swarmdesk-agent/shared'
 import { basename } from 'node:path'
 import { asAcpHttpFailure } from '../acp-http-error.js'
@@ -190,9 +195,13 @@ export const apiRoutes = [
         title: string
         mode?: LeaderMode
         teamTemplateId?: string
+        permissionMode?: SessionPermissionMode
       }
       if (!body.projectId || !body.title) {
         return c.json({ error: 'projectId and title required' }, 400)
+      }
+      if (body.permissionMode !== undefined && !isValidSessionPermissionMode(body.permissionMode)) {
+        return c.json({ error: 'permissionMode must be default or auto' }, 400)
       }
       try {
         const initialTeamMembers = body.teamTemplateId
@@ -205,6 +214,7 @@ export const apiRoutes = [
           projectId: body.projectId,
           title: body.title,
           mode: body.mode,
+          permissionMode: body.permissionMode,
           rolePrompts: loadSettings().prompts.roles,
           initialTeamMembers,
         })
@@ -256,13 +266,38 @@ export const apiRoutes = [
         )
       }
       try {
-        const session = store().updateSessionApprovalPolicy(
+        store().updateSessionApprovalPolicy(
           id,
           body.approvalPolicy as import('@swarmdesk-agent/shared').SessionApprovalPolicy,
+        )
+        const { session } = getWorkerScheduler().setSessionPermissionMode(
+          id,
+          permissionModeFromLegacyPolicy(body.approvalPolicy),
         )
         return c.json({ session, snapshot: store().snapshot() })
       } catch (e) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 404)
+      }
+    },
+  }),
+
+  registerApiRoute('/api/sessions/:id/permission-mode', {
+    method: 'POST',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const body = (await c.req.json()) as { permissionMode?: string }
+      if (!isValidSessionPermissionMode(body.permissionMode)) {
+        return c.json({ error: 'permissionMode must be default or auto' }, 400)
+      }
+      try {
+        const { session } = getWorkerScheduler().setSessionPermissionMode(id, body.permissionMode)
+        return c.json({ session, snapshot: store().snapshot() })
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        return c.json(
+          { error: message.includes('not found') ? message : 'Internal server error' },
+          message.includes('not found') ? 404 : 500,
+        )
       }
     },
   }),

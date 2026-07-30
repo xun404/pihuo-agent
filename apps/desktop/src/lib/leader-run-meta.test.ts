@@ -7,8 +7,25 @@ import {
   resolveLeaderRunMeta,
   shortModelId,
 } from './leader-run-meta.js'
+import * as leaderRunMetaModule from './leader-run-meta.js'
 
 describe('leader-run-meta', () => {
+  it('findCurrentTurnAssistant never reuses the previous turn before a new reply exists', () => {
+    const findCurrentTurnAssistant = (
+      leaderRunMetaModule as typeof leaderRunMetaModule & {
+        findCurrentTurnAssistant?: <T extends { role: string }>(messages: T[]) => T | undefined
+      }
+    ).findCurrentTurnAssistant
+    assert.equal(typeof findCurrentTurnAssistant, 'function')
+
+    const previous = { id: 'assistant-old', role: 'assistant' }
+    const currentUser = { id: 'user-new', role: 'user' }
+    assert.equal(findCurrentTurnAssistant!([previous, currentUser]), undefined)
+
+    const current = { id: 'assistant-new', role: 'assistant' }
+    assert.equal(findCurrentTurnAssistant!([previous, currentUser, current]), current)
+  })
+
   it('shortModelId strips provider prefix', () => {
     assert.equal(shortModelId('opencode-go/deepseek-v4-flash'), 'deepseek-v4-flash')
     assert.equal(shortModelId('gpt-4o'), 'gpt-4o')
@@ -95,6 +112,102 @@ describe('leader-run-meta', () => {
     })
     assert.equal(meta.model, 'x/y')
     assert.equal(meta.thinking, 'medium')
+  })
+
+  it('resolveLeaderRunMeta restores durable run metadata after history reload', () => {
+    const messages = [
+      {
+        id: 'u1',
+        role: 'user',
+        metadata: { createdAt: '2026-07-30T02:08:17.000Z' },
+        parts: [{ type: 'text', text: 'hello' }],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        metadata: {
+          createdAt: '2026-07-30T02:08:21.000Z',
+          provider: 'opencode-go',
+          modelId: 'deepseek-v4-flash',
+        },
+        parts: [
+          { type: 'text', text: 'done' },
+          {
+            type: 'data-leader-run-meta',
+            data: {
+              startedAt: '2026-07-30T02:08:17.000Z',
+              completedAt: '2026-07-30T02:09:30.000Z',
+              model: 'opencode-go/deepseek-v4-flash',
+              thinking: 'max',
+            },
+          },
+        ],
+      },
+    ]
+
+    const meta = resolveLeaderRunMeta(messages, 1, new Map(), { live: false, now: 0 })
+    assert.equal(meta.model, 'opencode-go/deepseek-v4-flash')
+    assert.equal(meta.thinking, 'max')
+    assert.equal(meta.startedAt, Date.parse('2026-07-30T02:08:17.000Z'))
+    assert.equal(meta.endedAt, Date.parse('2026-07-30T02:09:30.000Z'))
+  })
+
+  it('uses the persisted assistant timestamp as legacy completion time, including the last turn', () => {
+    const messages = [
+      {
+        id: 'u1',
+        role: 'user',
+        metadata: { createdAt: '2026-07-29T13:07:04.392Z' },
+        parts: [{ type: 'text', text: 'run it' }],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        metadata: { createdAt: '2026-07-29T13:07:07.560Z' },
+        parts: [{ type: 'text', text: 'done' }],
+      },
+      {
+        id: 'u2',
+        role: 'user',
+        metadata: { createdAt: '2026-07-29T13:20:00.000Z' },
+        parts: [{ type: 'text', text: 'next task' }],
+      },
+    ]
+
+    const withFollowingTurn = resolveLeaderRunMeta(messages, 1, new Map(), {
+      live: false,
+      now: 0,
+    })
+    assert.equal(withFollowingTurn.startedAt, Date.parse('2026-07-29T13:07:04.392Z'))
+    assert.equal(withFollowingTurn.endedAt, Date.parse('2026-07-29T13:07:07.560Z'))
+
+    const asLastTurn = resolveLeaderRunMeta(messages.slice(0, 2), 1, new Map(), {
+      live: false,
+      now: 0,
+    })
+    assert.equal(asLastTurn.endedAt, Date.parse('2026-07-29T13:07:07.560Z'))
+  })
+
+  it('resolveLeaderActivity reports the active tool category and falls back to Thinking', () => {
+    const resolveLeaderActivity = (
+      leaderRunMetaModule as typeof leaderRunMetaModule & {
+        resolveLeaderActivity?: (parts: Array<Record<string, unknown>>) => string
+      }
+    ).resolveLeaderActivity
+    assert.equal(typeof resolveLeaderActivity, 'function')
+    assert.equal(
+      resolveLeaderActivity!([{ type: 'tool-bash', state: 'input-streaming' }]),
+      'Command',
+    )
+    assert.equal(
+      resolveLeaderActivity!([{ type: 'tool-task_write', state: 'input-streaming' }]),
+      'Task',
+    )
+    assert.equal(
+      resolveLeaderActivity!([{ type: 'reasoning', state: 'streaming', text: 'working' }]),
+      'Thinking',
+    )
+    assert.equal(resolveLeaderActivity!([{ type: 'text', text: '' }]), 'Thinking')
   })
 
   it('formatClockTime uses CST (Asia/Shanghai) and i18n label', () => {

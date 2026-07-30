@@ -386,15 +386,12 @@
 }
 
 /* ============ Leader 扁平 footer（lead-footer）============
-   sup-card 卡片壳移除后，footer 不再有顶部分隔线。
-   openchamber 风格：4 段（模型·思考强度·耗时·日期），每段 图标(13px)+文字，
-   无 · 分隔符，纯 gap 留白；统一 muted（text-3 / opacity .6）。
-   全用 CSS 变量，三套主题（warm/classic/dark）自动适配。 */
+   运行中：模型 · 当前动作；结束后：模型 · 思考强度 · 耗时 · 开始时间。 */
 .lead-footer {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px; /* 段间距（对应 openchamber gap-x-2.5）*/
+  gap: 6px;
   padding-top: 8px;
   margin-top: 8px;
   font-size: var(--fs-xs);
@@ -419,103 +416,40 @@
 .lead-footer-text {
   min-width: 0;
 }
-/* live 运行中脉冲点（迁移自 sup-status .pip）*/
-.lead-footer-live {
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
+.lead-footer-separator {
+  color: var(--text-4);
+  user-select: none;
 }
-.lead-footer-pip {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: pulse-dot 1.8s ease-in-out infinite;
+.lead-footer-action {
+  color: var(--text-2);
 }
 
 /* ============ TaskListCard（data-signal 任务列表）============
    inline 渲染在 Leader 消息流里。线稿 icon-spec-v3 配色。
    全用 CSS 变量，三套主题自动适配。 */
-.task-card {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--r-lg);
-  background: color-mix(in srgb, var(--bg-surface) 85%, transparent);
-  overflow: hidden;
-  margin: 2px 0;
-}
-.task-card-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--border-soft);
-  font-size: var(--fs-xs);
-  color: var(--text-2);
-  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
-}
-.task-card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.task-card-title svg {
-  width: 13px;
-  height: 13px;
-  color: var(--accent);
-}
-.task-card-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-}
-.task-card-bar {
-  width: 64px;
-  height: 4px;
-  background: var(--bg-hover);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.task-card-bar > i {
-  display: block;
-  height: 100%;
-  background: var(--green);
-  border-radius: 2px;
-  transition: width var(--dur-base) var(--ease-out);
-}
-.task-card-live {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: var(--accent);
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.task-card-live-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: pulse-dot 1.8s ease-in-out infinite;
-}
-.task-card-body {
+.task-list {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  margin: 1px 0;
+}
+.task-process-row {
+  width: 100%;
+  min-width: 0;
 }
 .task-row {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 7px 12px;
-  font-size: var(--fs-sm);
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 8px 4px 1px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-xs);
   color: var(--text-2);
-  border-top: 1px solid transparent;
+  transition: background var(--dur-fast) ease;
 }
-.task-row + .task-row {
-  border-top-color: var(--border-soft);
+.task-row:hover {
+  background: color-mix(in srgb, var(--bg-hover) 62%, transparent);
 }
 .task-row-icon {
   display: inline-flex;
@@ -533,55 +467,56 @@
 .task-completed {
   color: var(--text-3);
 }
-.task-completed .task-row-text {
-  text-decoration: line-through;
-  text-decoration-color: var(--text-4);
-}
 .task-completed .task-row-icon svg {
   color: var(--green);
 }
 .task-in_progress {
-  color: var(--text-1);
-  font-weight: 500;
+  color: var(--text-2);
+  font-weight: var(--fw-regular);
 }
 .task-in_progress .task-row-icon svg {
-  color: var(--accent);
+  color: var(--text-3);
 }
 .task-pending .task-row-icon svg {
   color: var(--text-4);
 }
-.task-row-role {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
+.task-row-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: 1.25;
+  white-space: nowrap;
   flex-shrink: 0;
 }
-.task-row-text {
-  flex: 1;
+.task-row-role-text {
+  color: inherit;
+  font: inherit;
+}
+.task-row-preview {
+  flex: 0 1 auto;
   min-width: 0;
-}
-.task-row-active {
-  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
   color: var(--text-3);
-  font-style: italic;
-  flex-shrink: 0;
 }
-/* role 配色（复用 worker-card-head .node-cap 语义）*/
-.role-plan .task-row-role {
-  color: var(--purple);
+.task-row-collapse {
+  width: 100%;
 }
-.role-coder .task-row-role {
-  color: var(--blue);
+.task-row-detail {
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-weight: var(--fw-regular);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
-.role-review .task-row-role {
-  color: var(--accent);
-}
-.role-research .task-row-role {
-  color: var(--green);
-}
-
-
-
 /* leader 旧规则清理后的消息间距 */
 .msg.leader {
   /* 仅保留 flex 基础——卡片样式移至 .sup-card */
@@ -844,7 +779,8 @@
 /* ============ 过程层：思考块 / 工具行（含展开动画） ============ */
 
 .tool-row,
-.thinking-block {
+.thinking-block,
+.task-process-row {
   border: none;
   margin: 0;
   padding: 0;
@@ -852,16 +788,14 @@
   line-height: 1.25;
 }
 
-/* —— 共用 summary 行（线稿 .node-row 1:1）——
-   padding 4px 8px 4px 1px + radius r-md + hover bg-hover。
-   不是 card（无 border/shadow），但比纯文本行多一点"可点击行"质感。*/
-.tool-row-summary,
-.thinking-block-summary,
-.worker-card-head {
+/* —— 共用 process summary 行 ——
+   三类折叠块只通过这一契约控制行高、点击区和垂直节奏。 */
+.process-row-summary {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px 4px 1px;
+  min-height: 28px;
+  padding: 3px 8px 3px 1px;
   border-radius: var(--r-md);
   cursor: pointer;
   list-style: none;
@@ -869,27 +803,21 @@
   width: 100%;
   box-sizing: border-box;
 }
-.tool-row-summary:hover,
-.thinking-block-summary:hover,
-.worker-card-head:hover {
+.process-row-summary:hover {
   background: var(--bg-hover);
 }
 /* 状态图标槽：折叠=类型图标，hover=›，展开=⌄ */
 /* 图标槽：relative 固定尺寸容器，内部 type 图标 + chevron 都 absolute 叠放，
    用 opacity 交叉淡入。chevron 用 transform: rotate(90deg) 过渡。*/
-.tb-icon-slot,
-.tr-icon-slot {
+.process-icon-slot {
   position: relative;
   flex-shrink: 0;
-}
-.tb-icon-slot,
-.tr-icon-slot {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
-.tb-icon,
-.tr-icon {
+.process-icon-type,
+.process-icon-chevron {
   position: absolute;
   inset: 0;
   display: inline-flex;
@@ -901,32 +829,46 @@
     transform var(--dur-base) var(--ease-out),
     color var(--dur-fast) ease;
 }
+.process-icon-type:not(.worker-logo) svg {
+  width: 14px;
+  height: 14px;
+}
+.process-icon-chevron svg {
+  width: 10px;
+  height: 10px;
+}
 
 /* 折叠态：类型图标可见，chevron 隐藏；hover 反过来 */
 .thinking-block:not(.is-open) .tb-icon-type,
-.tool-row:not(.is-open) .tr-icon-type {
+.tool-row:not(.is-open) .tr-icon-type,
+.task-process-row:not(.is-open) .task-row-icon-type {
   opacity: 0.85;
 }
 .thinking-block:not(.is-open) .tb-icon-chevron,
-.tool-row:not(.is-open) .tr-icon-chevron {
+.tool-row:not(.is-open) .tr-icon-chevron,
+.task-process-row:not(.is-open) .task-row-icon-chevron {
   opacity: 0;
 }
 .thinking-block:not(.is-open):hover .tb-icon-type,
-.tool-row:not(.is-open):hover .tr-icon-type {
+.tool-row:not(.is-open):hover .tr-icon-type,
+.task-process-row:not(.is-open):hover .task-row-icon-type {
   opacity: 0;
 }
 .thinking-block:not(.is-open):hover .tb-icon-chevron,
-.tool-row:not(.is-open):hover .tr-icon-chevron {
+.tool-row:not(.is-open):hover .tr-icon-chevron,
+.task-process-row:not(.is-open):hover .task-row-icon-chevron {
   opacity: 1;
 }
 
 /* 展开态：chevron 可见并旋转 90°，类型图标隐藏 */
 .thinking-block.is-open .tb-icon-type,
-.tool-row.is-open .tr-icon-type {
+.tool-row.is-open .tr-icon-type,
+.task-process-row.is-open .task-row-icon-type {
   opacity: 0;
 }
 .thinking-block.is-open .tb-icon-chevron,
-.tool-row.is-open .tr-icon-chevron {
+.tool-row.is-open .tr-icon-chevron,
+.task-process-row.is-open .task-row-icon-chevron {
   opacity: 1;
   transform: rotate(90deg);
 }
@@ -1038,7 +980,7 @@
     opacity: 0.55;
   }
 }
-.worker-card-running .worker-card-head .status:not(.pending):not(.done) {
+.worker-run-running .worker-card-head .status:not(.pending):not(.done) {
   animation: worker-status-pulse 1.6s ease-in-out infinite;
 }
 /* worker-card-pending-dots 已移除：Worker 展开体改用 .line 流，运行态靠 head 的 busy-dots。*/
@@ -1084,19 +1026,16 @@
    注意：不要在内层/body 设 max-height 或 margin——会钳制外层 scrollHeight 测量，
    导致展开动画末尾跳变。用 padding 代替 margin。*/
 .thinking-block-collapse,
-.tool-row-collapse {
+.tool-row-collapse,
+.task-row-collapse {
   /* 外层：height 由 useCollapsible 的 JS 动画控制（0 ↔ scrollHeight → auto）*/
-}
-.thinking-block-inner {
-  padding-top: 2px;
-  padding-bottom: 4px;
 }
 .tool-row-inner {
   /* 仅作位移层 */
 }
 .thinking-block-body {
-  padding: 2px 0 4px 12px;
-  border-left: 2px solid color-mix(in srgb, var(--border) 70%, var(--text-3));
+  padding: 0;
+  border-left: 0;
   font-size: 12.5px;
   color: var(--text-3);
   white-space: pre-wrap;
@@ -1158,20 +1097,128 @@
   flex: 1 1 auto;
   max-width: min(520px, 58vw);
 }
-/* 工具展开体：改用线稿 .node-body-inner .line 流（见上方共用规则）。
-   旧的 .tool-row-body / .tool-row-terminal* 已移除。*/
+/* 工具展开体：OpenChamber 风格的输入/输出块，保留共用的左侧 guide。 */
+.tool-row .node-body-inner,
+.worker-run .node-body-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(420px, 46vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+.tool-row-block {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 6px;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  line-height: 1.55;
+}
+.tool-row-block-marker {
+  color: var(--text-4);
+  line-height: 1.55;
+  text-align: center;
+  user-select: none;
+}
+.tool-row-block-content {
+  min-width: 0;
+  margin: 0;
+  padding: 5px 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-input) 62%, transparent);
+  color: var(--text-3);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.tool-row-block-output .tool-row-block-content {
+  color: var(--text-2);
+}
+.tool-row-block-error .tool-row-block-marker,
+.tool-row-block-error .tool-row-block-content {
+  color: var(--danger);
+}
+.tool-row-block-error .tool-row-block-content {
+  border-color: color-mix(in srgb, var(--danger) 24%, transparent);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+.tool-row-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 1px;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.tool-row-status.is-success > :first-child {
+  color: var(--green);
+}
+.tool-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding-left: 1px;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  line-height: 1.55;
+}
+.tool-field-group {
+  display: grid;
+  grid-template-columns: minmax(76px, 0.28fr) minmax(0, 1fr);
+  gap: 2px 10px;
+  min-width: 0;
+  padding: 3px 0 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+}
+.tool-field-group:last-child {
+  border-bottom: 0;
+}
+.tool-field-group-title {
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-weight: var(--fw-medium);
+}
+.tool-field-group .tool-field-row {
+  display: contents;
+}
+.tool-field-row {
+  display: grid;
+  grid-template-columns: minmax(76px, 0.28fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding: 1px 0;
+}
+.tool-field-key {
+  color: var(--text-4);
+  overflow-wrap: anywhere;
+}
+.tool-field-value {
+  min-width: 0;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* 工具行与 Worker 卡同栈时间距 */
 .chat-tool-worker-stack {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   width: 100%;
   margin: 0;
 }
 
 /* —— Worker 行（线稿 node-row 1:1，与 tool-row-summary 同款）——
    关键：head 是纯排版行，无 padding/bg/radius。与 thinking/tool 视觉统一。*/
-.worker-card {
+.worker-run {
   display: flex;
   flex-direction: column;
   margin-top: 0;
@@ -1182,9 +1229,6 @@
 /* Worker 图标槽：worker-logo ↔ chevron 交叉淡入（对齐 .tr-icon-slot 模式）。
    槽位 16px（容纳品牌 logo），logo 和 chevron 都 absolute inset:0 叠放。*/
 .worker-icon-slot {
-  position: relative;
-  width: 16px;
-  height: 16px;
   flex-shrink: 0;
 }
 .worker-icon-slot .worker-logo,
@@ -1199,18 +1243,19 @@
     transform var(--dur-base) var(--ease-out),
     color var(--dur-fast) ease;
 }
-/* Worker logo（16px 品牌色方块）*/
+/* Worker logo（14px 品牌色方块，与其它类型图标共享 16px 槽）*/
 .worker-logo {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 14px;
+  height: 14px;
+  margin: 1px;
+  border-radius: 3.5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .worker-logo svg {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 /* Inline registry icon: a fetched SVG that fills its parent chip. */
 .worker-brand-icon,
@@ -1267,10 +1312,23 @@
   font-weight: var(--fw-regular);
   flex-shrink: 0;
 }
+.worker-card-config {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-shrink: 1;
+}
 .worker-card-head .model {
   font-size: var(--fs-2xs);
   color: var(--text-4);
-  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-card-config-separator {
+  color: var(--text-4);
+  user-select: none;
 }
 .worker-card-head .status {
   margin-left: auto;
@@ -1316,7 +1374,6 @@
   color: var(--green);
   background: var(--green-soft);
 }
-/* Worker head chevron（行末独立元素，受约束尺寸，旋转过渡。
 /* Worker chevron（图标槽内的第二层，与 logo 交叉淡入）*/
 .worker-card-head .worker-chevron {
   color: var(--text-4);
@@ -1327,23 +1384,23 @@
   height: 10px;
 }
 /* 折叠态：logo 可见，chevron 隐藏；hover 时 logo 淡出，chevron 淡入 */
-.worker-card:not(.is-open) .worker-card-head .worker-logo {
+.worker-run:not(.is-open) .worker-card-head .worker-logo {
   opacity: 1;
 }
-.worker-card:not(.is-open) .worker-card-head .worker-chevron {
+.worker-run:not(.is-open) .worker-card-head .worker-chevron {
   opacity: 0;
 }
-.worker-card:not(.is-open):hover .worker-card-head .worker-logo {
+.worker-run:not(.is-open):hover .worker-card-head .worker-logo {
   opacity: 0;
 }
-.worker-card:not(.is-open):hover .worker-card-head .worker-chevron {
+.worker-run:not(.is-open):hover .worker-card-head .worker-chevron {
   opacity: 1;
 }
 /* 展开态：logo 隐藏，chevron 显示并旋转 90° */
-.worker-card.is-open .worker-card-head .worker-logo {
+.worker-run.is-open .worker-card-head .worker-logo {
   opacity: 0;
 }
-.worker-card.is-open .worker-card-head .worker-chevron {
+.worker-run.is-open .worker-card-head .worker-chevron {
   opacity: 1;
   transform: rotate(90deg);
   color: var(--text-3);
@@ -1352,14 +1409,109 @@
 .worker-card-collapse {
   overflow: hidden;
 }
-/* —— 节点展开体（线稿 node-body-inner 1:1）——
-   思考 / 工具 / Worker 三者共用：缩进 + 1px 竖线 guide + .line 事件流。*/
-.node-body-inner {
+.worker-action-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.worker-action-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding-left: 18px;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 1.45;
+  color: var(--text-4);
+}
+.worker-action-label::after {
+  content: '';
+  height: 1px;
+  flex: 1 1 auto;
+  background: color-mix(in srgb, var(--border) 42%, transparent);
+}
+.worker-action-output .tool-row-block-marker {
+  color: var(--green);
+}
+.worker-action-output .worker-action-content {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  line-height: 1.55;
+  white-space: normal;
+}
+.worker-action-markdown,
+.worker-action-markdown .md-content {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.msg.leader .worker-action-markdown .md-content {
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+.worker-action-markdown .md-content > :first-child {
+  margin-top: 0;
+}
+.worker-action-markdown .md-content > :last-child {
+  margin-bottom: 0;
+}
+.worker-action-markdown .md-content p,
+.worker-action-markdown .md-content ul,
+.worker-action-markdown .md-content ol,
+.worker-action-markdown .md-content blockquote {
+  margin-top: 0;
+  margin-bottom: 0.45em;
+}
+.worker-action-markdown .md-content ul,
+.worker-action-markdown .md-content ol {
+  padding-left: 1.5em;
+}
+.worker-action-markdown .md-content strong {
+  color: inherit;
+}
+.worker-action-markdown .md-content pre,
+.worker-action-markdown .md-content .md-table-wrap {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+}
+.worker-action-markdown .md-content code {
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.worker-action-error .worker-card-auth-hint {
+  margin-top: 4px;
+}
+.worker-action-approval-controls.approval-row {
+  margin-top: 6px;
+  padding: 6px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+  background: transparent;
+}
+/* —— 共用展开体 ——
+   思考 / 工具 / Worker 三者共用缩进、1px guide 与上下节奏。 */
+.process-collapse-body {
   position: relative;
   margin-left: 8px;
-  padding: 4px 0 6px 14px;
+  padding: 3px 0 5px 14px;
 }
-.node-body-inner::before {
+.process-collapse-body::before {
   content: '';
   position: absolute;
   left: 3px;
@@ -1370,11 +1522,11 @@
 }
 .node-body-inner .line {
   display: flex;
-  gap: var(--sp-2);
+  gap: 6px;
   font-family: var(--mono);
   font-size: var(--fs-2xs);
   color: var(--text-3);
-  line-height: 1.7;
+  line-height: 1.55;
 }
 .node-body-inner .line .mk {
   color: var(--text-4);
@@ -2084,4 +2236,3 @@
     display: none;
   }
 }
-

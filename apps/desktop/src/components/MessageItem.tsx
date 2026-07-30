@@ -17,12 +17,13 @@ import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
 import { TaskListCard, type TaskItem } from './chat/TaskListCard'
-import { IconClock, Sparkle, Zap, ZapOff, Calendar } from './Icons'
+import { IconClock, Origami, Zap, ZapOff, Calendar } from './Icons'
 import { setRecordKey } from '../lib/chat-state'
 import type { MessageKey } from '../i18n/locales'
 import { parseRouterUserMessage } from '../lib/user-message-display'
 import {
   formatClockTime,
+  resolveLeaderActivity,
   resolveLeaderRunMeta,
   shortModelId,
   type ClientTurnMeta,
@@ -33,7 +34,6 @@ import {
   type WorkerCardPlacement,
 } from '../lib/worker-card-placement'
 import type { ThinkingIntensity } from '../lib/settings'
-import type { AccessModeId } from '../lib/access-mode'
 
 // i18n：复用 locales 的 MessageKey 联合类型，和 I18nProvider 的 t 签名对齐。
 type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string
@@ -145,7 +145,7 @@ function MessageItemImpl({
         const live = msgLive
         void timingEpoch
         const meta = resolveLeaderRunMeta(messages, msgIdx, turnTimingRef.current, {
-          live: false,
+          live,
           now: Date.now(),
           fallbackModel: selectedModel || undefined,
           fallbackThinking: thinkingIntensity || undefined,
@@ -162,9 +162,12 @@ function MessageItemImpl({
             : live
               ? thinkShort
               : '') || ''
-        const clientTiming = turnTimingRef.current.get(message.id)
-        const sealedStart = clientTiming?.startedAt ?? meta.startedAt
-        const sealedEnd = clientTiming?.endedAt ?? (!live ? meta.endedAt : undefined)
+        // resolveLeaderRunMeta already gives durable data precedence over the
+        // volatile client map. Do not re-read the map here: a brief stale busy
+        // state after reload can otherwise replace a persisted 90s run with a
+        // synthetic 0.1s timing entry.
+        const sealedStart = meta.startedAt
+        const sealedEnd = !live ? meta.endedAt : undefined
         const durationSec =
           !live && sealedStart != null && sealedEnd != null && sealedEnd >= sealedStart
             ? Math.max(0, (sealedEnd - sealedStart) / 1000)
@@ -174,7 +177,18 @@ function MessageItemImpl({
           sealedStart != null
             ? formatClockTime(sealedStart, locale, { timeZoneLabel: t('chat.runTzCst') })
             : ''
-        return { modelLabel, thinking: thinkKey, thinkLabel, durationLabel, startLabel, live }
+        const currentActivity = live
+          ? resolveLeaderActivity(message.parts as Array<Record<string, unknown>>)
+          : ''
+        return {
+          modelLabel,
+          thinking: thinkKey,
+          thinkLabel,
+          durationLabel,
+          startLabel,
+          currentActivity,
+          live,
+        }
       })()
     : null
 
@@ -434,8 +448,8 @@ function MessageItemImpl({
             {showErrorInThisBubble && errorBlock}
           </div>
           {/* /sup-body */}
-          {/* footer：模型 · 思考强度 · 耗时 · 日期（openchamber 风格，无 · 分隔，纯 gap 留白）。
-              图标+文字，统一 muted；live 时末尾追加运行中脉冲点（迁移自 sup-status）。 */}
+          {/* footer：运行中仅显示「模型 · 当前动作」；结束后显示
+              「模型 · 思考强度 · 耗时 · 开始时间」。 */}
           {(leaderMeta.modelLabel ||
             leaderMeta.thinkLabel ||
             leaderMeta.durationLabel ||
@@ -444,33 +458,51 @@ function MessageItemImpl({
             <div className="lead-footer">
               {leaderMeta.modelLabel && (
                 <span className="lead-footer-meta">
-                  <Sparkle size={13} />
+                  <Origami size={13} />
                   <span className="lead-footer-text">{leaderMeta.modelLabel}</span>
                 </span>
               )}
-              {leaderMeta.thinkLabel && (
-                <span className="lead-footer-meta">
-                  {/* 思考关闭用 ZapOff，其余强度用 Zap */}
-                  {leaderMeta.thinking === 'off' ? <ZapOff size={13} /> : <Zap size={13} />}
-                  <span className="lead-footer-text">{leaderMeta.thinkLabel}</span>
-                </span>
-              )}
-              {leaderMeta.durationLabel && (
-                <span className="lead-footer-meta mono">
-                  <IconClock size={13} />
-                  <span className="lead-footer-text">{leaderMeta.durationLabel}</span>
-                </span>
-              )}
-              {leaderMeta.startLabel && (
-                <span className="lead-footer-meta mono">
-                  <Calendar size={13} />
-                  <span className="lead-footer-text">{leaderMeta.startLabel}</span>
-                </span>
-              )}
-              {leaderMeta.live && (
-                <span className="lead-footer-live" aria-hidden>
-                  <span className="lead-footer-pip" />
-                </span>
+              {leaderMeta.live ? (
+                <>
+                  {leaderMeta.modelLabel && <span className="lead-footer-separator">·</span>}
+                  <span className="lead-footer-action">{leaderMeta.currentActivity || 'Thinking'}</span>
+                </>
+              ) : (
+                <>
+                  {leaderMeta.thinkLabel && (
+                    <>
+                      {leaderMeta.modelLabel && <span className="lead-footer-separator">·</span>}
+                      <span className="lead-footer-meta">
+                        {leaderMeta.thinking === 'off' ? <ZapOff size={13} /> : <Zap size={13} />}
+                        <span className="lead-footer-text">{leaderMeta.thinkLabel}</span>
+                      </span>
+                    </>
+                  )}
+                  {leaderMeta.durationLabel && (
+                    <>
+                      {(leaderMeta.modelLabel || leaderMeta.thinkLabel) && (
+                        <span className="lead-footer-separator">·</span>
+                      )}
+                      <span className="lead-footer-meta mono">
+                        <IconClock size={13} />
+                        <span className="lead-footer-text">{leaderMeta.durationLabel}</span>
+                      </span>
+                    </>
+                  )}
+                  {leaderMeta.startLabel && (
+                    <>
+                      {(leaderMeta.modelLabel ||
+                        leaderMeta.thinkLabel ||
+                        leaderMeta.durationLabel) && (
+                        <span className="lead-footer-separator">·</span>
+                      )}
+                      <span className="lead-footer-meta mono">
+                        <Calendar size={13} />
+                        <span className="lead-footer-text">{leaderMeta.startLabel}</span>
+                      </span>
+                    </>
+                  )}
+                </>
               )}
             </div>
           )}

@@ -50,15 +50,16 @@ describe('Session — lastReplyAt', () => {
       assert.equal(marked.updatedAt, lastReplyAt)
     })
 
-    it('preserves title / mode / memoryThreadId / approvalPolicy', () => {
+    it('preserves title / build mode / memoryThreadId / permission state', () => {
       const { store, projectId } = freshStore()
       const s = store.createSession({ projectId, mode: 'review', title: 'T' })
       const marked = store.markSessionReply(s.id)
       assert.ok(marked)
       assert.equal(marked!.title, 'T')
-      assert.equal(marked!.mode, 'review')
+      assert.equal(marked!.mode, 'build')
       assert.equal(marked!.memoryThreadId, s.memoryThreadId)
       assert.equal(marked!.approvalPolicy, s.approvalPolicy)
+      assert.equal(marked!.permissionMode, s.permissionMode)
     })
 
     it('advances lastReplyAt on each call', async () => {

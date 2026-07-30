@@ -3,17 +3,15 @@ import type { WorkerRole } from '@swarmdesk-agent/shared'
 export type Locale = 'zh' | 'en'
 
 export type MessageKey =
-  | 'access.autoEdit'
+  | 'permissions.autoOff'
+  | 'permissions.autoOn'
+  | 'permissions.defaultTitle'
+  | 'permissions.defaultDescription'
+  | 'permissions.autoTitle'
+  | 'permissions.autoDescription'
   | 'common.cancel'
   | 'common.confirmDelete'
   | 'common.confirm'
-  | 'access.autoEditDesc'
-  | 'access.confirm'
-  | 'access.confirmDesc'
-  | 'access.full'
-  | 'access.fullDesc'
-  | 'access.plan'
-  | 'access.planDesc'
   | 'app.bannerCmd'
   | 'app.bannerOffline'
   | 'app.loading'
@@ -94,6 +92,17 @@ export type MessageKey =
   | 'chat.think.xhigh'
   | 'chat.thinking'
   | 'chat.thinkingLive'
+  | 'chat.taskLabel'
+  | 'chat.taskProgress'
+  | 'chat.process.allDone'
+  | 'chat.process.label'
+  | 'chat.process.live'
+  | 'chat.process.miniAria'
+  | 'chat.process.panelAria'
+  | 'chat.process.minimize'
+  | 'chat.process.minimizeAria'
+  | 'chat.process.doneFold'
+  | 'chat.process.doneFoldCollapse'
   | 'chat.tool'
   | 'chat.toolError'
   | 'chat.you'
@@ -614,8 +623,12 @@ export type MessageKey =
   | 'workers.registryUpdateRequired'
   | 'workers.registryOwnerManagedHint'
   | 'workers.runAuthenticate'
+  | 'workers.runApproval'
   | 'workers.runAuthHint'
+  | 'workers.runError'
+  | 'workers.runInput'
   | 'workers.runNoOutput'
+  | 'workers.runOutput'
   | 'workers.runRestartContext'
   | 'workers.runTruncated'
   | 'workers.terminalCancel'
@@ -632,17 +645,15 @@ export type MessageKey =
 type Dict = Record<MessageKey, string>
 
 const zh: Dict = {
-  'access.autoEdit': '自动编辑',
   'common.cancel': '取消',
   'common.confirmDelete': '删除',
   'common.confirm': '确认',
-  'access.autoEditDesc': '自动编辑文件',
-  'access.confirm': '变更前确认',
-  'access.confirmDesc': '改文件前先问我',
-  'access.full': '完全访问',
-  'access.fullDesc': '减少确认次数',
-  'access.plan': '计划模式',
-  'access.planDesc': '编辑前先出计划',
+  'permissions.autoOff': '权限自动接受：关',
+  'permissions.autoOn': '权限自动接受：开',
+  'permissions.defaultTitle': '默认权限',
+  'permissions.defaultDescription': '项目内操作直接执行，项目外变更需要审批',
+  'permissions.autoTitle': '自动授权',
+  'permissions.autoDescription': '所有权限请求自动接受',
   'app.bannerCmd': 'npm run dev',
   'app.bannerOffline': '无法连接服务（{error}）。另开终端运行：',
   'app.loading': '加载中…',
@@ -726,6 +737,17 @@ const zh: Dict = {
   'chat.think.medium': '中',
   'chat.think.off': '关闭',
   'chat.think.xhigh': '极高',
+  'chat.taskLabel': '任务',
+  'chat.taskProgress': '任务进度',
+  'chat.process.allDone': '全部完成',
+  'chat.process.label': '进程',
+  'chat.process.live': '执行中',
+  'chat.process.miniAria': '进程（点击展开）',
+  'chat.process.panelAria': '任务进程',
+  'chat.process.minimize': '折叠',
+  'chat.process.minimizeAria': '折叠为迷你',
+  'chat.process.doneFold': '已完成 {count} 项',
+  'chat.process.doneFoldCollapse': '收起 {count} 项已完成',
   'chat.thinking': '思考',
   'chat.thinkingLive': '思考中',
   'chat.tool': '工具',
@@ -1266,8 +1288,12 @@ const zh: Dict = {
   'workers.registryOwnerManagedHint':
     'Registry Agent 由 Owner 准备安装并生成启动命令；不在此编辑命令。',
   'workers.runAuthenticate': '去认证',
+  'workers.runApproval': '审批',
   'workers.runAuthHint': '{name}（{identity}）需要完成认证后才能派发。',
+  'workers.runError': '错误',
+  'workers.runInput': '输入',
   'workers.runNoOutput': '已完成（无输出）',
+  'workers.runOutput': '输出',
   'workers.runRestartContext': '重新开始该 Agent 上下文',
   'workers.runTruncated': '输出已截断',
   'workers.terminalCancel': '取消并关闭',
@@ -1283,17 +1309,16 @@ const zh: Dict = {
 }
 
 const en: Dict = {
-  'access.autoEdit': 'Auto edit',
   'common.cancel': 'Cancel',
   'common.confirmDelete': 'Delete',
   'common.confirm': 'Confirm',
-  'access.autoEditDesc': 'Edit files automatically',
-  'access.confirm': 'Confirm changes',
-  'access.confirmDesc': 'Ask before editing files',
-  'access.full': 'Full access',
-  'access.fullDesc': 'Fewer confirmations',
-  'access.plan': 'Plan mode',
-  'access.planDesc': 'Plan before edits',
+  'permissions.autoOff': 'Auto-accept permissions: Off',
+  'permissions.autoOn': 'Auto-accept permissions: On',
+  'permissions.defaultTitle': 'Default permissions',
+  'permissions.defaultDescription':
+    'Operations inside the project run directly; changes outside it require approval.',
+  'permissions.autoTitle': 'Auto-approve',
+  'permissions.autoDescription': 'All permission requests are accepted automatically.',
   'app.bannerCmd': 'npm run dev',
   'app.bannerOffline': 'Cannot reach service ({error}). In another terminal run:',
   'app.loading': 'loading…',
@@ -1379,6 +1404,17 @@ const en: Dict = {
   'chat.think.medium': 'Medium',
   'chat.think.off': 'Off',
   'chat.think.xhigh': 'Extra high',
+  'chat.taskLabel': 'Task',
+  'chat.taskProgress': 'Task Progress',
+  'chat.process.allDone': 'All done',
+  'chat.process.label': 'Tasks',
+  'chat.process.live': 'Running',
+  'chat.process.miniAria': 'Tasks (click to expand)',
+  'chat.process.panelAria': 'Task process',
+  'chat.process.minimize': 'Collapse',
+  'chat.process.minimizeAria': 'Collapse to mini',
+  'chat.process.doneFold': '{count} completed',
+  'chat.process.doneFoldCollapse': 'Hide {count} completed',
   'chat.thinking': 'Thinking',
   'chat.thinkingLive': 'Thinking',
   'chat.tool': 'tool',
@@ -1948,8 +1984,12 @@ const en: Dict = {
   'workers.registryOwnerManagedHint':
     'Registry agents are prepared and launched by the Owner; the command is not edited here.',
   'workers.runAuthenticate': 'Go authenticate',
+  'workers.runApproval': 'Approval',
   'workers.runAuthHint': '{name} ({identity}) must be authenticated before dispatch.',
+  'workers.runError': 'Error',
+  'workers.runInput': 'Input',
   'workers.runNoOutput': 'Completed (no output)',
+  'workers.runOutput': 'Output',
   'workers.runRestartContext': 'Restart this agent context',
   'workers.runTruncated': 'Output truncated',
   'workers.terminalCancel': 'Cancel and close',

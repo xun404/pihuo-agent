@@ -1,4 +1,11 @@
 export { resolveWorkerCwd } from './presets.js'
+export {
+  classifyAcpFilePath,
+  classifyAcpLocations,
+  type AcpFilePathClassification,
+  type ClassifyAcpFilePathInput,
+  type ClassifyAcpLocationsInput,
+} from './acp-path-scope.js'
 export { whichSync, expandHome, configureLoginShellPath } from './which.js'
 export {
   checkWorkerCommand,

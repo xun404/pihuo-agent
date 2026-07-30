@@ -35,6 +35,7 @@ describe('mapPermissionRequest', () => {
 
     const result = mapPermissionRequest(params as any)
 
+    assert.equal(result.source, 'agent')
     assert.equal(result.toolCallId, 'tool-1')
     assert.equal(result.kind, 'read')
     assert.equal(result.title, 'Read file /etc/hosts')
@@ -199,6 +200,7 @@ describe('mapPermissionRequest', () => {
 
   it('AcpPermissionRequest type has the correct shape', () => {
     const req: AcpPermissionRequest = {
+      source: 'agent',
       toolCallId: 't1',
       kind: 'read',
       title: 'Test',
@@ -206,6 +208,7 @@ describe('mapPermissionRequest', () => {
       options: [{ optionId: 'o1', name: 'Yes', kind: 'allow_once' }],
     }
     assert.equal(req.toolCallId, 't1')
+    assert.equal(req.source, 'agent')
     assert.equal(req.kind, 'read')
     assert.equal(req.title, 'Test')
     assert.equal(req.locations![0].path, '/file')

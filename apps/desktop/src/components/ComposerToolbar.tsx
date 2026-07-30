@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { LeaderMode, SessionApprovalPolicy } from '@swarmdesk-agent/shared'
+import type { SessionPermissionMode } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   THINKING_INTENSITY_OPTIONS,
@@ -8,22 +8,17 @@ import {
   type ThinkingIntensity,
 } from '../lib/settings'
 import { ProviderLogo } from '../lib/provider-icons'
-import {
-  ACCESS_MODES,
-  accessModeById,
-  resolveAccessMode,
-  type AccessModeId,
-} from '../lib/access-mode'
 import { formatTokenCountDisplay } from '../lib/context-window'
-import { AccessModeIcon, ContextRing, IconCheck } from './Icons'
+import { ContextRing, IconCheck } from './Icons'
 import type { Locale } from '../i18n/locales'
+import { PermissionModeAction } from './PermissionModeAction'
 
 /**
- * Shared composer toolbar: access mode menu + ContextRing + model cascade +
+ * Shared composer toolbar: permission action + ContextRing + model cascade +
  * thinking intensity. Used by both the in-session ChatPanel composer and the
  * empty-state home composer so the controls are identical.
  *
- * All selection state (mode / approvalPolicy / selectedModel / thinking) is
+ * All selection state (permissionMode / selectedModel / thinking) is
  * controlled by the parent via props + onChange callbacks. Menu open/close
  * state is local. Token-usage (ContextRing) data is computed from the parent-
  * supplied model + optional message token count; in empty state pass
@@ -88,10 +83,9 @@ export function clampThink(
 }
 
 export interface ComposerToolbarProps {
-  /** Current LeaderMode (controlled). */
-  mode: LeaderMode
-  /** Current approval policy (controlled) — drives access mode derivation. */
-  approvalPolicy: SessionApprovalPolicy
+  /** Current Session permission mode (controlled). */
+  permissionMode: SessionPermissionMode
+  permissionSaving?: boolean
   /** Currently selected model id (controlled). */
   selectedModel: string
   /** Currently selected thinking intensity (controlled). */
@@ -122,9 +116,7 @@ export interface ComposerToolbarProps {
   locale: Locale
   /** Persist thinking selection to settings (no-op in empty state). */
   persistThinking?: boolean
-  /** Fired when access mode selection changes — parent updates mode + policy. */
-  onModeChange: (mode: LeaderMode) => void
-  onApprovalPolicyChange: (policy: SessionApprovalPolicy) => void
+  onPermissionModeChange: (mode: SessionPermissionMode) => void | Promise<void>
   /** Fired when model / thinking selection changes. */
   onModelChange: (modelId: string) => void
   onThinkingChange: (intensity: ThinkingIntensity) => void
@@ -137,8 +129,8 @@ export interface ComposerToolbarProps {
 }
 
 export function ComposerToolbar({
-  mode,
-  approvalPolicy,
+  permissionMode,
+  permissionSaving = false,
   selectedModel,
   thinkingIntensity,
   models,
@@ -149,8 +141,7 @@ export function ComposerToolbar({
   onCompressContext,
   locale,
   persistThinking = true,
-  onModeChange,
-  onApprovalPolicyChange,
+  onPermissionModeChange,
   onModelChange,
   onThinkingChange,
   onOpenSettings,
@@ -161,28 +152,15 @@ export function ComposerToolbar({
   const { t } = useI18n()
 
   // —— local menu open/close state ——
-  const [accessMenuOpen, setAccessMenuOpen] = useState(false)
   const [teamMenuOpen, setTeamMenuOpen] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [modelSideOpen, setModelSideOpen] = useState(false)
   const [thinkMenuOpen, setThinkMenuOpen] = useState(false)
   const [ctxTipOpen, setCtxTipOpen] = useState(false)
   const [compressing, setCompressing] = useState(false)
-  const accessWrapRef = useRef<HTMLDivElement>(null)
   const teamWrapRef = useRef<HTMLDivElement>(null)
   const modelWrapRef = useRef<HTMLDivElement>(null)
   const thinkWrapRef = useRef<HTMLDivElement>(null)
-
-  // —— derived: access mode ——
-  const accessModeId: AccessModeId = resolveAccessMode(mode, approvalPolicy)
-  const accessMode = accessModeById(accessModeId)
-
-  const selectAccessMode = (id: AccessModeId) => {
-    const def = accessModeById(id)
-    onModeChange(def.mode)
-    onApprovalPolicyChange(def.policy)
-    setAccessMenuOpen(false)
-  }
 
   const selectThinking = (level: ThinkingIntensity) => {
     onThinkingChange(level)
@@ -297,16 +275,8 @@ export function ComposerToolbar({
   // Mirrors the original ChatPanel logic, but uses ComposerToolbar's own
   // state/refs (ChatPanel's copy became dead code after extraction).
   useEffect(() => {
-    if (!accessMenuOpen && !teamMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
+    if (!teamMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
     const onDoc = (e: MouseEvent) => {
-      // access menu: close when clicking outside its wrapper
-      if (
-        accessMenuOpen &&
-        accessWrapRef.current &&
-        !accessWrapRef.current.contains(e.target as Node)
-      ) {
-        setAccessMenuOpen(false)
-      }
       if (
         teamMenuOpen &&
         teamWrapRef.current &&
@@ -329,12 +299,11 @@ export function ComposerToolbar({
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [accessMenuOpen, teamMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
+  }, [teamMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
 
   // —— Close all popovers when the window loses focus (Alt-Tab / app switch) ——
   useEffect(() => {
     if (
-      !accessMenuOpen &&
       !teamMenuOpen &&
       !modelMenuOpen &&
       !thinkMenuOpen &&
@@ -343,7 +312,6 @@ export function ComposerToolbar({
     )
       return
     const onBlur = () => {
-      setAccessMenuOpen(false)
       setTeamMenuOpen(false)
       setModelMenuOpen(false)
       setModelSideOpen(false)
@@ -352,63 +320,15 @@ export function ComposerToolbar({
     }
     window.addEventListener('blur', onBlur)
     return () => window.removeEventListener('blur', onBlur)
-  }, [accessMenuOpen, teamMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
+  }, [teamMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
 
   return (
     <>
-      <div className="mode-menu-wrap" ref={accessWrapRef}>
-        <button
-          type="button"
-          className={`chip menu${accessMode.accent ? ' access' : ''}`}
-          onClick={() => {
-            setAccessMenuOpen((v) => !v)
-            setTeamMenuOpen(false)
-            setModelMenuOpen(false)
-            setThinkMenuOpen(false)
-          }}
-        >
-          <AccessModeIcon id={accessMode.id} size={13} className="chip-ico" />
-          {t(accessMode.titleKey)}
-          <span className="caret">▾</span>
-        </button>
-        <AnimatePresence>
-          {accessMenuOpen && (
-            <motion.div
-              className="pop-menu mode-menu"
-              role="menu"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
-            >
-              {ACCESS_MODES.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`pop-item${accessModeId === m.id ? ' on' : ''}${
-                    m.accent ? ' access' : ''
-                  }`}
-                  role="menuitem"
-                  onClick={() => selectAccessMode(m.id)}
-                >
-                  <span className={`pi${m.accent ? ' accent' : ''}`} aria-hidden>
-                    <AccessModeIcon id={m.id} size={16} />
-                  </span>
-                  <span className="pi-body">
-                    <div className="pi-title">{t(m.titleKey)}</div>
-                    <div className="pi-desc">{t(m.descKey)}</div>
-                  </span>
-                  {accessModeId === m.id && (
-                    <span className="check">
-                      <IconCheck size={14} />
-                    </span>
-                  )}
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <PermissionModeAction
+        mode={permissionMode}
+        saving={permissionSaving}
+        onChange={onPermissionModeChange}
+      />
 
       {teamTemplateOptions.length > 0 && (
         <div className="mode-menu-wrap home-team-menu-wrap" ref={teamWrapRef}>
@@ -420,7 +340,6 @@ export function ComposerToolbar({
             title={selectedTeamLabel}
             onClick={() => {
               setTeamMenuOpen((v) => !v)
-              setAccessMenuOpen(false)
               setModelMenuOpen(false)
               setThinkMenuOpen(false)
             }}
@@ -577,7 +496,6 @@ export function ComposerToolbar({
             onClick={() => {
               setModelMenuOpen((v) => !v)
               setCtxTipOpen(false)
-              setAccessMenuOpen(false)
             }}
           >
             {modelsLoading ? t('app.loading') : modelChipLabel}

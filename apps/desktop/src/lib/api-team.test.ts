@@ -104,6 +104,7 @@ test('Session creation forwards a selected Team template id', async () => {
   await api.createSession({
     projectId: 'project-1',
     mode: 'build',
+    permissionMode: 'auto',
     teamTemplateId: 'template-1',
   })
 
@@ -113,7 +114,29 @@ test('Session creation forwards a selected Team template id', async () => {
     body: {
       projectId: 'project-1',
       mode: 'build',
+      permissionMode: 'auto',
       teamTemplateId: 'template-1',
     },
+  })
+})
+
+test('Session permission mode uses POST and encodes an opaque Session id', async () => {
+  let request: { pathname: string; method: string; body?: unknown } | undefined
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input))
+    request = {
+      pathname: url.pathname,
+      method: String(init?.method ?? 'GET'),
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    }
+    return Response.json({ session: {}, snapshot: {} })
+  }
+
+  await api.setSessionPermissionMode('session/one?x=1', 'default')
+
+  assert.deepEqual(request, {
+    pathname: `/api/sessions/${encodePathSegment('session/one?x=1')}/permission-mode`,
+    method: 'POST',
+    body: { permissionMode: 'default' },
   })
 })

@@ -48,6 +48,40 @@ export function buildUserTurnDbMessages(input: {
   return out
 }
 
+/** Build a durable assistant data marker for Leader footer metadata. */
+export function buildLeaderRunMetaDbMessage(input: {
+  runId: string
+  threadId: string
+  resourceId: string
+  model: string
+  thinking?: string
+  startedAt: Date
+  completedAt: Date
+}): Record<string, unknown> {
+  return {
+    id: `leader-run-meta:${input.runId}`,
+    role: 'assistant',
+    createdAt: input.completedAt,
+    threadId: input.threadId,
+    resourceId: input.resourceId,
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'data-leader-run-meta',
+          data: {
+            runId: input.runId,
+            startedAt: input.startedAt.toISOString(),
+            completedAt: input.completedAt.toISOString(),
+            model: input.model,
+            ...(input.thinking ? { thinking: input.thinking } : {}),
+          },
+        },
+      ],
+    },
+  }
+}
+
 /**
  * Ensure the memory thread exists, then persist the user turn.
  * Returns how many user messages were saved. Throws on storage failure —

@@ -97,9 +97,12 @@ export function terminalWorkerEventFromToolPart(part: {
     jobId: value.jobId,
     workerId: typeof value.workerId === 'string' ? value.workerId : undefined,
     workerName,
+    teamMemberName:
+      typeof value.teamMemberName === 'string' ? value.teamMemberName : undefined,
     workerKind: inferredKind,
     role: typeof value.role === 'string' ? (value.role as WorkerRole) : undefined,
     model: typeof value.model === 'string' ? value.model : undefined,
+    reasoning: typeof value.reasoning === 'string' ? value.reasoning : undefined,
     output: typeof value.output === 'string' ? value.output : '',
     error: typeof value.error === 'string' ? value.error : undefined,
     errorCode: typeof value.errorCode === 'string' ? value.errorCode : undefined,
@@ -164,7 +167,8 @@ export function workerRunReducer(
         if (
           prev.output !== event.output ||
           prev.status !== 'completed' ||
-          prev.truncated !== event.truncated
+          prev.truncated !== event.truncated ||
+          prev.teamMemberName !== event.teamMemberName
         ) {
           changed = true
         }
@@ -183,7 +187,8 @@ export function workerRunReducer(
           prev.output !== output ||
           prev.status !== event.type ||
           prev.truncated !== event.truncated ||
-          prev.error !== event.error
+          prev.error !== event.error ||
+          prev.teamMemberName !== event.teamMemberName
         ) {
           changed = true
         }
@@ -205,6 +210,7 @@ export function workerRunReducer(
         jobId: event.jobId,
         workerId: event.workerId,
         workerName: event.workerName,
+        teamMemberName: event.teamMemberName,
         workerKind: event.workerKind,
         role: event.role,
         model: event.model,
@@ -267,6 +273,7 @@ export function workerRunReducer(
         next.set(event.jobId, {
           ...prev,
           workerName: event.workerName ?? prev.workerName,
+          teamMemberName: event.teamMemberName ?? prev.teamMemberName,
           workerKind: kind,
           output: event.output,
           status: 'completed',
@@ -292,6 +299,7 @@ export function workerRunReducer(
           jobId: event.jobId,
           workerId: event.workerId,
           workerName: event.workerName,
+          teamMemberName: event.teamMemberName,
           workerKind: kind,
           role: event.role,
           model: event.model,
@@ -315,6 +323,7 @@ export function workerRunReducer(
         const end = times?.lastDeltaAt ?? Date.now()
         next.set(event.jobId, {
           ...prev,
+          teamMemberName: event.teamMemberName ?? prev.teamMemberName,
           output: event.output ?? prev.output,
           status: event.type,
           truncated: event.truncated,
@@ -343,6 +352,7 @@ export function workerRunReducer(
           jobId: event.jobId,
           workerId: event.workerId,
           workerName: event.workerName,
+          teamMemberName: event.teamMemberName,
           workerKind: kind,
           role: event.role,
           model: event.model,
@@ -551,6 +561,7 @@ export function seedWorkerStatesFromSnapshot(
         existing.error !== error ||
         existing.errorCode !== errorCode ||
         existing.workerId !== job.workerId ||
+        existing.teamMemberName !== job.teamMemberName ||
         !existing.snapshotHydrated ||
         timingStale
       ) {
@@ -559,9 +570,12 @@ export function seedWorkerStatesFromSnapshot(
           ...existing,
           workerId: job.workerId,
           workerName: job.workerName || existing.workerName,
+          teamMemberName: job.teamMemberName ?? existing.teamMemberName,
           workerKind: worker?.kind ?? existing.workerKind,
           role: job.role ?? existing.role,
-          model: worker?.model?.trim() || existing.model,
+          model: job.effectiveModel?.trim() || worker?.model?.trim() || existing.model,
+          reasoning:
+            job.effectiveReasoning?.trim() || worker?.reasoning?.trim() || existing.reasoning,
           status,
           output,
           error,
@@ -585,9 +599,11 @@ export function seedWorkerStatesFromSnapshot(
       jobId: job.id,
       workerId: job.workerId,
       workerName: job.workerName,
+      teamMemberName: job.teamMemberName,
       workerKind: worker?.kind ?? 'custom',
       role: job.role,
-      model: worker?.model?.trim() || undefined,
+      model: job.effectiveModel?.trim() || worker?.model?.trim() || undefined,
+      reasoning: job.effectiveReasoning?.trim() || worker?.reasoning?.trim() || undefined,
       reusedSession: false,
       sequence: 0,
       output: job.output ?? '',

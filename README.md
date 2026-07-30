@@ -63,7 +63,9 @@ Watch each job stream in place — tool calls, terminal output, and final status
 
 ### Approvals you control
 
-ACP permission requests surface in chat and the side panel. Session policies: manual, allow once / always, reject once / always.
+ACP permission requests surface in chat and the side panel. Each Session has a two-state shield: **Default** permits reads everywhere and project-local changes, while changes outside the project or with unknown scope require approval; **Auto-accept** selects an allow option for every request that provides one. Changes apply immediately to running and pending work.
+
+This policy is an application-level ACP approval boundary, not an OS sandbox. It does not intercept direct system calls made by an Agent process.
 
 </td>
 <td width="50%">

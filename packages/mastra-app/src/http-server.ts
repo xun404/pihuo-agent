@@ -6,6 +6,7 @@
  * Port: MASTRA_PORT or 4111
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { basename, resolve as pathResolve } from 'node:path'
 import {
@@ -101,6 +102,7 @@ import type {
   ApplyTeamTemplateInput,
   CustomAcpRegistrationInput,
   PromptSettings,
+  SessionPermissionMode,
 } from '@swarmdesk-agent/shared'
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
@@ -110,7 +112,10 @@ import {
   attachChatRunSubscriber,
   abortChatRun,
 } from './chat-run-hub.js'
-import { persistUserTurnUpFront } from './persist-user-turn.js'
+import {
+  buildLeaderRunMetaDbMessage,
+  persistUserTurnUpFront,
+} from './persist-user-turn.js'
 import { coalesceAssistantTurns } from './coalesce-assistant-turns.js'
 import { RequestContext } from '@mastra/core/request-context'
 import { leaderAgent } from './agents/leader-agent.js'
@@ -150,8 +155,10 @@ import {
 } from './desktop-auth.js'
 import {
   isTerminalWorkerEvent,
+  isValidSessionPermissionMode,
   isValidPromptSettings,
   normalizePromptSettings,
+  permissionModeFromLegacyPolicy,
   type WorkerRunEvent,
 } from '@swarmdesk-agent/shared'
 import { AsyncLocalStorage } from 'node:async_hooks'
@@ -962,6 +969,9 @@ const server = createServer(async (req, res) => {
             thinkingIntensity,
             messageCount: Array.isArray(params.messages) ? params.messages.length : 0,
           })
+          const leaderRunStartedAt = new Date()
+          const leaderRunMarkerId = randomUUID()
+          let leaderRunMetaPersisted = false
           // untilIdle keeps the stream open across background tool tasks
           // @see https://mastra.ai/docs/long-running-agents/background-tasks
 
@@ -1001,6 +1011,28 @@ const server = createServer(async (req, res) => {
                 runId?: string
               }) => {
                 if (!onFinishEvent.finishReason) return
+
+                if (!leaderRunMetaPersisted) {
+                  leaderRunMetaPersisted = true
+                  const completedAt = new Date()
+                  try {
+                    const marker = buildLeaderRunMetaDbMessage({
+                      runId: onFinishEvent.runId ?? leaderRunMarkerId,
+                      threadId,
+                      resourceId,
+                      model: leaderModel,
+                      thinking: thinkingIntensity,
+                      startedAt: leaderRunStartedAt,
+                      completedAt,
+                    })
+                    await leaderMemory.saveMessages({ messages: [marker as never] })
+                  } catch (err) {
+                    console.error('[leader-run-meta] Failed to persist run metadata:', {
+                      threadId,
+                      error: String(err),
+                    })
+                  }
+                }
 
                 // Stamp the reply time so the sidebar can show "last reply X ago"
                 // instead of the noisy session.updatedAt (which mode/rename/activate
@@ -2478,9 +2510,17 @@ const server = createServer(async (req, res) => {
           mode?: LeaderMode
           memoryThreadId?: string
           teamTemplateId?: string
+          permissionMode?: SessionPermissionMode
         }
         if (!body.projectId) {
           send(res, 400, { error: 'projectId required' })
+          return
+        }
+        if (
+          body.permissionMode !== undefined &&
+          !isValidSessionPermissionMode(body.permissionMode)
+        ) {
+          send(res, 400, { error: 'permissionMode must be default or auto' })
           return
         }
         // title is optional: when omitted the session is created with a placeholder
@@ -2496,6 +2536,7 @@ const server = createServer(async (req, res) => {
             projectId: body.projectId,
             title: body.title,
             mode: body.mode,
+            permissionMode: body.permissionMode,
             memoryThreadId: body.memoryThreadId,
             rolePrompts: loadSettings().prompts.roles,
             initialTeamMembers,
@@ -2627,13 +2668,38 @@ const server = createServer(async (req, res) => {
           return
         }
         try {
-          const session = store.updateSessionApprovalPolicy(
+          store.updateSessionApprovalPolicy(
             policyMatch.id!,
             body.approvalPolicy as import('@swarmdesk-agent/shared').SessionApprovalPolicy,
+          )
+          const { session } = getWorkerScheduler().setSessionPermissionMode(
+            policyMatch.id!,
+            permissionModeFromLegacyPolicy(body.approvalPolicy),
           )
           send(res, 200, { session, snapshot: store.snapshot() })
         } catch (e) {
           send(res, 404, { error: e instanceof Error ? e.message : String(e) })
+        }
+        return
+      }
+
+      const permissionModeMatch = match(path, '/api/sessions/:id/permission-mode')
+      if (method === 'POST' && permissionModeMatch) {
+        const body = (await readJson(req)) as { permissionMode?: string }
+        if (!isValidSessionPermissionMode(body.permissionMode)) {
+          send(res, 400, { error: 'permissionMode must be default or auto' })
+          return
+        }
+        try {
+          const { session } = getWorkerScheduler().setSessionPermissionMode(
+            permissionModeMatch.id!,
+            body.permissionMode,
+          )
+          send(res, 200, { session, snapshot: store.snapshot() })
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e)
+          if (message.includes('not found')) send(res, 404, { error: message })
+          else sendUnexpectedFailure(res, e, 'update session permission mode')
         }
         return
       }

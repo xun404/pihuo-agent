@@ -6,7 +6,7 @@ import type {
   LeaderMode,
   Project,
   Session,
-  SessionApprovalPolicy,
+  SessionPermissionMode,
   WorkerJob,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
@@ -49,6 +49,7 @@ import { findLatestTaskList } from '../lib/find-latest-task-list'
 import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
 import {
+  findCurrentTurnAssistant,
   formatClockTime,
   resolveLeaderRunMeta,
   shortModelId,
@@ -119,7 +120,6 @@ interface Props {
   serverUp: boolean
   /** Visible pane (vs keep-alive hidden for parallel sessions) */
   isActive?: boolean
-  onModeChange?: (mode: LeaderMode) => void
   /** Inline rename from the chat header. Receives the new title; the parent
    *  decides whether to actually persist (e.g. skip if unchanged / empty). */
   onRenameSession?: (title: string) => void
@@ -133,8 +133,8 @@ interface Props {
   /** Report streaming/busy so sidebar can show parallel activity */
   onBusyChange?: (busy: boolean) => void
   /** Approval policy and resolution */
-  approvalPolicy: SessionApprovalPolicy
-  onSetApprovalPolicy?: (policy: SessionApprovalPolicy) => void
+  permissionMode: SessionPermissionMode
+  onSetPermissionMode?: (mode: SessionPermissionMode) => void | Promise<void>
   resolving?: Record<string, boolean>
   onResolveApproval?: (
     approvalId: string,
@@ -196,14 +196,13 @@ export function ChatPanel({
   session,
   serverUp,
   isActive = true,
-  onModeChange,
   onRenameSession,
   onOpenSettings,
   onRefreshSnapshot,
   settingsOpen,
   onBusyChange,
-  approvalPolicy,
-  onSetApprovalPolicy,
+  permissionMode,
+  onSetPermissionMode,
   resolving = {},
   onResolveApproval,
   onResetContext,
@@ -242,7 +241,6 @@ export function ChatPanel({
       }
     }
   }, [initialInput, autoSendInitialInput, onInitialInputConsumed])
-  const [mode, setMode] = useState<LeaderMode>(session?.mode ?? 'build')
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [thinkingIntensity, setThinkingIntensity] = useState<ThinkingIntensity>('medium')
@@ -271,13 +269,11 @@ export function ChatPanel({
   /** messages-scroll 容器：TurnNavigator 跳转 + 滚动监听用 */
   const messagesScrollRef = useRef<HTMLDivElement>(null)
   const historyLoadedFor = useRef<string | null>(null)
-  // Keep latest model / thinking / mode for transport body (avoid stale closure)
+  // Keep latest model / thinking for transport body (avoid stale closure)
   const selectedModelRef = useRef(selectedModel)
   selectedModelRef.current = selectedModel
   const thinkingIntensityRef = useRef(thinkingIntensity)
   thinkingIntensityRef.current = thinkingIntensity
-  const modeRef = useRef(mode)
-  modeRef.current = mode
   /** Track tool start times (keyed by metaKey) for execution duration */
   const toolStartTimes = useRef<Map<string, number>>(new Map())
   const toolDurations = useRef<Map<string, number>>(new Map())
@@ -433,7 +429,7 @@ export function ChatPanel({
           // UI keeps clean user text; inject mode/context only on the wire
           const wireLast = enrichLastUserMessageForWire(last as never, {
             locale: localeRef.current,
-            mode: modeRef.current,
+            mode: 'build',
             projectName: proj?.name,
             projectPath: proj?.rootPath,
             sessionTitle: sess?.title,
@@ -781,7 +777,7 @@ export function ChatPanel({
   useEffect(() => {
     const map = turnTimingRef.current
     let changed = false
-    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+    const currentAssistant = findCurrentTurnAssistant(messages)
     const wasBusy = wasBusyRef.current
 
     if (busy) {
@@ -805,15 +801,15 @@ export function ChatPanel({
       }
 
       // 同步到当前 assistant id（id 变了就迁过去，删掉旧 key）
-      if (lastAssistant && activeTurnRef.current) {
+      if (currentAssistant && activeTurnRef.current) {
         const at = activeTurnRef.current
         const prevId = at.assistantId
-        if (prevId && prevId !== lastAssistant.id) {
+        if (prevId && prevId !== currentAssistant.id) {
           map.delete(prevId)
           changed = true
         }
-        if (at.assistantId !== lastAssistant.id) {
-          at.assistantId = lastAssistant.id
+        if (at.assistantId !== currentAssistant.id) {
+          at.assistantId = currentAssistant.id
           changed = true
         }
         const next: ClientTurnMeta = {
@@ -821,7 +817,7 @@ export function ChatPanel({
           model: at.model,
           thinking: at.thinking,
         }
-        const prev = map.get(lastAssistant.id)
+        const prev = map.get(currentAssistant.id)
         if (
           !prev ||
           prev.startedAt !== next.startedAt ||
@@ -829,14 +825,14 @@ export function ChatPanel({
           prev.thinking !== next.thinking ||
           prev.endedAt != null
         ) {
-          map.set(lastAssistant.id, next)
+          map.set(currentAssistant.id, next)
           changed = true
         }
       }
     } else if (wasBusy && activeTurnRef.current) {
       // 本轮结束：封印到最终 assistant
       const at = activeTurnRef.current
-      const id = lastAssistant?.id ?? at.assistantId
+      const id = currentAssistant?.id ?? at.assistantId
       if (id) {
         map.set(id, {
           startedAt: at.startedAt,
@@ -852,10 +848,6 @@ export function ChatPanel({
     wasBusyRef.current = busy
     if (changed) setTimingEpoch((n) => n + 1)
   }, [messages, busy])
-
-  useEffect(() => {
-    if (session.mode) setMode(session.mode)
-  }, [session.mode, session.id])
 
   const selectedMeta = models.find((m) => m.id === selectedModel)
   const modelShort = selectedMeta
@@ -1489,8 +1481,7 @@ export function ChatPanel({
         />
         <div className="composer-tools">
           <ComposerToolbar
-            mode={mode}
-            approvalPolicy={approvalPolicy}
+            permissionMode={permissionMode}
             selectedModel={selectedModel}
             thinkingIntensity={thinkingIntensity}
             models={models}
@@ -1505,12 +1496,7 @@ export function ChatPanel({
             sessionId={session.id}
             onCompressContext={runCompressContext}
             locale={locale}
-            onModeChange={(m) => {
-              setMode(m)
-              modeRef.current = m
-              onModeChange?.(m)
-            }}
-            onApprovalPolicyChange={(p) => onSetApprovalPolicy?.(p)}
+            onPermissionModeChange={(next) => onSetPermissionMode?.(next)}
             onModelChange={(id) => {
               setSelectedModel(id)
               selectedModelRef.current = id

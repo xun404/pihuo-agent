@@ -1,5 +1,8 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   agent,
   client,
@@ -49,6 +52,7 @@ interface FakeAgentOpts {
     | { stopReason: TestStopReason; text?: string }
     | Promise<{ stopReason: TestStopReason; text?: string }>
   sendUpdateOnPrompt?: (sid: string) => Array<{ text: string }>
+  onPromptClient?: (ctx: any) => Promise<void>
   onClose?: (sid: string) => void
   onDelete?: (sid: string) => void
   onCancel?: (sid: string) => void
@@ -98,6 +102,7 @@ function createFakeAgent(opts: FakeAgentOpts = {}): AgentApp {
     })
     .onRequest(methods.agent.session.prompt, async (ctx) => {
       const sid = ctx.params.sessionId
+      await opts.onPromptClient?.(ctx)
       if (opts.onPrompt) {
         const r = await opts.onPrompt(sid)
         if (r.text) {
@@ -143,7 +148,7 @@ function createFakeAgent(opts: FakeAgentOpts = {}): AgentApp {
     })
 }
 
-async function setupDriver(opts: FakeAgentOpts = {}): Promise<{
+async function setupDriver(opts: FakeAgentOpts = {}, cwd = SAFE_CWD): Promise<{
   driver: AcpSessionDriver
   agentApp: AgentApp
   agentStream: Stream
@@ -151,10 +156,52 @@ async function setupDriver(opts: FakeAgentOpts = {}): Promise<{
   const { clientStream, agentStream } = createPairedStreams()
   const agentApp = createFakeAgent(opts)
   agentApp.connect(agentStream)
-  const driver = await AcpSessionDriver.connect(SAFE_CWD, clientStream)
+  const driver = await AcpSessionDriver.connect(cwd, clientStream)
   await driver.initialize()
   return { driver, agentApp, agentStream }
 }
+
+describe('AcpSessionDriver — filesystem permission boundary', () => {
+  it('routes an outside write through the current prompt permission binding', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'acp-driver-fs-root-'))
+    const outside = mkdtempSync(join(tmpdir(), 'acp-driver-fs-outside-'))
+    const target = join(outside, 'approved.txt')
+    try {
+      const { driver } = await setupDriver(
+        {
+          sessionIds: ['sid-fs-write'],
+          onPromptClient: async (ctx) => {
+            await ctx.client.request(methods.client.fs.writeTextFile as string, {
+              sessionId: ctx.params.sessionId,
+              path: target,
+              content: 'from agent',
+            })
+          },
+        },
+        projectRoot,
+      )
+      await driver.sessionNew()
+      let requestSource: string | undefined
+      const result = await driver.prompt(
+        'write outside',
+        makeBinding({
+          onPermissionRequest: async (request) => {
+            requestSource = request.source
+            return { outcome: 'selected', optionId: 'router_fs_allow_once' }
+          },
+        }),
+      )
+
+      assert.equal(result.ok, true)
+      assert.equal(requestSource, 'client_fs')
+      assert.equal(readFileSync(target, 'utf8'), 'from agent')
+      driver.close()
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
+  })
+})
 
 function makeBinding(overrides: Partial<PromptBinding> = {}): PromptBinding {
   return { jobId: 'job-1', sequence: 0, ...overrides }

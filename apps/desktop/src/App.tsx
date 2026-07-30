@@ -8,10 +8,9 @@ import {
 } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type {
-  LeaderMode,
   Project,
   Session,
-  SessionApprovalPolicy,
+  SessionPermissionMode,
   WorkerJob,
 } from '@swarmdesk-agent/shared'
 import {
@@ -56,7 +55,6 @@ function AppShell({
   clearPendingSession,
   activateSession,
   activateProject,
-  setSessionMode,
   setSessionStatus,
   markSessionRead,
   deleteProject,
@@ -74,7 +72,7 @@ function AppShell({
   archiveTeamMember,
   resetTeamMemberSession,
   refresh,
-  setSessionApprovalPolicy,
+  setSessionPermissionMode,
 }: ReturnType<typeof useAppState>) {
   const { t } = useI18n()
   const { error: toastError, info: toastInfo } = useToast()
@@ -248,8 +246,7 @@ function AppShell({
   const onComposeFirstMessage = (
     text: string,
     preset?: {
-      mode: LeaderMode
-      approvalPolicy: SessionApprovalPolicy
+      permissionMode: SessionPermissionMode
       teamTemplateId?: string
     },
   ): Promise<boolean> => {
@@ -267,17 +264,14 @@ function AppShell({
         }
         // Clear any pending local-only session (sidebar button flow)
         clearPendingSession()
-        const mode = preset?.mode ?? 'build'
         const session = await createSession(
           undefined,
-          mode,
+          'build',
           projectId,
           undefined,
           preset?.teamTemplateId,
+          preset?.permissionMode ?? 'default',
         )
-        if (preset && preset.approvalPolicy !== 'manual') {
-          await setSessionApprovalPolicy(session.id, preset.approvalPolicy)
-        }
         // Bind the text to the newly-created session id so ONLY its ChatPanel
         // consumes it — the previously-active panel must not race in first.
         setPendingComposerForSession({ sessionId: session.id, text: trimmed, autoSend: true })
@@ -330,11 +324,6 @@ function AppShell({
 
   const onDeleteSession = (session: Session) => {
     deleteSession(session.id).catch((e) => toastError(String(e)))
-  }
-
-  const onModeChange = (mode: LeaderMode) => {
-    if (!activeSession) return
-    void setSessionMode(activeSession.id, mode).catch((e) => toastError(String(e)))
   }
 
   const leaveSettings = () => {
@@ -433,7 +422,6 @@ function AppShell({
                     sessions={snapshot.sessions}
                     projects={snapshot.projects}
                     serverUp={serverUp}
-                    onModeChange={onModeChange}
                     onRenameSession={onRenameSession}
                     onOpenSettings={(tab) => {
                       if (tab) setSettingsTab(tab)
@@ -443,9 +431,13 @@ function AppShell({
                     onRefreshSnapshot={() => void refresh()}
                     settingsOpen={false}
                     onBusySessionsChange={setBusySessionIds}
-                    onSetApprovalPolicy={(sessionId, policy) =>
-                      void setSessionApprovalPolicy(sessionId, policy).catch((e) =>
-                        toastError(String(e)),
+                    onSetPermissionMode={(sessionId, permissionMode) =>
+                      setSessionPermissionMode(sessionId, permissionMode).then(
+                        () => undefined,
+                        (e) => {
+                          toastError(String(e))
+                          throw e
+                        },
                       )
                     }
                     onSessionStatusChange={(sessionId, status, opts) =>

@@ -6,7 +6,7 @@ import type {
   Locale,
   Project,
   Session,
-  SessionApprovalPolicy,
+  SessionPermissionMode,
   TeamMember,
   TeamTemplate,
   CreateTeamTemplateInput,
@@ -326,6 +326,7 @@ export const api = {
     mode?: LeaderMode
     memoryThreadId?: string
     teamTemplateId?: string
+    permissionMode?: SessionPermissionMode
   }) =>
     request<{ session: Session; snapshot: AppSnapshot }>('/api/sessions', {
       method: 'POST',
@@ -348,14 +349,6 @@ export const api = {
       `/api/projects/${encodePathSegment(id)}/activate`,
       {
         method: 'POST',
-      },
-    ),
-  setSessionMode: (id: string, mode: LeaderMode) =>
-    request<{ session: Session; snapshot: AppSnapshot }>(
-      `/api/sessions/${encodePathSegment(id)}/mode`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ mode }),
       },
     ),
   setSessionStatus: (
@@ -385,12 +378,12 @@ export const api = {
       `/api/sessions/${encodePathSegment(id)}/read`,
       { method: 'POST', body: JSON.stringify(upTo ? { upTo } : {}) },
     ),
-  setSessionApprovalPolicy: (id: string, approvalPolicy: SessionApprovalPolicy) =>
+  setSessionPermissionMode: (id: string, permissionMode: SessionPermissionMode) =>
     request<{ session: Session; snapshot: AppSnapshot }>(
-      `/api/sessions/${encodePathSegment(id)}/approval-policy`,
+      `/api/sessions/${encodePathSegment(id)}/permission-mode`,
       {
         method: 'POST',
-        body: JSON.stringify({ approvalPolicy }),
+        body: JSON.stringify({ permissionMode }),
       },
     ),
   /**
