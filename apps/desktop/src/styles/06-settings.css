@@ -3053,7 +3053,8 @@ textarea.settings-input.team-library-desc-input {
 .text-prompt-overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  /* Above turn-nav (15) / preview (25) / composer dock (4) — portal to body */
+  z-index: 10000;
   background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;

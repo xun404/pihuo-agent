@@ -12,7 +12,7 @@ import { basename, resolve as pathResolve } from 'node:path'
 import {
   getWorkerModelCatalogStore,
   getGitStatus,
-  listProjectFiles,
+  getGitFileDiff,
   listLocalBranches,
   switchBranch,
   createBranchAndSwitch,
@@ -1498,6 +1498,30 @@ const server = createServer(async (req, res) => {
         return
       }
 
+      // Per-file unified diff (OpenChamber-style changed-file viewer)
+      const gitDiffMatch = match(path, '/api/projects/:id/git/diff')
+      if (method === 'GET' && gitDiffMatch) {
+        const project = store.listProjects().find((p) => p.id === gitDiffMatch.id)
+        if (!project) {
+          send(res, 404, { error: 'project not found' })
+          return
+        }
+        const filePath = url.searchParams.get('path')?.trim() ?? ''
+        const staged = url.searchParams.get('staged') === '1' || url.searchParams.get('staged') === 'true'
+        const contextRaw = url.searchParams.get('contextLines')
+        const contextLines = contextRaw != null && contextRaw !== '' ? Number(contextRaw) : undefined
+        if (!filePath) {
+          send(res, 400, { ok: false, error: 'path required' })
+          return
+        }
+        const diff = await getGitFileDiff(project.rootPath, filePath, {
+          staged,
+          contextLines: Number.isFinite(contextLines) ? contextLines : undefined,
+        })
+        send(res, diff.ok ? 200 : 400, diff)
+        return
+      }
+
       // —— Git branches (list / switch / create / commit-and-switch) ——
       const branchesListMatch = match(path, '/api/projects/:id/branches')
       if (method === 'GET' && branchesListMatch) {
@@ -1568,36 +1592,6 @@ const server = createServer(async (req, res) => {
         }
         const result = await commitAndSwitch(project.rootPath, target, message)
         send(res, 200, result)
-        return
-      }
-
-      // Files listing
-      if (method === 'GET' && path === '/api/files') {
-        const { project } = store.getActive()
-        if (!project) {
-          send(res, 400, { error: 'no active project', ok: false, entries: [] })
-          return
-        }
-        const depth = Number(url.searchParams.get('depth') ?? 3)
-        const files = listProjectFiles(project.rootPath, {
-          maxDepth: Number.isFinite(depth) ? depth : 3,
-        })
-        send(res, 200, files)
-        return
-      }
-
-      const filesMatch = match(path, '/api/projects/:id/files')
-      if (method === 'GET' && filesMatch) {
-        const project = store.listProjects().find((p) => p.id === filesMatch.id)
-        if (!project) {
-          send(res, 404, { error: 'project not found' })
-          return
-        }
-        const depth = Number(url.searchParams.get('depth') ?? 3)
-        const files = listProjectFiles(project.rootPath, {
-          maxDepth: Number.isFinite(depth) ? depth : 3,
-        })
-        send(res, 200, files)
         return
       }
 

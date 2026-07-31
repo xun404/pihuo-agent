@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 
 interface ModalProps {
@@ -24,13 +25,11 @@ interface ModalProps {
 /**
  * 统一模态基座（v4 动画对齐）。
  *
- * - backdrop：opacity 淡入淡出 + backdrop-filter blur
- * - panel：opacity + scale(.98→1) + translateY(8px→0)，spring 入场，反向退场
+ * - 始终 portal 到 document.body，避免 chat timeline / composer 局部 stacking context 穿模
+ * - backdrop：opacity 淡入淡出
+ * - panel：opacity + scale(.98→1) + translateY(8px→0)
  * - ESC / backdrop 点击关闭
  * - 打开时锁定 body 滚动
- *
- * 时值/缓动引用 motion token（--dur-base / --ease-spring）。
- * 退场经 AnimatePresence 延迟卸载，避免现有 `if(!open) return null` 的瞬时消失。
  */
 export function Modal({
   open,
@@ -41,7 +40,6 @@ export function Modal({
   closeOnBackdrop = true,
   closeOnEsc = true,
 }: ModalProps) {
-  // 滚动锁
   useEffect(() => {
     if (!open) return
     const prev = document.body.style.overflow
@@ -51,7 +49,6 @@ export function Modal({
     }
   }, [open])
 
-  // ESC 关闭（挂在 document，避免焦点未入面板时失效）
   useEffect(() => {
     if (!open || !closeOnEsc) return
     const onKey = (e: KeyboardEvent) => {
@@ -64,7 +61,9 @@ export function Modal({
     return () => document.removeEventListener('keydown', onKey)
   }, [open, closeOnEsc, onClose])
 
-  return (
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -72,7 +71,6 @@ export function Modal({
           role="dialog"
           aria-modal="true"
           aria-label={label}
-          // backdrop 淡入淡出
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -83,7 +81,6 @@ export function Modal({
         >
           <motion.div
             className={panelClassName ?? 'text-prompt-modal'}
-            // 面板：opacity + scale + translateY，弹簧入场
             initial={{ opacity: 0, scale: 0.98, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 8 }}
@@ -94,6 +91,7 @@ export function Modal({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }

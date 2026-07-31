@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type {
   ApprovalItem,
   CreateTeamMemberInput,
@@ -11,7 +11,7 @@ import type {
 import { normalizePromptSettings, WORKER_ROLES } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
-import { api, type FileEntryDto, type GitStatusResponse } from '../lib/api'
+import { api } from '../lib/api'
 import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
 import { fetchSettings } from '../lib/settings'
 import {
@@ -27,37 +27,8 @@ import { WorkerReasoningSelect } from './WorkerReasoningSelect'
 import { useToast } from './Toast'
 import { TeamTemplateManager } from './TeamTemplateManager'
 
-type Tab = 'roles' | 'git' | 'files' | 'approvals'
-
-function statusLetter(status: string): string {
-  if (status === '??') return '?'
-  return status.replace(/\s/g, '')[0] ?? 'M'
-}
-
-function FileTree({ entries, depth = 0 }: { entries: FileEntryDto[]; depth?: number }) {
-  return (
-    <>
-      {entries.map((entry) => (
-        <div key={entry.path}>
-          <div
-            className={`tree-item w-row inspector-list-row${entry.type === 'directory' ? ' folder' : ''}`}
-            style={{ paddingLeft: 10 + depth * 12 }}
-          >
-            <span className="tree-item-ico" aria-hidden>
-              {entry.type === 'directory' ? '▾' : '·'}
-            </span>
-            <div className="info">
-              <div className="n">{entry.name}</div>
-            </div>
-          </div>
-          {entry.children && entry.children.length > 0 && (
-            <FileTree entries={entry.children} depth={depth + 1} />
-          )}
-        </div>
-      ))}
-    </>
-  )
-}
+export type InspectorTab = 'roles' | 'approvals'
+type Tab = InspectorTab
 
 interface Props {
   workers: WorkerRegistration[]
@@ -115,23 +86,12 @@ export function RightPanel({
   const { success: toastSuccess, error: toastError } = useToast()
   const [tab, setTab] = useState<Tab>('roles')
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
-  const [git, setGit] = useState<GitStatusResponse | null>(null)
-  const [gitLoading, setGitLoading] = useState(false)
-  const [gitError, setGitError] = useState<string | null>(null)
-  const [files, setFiles] = useState<FileEntryDto[] | null>(null)
-  const [filesLoading, setFilesLoading] = useState(false)
-  const [filesError, setFilesError] = useState<string | null>(null)
-  const [filesTruncated, setFilesTruncated] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [roleDraft, setRoleDraft] = useState<RoleDraft>(EMPTY_ROLE_DRAFT)
   const [rolePrompts, setRolePrompts] = useState(() => normalizePromptSettings(undefined).roles)
   const [roleBusy, setRoleBusy] = useState(false)
   const [roleReasoningValid, setRoleReasoningValid] = useState(true)
   const [roleJobs, setRoleJobs] = useState<WorkerJob[]>([])
-  const gitRequestGen = useRef(0)
-  const filesRequestGen = useRef(0)
-  const projectScopeRef = useRef(projectId)
-  projectScopeRef.current = projectId
 
   const enabledWorkers = workers.filter((worker) => worker.enabled)
 
@@ -149,65 +109,6 @@ export function RightPanel({
     }
   }, [])
 
-  const loadGit = useCallback(async () => {
-    const gen = ++gitRequestGen.current
-    const requestProjectId = projectId
-    if (!projectId) {
-      setGit(null)
-      setGitError(t('git.noProject'))
-      setGitLoading(false)
-      return
-    }
-    setGitLoading(true)
-    setGitError(null)
-    try {
-      const data = await api.gitStatus(projectId)
-      if (gen !== gitRequestGen.current || projectScopeRef.current !== requestProjectId) return
-      setGit(data)
-      if (!data.ok) setGitError(data.error ?? t('git.error'))
-    } catch (error) {
-      if (gen !== gitRequestGen.current || projectScopeRef.current !== requestProjectId) return
-      setGit(null)
-      setGitError(error instanceof Error ? error.message : String(error))
-    } finally {
-      if (gen === gitRequestGen.current && projectScopeRef.current === requestProjectId) {
-        setGitLoading(false)
-      }
-    }
-  }, [projectId, t])
-
-  const loadFiles = useCallback(async () => {
-    const gen = ++filesRequestGen.current
-    const requestProjectId = projectId
-    if (!projectId) {
-      setFiles(null)
-      setFilesError(t('files.noProject'))
-      setFilesLoading(false)
-      return
-    }
-    setFilesLoading(true)
-    setFilesError(null)
-    try {
-      const data = await api.listFiles(projectId)
-      if (gen !== filesRequestGen.current || projectScopeRef.current !== requestProjectId) return
-      if (!data.ok) {
-        setFiles(null)
-        setFilesError(data.error ?? t('files.error'))
-      } else {
-        setFiles(data.entries)
-        setFilesTruncated(data.truncated)
-      }
-    } catch (error) {
-      if (gen !== filesRequestGen.current || projectScopeRef.current !== requestProjectId) return
-      setFiles(null)
-      setFilesError(error instanceof Error ? error.message : String(error))
-    } finally {
-      if (gen === filesRequestGen.current && projectScopeRef.current === requestProjectId) {
-        setFilesLoading(false)
-      }
-    }
-  }, [projectId, t])
-
   const loadRoleJobs = useCallback(async () => {
     if (!sessionId) {
       setRoleJobs([])
@@ -218,22 +119,8 @@ export function RightPanel({
   }, [sessionId])
 
   useEffect(() => {
-    gitRequestGen.current += 1
-    filesRequestGen.current += 1
-    setGit(null)
-    setGitError(null)
-    setGitLoading(false)
-    setFiles(null)
-    setFilesError(null)
-    setFilesLoading(false)
-    setFilesTruncated(false)
-  }, [projectId])
-
-  useEffect(() => {
-    if (tab === 'git') void loadGit()
-    if (tab === 'files') void loadFiles()
     if (tab === 'roles') void loadRoleJobs()
-  }, [tab, loadGit, loadFiles, loadRoleJobs])
+  }, [tab, loadRoleJobs])
 
   useEffect(() => {
     setEditingId(null)
@@ -320,8 +207,6 @@ export function RightPanel({
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'roles', label: t('right.roles') },
-    { id: 'git', label: t('right.git') },
-    { id: 'files', label: t('right.files') },
     { id: 'approvals', label: t('right.approvals') },
   ]
 
@@ -675,75 +560,6 @@ export function RightPanel({
               </button>
             </div>
           </Modal>
-        </div>
-      )}
-
-      {tab === 'git' && (
-        <div className="drawer-body tab-panel active">
-          <div className="inspector-panel-head">
-            <div className="inspector-panel-title">
-              {git?.branch ? `⎇ ${git.branch}` : t('right.git')}
-            </div>
-            <button
-              className="settings-btn-soft"
-              type="button"
-              onClick={() => void loadGit()}
-              disabled={gitLoading}
-            >
-              {gitLoading ? t('app.loading') : t('common.refresh')}
-            </button>
-          </div>
-          <div className="inspector-stats">
-            <div className="inspector-stat">
-              <div className="inspector-stat-n is-green">
-                {gitLoading ? '…' : git ? `+${git.insertions}` : '—'}
-              </div>
-              <div className="inspector-stat-l">{t('git.insertions')}</div>
-            </div>
-            <div className="inspector-stat">
-              <div className="inspector-stat-n is-danger">
-                {gitLoading ? '…' : git ? `−${git.deletions}` : '—'}
-              </div>
-              <div className="inspector-stat-l">{t('git.deletions')}</div>
-            </div>
-          </div>
-          {gitError && <p className="section-hint is-warn">{gitError}</p>}
-          {!gitError && git && git.files.length === 0 && (
-            <p className="section-hint">{t('git.clean')}</p>
-          )}
-          {git?.files.map((file) => (
-            <div className="w-row inspector-list-row" key={file.path}>
-              <span className={`git-status-badge ${statusLetter(file.status)}`}>
-                {statusLetter(file.status)}
-              </span>
-              <div className="info">
-                <div className="n mono">{file.path}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === 'files' && (
-        <div className="drawer-body tab-panel active">
-          <div className="inspector-panel-head">
-            <div className="inspector-panel-title">{t('right.files')}</div>
-            <button
-              className="settings-btn-soft"
-              type="button"
-              onClick={() => void loadFiles()}
-              disabled={filesLoading}
-            >
-              {filesLoading ? t('app.loading') : t('common.refresh')}
-            </button>
-          </div>
-          {filesLoading && <p className="section-hint">{t('app.loading')}</p>}
-          {filesError && <p className="section-hint is-warn">{filesError}</p>}
-          {!filesLoading && !filesError && files && files.length === 0 && (
-            <p className="section-hint">{t('files.empty')}</p>
-          )}
-          {files && <FileTree entries={files} />}
-          {filesTruncated && <p className="section-hint">{t('files.truncated')}</p>}
         </div>
       )}
 

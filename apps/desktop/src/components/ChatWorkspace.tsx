@@ -23,6 +23,7 @@ import { useSendShortcut } from '../hooks/useSendShortcut'
 import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
 import { IconArrowUp, IconFolder } from './Icons'
+import { ComposerStatusRow } from './chat/ComposerStatusRow'
 
 /**
  * Empty-state hint pool. Each time the user lands on the empty Chat state
@@ -235,6 +236,11 @@ export function ChatWorkspace({
   const [hintKey, setHintKey] = useState<MessageKey>(() => EMPTY_HINT_KEYS[0]!)
   // remember the last hint so we don't pick it twice in a row
   const lastHintIdxRef = useRef(0)
+  const [homeGitRefreshToken, setHomeGitRefreshToken] = useState(0)
+  const handleHomeRefreshGit = useCallback(() => {
+    setHomeGitRefreshToken((n) => n + 1)
+    onRefreshGit?.()
+  }, [onRefreshGit])
 
   // Rotate the empty-state hint each time we (re)enter the empty state.
   // Triggered when session becomes null after having been non-null, or on mount.
@@ -357,6 +363,12 @@ export function ChatWorkspace({
         </h1>
         <p className="home-hint">{t(hintKey)}</p>
         {onComposeFirstMessage && (
+          <div className="composer-stack home-composer-stack">
+            <ComposerStatusRow
+              projectId={homeProject?.id}
+              enabled
+              gitRefreshToken={homeGitRefreshToken}
+            />
           <form
             className="composer-card home-composer"
             onSubmit={(e) => {
@@ -388,7 +400,7 @@ export function ChatWorkspace({
                     project={homeProject}
                     snapshotWorkers={snapshotWorkers}
                     snapshotJobs={snapshotJobs}
-                    onAfterSwitch={onRefreshGit}
+                    onAfterSwitch={handleHomeRefreshGit}
                   />
                 </>
               )}
@@ -438,6 +450,7 @@ export function ChatWorkspace({
               </button>
             </div>
           </form>
+          </div>
         )}
         {!serverUp && (
           <p className="home-hint" style={{ color: 'var(--danger)' }}>

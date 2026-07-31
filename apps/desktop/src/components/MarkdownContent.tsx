@@ -1,6 +1,8 @@
 import { memo, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { MdCodeBlock } from './chat/MdCodeBlock'
+import { languageFromClassName } from '../lib/md-code-lang'
 
 type Props = {
   children: string
@@ -13,19 +15,19 @@ const components: Components = {
       {children}
     </a>
   ),
-  pre: ({ children, ...rest }) => (
-    <pre className="md-pre" {...rest}>
-      {children as ReactNode}
-    </pre>
-  ),
+  // Fenced blocks are fully rendered by `code` (MdCodeBlock); unwrap outer <pre>.
+  pre: ({ children }) => <>{children as ReactNode}</>,
   code: ({ className, children, ...rest }) => {
     const text = String(children)
-    const isBlock = Boolean(className?.includes('language-') || text.includes('\n'))
+    const langClass = Boolean(className?.includes('language-'))
+    const isBlock = langClass || text.includes('\n')
     if (isBlock) {
       return (
-        <code className={`md-code-block ${className ?? ''}`} {...rest}>
-          {children}
-        </code>
+        <MdCodeBlock
+          code={text}
+          language={languageFromClassName(className)}
+          className={className}
+        />
       )
     }
     return (
@@ -44,6 +46,7 @@ const components: Components = {
 /**
  * Render assistant chat text as GFM markdown (tables, lists, code fences, etc.).
  * Safe enough for model output: no raw HTML, links open in new tab.
+ * Fenced code blocks get line numbers + lightweight syntax highlight.
  */
 export const MarkdownContent = memo(function MarkdownContent({ children, className }: Props) {
   if (!children) return null

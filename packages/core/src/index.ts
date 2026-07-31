@@ -52,9 +52,12 @@ export {
   parseGitStatusPorcelain,
   parseGitNumstat,
   getGitStatus,
+  getGitFileDiff,
+  resolveRepoRelativePath,
   looksLikeGitRepo,
   type GitChangedFile,
   type GitStatusResult,
+  type GitFileDiffResult,
 } from './git-status.js'
 export {
   parseBranchForEachRef,

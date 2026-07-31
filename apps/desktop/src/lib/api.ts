@@ -72,7 +72,26 @@ export interface GitStatusResponse {
   isRepo: boolean
   rootPath: string
   branch?: string
-  files: { path: string; status: string; index: string; worktree: string }[]
+  files: {
+    path: string
+    status: string
+    index: string
+    worktree: string
+    insertions?: number
+    deletions?: number
+  }[]
+  insertions: number
+  deletions: number
+  error?: string
+}
+
+export interface GitFileDiffResponse {
+  ok: boolean
+  path: string
+  staged: boolean
+  isBinary: boolean
+  isUntracked: boolean
+  patch: string
   insertions: number
   deletions: number
   error?: string
@@ -119,21 +138,6 @@ export interface BranchSwitchResult {
   didChange: boolean
   issues: BranchSwitchIssue[]
   currentBranchName?: string
-  error?: string
-}
-
-export interface FileEntryDto {
-  name: string
-  path: string
-  type: 'file' | 'directory'
-  children?: FileEntryDto[]
-}
-
-export interface FilesResponse {
-  ok: boolean
-  rootPath: string
-  entries: FileEntryDto[]
-  truncated: boolean
   error?: string
 }
 
@@ -817,6 +821,18 @@ export const api = {
     request<GitStatusResponse>(
       projectId ? `/api/projects/${encodePathSegment(projectId)}/git` : '/api/git',
     ),
+  gitFileDiff: (
+    projectId: string,
+    filePath: string,
+    opts?: { staged?: boolean; contextLines?: number },
+  ) => {
+    const q = new URLSearchParams({ path: filePath })
+    if (opts?.staged) q.set('staged', '1')
+    if (typeof opts?.contextLines === 'number') q.set('contextLines', String(opts.contextLines))
+    return request<GitFileDiffResponse>(
+      `/api/projects/${encodePathSegment(projectId)}/git/diff?${q.toString()}`,
+    )
+  },
   listBranches: (projectId: string) =>
     request<BranchListResult>(`/api/projects/${encodePathSegment(projectId)}/branches`),
   switchBranch: (projectId: string, targetBranchName: string) =>
@@ -833,12 +849,6 @@ export const api = {
     request<BranchSwitchResult>(
       `/api/projects/${encodePathSegment(projectId)}/branches/commit-and-switch`,
       { method: 'POST', body: JSON.stringify({ targetBranchName, message }) },
-    ),
-  listFiles: (projectId?: string, depth = 3) =>
-    request<FilesResponse>(
-      projectId
-        ? `/api/projects/${encodePathSegment(projectId)}/files?depth=${depth}`
-        : `/api/files?depth=${depth}`,
     ),
   activity: (limit = 50) =>
     request<{

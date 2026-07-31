@@ -24,7 +24,7 @@ import { MessageItem } from './MessageItem'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
-import { ProcessFloatPanel } from './chat/ProcessFloatPanel'
+import { ComposerStatusRow } from './chat/ComposerStatusRow'
 import { TurnNavigator } from './chat/TurnNavigator'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
 import {
@@ -268,7 +268,15 @@ export function ChatPanel({
   const bottomRef = useRef<HTMLDivElement>(null)
   /** messages-scroll 容器：TurnNavigator 跳转 + 滚动监听用 */
   const messagesScrollRef = useRef<HTMLDivElement>(null)
-  const historyLoadedFor = useRef<string | null>(null)
+  /**
+   * Chat instance we've successfully hydrated from memory. Keyed by the
+   * ThrottledChat object (not thread id): when transport/chat is recreated the
+   * new instance starts empty, and a thread-id-only guard would skip reload and
+   * leave the keep-alive panel stuck on the empty "home" layout forever.
+   */
+  const historyHydratedChat = useRef<object | null>(null)
+  /** Bumped when an active empty pane needs another history attempt. */
+  const [historyReloadToken, setHistoryReloadToken] = useState(0)
   // Keep latest model / thinking for transport body (avoid stale closure)
   const selectedModelRef = useRef(selectedModel)
   selectedModelRef.current = selectedModel
@@ -554,13 +562,18 @@ export function ChatPanel({
     onInitialInputConsumed,
   ])
 
-  // Load persisted history once per thread (survives refresh). Retries on
+  // Load persisted history once per chat instance (survives refresh). Retries on
   // transient failure: memory.recall() can 500 under SQLite concurrency (e.g.
   // while another session is streaming + React StrictMode double-mounts in dev).
   // Without retry, the session would render the empty "home" state even though
   // the messages exist on disk — looking like the chat "disappeared" until reload.
+  //
+  // Guard is the ThrottledChat instance, not memoryThreadId: useChat's setMessages
+  // identity is stable across chat recreation, so a thread-id guard would skip
+  // re-hydration after transport/chat is rebuilt and leave messages empty forever
+  // (keep-alive ChatPanels never remount on re-select).
   useEffect(() => {
-    if (historyLoadedFor.current === memoryThreadId) {
+    if (historyHydratedChat.current === chat) {
       setHistoryLoading(false)
       return
     }
@@ -574,11 +587,13 @@ export function ChatPanel({
           try {
             const res = await api.getThreadMessages(memoryThreadId, memoryResourceId)
             if (cancelled) return
-            historyLoadedFor.current = memoryThreadId
             if (Array.isArray(res.messages) && res.messages.length > 0) {
               // Don't clobber an in-flight / already-populated chat
               setMessages((prev) => (prev.length > 0 ? prev : (res.messages as never)))
             }
+            // Mark hydrated only after a successful recall (empty or non-empty).
+            // Failures leave the guard unset so activation can retry.
+            historyHydratedChat.current = chat
             return
           } catch (e) {
             if (cancelled) return
@@ -591,7 +606,8 @@ export function ChatPanel({
               if (cancelled) return
             } else {
               console.warn('[ChatPanel] load history failed, giving up', e)
-              historyLoadedFor.current = memoryThreadId
+              // Do NOT mark hydrated — keep-alive + re-select can retry via
+              // historyReloadToken when the pane becomes active again.
             }
           }
         }
@@ -605,19 +621,32 @@ export function ChatPanel({
     return () => {
       cancelled = true
     }
-  }, [memoryThreadId, memoryResourceId, setMessages])
+  }, [chat, memoryThreadId, memoryResourceId, setMessages, historyReloadToken])
+
+  // Keep-alive panels can sit forever on empty "home" after a failed recall or a
+  // chat recreation that wiped messages. When this pane becomes active with no
+  // messages, force another hydration attempt.
+  const wasActiveRef = useRef(isActive)
+  useEffect(() => {
+    const becameActive = isActive && !wasActiveRef.current
+    wasActiveRef.current = isActive
+    if (!becameActive) return
+    if (historyLoading || messages.length > 0) return
+    historyHydratedChat.current = null
+    setHistoryReloadToken((n) => n + 1)
+  }, [isActive, historyLoading, messages.length])
 
   // Resume an in-flight run after a reload: re-attach to the server-side stream
   // (GET /chat/:agentId/:threadId/stream). MUST wait until history is loaded so
   // the replayed chunks build on the persisted messages instead of racing
-  // setMessages. 204 = no active run → no-op. Once per thread per mount.
-  const resumeAttemptedFor = useRef<string | null>(null)
+  // setMessages. 204 = no active run → no-op. Once per chat instance.
+  const resumeAttemptedFor = useRef<object | null>(null)
   useEffect(() => {
     if (historyLoading) return
-    if (resumeAttemptedFor.current === memoryThreadId) return
-    resumeAttemptedFor.current = memoryThreadId
+    if (resumeAttemptedFor.current === chat) return
+    resumeAttemptedFor.current = chat
     void resumeStream()
-  }, [historyLoading, memoryThreadId, resumeStream])
+  }, [historyLoading, chat, resumeStream])
 
   // Seed message history and the complete durable snapshot in one monotonic update.
   useEffect(() => {
@@ -1459,11 +1488,22 @@ export function ChatPanel({
     handleContinueBudget,
   ])
 
-  // 浮窗进程气泡：提取最新 task 快照（无 task → null → 不渲染浮窗）
+  // Task list snapshot for composer status row (OpenChamber-style)
   const taskSnapshot = useMemo(() => findLatestTaskList(messages), [messages])
+  const [gitRefreshToken, setGitRefreshToken] = useState(0)
+  const handleRefreshGit = useCallback(() => {
+    setGitRefreshToken((n) => n + 1)
+    onRefreshGit?.()
+  }, [onRefreshGit])
 
   const composerCard = (
     <div className="composer-stack">
+      <ComposerStatusRow
+        projectId={project?.id ?? session.projectId}
+        enabled={isActive}
+        tasks={taskSnapshot}
+        gitRefreshToken={gitRefreshToken}
+      />
       <form className="composer-card" onSubmit={onSubmit}>
         <div className="context-bar">
           {project && (
@@ -1477,7 +1517,7 @@ export function ChatPanel({
               project={project}
               snapshotWorkers={snapshotWorkers}
               snapshotJobs={snapshotJobs}
-              onAfterSwitch={onRefreshGit}
+              onAfterSwitch={handleRefreshGit}
             />
           )}
         </div>
@@ -1677,8 +1717,6 @@ export function ChatPanel({
               followTailRef.current = false
             }}
           />
-          {/* 右上角浮窗进程气泡：有 task 快照时显示（mini/panel 切换，无关闭按钮）*/}
-          {taskSnapshot && <ProcessFloatPanel tasks={taskSnapshot} />}
           <div ref={messagesScrollRef} className="messages-scroll">
             <div className="messages">{messageList}</div>
           </div>

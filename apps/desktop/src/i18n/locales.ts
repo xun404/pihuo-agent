@@ -120,6 +120,40 @@ export type MessageKey =
   | 'chat.process.minimizeAria'
   | 'chat.process.doneFold'
   | 'chat.process.doneFoldCollapse'
+  | 'chat.statusRow.tasksTitle'
+  | 'chat.statusRow.tasksAria'
+  | 'chat.statusRow.pendingChanges.fileCountOne'
+  | 'chat.statusRow.pendingChanges.fileCountMany'
+  | 'chat.statusRow.pendingChanges.changedInWorkspace'
+  | 'chat.statusRow.pendingChanges.title'
+  | 'chat.diff.title'
+  | 'chat.diff.loadFailed'
+  | 'chat.diff.binary'
+  | 'chat.diff.empty'
+  | 'chat.diff.working'
+  | 'chat.diff.staged'
+  | 'chat.diff.scopeToggle'
+  | 'chat.diff.viewAll'
+  | 'chat.diff.openFileTitle'
+  | 'chat.diff.close'
+  | 'chat.diff.wrap'
+  | 'chat.diff.wrapShort'
+  | 'chat.diff.sideBySide'
+  | 'chat.diff.sideBySideShort'
+  | 'chat.diff.unified'
+  | 'chat.diff.unifiedShort'
+  | 'chat.diff.fullFile'
+  | 'chat.diff.fullFileOff'
+  | 'chat.diff.fullFileShort'
+  | 'chat.diff.workingHint'
+  | 'chat.diff.stagedHint'
+  | 'chat.diff.scope.working'
+  | 'chat.diff.scope.staged'
+  | 'chat.diff.scope.turn'
+  | 'chat.diff.scope.turnHint'
+  | 'chat.diff.scope.turnEmpty'
+  | 'chat.diff.expandAll'
+  | 'chat.diff.collapseAll'
   | 'chat.tool'
   | 'chat.toolError'
   | 'chat.you'
@@ -184,8 +218,6 @@ export type MessageKey =
   | 'layout.resizeSidebar'
   | 'layout.resizeInspector'
   | 'right.approvals'
-  | 'right.files'
-  | 'right.git'
   | 'right.jobs'
   | 'right.roles'
   | 'right.rolesHint'
@@ -768,6 +800,40 @@ const zh: Dict = {
   'chat.process.minimizeAria': '折叠为迷你',
   'chat.process.doneFold': '已完成 {count} 项',
   'chat.process.doneFoldCollapse': '收起 {count} 项已完成',
+  'chat.statusRow.tasksTitle': '任务',
+  'chat.statusRow.tasksAria': '任务 {completed}/{total}',
+  'chat.statusRow.pendingChanges.fileCountOne': '{count} 个文件',
+  'chat.statusRow.pendingChanges.fileCountMany': '{count} 个文件',
+  'chat.statusRow.pendingChanges.changedInWorkspace': '工作区中有变更',
+  'chat.statusRow.pendingChanges.title': '已更改文件',
+  'chat.diff.title': '变更文件',
+  'chat.diff.loadFailed': '无法加载 diff',
+  'chat.diff.binary': '二进制文件，无法预览 diff。',
+  'chat.diff.empty': '此文件暂无文本 diff（可能仅为重命名或权限变更）。',
+  'chat.diff.working': '工作区',
+  'chat.diff.staged': '已暂存',
+  'chat.diff.workingHint': '对比工作区相对暂存区的改动（git diff）',
+  'chat.diff.stagedHint': '对比已暂存相对 HEAD 的改动（git diff --cached）',
+  'chat.diff.scopeToggle': '切换工作区 / 已暂存 diff',
+  'chat.diff.viewAll': '查看全部变更',
+  'chat.diff.openFileTitle': '查看 {path}',
+  'chat.diff.close': '关闭',
+  'chat.diff.wrap': '自动换行',
+  'chat.diff.wrapShort': '换行',
+  'chat.diff.sideBySide': '左右对照视图',
+  'chat.diff.sideBySideShort': '左右',
+  'chat.diff.unified': '统一视图',
+  'chat.diff.unifiedShort': '统一',
+  'chat.diff.fullFile': '加载完整文件上下文',
+  'chat.diff.fullFileOff': '仅显示改动片段',
+  'chat.diff.fullFileShort': '完整',
+  'chat.diff.scope.working': '已更改',
+  'chat.diff.scope.staged': '已暂存',
+  'chat.diff.scope.turn': '上一轮',
+  'chat.diff.scope.turnHint': '上一轮变更需要会话级 diff 快照，即将支持',
+  'chat.diff.scope.turnEmpty': '暂无上一轮变更记录',
+  'chat.diff.expandAll': '全部展开',
+  'chat.diff.collapseAll': '全部折叠',
   'chat.thinking': '思考',
   'chat.thinkingLive': '思考中',
   'chat.activity.thinking': '思考中',
@@ -852,8 +918,6 @@ const zh: Dict = {
   'prompt.projectPath': '项目根目录绝对路径',
   'prompt.selectFolder': '选择此文件夹',
   'right.approvals': '审批',
-  'right.files': '文件',
-  'right.git': 'Git',
   'right.jobs': 'Jobs',
   'right.roles': '协作组',
   'right.rolesHint': '协作组属于当前会话。同一 Worker 可绑定多个成员，各自拥有独立会话与提示词。',
@@ -1455,6 +1519,40 @@ const en: Dict = {
   'chat.process.minimizeAria': 'Collapse to mini',
   'chat.process.doneFold': '{count} completed',
   'chat.process.doneFoldCollapse': 'Hide {count} completed',
+  'chat.statusRow.tasksTitle': 'Tasks',
+  'chat.statusRow.tasksAria': 'Tasks {completed}/{total}',
+  'chat.statusRow.pendingChanges.fileCountOne': '{count} file',
+  'chat.statusRow.pendingChanges.fileCountMany': '{count} files',
+  'chat.statusRow.pendingChanges.changedInWorkspace': 'changed in workspace',
+  'chat.statusRow.pendingChanges.title': 'Changed files',
+  'chat.diff.title': 'Changed files',
+  'chat.diff.loadFailed': 'Failed to load diff',
+  'chat.diff.binary': 'Binary file — diff preview unavailable.',
+  'chat.diff.empty': 'No text diff for this file (rename or mode-only change).',
+  'chat.diff.working': 'Working',
+  'chat.diff.staged': 'Staged',
+  'chat.diff.workingHint': 'Working tree vs index (git diff)',
+  'chat.diff.stagedHint': 'Staged vs HEAD (git diff --cached)',
+  'chat.diff.scopeToggle': 'Toggle working / staged diff',
+  'chat.diff.viewAll': 'View all changes',
+  'chat.diff.openFileTitle': 'View {path}',
+  'chat.diff.close': 'Close',
+  'chat.diff.wrap': 'Word wrap',
+  'chat.diff.wrapShort': 'Wrap',
+  'chat.diff.sideBySide': 'Side-by-side view',
+  'chat.diff.sideBySideShort': 'Split',
+  'chat.diff.unified': 'Unified view',
+  'chat.diff.unifiedShort': 'Unified',
+  'chat.diff.fullFile': 'Load full file context',
+  'chat.diff.fullFileOff': 'Show patch context only',
+  'chat.diff.fullFileShort': 'Full',
+  'chat.diff.scope.working': 'Changed',
+  'chat.diff.scope.staged': 'Staged',
+  'chat.diff.scope.turn': 'Last turn',
+  'chat.diff.scope.turnHint': 'Last-turn diffs need a session snapshot (coming soon)',
+  'chat.diff.scope.turnEmpty': 'No last-turn changes recorded',
+  'chat.diff.expandAll': 'Expand all',
+  'chat.diff.collapseAll': 'Collapse all',
   'chat.thinking': 'Thinking',
   'chat.thinkingLive': 'Thinking',
   'chat.activity.thinking': 'thinking',
@@ -1545,8 +1643,6 @@ const en: Dict = {
   'prompt.projectPath': 'Absolute path to project root',
   'prompt.selectFolder': 'Select this folder',
   'right.approvals': 'Approvals',
-  'right.files': 'Files',
-  'right.git': 'Git',
   'right.jobs': 'Jobs',
   'right.roles': 'Crew',
   'right.rolesHint':

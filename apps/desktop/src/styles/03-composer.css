@@ -2,6 +2,1092 @@
 .composer-stack {
   width: min(var(--messages-max), 100%);
   margin-top: var(--sp-2);
+  /* Popovers above the status row must not be clipped */
+  overflow: visible;
+  position: relative;
+  z-index: 5;
+}
+
+/* OpenChamber-style status row above composer card */
+.composer-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 1.25rem;
+  margin-bottom: 6px;
+  padding: 2px 2px 0;
+  position: relative;
+  z-index: 6;
+  /* Local scrim: remaining message ink under chips fades into dock bg */
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg-main) 0%, transparent) 0%,
+    color-mix(in srgb, var(--bg-main) 70%, transparent) 35%,
+    var(--bg-main) 100%
+  );
+}
+/* Collapse when both sides rendered nothing */
+.composer-status-row:not(:has(.pending-changes-bar)):not(:has(.task-status-bar)) {
+  display: none;
+  margin: 0;
+  min-height: 0;
+  padding: 0;
+  background: none;
+}
+.composer-status-left,
+.composer-status-right {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+.composer-status-left {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+}
+.composer-status-right {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  max-width: min(52%, 22rem);
+}
+
+.pending-changes-bar,
+.task-status-bar {
+  position: relative;
+  min-width: 0;
+}
+.pending-changes-trigger,
+.task-status-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.2;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    color var(--dur-instant) var(--ease-out),
+    background var(--dur-instant) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.pending-changes-trigger:hover,
+.task-status-trigger:hover {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 5%, transparent);
+}
+.pending-changes-trigger:active,
+.task-status-trigger:active {
+  transform: scale(0.97);
+}
+/* Theme-adaptive (not fixed warm/warn) — follows text tokens + green on dirty */
+.pending-changes-icon {
+  flex-shrink: 0;
+  color: var(--text-2);
+  transition: color var(--dur-instant) var(--ease-out);
+}
+.pending-changes-trigger:hover .pending-changes-icon {
+  color: var(--text-1);
+}
+.pending-changes-trigger[aria-expanded='true'] .pending-changes-icon {
+  color: var(--green, #1a9e5c);
+}
+.pending-changes-count {
+  flex-shrink: 0;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.pending-changes-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.pending-changes-stats {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+.pending-changes-stats .is-add {
+  color: var(--green, #2f9e64);
+}
+.pending-changes-stats .is-del {
+  color: var(--danger, #d14343);
+}
+/* Chevron rotate on expand */
+.composer-status-chevron {
+  flex-shrink: 0;
+  transition: transform var(--dur-fast) var(--ease-out);
+  opacity: 0.75;
+}
+.pending-changes-trigger[aria-expanded='true'] .composer-status-chevron,
+.task-status-trigger[aria-expanded='true'] .composer-status-chevron {
+  transform: rotate(180deg);
+}
+.task-status-active {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  max-width: 12rem;
+}
+.task-status-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.task-status-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.task-status-meta-sep {
+  opacity: 0.7;
+}
+.task-status-icon-live {
+  color: var(--blue, #3b82f6);
+}
+
+.composer-status-popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  z-index: 40;
+  min-width: 200px;
+  max-width: min(28rem, 90vw);
+  padding: 4px;
+  border-radius: var(--r-lg, 12px);
+  background: var(--bg-elevated, var(--bg-surface));
+  color: var(--text-1);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-popover, var(--shadow-composer));
+  transform-origin: bottom center;
+  will-change: transform, opacity;
+}
+.pending-changes-popover {
+  left: 0;
+}
+.task-status-popover {
+  right: 0;
+}
+.composer-status-popover-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 4px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-2);
+}
+.composer-status-popover-count {
+  font-size: 0.75rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.composer-status-popover-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 2px 0 4px;
+}
+.pending-changes-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.pending-changes-file:hover,
+.pending-changes-file:focus-visible {
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+  outline: none;
+}
+.pending-changes-file .git-status-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono, ui-monospace, monospace);
+  flex-shrink: 0;
+  background: var(--bg-hover, color-mix(in srgb, var(--text-1) 6%, transparent));
+  color: var(--text-2);
+}
+.pending-changes-file .git-status-badge.M {
+  color: var(--accent, var(--blue));
+  background: color-mix(in srgb, var(--accent, var(--blue)) 12%, transparent);
+}
+.pending-changes-file .git-status-badge.A {
+  color: var(--green);
+  background: var(--green-soft, color-mix(in srgb, var(--green) 12%, transparent));
+}
+.pending-changes-file .git-status-badge.D {
+  color: var(--danger);
+  background: var(--danger-soft, color-mix(in srgb, var(--danger) 12%, transparent));
+}
+.pending-changes-file .git-status-badge.\? {
+  color: var(--text-3);
+}
+.pending-changes-file-path {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: baseline;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Muted truncated prefix (RTL so ellipsis eats the left / start of path).
+   No trailing slash here — slash is a separate non-RTL node next to the name. */
+.pending-changes-file-dir {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  direction: rtl;
+  text-align: left;
+  unicode-bidi: plaintext;
+}
+.pending-changes-file-sep {
+  flex: 0 0 auto;
+  color: var(--text-3);
+}
+/* Basename — never shrink, always fully visible */
+.pending-changes-file-name {
+  flex: 0 0 auto;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.pending-changes-file-stats {
+  display: inline-flex;
+  gap: 5px;
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.pending-changes-file-stats .is-add {
+  color: var(--green, #1a9e5c);
+}
+.pending-changes-file-stats .is-del {
+  color: var(--danger, #e04b4b);
+}
+.task-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: var(--fs-sm);
+  min-width: 0;
+}
+.task-status-row-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--text-3);
+}
+.task-status-row.is-completed .task-status-row-icon {
+  color: var(--green, #2f9e64);
+}
+.task-status-row.is-in_progress .task-status-row-icon {
+  color: var(--blue, #3b82f6);
+}
+.task-status-row-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.task-status-row.is-completed .task-status-row-text {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+
+.pending-changes-popover-foot {
+  padding: 4px 6px 6px;
+  border-top: 1px solid var(--border-soft);
+}
+.pending-changes-view-all {
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  text-align: center;
+}
+.pending-changes-view-all:hover {
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+  color: var(--text-1);
+}
+
+/* —— Changed files diff modal (OpenChamber-style) —— */
+.changed-files-diff-modal {
+  width: min(960px, calc(100vw - 48px));
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: hidden;
+  background: var(--bg-surface);
+  border-radius: var(--r-xl);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-composer);
+}
+.changed-files-diff-modal.is-stacked {
+  width: min(1040px, calc(100vw - 40px));
+  max-height: min(86vh, 800px);
+}
+.changed-files-diff {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(80vh, 720px);
+}
+.changed-files-diff.is-stacked {
+  max-height: min(86vh, 800px);
+  height: min(86vh, 800px);
+}
+.changed-files-diff-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+.changed-files-diff-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.changed-files-diff-head.stacked-head {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.stacked-head-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  position: relative;
+  flex: 1 1 auto;
+}
+.diff-scope-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.diff-scope-trigger:hover {
+  background: color-mix(in srgb, var(--text-1) 4%, var(--bg-surface));
+}
+.diff-scope-trigger svg {
+  opacity: 0.55;
+  transition: transform 0.15s ease;
+}
+.diff-scope-trigger svg.is-open {
+  transform: rotate(180deg);
+}
+.diff-scope-count {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.diff-scope-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 11rem;
+  padding: 4px;
+  border-radius: var(--r-lg, 12px);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elevated, var(--bg-surface));
+  box-shadow: var(--shadow-popover, var(--shadow-composer));
+  animation: diff-scope-in 0.14s ease;
+}
+@keyframes diff-scope-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.diff-scope-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.diff-scope-option:hover:not(.is-disabled) {
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+}
+.diff-scope-option.is-on {
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+}
+.diff-scope-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.diff-scope-option-count {
+  margin-left: auto;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+}
+.diff-scope-check {
+  color: var(--blue);
+  flex-shrink: 0;
+}
+.diff-stacked-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 12px;
+  background: color-mix(in srgb, var(--bg-main, var(--bg-surface)) 50%, var(--bg-surface));
+}
+.diff-file-block {
+  border-bottom: 1px solid var(--border-soft);
+}
+.diff-file-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  box-sizing: border-box;
+}
+.diff-file-block-head:hover {
+  background: color-mix(in srgb, var(--text-1) 4%, transparent);
+}
+.diff-file-block.is-open .diff-file-block-head {
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+}
+.diff-file-block-chevron {
+  display: inline-flex;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+/* Path + name stay glued: dir shrinks/truncates, name never moves to the far edge */
+.diff-file-block-path {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: baseline;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+.diff-file-block-dir {
+  /* grow:0 so we don't open a gap before the filename */
+  flex: 0 1 auto;
+  min-width: 2ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  direction: rtl;
+  text-align: left;
+  unicode-bidi: plaintext;
+}
+.diff-file-block-sep {
+  flex: 0 0 auto;
+  color: var(--text-3);
+}
+.diff-file-block-name {
+  flex: 0 0 auto;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.diff-file-block-stats {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.diff-file-block-stats .is-add {
+  color: var(--green);
+}
+.diff-file-block-stats .is-del {
+  color: var(--danger);
+}
+/* Expand via grid 0fr→1fr — no height:auto animation desync */
+.diff-file-block-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.2s ease;
+  overflow: hidden;
+}
+.diff-file-block-body.is-open {
+  grid-template-rows: 1fr;
+}
+.diff-file-block-body-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.diff-file-block-body.is-open .diff-file-block-body-inner {
+  overflow: auto;
+  max-height: min(52vh, 480px);
+  padding: 0 0 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border-soft) 70%, transparent);
+}
+.diff-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+.diff-tool-btn:hover {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 5%, transparent);
+}
+.diff-tool-btn:active {
+  transform: scale(0.96);
+}
+.diff-tool-btn.is-on {
+  border-color: color-mix(in srgb, var(--blue) 40%, var(--border-soft));
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+}
+.diff-scope-seg {
+  display: inline-flex;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.diff-scope-seg button {
+  margin: 0;
+  padding: 2px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.diff-scope-seg button.is-on {
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--text-1);
+}
+.changed-files-diff-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: var(--fs-md);
+  color: var(--text-1);
+}
+.changed-files-diff-count {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-3);
+}
+.changed-files-diff-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  height: min(68vh, 620px);
+}
+.changed-files-diff-list {
+  width: min(260px, 34%);
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-soft);
+  padding: 6px;
+}
+.changed-files-diff-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.changed-files-diff-file:hover {
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+}
+.changed-files-diff-file.is-active {
+  background: color-mix(in srgb, var(--blue, #3b82f6) 12%, transparent);
+}
+.changed-files-diff-file-path {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.changed-files-diff-file .git-status-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono, ui-monospace, monospace);
+  flex-shrink: 0;
+  background: var(--bg-hover, color-mix(in srgb, var(--text-1) 6%, transparent));
+  color: var(--text-2);
+}
+.changed-files-diff-file .git-status-badge.M {
+  color: var(--accent, var(--blue));
+  background: color-mix(in srgb, var(--accent, var(--blue)) 12%, transparent);
+}
+.changed-files-diff-file .git-status-badge.A {
+  color: var(--green);
+  background: var(--green-soft, color-mix(in srgb, var(--green) 12%, transparent));
+}
+.changed-files-diff-file .git-status-badge.D {
+  color: var(--danger);
+  background: var(--danger-soft, color-mix(in srgb, var(--danger) 12%, transparent));
+}
+.changed-files-diff-view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.changed-files-diff-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+.changed-files-diff-view-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.changed-files-diff-view-path strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.changed-files-diff-view-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.changed-files-diff-view-meta .is-add {
+  color: var(--green);
+}
+.changed-files-diff-view-meta .is-del {
+  color: var(--danger);
+}
+.changed-files-diff-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+  background: color-mix(in srgb, var(--bg-main, var(--bg-surface)) 60%, var(--bg-surface));
+}
+.changed-files-diff-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 24px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+  backdrop-filter: blur(1px);
+}
+.changed-files-diff-anim {
+  min-height: 100%;
+}
+.unified-diff {
+  margin: 0;
+  padding: 4px 0 12px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  white-space: normal; /* wrap controlled on .unified-diff-code */
+}
+.unified-diff-line {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  transition: background 0.15s ease;
+}
+.unified-diff.is-nowrap .unified-diff-line {
+  min-width: max-content;
+  max-width: none;
+}
+.unified-diff-gutter {
+  width: 40px;
+  flex-shrink: 0;
+  text-align: right;
+  padding: 0 8px 0 4px;
+  color: var(--text-3);
+  user-select: none;
+  border-right: 1px solid var(--border-soft);
+}
+.unified-diff-sign {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  user-select: none;
+  color: var(--text-3);
+}
+.unified-diff-code {
+  display: block;
+  flex: 1 1 auto;
+  padding: 0 10px 0 4px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.unified-diff.is-nowrap .unified-diff-code,
+.changed-files-diff-scroll.is-nowrap .unified-diff-code {
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* —— Diff syntax tokens —— */
+.syn {
+  font: inherit;
+}
+.syn-keyword {
+  color: var(--diff-syn-keyword, #7c3aed);
+  font-weight: 600;
+}
+.syn-type {
+  color: var(--diff-syn-type, #0891b2);
+}
+.syn-string {
+  color: var(--diff-syn-string, #059669);
+}
+.syn-number {
+  color: var(--diff-syn-number, #d97706);
+}
+.syn-comment {
+  color: var(--diff-syn-comment, var(--text-3));
+  font-style: italic;
+}
+.syn-function {
+  color: var(--diff-syn-fn, #2563eb);
+}
+.syn-punct {
+  color: var(--diff-syn-punct, var(--text-2));
+}
+.syn-ident {
+  color: inherit;
+}
+/* —— Diff palette on root so stacked + legacy layouts both inherit —— */
+.changed-files-diff,
+.diff-stacked-scroll,
+.changed-files-diff-scroll,
+.diff-file-block-body-inner {
+  --diff-add-bg: color-mix(in srgb, var(--green) 14%, var(--bg-surface, #fff));
+  --diff-add-bg-full: color-mix(in srgb, var(--green) 20%, var(--bg-surface, #fff));
+  --diff-add-mark: color-mix(in srgb, var(--green) 75%, #0b3d28);
+  --diff-add-gutter: color-mix(in srgb, var(--green) 12%, var(--bg-surface, #fff));
+  --diff-del-bg: color-mix(in srgb, var(--danger) 12%, var(--bg-surface, #fff));
+  --diff-del-bg-full: color-mix(in srgb, var(--danger) 18%, var(--bg-surface, #fff));
+  --diff-del-mark: color-mix(in srgb, var(--danger) 78%, #5c1212);
+  --diff-del-gutter: color-mix(in srgb, var(--danger) 10%, var(--bg-surface, #fff));
+  --diff-ctx-fg: var(--text-2);
+  --diff-hunk-bg: color-mix(in srgb, var(--blue) 8%, var(--bg-surface, #fff));
+  --diff-hunk-fg: color-mix(in srgb, var(--blue) 55%, var(--text-2));
+}
+
+/* Keep readable on add/del backgrounds */
+.side-diff-cell.is-add .syn-keyword,
+.unified-diff-line.is-add .syn-keyword,
+.side-diff-cell.is-del .syn-keyword,
+.unified-diff-line.is-del .syn-keyword {
+  font-weight: 600;
+}
+.unified-diff-line.is-add {
+  background: var(--diff-add-bg, color-mix(in srgb, var(--green) 14%, transparent));
+}
+.unified-diff-line.is-add .unified-diff-gutter {
+  background: var(--diff-add-gutter, color-mix(in srgb, var(--green) 10%, transparent));
+  color: var(--diff-add-mark, var(--green));
+}
+.unified-diff-line.is-add .unified-diff-sign {
+  color: var(--diff-add-mark, var(--green));
+  font-weight: 600;
+}
+.unified-diff-line.is-del {
+  background: var(--diff-del-bg, color-mix(in srgb, var(--danger) 12%, transparent));
+}
+.unified-diff-line.is-del .unified-diff-gutter {
+  background: var(--diff-del-gutter, color-mix(in srgb, var(--danger) 9%, transparent));
+  color: var(--diff-del-mark, var(--danger));
+}
+.unified-diff-line.is-del .unified-diff-sign {
+  color: var(--diff-del-mark, var(--danger));
+  font-weight: 600;
+}
+/* Full-file: clearer change bands + left accent (no opacity fade on ctx) */
+.unified-diff.is-full .unified-diff-line.is-add {
+  background: var(--diff-add-bg-full);
+  box-shadow: inset 3px 0 0 var(--diff-add-mark);
+}
+.unified-diff.is-full .unified-diff-line.is-del {
+  background: var(--diff-del-bg-full);
+  box-shadow: inset 3px 0 0 var(--diff-del-mark);
+}
+.unified-diff.is-full .unified-diff-line.is-ctx {
+  color: var(--diff-ctx-fg);
+}
+.unified-diff.is-full .unified-diff-line.is-ctx .unified-diff-code {
+  color: var(--text-2);
+}
+.unified-diff.is-full .unified-diff-line.is-ctx .syn {
+  opacity: 0.92;
+}
+.side-diff.is-full .side-diff-cell.is-add {
+  background: var(--diff-add-bg-full);
+  box-shadow: inset 3px 0 0 var(--diff-add-mark);
+}
+.side-diff.is-full .side-diff-cell.is-del {
+  background: var(--diff-del-bg-full);
+  box-shadow: inset 3px 0 0 var(--diff-del-mark);
+}
+.side-diff.is-full .side-diff-cell.is-ctx {
+  color: var(--diff-ctx-fg);
+}
+.side-diff.is-full .side-diff-cell.is-ctx .side-diff-code {
+  color: var(--text-2);
+}
+.side-diff.is-full .side-diff-cell.is-ctx .syn {
+  opacity: 0.92;
+}
+.unified-diff-line.is-hunk {
+  background: var(--diff-hunk-bg);
+  color: var(--diff-hunk-fg);
+}
+.unified-diff-line.is-meta {
+  color: var(--text-3);
+  font-size: 11px;
+  background: color-mix(in srgb, var(--text-1) 2%, transparent);
+}
+.unified-diff-line.is-hunk .unified-diff-code,
+.unified-diff-line.is-meta .unified-diff-code {
+  padding-left: 8px;
+}
+
+/* Side-by-side — columns must clip; long unwrapped lines must not paint into the sibling cell */
+.side-diff {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  padding-bottom: 12px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.side-diff-full {
+  padding: 4px 10px;
+  color: var(--text-2);
+  font-size: 11px;
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  border-bottom: 1px solid var(--border-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.side-diff-row {
+  display: grid;
+  /* minmax(0,1fr) is required so long pre lines don't blow out the track */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+}
+.side-diff-cell {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden; /* prevent cross-column paint bleed */
+  border-right: 1px solid var(--border-soft);
+  box-sizing: border-box;
+}
+.side-diff-cell:last-child {
+  border-right: 0;
+}
+.side-diff-gutter {
+  width: 36px;
+  flex-shrink: 0;
+  text-align: right;
+  padding: 0 6px;
+  color: var(--text-3);
+  user-select: none;
+  border-right: 1px solid var(--border-soft);
+  line-height: inherit;
+}
+.side-diff-code {
+  display: block !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* wrap ON (default) */
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+/* wrap OFF: still break in side-by-side — columns are too narrow for true pre */
+.side-diff.is-nowrap .side-diff-code,
+.changed-files-diff-scroll.is-nowrap .side-diff-code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.side-diff-cell.is-add {
+  background: var(--diff-add-bg);
+  transition: background 0.15s ease;
+}
+.side-diff-cell.is-add .side-diff-gutter {
+  background: var(--diff-add-gutter);
+  color: var(--diff-add-mark);
+}
+.side-diff-cell.is-del {
+  background: var(--diff-del-bg);
+  transition: background 0.15s ease;
+}
+.side-diff-cell.is-del .side-diff-gutter {
+  background: var(--diff-del-gutter);
+  color: var(--diff-del-mark);
+}
+.side-diff-cell.is-empty {
+  background: color-mix(in srgb, var(--text-1) 3%, var(--bg-surface));
+}
+.side-diff-cell.is-ctx {
+  background: transparent;
+}
+.side-diff-full.is-hunk {
+  background: var(--diff-hunk-bg);
+  color: var(--diff-hunk-fg);
+  font-weight: 500;
+}
+/* Nested token spans must allow wrapping */
+.side-diff-code .syn,
+.unified-diff-code .syn {
+  white-space: inherit;
+  word-break: inherit;
+  overflow-wrap: inherit;
 }
 .composer-card {
   background: var(--bg-surface);

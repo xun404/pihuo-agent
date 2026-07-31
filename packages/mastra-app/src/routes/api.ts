@@ -1,11 +1,11 @@
 import { registerApiRoute } from '@mastra/core/server'
 import {
   getGitStatus,
+  getGitFileDiff,
   listLocalBranches,
   switchBranch,
   createBranchAndSwitch,
   commitAndSwitch,
-  listProjectFiles,
   getSharedStore,
   loadSettings,
   getWorkerModelCatalogStore,
@@ -1283,6 +1283,28 @@ export const apiRoutes = [
     },
   }),
 
+  registerApiRoute('/api/projects/:id/git/diff', {
+    method: 'GET',
+    handler: async (c) => {
+      const id = c.req.param('id')
+      const project = store()
+        .listProjects()
+        .find((p) => p.id === id)
+      if (!project) return c.json({ error: 'project not found' }, 404)
+      const filePath = c.req.query('path')?.trim() ?? ''
+      const stagedParam = c.req.query('staged')
+      const staged = stagedParam === '1' || stagedParam === 'true'
+      const contextRaw = c.req.query('contextLines')
+      const contextLines = contextRaw != null && contextRaw !== '' ? Number(contextRaw) : undefined
+      if (!filePath) return c.json({ ok: false, error: 'path required' }, 400)
+      const diff = await getGitFileDiff(project.rootPath, filePath, {
+        staged,
+        contextLines: Number.isFinite(contextLines) ? contextLines : undefined,
+      })
+      return c.json(diff, diff.ok ? 200 : 400)
+    },
+  }),
+
   registerApiRoute('/api/projects/:id/branches', {
     method: 'GET',
     handler: async (c) => {
@@ -1340,37 +1362,6 @@ export const apiRoutes = [
       if (!target) return c.json({ error: 'targetBranchName required' }, 400)
       if (!message) return c.json({ error: 'message required' }, 400)
       return c.json(await commitAndSwitch(project.rootPath, target, message))
-    },
-  }),
-
-  registerApiRoute('/api/files', {
-    method: 'GET',
-    handler: async (c) => {
-      const { project } = store().getActive()
-      if (!project) return c.json({ error: 'no active project', ok: false, entries: [] }, 400)
-      const depth = Number(c.req.query('depth') ?? 3)
-      return c.json(
-        listProjectFiles(project.rootPath, {
-          maxDepth: Number.isFinite(depth) ? depth : 3,
-        }),
-      )
-    },
-  }),
-
-  registerApiRoute('/api/projects/:id/files', {
-    method: 'GET',
-    handler: async (c) => {
-      const id = c.req.param('id')
-      const project = store()
-        .listProjects()
-        .find((p) => p.id === id)
-      if (!project) return c.json({ error: 'project not found' }, 404)
-      const depth = Number(c.req.query('depth') ?? 3)
-      return c.json(
-        listProjectFiles(project.rootPath, {
-          maxDepth: Number.isFinite(depth) ? depth : 3,
-        }),
-      )
     },
   }),
 

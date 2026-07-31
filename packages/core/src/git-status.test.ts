@@ -4,7 +4,14 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFileSync } from 'node:child_process'
-import { parseGitStatusPorcelain, parseGitNumstat, getGitStatus } from './git-status.js'
+import {
+  parseGitStatusPorcelain,
+  parseGitNumstat,
+  parseGitNumstatByPath,
+  getGitStatus,
+  getGitFileDiff,
+  resolveRepoRelativePath,
+} from './git-status.js'
 
 describe('parseGitStatusPorcelain', () => {
   it('parses modified, added, untracked, and renames', () => {
@@ -30,6 +37,16 @@ describe('parseGitNumstat', () => {
     const r = parseGitNumstat(raw)
     assert.equal(r.insertions, 13)
     assert.equal(r.deletions, 2)
+  })
+})
+
+describe('parseGitNumstatByPath', () => {
+  it('maps per-path stats and merges renames to new path', () => {
+    const raw = '10\t2\tsrc/a.ts\n1\t1\told.ts => new.ts\n-\t-\tbin.png\n'
+    const m = parseGitNumstatByPath(raw)
+    assert.deepEqual(m.get('src/a.ts'), { insertions: 10, deletions: 2 })
+    assert.deepEqual(m.get('new.ts'), { insertions: 1, deletions: 1 })
+    assert.deepEqual(m.get('bin.png'), { insertions: 0, deletions: 0 })
   })
 })
 
@@ -65,6 +82,10 @@ describe('getGitStatus real repo', () => {
     assert.ok(paths.includes('hello.txt') || paths.includes('extra.txt'))
     assert.ok(typeof status.insertions === 'number')
     assert.ok(typeof status.deletions === 'number')
+    const hello = status.files.find((f) => f.path === 'hello.txt')
+    if (hello) {
+      assert.ok((hello.insertions ?? 0) + (hello.deletions ?? 0) > 0)
+    }
   })
 
   it('returns structured failure for non-repo path', async () => {
@@ -77,5 +98,24 @@ describe('getGitStatus real repo', () => {
     } finally {
       rmSync(bare, { recursive: true, force: true })
     }
+  })
+
+  it('getGitFileDiff returns patch for modified tracked file', async () => {
+    const diff = await getGitFileDiff(dir, 'hello.txt')
+    assert.equal(diff.ok, true)
+    assert.equal(diff.isUntracked, false)
+    assert.ok(diff.patch.includes('hello') || diff.patch.includes('+'), diff.patch.slice(0, 200))
+  })
+
+  it('getGitFileDiff handles untracked file as add', async () => {
+    const diff = await getGitFileDiff(dir, 'extra.txt')
+    assert.equal(diff.ok, true)
+    assert.equal(diff.isUntracked, true)
+    assert.ok(diff.patch.includes('+') || diff.insertions > 0, diff.patch.slice(0, 200))
+  })
+
+  it('resolveRepoRelativePath rejects traversal', () => {
+    const bad = resolveRepoRelativePath('/repo', '../etc/passwd')
+    assert.equal(bad.ok, false)
   })
 })
