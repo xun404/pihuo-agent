@@ -17,6 +17,10 @@ interface Window {
     /** Injected Desktop API bearer (from runtime.json / main process) */
     desktopToken?: string
     getDesktopToken?: () => Promise<string | null>
+    /** Menu bar About/Settings → open settings panel; returns unsubscribe. */
+    onOpenSettings?: (
+      handler: (tab?: 'general' | 'model' | 'prompts' | 'workers' | 'about') => void,
+    ) => () => void
     settings?: {
       get: () => Promise<unknown>
       setThinkingIntensity?: (

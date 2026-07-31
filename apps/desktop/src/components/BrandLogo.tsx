@@ -1,19 +1,26 @@
-import { useTheme } from '../theme/ThemeProvider'
-
 type BrandLogoProps = {
   className?: string
   size?: number
   /** Accessible label; omit when decorative (parent provides context). */
   title?: string
+  /**
+   * `app` — full plate (Dock / sidebar chip).
+   * `glyph` — gold mark only, transparent background (home empty-state).
+   */
+  variant?: 'app' | 'glyph'
 }
 
 /**
- * Theme-aware SwarmDesk brand mark (honeycomb).
- * Uses light SVG on light surfaces and dark SVG on dark.
+ * SwarmDesk final brand mark (PNG).
+ * Single source: `/icon.png` (app plate) or `/icon-glyph.png` (no black plate).
  */
-export function BrandLogo({ className, size = 88, title }: BrandLogoProps) {
-  const { resolved } = useTheme()
-  const src = resolved === 'dark' ? '/icon_dark.svg' : '/icon.svg'
+export function BrandLogo({
+  className,
+  size = 88,
+  title,
+  variant = 'app',
+}: BrandLogoProps) {
+  const src = variant === 'glyph' ? '/icon-glyph.png' : '/icon.png'
 
   return (
     <img

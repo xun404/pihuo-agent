@@ -6,6 +6,8 @@ npmRebuild: false
 directories:
   output: release
   buildResources: build
+# Source mark: build/icon.png (1024) + build/icon.icns (mac). electron-builder
+# derives platform artifacts; keep both in sync when regenerating the brand mark.
 icon: build/icon.png
 files:
   - package.json
@@ -25,6 +27,9 @@ extraResources:
     to: runtime/node_modules
 mac:
   identity: null
+  # Prefer multi-resolution ICNS when present (build/icon.icns from brand mark).
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
   target:
     - target: dmg
       arch:

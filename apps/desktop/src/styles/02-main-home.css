@@ -51,8 +51,10 @@
   height: 100%;
   display: block;
   object-fit: contain;
-  border-radius: 21%;
-  filter: drop-shadow(0 10px 28px color-mix(in srgb, var(--text-1) 12%, transparent));
+  /* Glyph-only PNG (no black plate) */
+  border-radius: 0;
+  opacity: 1;
+  filter: drop-shadow(0 10px 28px color-mix(in srgb, var(--accent, #e8890c) 22%, transparent));
   user-select: none;
   -webkit-user-drag: none;
 }

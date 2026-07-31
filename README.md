@@ -1,9 +1,6 @@
 <h1 align="center">
   <a href="https://github.com/xun404/swarmdesk-agent">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/icon_dark.png" />
-      <img src="docs/assets/icon.png" alt="SwarmDesk" width="64" valign="middle" />
-    </picture>
+    <img src="docs/assets/icon.png" alt="SwarmDesk" width="64" valign="middle" />
   </a>
   SwarmDesk
 </h1>

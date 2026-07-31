@@ -18,12 +18,13 @@ import {
   IconChevronDown,
   IconOpen,
   IconPlus,
-  IconQueenBee,
   IconSettings,
   IconTrash,
   IconWorkers,
+  Folder,
+  FolderOpen,
 } from './Icons'
-import { Folder, FolderOpen } from './Icons'
+import { BrandLogo } from './BrandLogo'
 import { Modal } from './ui/Modal'
 import { Expandable } from './ui/Expandable'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
@@ -218,7 +219,7 @@ export function LeftSidebar({
 
       <div className="brand">
         <span className="mark" aria-hidden>
-          <IconQueenBee size={22} />
+          <BrandLogo size={30} />
         </span>
         <span className="brand-name">{t('sidebar.brand')}</span>
       </div>

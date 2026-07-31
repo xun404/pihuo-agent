@@ -109,8 +109,8 @@ export function IconCrew(p: IconProps) {
 }
 
 /**
- * Leader / sidebar brand glyph.
- * Full honeycomb mark lives in docs/assets/icon.svg; small UI marks use 🐝.
+ * Leader / sidebar brand glyph (emoji stand-in).
+ * Full app mark: apps/desktop/public/icon.png (BrandLogo).
  */
 export function IconQueenBee({ className, size = 16, title }: IconProps) {
   return (

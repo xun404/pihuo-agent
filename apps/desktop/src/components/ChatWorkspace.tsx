@@ -348,7 +348,7 @@ export function ChatWorkspace({
       <div className="window-drag-top" aria-hidden />
       <div className="home">
         <div className="logo-cloud" aria-hidden>
-          <BrandLogo size={88} />
+          <BrandLogo size={88} variant="glyph" />
         </div>
         <h1 className="greeting">
           {homeProject ? (

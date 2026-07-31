@@ -5,8 +5,10 @@ import {
   ipcMain,
   dialog,
   utilityProcess,
+  nativeImage,
   type IpcMainInvokeEvent,
 } from 'electron'
+import { flushPendingSettingsTab, installApplicationMenu } from './app-menu.js'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -79,6 +81,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Optional Chrome DevTools Protocol for headless inspection/debugging.
 // The development launcher defaults this to 8315; packaged apps remain off by default.
 // SWARMDESK_AGENT_CDP_PORT can override the port (loopback only).
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-software-rasterizer')
 if (process.env.SWARMDESK_AGENT_CDP_PORT) {
   app.commandLine.appendSwitch('remote-debugging-port', process.env.SWARMDESK_AGENT_CDP_PORT)
   app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1')
@@ -129,6 +133,9 @@ let lastApiChildMeta: {
 const runApiLifecycleTask = createSerialTaskRunner()
 const isPrimaryInstance = app.requestSingleInstanceLock()
 if (!isPrimaryInstance) app.quit()
+
+// Menu / About labels use app.name; package name is scoped (@swarmdesk-agent/desktop).
+app.setName('SwarmDesk')
 
 function secretsEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
@@ -838,14 +845,30 @@ const MAC_TRAFFIC_LIGHT = {
 } as const
 
 function resolveAppIconPath(): string | undefined {
-  // Vite copies apps/desktop/public → dist; electron-builder also uses build/icon.png.
+  // Prefer packaged build resources, then Vite public/dist copies.
   const candidates = [
     process.env.DIST ? path.join(process.env.DIST, 'icon.png') : '',
     path.join(__dirname, '../dist/icon.png'),
     path.join(__dirname, '../public/icon.png'),
+    path.join(__dirname, '../../../build/icon.icns'),
     path.join(__dirname, '../../../build/icon.png'),
   ].filter(Boolean)
   return candidates.find((p) => existsSync(p))
+}
+
+/** Dock / taskbar / window icon — keep in sync with build/icon.* */
+function applyAppIcon(): void {
+  const iconPath = resolveAppIconPath()
+  if (!iconPath) return
+  try {
+    const image = nativeImage.createFromPath(iconPath)
+    if (image.isEmpty()) return
+    if (process.platform === 'darwin' && app.dock) {
+      app.dock.setIcon(image)
+    }
+  } catch (e) {
+    console.warn('[electron] failed to apply app icon', e)
+  }
 }
 
 function createWindow() {
@@ -877,7 +900,13 @@ function createWindow() {
     win.setWindowButtonPosition({ x: MAC_TRAFFIC_LIGHT.x, y: MAC_TRAFFIC_LIGHT.y })
   }
 
-  win.once('ready-to-show', () => win?.show())
+  win.once('ready-to-show', () => {
+    win?.show()
+    flushPendingSettingsTab(win)
+  })
+  win.on('closed', () => {
+    win = null
+  })
 
   if (DEV_SERVER_URL) {
     void win.loadURL(DEV_SERVER_URL)
@@ -885,6 +914,10 @@ function createWindow() {
   } else {
     void win.loadFile(path.join(process.env.DIST!, 'index.html'))
   }
+
+  win.webContents.once('did-finish-load', () => {
+    flushPendingSettingsTab(win)
+  })
 
   const handleNavigation = (event: Electron.Event, url: string) => {
     if (
@@ -964,6 +997,13 @@ app.whenReady().then(async () => {
   }
 
   if (shouldCreateDesktopWindow({ packagedSmoke: PACKAGED_SMOKE })) {
+    applyAppIcon()
+    installApplicationMenu({
+      getMainWindow: () => win,
+      ensureMainWindow: () => {
+        if (!win || win.isDestroyed()) createWindow()
+      },
+    })
     createWindow()
   }
 })

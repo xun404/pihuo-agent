@@ -151,24 +151,32 @@ function AppShell({
   }, [activeSessionId, activeErrAt, activeReplyAt, activeFinishedAt, activeReadAt])
 
   useEffect(() => {
-    const onOpen = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ tab?: string }>).detail
+    const openSettingsTab = (tab?: string) => {
       if (
-        detail?.tab === 'workers' ||
-        detail?.tab === 'model' ||
-        detail?.tab === 'prompts' ||
-        detail?.tab === 'general' ||
-        detail?.tab === 'about'
+        tab === 'workers' ||
+        tab === 'model' ||
+        tab === 'prompts' ||
+        tab === 'general' ||
+        tab === 'about'
       ) {
-        setSettingsTab(detail.tab)
+        setSettingsTab(tab)
       } else {
         setSettingsTab('workers')
       }
       setSettingsOpen(true)
       setInspectorOpen(false)
     }
+    const onOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ tab?: string }>).detail
+      openSettingsTab(detail?.tab)
+    }
     window.addEventListener('swarmdesk-agent:open-settings', onOpen)
-    return () => window.removeEventListener('swarmdesk-agent:open-settings', onOpen)
+    // Electron menu: About → settings/about, Settings… → settings/general
+    const unsubMenu = window.routerAgents?.onOpenSettings?.(openSettingsTab)
+    return () => {
+      window.removeEventListener('swarmdesk-agent:open-settings', onOpen)
+      unsubMenu?.()
+    }
   }, [])
 
   const beginSidebarResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {

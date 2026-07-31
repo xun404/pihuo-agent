@@ -1677,7 +1677,7 @@ export function ChatPanel({
         <div className="home" style={{ flex: 1 }}>
           {/* 线稿 home：logo-cloud（品牌标）→ 问候 → Composer */}
           <div className="logo-cloud" aria-hidden>
-            <BrandLogo size={88} />
+            <BrandLogo size={88} variant="glyph" />
           </div>
           <h1 className="greeting">
             {project ? (
