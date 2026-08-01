@@ -28,7 +28,7 @@ describe('WorkerTimeoutSettingsEditor', () => {
       </I18nProvider>,
     )
 
-    assert.match(html, /Runtime/u)
+    assert.match(html, /Worker execution settings/u)
     assert.match(html, /settings-card-head/u)
     assert.match(html, /aria-label="Leader step budget"[^>]*value="500"/u)
     assert.match(html, /timeout-duration-field/u)
