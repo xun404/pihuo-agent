@@ -23,115 +23,61 @@ function makeEvent(overrides?: Partial<LeaderStepBudgetEvent['data']>): LeaderSt
 }
 
 describe('detectLeaderStepBudgetExhaustion', () => {
-  it('returns event when steps.length === maxSteps and finishReason is "tool-calls"', () => {
-    const event = detectLeaderStepBudgetExhaustion({
+  it('returns a max_steps event only for tool-calls at or above the budget', () => {
+    const hit = detectLeaderStepBudgetExhaustion({
       maxSteps: 20,
       steps: new Array(20).fill({}),
       finishReason: 'tool-calls',
       runId: 'run-1',
       occurredAt: '2025-01-15T00:00:00.000Z',
     })
-    assert.ok(event)
-    assert.equal(event!.type, LEADER_STEP_BUDGET_PART_TYPE)
-    assert.equal(event!.data.reason, 'max_steps')
-    assert.equal(event!.data.maxSteps, 20)
-    assert.equal(event!.data.usedSteps, 20)
-    assert.equal(event!.data.runId, 'run-1')
-  })
+    assert.ok(hit)
+    assert.equal(hit!.type, LEADER_STEP_BUDGET_PART_TYPE)
+    assert.equal(hit!.data.reason, 'max_steps')
+    assert.equal(hit!.data.maxSteps, 20)
+    assert.equal(hit!.data.usedSteps, 20)
+    assert.equal(hit!.data.runId, 'run-1')
+    assert.equal(hit!.data.occurredAt, '2025-01-15T00:00:00.000Z')
 
-  it('returns event when steps.length > maxSteps and finishReason is "tool-calls"', () => {
-    const event = detectLeaderStepBudgetExhaustion({
+    const over = detectLeaderStepBudgetExhaustion({
       maxSteps: 20,
       steps: new Array(25).fill({}),
       finishReason: 'tool-calls',
       runId: 'run-2',
     })
-    assert.ok(event)
-    assert.equal(event!.data.usedSteps, 25)
-  })
+    assert.ok(over)
+    assert.equal(over!.data.usedSteps, 25)
 
-  it('returns null when steps.length < maxSteps and finishReason is "tool-calls"', () => {
-    const event = detectLeaderStepBudgetExhaustion({
-      maxSteps: 20,
-      steps: new Array(10).fill({}),
-      finishReason: 'tool-calls',
-      runId: 'run-3',
-    })
-    assert.equal(event, null)
-  })
-
-  it('returns null when steps.length >= maxSteps but finishReason is "stop"', () => {
-    const event = detectLeaderStepBudgetExhaustion({
-      maxSteps: 20,
-      steps: new Array(20).fill({}),
-      finishReason: 'stop',
-      runId: 'run-4',
-    })
-    assert.equal(event, null)
-  })
-
-  it('returns null when steps.length >= maxSteps but finishReason is "error"', () => {
-    const event = detectLeaderStepBudgetExhaustion({
-      maxSteps: 20,
-      steps: new Array(30).fill({}),
-      finishReason: 'error',
-      runId: 'run-5',
-    })
-    assert.equal(event, null)
-  })
-
-  it('returns null when steps.length >= maxSteps but finishReason is "length"', () => {
-    const event = detectLeaderStepBudgetExhaustion({
-      maxSteps: 20,
-      steps: new Array(20).fill({}),
-      finishReason: 'length',
-      runId: 'run-length',
-    })
-    assert.equal(event, null)
-  })
-
-  it('returns null when steps.length === 0 with any reason', () => {
-    const event = detectLeaderStepBudgetExhaustion({
-      maxSteps: 20,
-      steps: [],
-      finishReason: 'tool-calls',
-      runId: 'run-6',
-    })
-    assert.equal(event, null)
-  })
-
-  it('returns null when steps array is empty and finishReason is "stop"', () => {
-    const event = detectLeaderStepBudgetExhaustion({
-      maxSteps: 20,
-      steps: [],
-      finishReason: 'stop',
-      runId: 'run-7',
-    })
-    assert.equal(event, null)
-  })
-
-  it('preserves custom occurredAt if provided', () => {
-    const event = detectLeaderStepBudgetExhaustion({
-      maxSteps: 20,
-      steps: new Array(20).fill({}),
-      finishReason: 'tool-calls',
-      runId: 'run-custom',
-      occurredAt: '2025-07-01T12:00:00.000Z',
-    })
-    assert.equal(event!.data.occurredAt, '2025-07-01T12:00:00.000Z')
-  })
-
-  it('generates occurredAt if not provided', () => {
     const before = new Date().toISOString()
-    const event = detectLeaderStepBudgetExhaustion({
+    const autoTs = detectLeaderStepBudgetExhaustion({
       maxSteps: 20,
       steps: new Array(20).fill({}),
       finishReason: 'tool-calls',
       runId: 'run-auto',
     })
     const after = new Date().toISOString()
-    assert.ok(event!.data.occurredAt >= before)
-    assert.ok(event!.data.occurredAt <= after)
+    assert.ok(autoTs!.data.occurredAt >= before)
+    assert.ok(autoTs!.data.occurredAt <= after)
+
+    const nullCases: Array<{ steps: number; finishReason: string }> = [
+      { steps: 10, finishReason: 'tool-calls' },
+      { steps: 20, finishReason: 'stop' },
+      { steps: 30, finishReason: 'error' },
+      { steps: 20, finishReason: 'length' },
+      { steps: 0, finishReason: 'tool-calls' },
+      { steps: 0, finishReason: 'stop' },
+    ]
+    for (const [i, c] of nullCases.entries()) {
+      assert.equal(
+        detectLeaderStepBudgetExhaustion({
+          maxSteps: 20,
+          steps: new Array(c.steps).fill({}),
+          finishReason: c.finishReason,
+          runId: `run-null-${i}`,
+        }),
+        null,
+      )
+    }
   })
 })
 

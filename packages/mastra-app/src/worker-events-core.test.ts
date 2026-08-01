@@ -188,6 +188,33 @@ describe('WorkerEventEmitter', () => {
       assert.equal(received.length, 0)
     })
 
+    it('delivers failed/cancelled before started as terminal-only', () => {
+      const failed: WorkerRunEvent[] = []
+      emitter.subscribe('job_fail_only', collectHandler(failed))
+      emitter.emit(makeFailed('preflight', 'job_fail_only'))
+      assert.equal(failed.length, 1)
+      assert.equal(failed[0]!.type, 'failed')
+
+      const cancelled: WorkerRunEvent[] = []
+      emitter.subscribe('job_cancel_only', collectHandler(cancelled))
+      emitter.emit(makeCancelled('job_cancel_only'))
+      assert.equal(cancelled.length, 1)
+      assert.equal(cancelled[0]!.type, 'cancelled')
+    })
+
+    it('normalizes invalid journalMax without unbounded retention', () => {
+      const bounded = new WorkerEventEmitter({
+        terminalTtlMs: Number.POSITIVE_INFINITY,
+        journalMax: -1,
+      })
+      bounded.emit(makeStarted({ jobId: 'normalized-limits' }))
+      for (let sequence = 1; sequence <= 600; sequence += 1) {
+        bounded.emit(makeDelta(sequence, 'x', 'normalized-limits'))
+      }
+      bounded.emit(makeCompleted({ jobId: 'normalized-limits' }))
+      assert.ok(bounded.getJournal('normalized-limits').length <= 512)
+    })
+
     it('drops duplicate started events', () => {
       const received: WorkerRunEvent[] = []
       emitter.subscribe('job_1', collectHandler(received))

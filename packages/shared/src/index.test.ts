@@ -35,31 +35,17 @@ describe('Session permission mode', () => {
 })
 
 describe('isModelCacheFresh', () => {
-  it('returns false when modelsFetchedAt is undefined', () => {
+  it('evaluates freshness for missing, invalid, TTL, and injectable now', () => {
     assert.equal(isModelCacheFresh(undefined), false)
-  })
-
-  it('returns false when modelsFetchedAt is invalid', () => {
     assert.equal(isModelCacheFresh('not-a-date'), false)
-  })
-
-  it('returns true when within default TTL', () => {
-    const now = new Date().toISOString()
-    assert.equal(isModelCacheFresh(now), true)
-  })
-
-  it('returns false when past TTL', () => {
-    const past = new Date(Date.now() - WORKER_MODELS_TTL_MS - 1000).toISOString()
-    assert.equal(isModelCacheFresh(past), false)
-  })
-
-  it('accepts custom TTL', () => {
+    assert.equal(isModelCacheFresh(new Date().toISOString()), true)
+    assert.equal(
+      isModelCacheFresh(new Date(Date.now() - WORKER_MODELS_TTL_MS - 1000).toISOString()),
+      false,
+    )
     const past = new Date(Date.now() - 1000).toISOString()
     assert.equal(isModelCacheFresh(past, 500), false)
     assert.equal(isModelCacheFresh(past, 2000), true)
-  })
-
-  it('accepts injectable now', () => {
     const t0 = Date.parse('2026-01-01T00:00:00.000Z')
     const fetched = new Date(t0).toISOString()
     assert.equal(isModelCacheFresh(fetched, 1000, t0 + 500), true)
@@ -68,12 +54,9 @@ describe('isModelCacheFresh', () => {
 })
 
 describe('isCommandHealthFresh / isAcpHealthFresh', () => {
-  it('uses COMMAND_HEALTH_TTL_MS = 5m and ACP_HEALTH_TTL_MS = 15m', () => {
+  it('uses the documented TTLs and injectable now', () => {
     assert.equal(COMMAND_HEALTH_TTL_MS, 5 * 60 * 1000)
     assert.equal(ACP_HEALTH_TTL_MS, 15 * 60 * 1000)
-  })
-
-  it('isCommandHealthFresh respects TTL and now', () => {
     const t0 = Date.parse('2026-01-01T00:00:00.000Z')
     assert.equal(isCommandHealthFresh(undefined, t0), false)
     assert.equal(
@@ -87,10 +70,6 @@ describe('isCommandHealthFresh / isAcpHealthFresh', () => {
       ),
       false,
     )
-  })
-
-  it('isAcpHealthFresh respects TTL and now', () => {
-    const t0 = Date.parse('2026-01-01T00:00:00.000Z')
     assert.equal(
       isAcpHealthFresh({ status: 'ready', checkedAt: new Date(t0).toISOString() }, t0 + 1000),
       true,

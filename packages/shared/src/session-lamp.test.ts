@@ -29,90 +29,86 @@ function makeSession(patch: Partial<Session> = {}): Session {
 }
 
 describe('sessionLampClass', () => {
-  it('documents the lamp timing constants', () => {
+  it('applies approve > run > error > done priority with grace/unread rules', () => {
     assert.equal(SESSION_LAMP_ERROR_GRACE_MS, 3_000)
     assert.equal(SESSION_LAMP_ACTIVE_TTL_MS, 60_000)
-  })
 
-  it('approve outranks everything, including unread errors', () => {
-    const s = makeSession({
-      status: 'needs_approval',
-      lastErrorAt: iso(T0),
-      lastReadAt: iso(T0 - 1_000),
-    })
-    assert.equal(sessionLampClass(s, true, T0), 'approve')
-  })
+    assert.equal(
+      sessionLampClass(
+        makeSession({
+          status: 'needs_approval',
+          lastErrorAt: iso(T0),
+          lastReadAt: iso(T0 - 1_000),
+        }),
+        true,
+        T0,
+      ),
+      'approve',
+    )
 
-  it('run when busy (optimistic) or status running, outranking unread lamps', () => {
-    const base = {
+    const unreadBase = {
       lastErrorAt: iso(T0 - 500),
       lastReplyAt: iso(T0 - 500),
       lastReadAt: iso(T0 - 10_000),
     }
-    assert.equal(sessionLampClass(makeSession({ ...base, status: 'running' }), false, T0), 'run')
-    assert.equal(sessionLampClass(makeSession(base), true, T0), 'run')
-  })
+    assert.equal(sessionLampClass(makeSession({ ...unreadBase, status: 'running' }), false, T0), 'run')
+    assert.equal(sessionLampClass(makeSession(unreadBase), true, T0), 'run')
 
-  it('error while the error event is unread', () => {
-    const s = makeSession({ lastErrorAt: iso(T0), lastReadAt: iso(T0 - 1) })
-    assert.equal(sessionLampClass(s, false, T0), 'error')
-  })
+    assert.equal(
+      sessionLampClass(makeSession({ lastErrorAt: iso(T0), lastReadAt: iso(T0 - 1) }), false, T0),
+      'error',
+    )
+    const legacy = makeSession({ lastChatErrorAt: iso(T0), lastReadAt: iso(T0 - 1) })
+    assert.equal(sessionLampClass(legacy, false, T0), 'error')
+    assert.equal(sessionLampTimes(legacy).errAt, T0)
 
-  it('error falls back to legacy lastChatErrorAt when lastErrorAt is absent', () => {
-    const s = makeSession({ lastChatErrorAt: iso(T0), lastReadAt: iso(T0 - 1) })
-    assert.equal(sessionLampClass(s, false, T0), 'error')
-    assert.equal(sessionLampTimes(s).errAt, T0)
-  })
+    const grace = makeSession({ lastErrorAt: iso(T0 - 10_000), lastReadAt: iso(T0) })
+    assert.equal(sessionLampClass(grace, false, T0 + SESSION_LAMP_ERROR_GRACE_MS - 1), 'error')
+    assert.equal(sessionLampClass(grace, false, T0 + SESSION_LAMP_ERROR_GRACE_MS), 'idle')
 
-  it('error lingers for the 3s grace after being read, then goes out', () => {
-    const s = makeSession({ lastErrorAt: iso(T0 - 10_000), lastReadAt: iso(T0) })
-    assert.equal(sessionLampClass(s, false, T0 + SESSION_LAMP_ERROR_GRACE_MS - 1), 'error')
-    assert.equal(sessionLampClass(s, false, T0 + SESSION_LAMP_ERROR_GRACE_MS), 'idle')
-  })
+    assert.equal(
+      sessionLampClass(makeSession({ lastReplyAt: iso(T0), lastReadAt: iso(T0 - 1) }), false, T0),
+      'done',
+    )
+    assert.equal(
+      sessionLampClass(makeSession({ lastFinishedAt: iso(T0), lastReadAt: iso(T0 - 1) }), false, T0),
+      'done',
+    )
+    assert.equal(
+      sessionLampClass(makeSession({ lastReplyAt: iso(T0), lastReadAt: iso(T0) }), false, T0),
+      'idle',
+    )
 
-  it('done while the completion event is unread (reply or job finish)', () => {
-    const byReply = makeSession({ lastReplyAt: iso(T0), lastReadAt: iso(T0 - 1) })
-    assert.equal(sessionLampClass(byReply, false, T0), 'done')
-    const byJob = makeSession({ lastFinishedAt: iso(T0), lastReadAt: iso(T0 - 1) })
-    assert.equal(sessionLampClass(byJob, false, T0), 'done')
-  })
-
-  it('done goes out immediately once read (no grace)', () => {
-    const s = makeSession({ lastReplyAt: iso(T0), lastReadAt: iso(T0) })
-    assert.equal(sessionLampClass(s, false, T0), 'idle')
-  })
-
-  it('done uses the newest of lastReplyAt / lastFinishedAt', () => {
-    const s = makeSession({
+    const newestDone = makeSession({
       lastReplyAt: iso(T0 - 5_000),
       lastFinishedAt: iso(T0),
       lastReadAt: iso(T0 - 1_000),
     })
-    assert.equal(sessionLampTimes(s).doneAt, T0)
-    assert.equal(sessionLampClass(s, false, T0), 'done')
-  })
+    assert.equal(sessionLampTimes(newestDone).doneAt, T0)
+    assert.equal(sessionLampClass(newestDone, false, T0), 'done')
 
-  it('error outranks done when both are unread', () => {
-    const s = makeSession({
-      lastErrorAt: iso(T0 - 100),
-      lastReplyAt: iso(T0),
-      lastReadAt: iso(T0 - 10_000),
-    })
-    assert.equal(sessionLampClass(s, false, T0), 'error')
-  })
-
-  it('idle when there is nothing to report', () => {
+    assert.equal(
+      sessionLampClass(
+        makeSession({
+          lastErrorAt: iso(T0 - 100),
+          lastReplyAt: iso(T0),
+          lastReadAt: iso(T0 - 10_000),
+        }),
+        false,
+        T0,
+      ),
+      'error',
+    )
     assert.equal(sessionLampClass(makeSession(), false, T0), 'idle')
-  })
-
-  it('tolerates missing/garbage timestamps', () => {
-    const s = makeSession({ lastErrorAt: 'not-a-date', lastReadAt: undefined })
-    assert.equal(sessionLampClass(s, false, T0), 'idle')
+    assert.equal(
+      sessionLampClass(makeSession({ lastErrorAt: 'not-a-date', lastReadAt: undefined }), false, T0),
+      'idle',
+    )
   })
 })
 
 describe('sessionHasUnreadLamp', () => {
-  it('true when an error or done event is newer than the watermark', () => {
+  it('tracks unread error/done versus read watermark', () => {
     assert.equal(
       sessionHasUnreadLamp(makeSession({ lastErrorAt: iso(T0), lastReadAt: iso(T0 - 1) })),
       true,
@@ -121,10 +117,11 @@ describe('sessionHasUnreadLamp', () => {
       sessionHasUnreadLamp(makeSession({ lastFinishedAt: iso(T0), lastReadAt: iso(T0 - 1) })),
       true,
     )
-  })
-
-  it('false once everything is read (in-grace error does not count)', () => {
-    const s = makeSession({ lastErrorAt: iso(T0), lastReplyAt: iso(T0), lastReadAt: iso(T0) })
-    assert.equal(sessionHasUnreadLamp(s), false)
+    assert.equal(
+      sessionHasUnreadLamp(
+        makeSession({ lastErrorAt: iso(T0), lastReplyAt: iso(T0), lastReadAt: iso(T0) }),
+      ),
+      false,
+    )
   })
 })

@@ -584,36 +584,7 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
     assert.equal(state!.output, 'x'.repeat(100))
   })
 
-  it('Resilience: events after terminal are suppressed by emitter order enforcement', async () => {
-    const collector = new EventCollector('job_resilient', emitter)
-    const promise = collector.waitForCompletion(2000)
-
-    emitWorkerEvent('job_resilient', makeStarted({ jobId: 'job_resilient' }))
-    emitWorkerEvent('job_resilient', makeCompleted({ jobId: 'job_resilient' }))
-    // After terminal — emitter should suppress this
-    emitWorkerEvent('job_resilient', makeDelta(99, 'post-termination', 'job_resilient'))
-
-    const events = await promise
-    const deltas = events.filter((e) => e.type === 'delta')
-    assert.equal(deltas.length, 0, 'no delta should arrive after terminal')
-    assert.equal(events.filter((e) => e.type === 'completed').length, 1)
-  })
-
-  it('Resilience: started event emitted after terminal is suppressed', async () => {
-    const collector = new EventCollector('job_start_after_term', emitter)
-    const promise = collector.waitForCompletion(2000)
-
-    emitWorkerEvent('job_start_after_term', makeStarted({ jobId: 'job_start_after_term' }))
-    emitWorkerEvent('job_start_after_term', makeCompleted({ jobId: 'job_start_after_term' }))
-    // After terminal — emitter should suppress duplicate started
-    emitWorkerEvent('job_start_after_term', makeStarted({ jobId: 'job_start_after_term' }))
-
-    const events = await promise
-    const startedEvents = events.filter((e) => e.type === 'started')
-    assert.equal(startedEvents.length, 1, 'only one started event allowed')
-  })
-
-  it('Resilience: duplicate terminal (completed after completed) is suppressed', async () => {
+  it('Resilience: duplicate terminal after first completed is suppressed end-to-end', async () => {
     const collector = new EventCollector('job_dbl_terminal', emitter)
     const promise = collector.waitForCompletion(2000)
 

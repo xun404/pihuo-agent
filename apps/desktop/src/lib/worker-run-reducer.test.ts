@@ -427,28 +427,21 @@ describe('workerRunReducer', () => {
   })
 
   describe('running vs terminal rendering markers', () => {
-    it('running status means plain text mode (status=running)', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeDelta({ sequence: 1, delta: 'text' }))
-      assert.equal(get(s, 'job-1').status, 'running')
-    })
+    it('maps started/delta to running and terminals to their status', () => {
+      let running = workerRunReducer(new Map(), makeStarted())
+      running = workerRunReducer(running, makeDelta({ sequence: 1, delta: 'text' }))
+      assert.equal(get(running, 'job-1').status, 'running')
 
-    it('completed status means Markdown rendering mode', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeCompleted({ output: '# markdown' }))
-      assert.equal(get(s, 'job-1').status, 'completed')
-    })
-
-    it('failed status means Markdown rendering mode', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeFailed())
-      assert.equal(get(s, 'job-1').status, 'failed')
-    })
-
-    it('cancelled status means Markdown rendering mode', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, { type: 'cancelled', jobId: 'job-1', truncated: false })
-      assert.equal(get(s, 'job-1').status, 'cancelled')
+      const base = workerRunReducer(new Map(), makeStarted())
+      assert.equal(get(workerRunReducer(base, makeCompleted({ output: '# markdown' })), 'job-1').status, 'completed')
+      assert.equal(get(workerRunReducer(base, makeFailed()), 'job-1').status, 'failed')
+      assert.equal(
+        get(
+          workerRunReducer(base, { type: 'cancelled', jobId: 'job-1', truncated: false }),
+          'job-1',
+        ).status,
+        'cancelled',
+      )
     })
   })
 
@@ -466,30 +459,15 @@ describe('workerRunReducer', () => {
   })
 
   describe('timed_out event', () => {
-    it('marks as timed_out like failed/cancelled', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, { type: 'timed_out', jobId: 'job-1', truncated: false })
-      const entry = get(s, 'job-1')
-      assert.equal(entry.status, 'timed_out')
-    })
+    it('marks timed_out, keeps partial output/truncated, and can bootstrap identity', () => {
+      let partial = workerRunReducer(new Map(), makeStarted())
+      partial = workerRunReducer(partial, makeDelta({ sequence: 1, delta: 'building...' }))
+      partial = workerRunReducer(partial, { type: 'timed_out', jobId: 'job-1', truncated: true })
+      assert.equal(get(partial, 'job-1').status, 'timed_out')
+      assert.equal(get(partial, 'job-1').output, 'building...')
+      assert.equal(get(partial, 'job-1').truncated, true)
 
-    it('retains partial output on timed_out', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeDelta({ sequence: 1, delta: 'building...' }))
-      s = workerRunReducer(s, { type: 'timed_out', jobId: 'job-1', truncated: false })
-      const entry = get(s, 'job-1')
-      assert.equal(entry.status, 'timed_out')
-      assert.equal(entry.output, 'building...')
-    })
-
-    it('sets truncated=true on timed_out', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, { type: 'timed_out', jobId: 'job-1', truncated: true })
-      assert.equal(get(s, 'job-1').truncated, true)
-    })
-
-    it('creates fallback entry from timed_out with workerName', () => {
-      const s = workerRunReducer(new Map(), {
+      const bootstrapped = workerRunReducer(new Map(), {
         type: 'timed_out',
         jobId: 'job-t',
         output: 'timeout result',
@@ -498,7 +476,7 @@ describe('workerRunReducer', () => {
         workerKind: 'codex',
         role: 'coder',
       })
-      const entry = get(s, 'job-t')
+      const entry = get(bootstrapped, 'job-t')
       assert.equal(entry.status, 'timed_out')
       assert.equal(entry.output, 'timeout result')
       assert.equal(entry.workerName, 'Timeout Worker')
@@ -507,78 +485,37 @@ describe('workerRunReducer', () => {
   })
 
   describe('reference stability (no-op returns same Map)', () => {
-    it('returns same Map when started event is duplicate', () => {
-      const s = workerRunReducer(new Map(), makeStarted())
-      const s2 = workerRunReducer(s, makeStarted())
-      assert.strictEqual(s2, s)
-    })
+    it('returns the same Map for no-op events and a new Map on real changes', () => {
+      const started = workerRunReducer(new Map(), makeStarted())
+      assert.strictEqual(workerRunReducer(started, makeStarted()), started)
+      assert.strictEqual(workerRunReducer(started, makeDelta({ jobId: 'unknown', sequence: 1 })), started)
 
-    it('returns same Map when delta for unknown jobId', () => {
-      const s = workerRunReducer(new Map(), makeStarted())
-      const s2 = workerRunReducer(s, makeDelta({ jobId: 'unknown', sequence: 1 }))
-      assert.strictEqual(s2, s)
-    })
+      let withDelta = workerRunReducer(started, makeDelta({ sequence: 1, delta: 'A' }))
+      assert.notStrictEqual(withDelta, started)
+      assert.strictEqual(workerRunReducer(withDelta, makeDelta({ sequence: 1, delta: 'B' })), withDelta)
 
-    it('returns same Map for duplicate delta sequence', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeDelta({ sequence: 1, delta: 'A' }))
-      const s2 = workerRunReducer(s, makeDelta({ sequence: 1, delta: 'B' }))
-      assert.strictEqual(s2, s)
-    })
-
-    it('returns same Map for delta after terminal status', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeCompleted({ output: 'done' }))
-      const s2 = workerRunReducer(s, makeDelta({ sequence: 1, delta: 'X' }))
-      assert.strictEqual(s2, s)
-    })
-
-    it('returns same Map when terminal content is identical', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeCompleted({ output: 'done', truncated: false }))
-      const s2 = workerRunReducer(s, makeCompleted({ output: 'done', truncated: false }))
-      assert.strictEqual(s2, s)
-    })
-
-    it('returns NEW Map when actual change happens', () => {
-      const s = workerRunReducer(new Map(), makeStarted())
-      const s2 = workerRunReducer(s, makeDelta({ sequence: 1, delta: 'A' }))
-      assert.notStrictEqual(s2, s)
-    })
-
-    it('handles streaming deltas efficiently', () => {
-      let s: Map<string, WorkerRunState> = new Map()
-      s = workerRunReducer(s, makeStarted())
-      let changes = 0
-      for (let i = 1; i <= 200; i++) {
-        const s2 = workerRunReducer(s, makeDelta({ sequence: i, delta: 'x' }))
-        if (s2 !== s) changes++
-        s = s2
-      }
-      assert.equal(changes, 200)
-    })
-
-    it('skips duplicate terminal event when content matches', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeFailed({ output: 'err', error: 'oops', truncated: false }))
-      const s2 = workerRunReducer(s, makeFailed({ output: 'err', error: 'oops', truncated: false }))
-      assert.strictEqual(s2, s)
-    })
-
-    it('creates new Map for terminal event when output differs', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeFailed({ output: 'err1', error: 'oops', truncated: false }))
-      const s2 = workerRunReducer(
-        s,
-        makeFailed({ output: 'err2', error: 'oops', truncated: false }),
+      const completed = workerRunReducer(started, makeCompleted({ output: 'done', truncated: false }))
+      assert.strictEqual(workerRunReducer(completed, makeDelta({ sequence: 1, delta: 'X' })), completed)
+      assert.strictEqual(
+        workerRunReducer(completed, makeCompleted({ output: 'done', truncated: false })),
+        completed,
       )
-      assert.notStrictEqual(s2, s)
-    })
 
-    it('returns same Map for unmatched approval_resolved', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(
-        s,
+      const failed = workerRunReducer(
+        started,
+        makeFailed({ output: 'err', error: 'oops', truncated: false }),
+      )
+      assert.strictEqual(
+        workerRunReducer(failed, makeFailed({ output: 'err', error: 'oops', truncated: false })),
+        failed,
+      )
+      assert.notStrictEqual(
+        workerRunReducer(failed, makeFailed({ output: 'err2', error: 'oops', truncated: false })),
+        failed,
+      )
+
+      let pending = workerRunReducer(
+        started,
         makeApprovalRequested({
           approval: makeApprovalItem({
             id: 'a1',
@@ -586,35 +523,36 @@ describe('workerRunReducer', () => {
           }) as any,
         }),
       )
-      // Resolve with non-matching ID
-      const s2 = workerRunReducer(
-        s,
-        makeApprovalResolved({
-          approval: makeApprovalItem({
-            id: 'a2',
-            status: 'allowed',
-            createdAt: '2026-07-14T01:00:00.000Z',
-          }) as any,
-        }),
+      assert.strictEqual(
+        workerRunReducer(
+          pending,
+          makeApprovalResolved({
+            approval: makeApprovalItem({
+              id: 'a2',
+              status: 'allowed',
+              createdAt: '2026-07-14T01:00:00.000Z',
+            }) as any,
+          }),
+        ),
+        pending,
       )
-      assert.strictEqual(s2, s, 'unmatched approval_resolved should return same Map')
-    })
 
-    it('records a resolved tombstone even with no prior pendingApproval', () => {
-      const s = workerRunReducer(new Map(), makeStarted())
-      const event = makeApprovalResolved()
-      const s2 = workerRunReducer(s, event)
-      assert.notStrictEqual(s2, s)
-      assert.equal(get(s2, 'job-1').approvalCursor?.resolved, true)
-      assert.strictEqual(workerRunReducer(s2, event), s2)
-    })
+      pending = workerRunReducer(withDelta, makeApprovalRequested())
+      assert.strictEqual(workerRunReducer(pending, makeDelta({ sequence: 1, delta: 'B' })), pending)
 
-    it('returns same Map when delta after pending_approval has same sequence', () => {
-      let s = workerRunReducer(new Map(), makeStarted())
-      s = workerRunReducer(s, makeDelta({ sequence: 1, delta: 'A' }))
-      s = workerRunReducer(s, makeApprovalRequested())
-      const s2 = workerRunReducer(s, makeDelta({ sequence: 1, delta: 'B' }))
-      assert.strictEqual(s2, s)
+      const resolvedOnly = workerRunReducer(started, makeApprovalResolved())
+      assert.notStrictEqual(resolvedOnly, started)
+      assert.equal(get(resolvedOnly, 'job-1').approvalCursor?.resolved, true)
+      assert.strictEqual(workerRunReducer(resolvedOnly, makeApprovalResolved()), resolvedOnly)
+
+      let stream: Map<string, WorkerRunState> = started
+      let changes = 0
+      for (let i = 1; i <= 200; i++) {
+        const next = workerRunReducer(stream, makeDelta({ sequence: i, delta: 'x' }))
+        if (next !== stream) changes++
+        stream = next
+      }
+      assert.equal(changes, 200)
     })
   })
 
@@ -1055,49 +993,37 @@ describe('workerRunReducer', () => {
       assert.equal(j2.pendingApproval, undefined)
     })
 
-    it('skips approvals that are not pending', () => {
-      const s = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
-      const approvals: ApprovalItem[] = [
+    it('skips non-actionable snapshot rows (not pending, no jobId, unknown/terminal jobs)', () => {
+      const running = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
+      const nonPending = seedApprovalsFromSnapshot(running, [
         makeApprovalItem({ id: 'a1', jobId: 'j1', status: 'allowed' }),
         makeApprovalItem({ id: 'a2', jobId: 'j1', status: 'denied' }),
         makeApprovalItem({ id: 'a3', jobId: 'j1', status: 'cancelled' }),
-      ]
-      const result = seedApprovalsFromSnapshot(s, approvals)
-      const j1 = result.get('j1')!
-      assert.equal(j1.status, 'running')
-      assert.equal(j1.pendingApproval, undefined)
-    })
+      ])
+      assert.equal(nonPending.get('j1')!.status, 'running')
+      assert.equal(nonPending.get('j1')!.pendingApproval, undefined)
 
-    it('skips approvals without a jobId', () => {
-      const s = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
-      const approvals: ApprovalItem[] = [
+      const noJobId = seedApprovalsFromSnapshot(running, [
         makeApprovalItem({ id: 'a1', jobId: undefined, status: 'pending' }),
-      ]
-      const result = seedApprovalsFromSnapshot(s, approvals)
-      const j1 = result.get('j1')!
-      assert.equal(j1.status, 'running')
-    })
+      ])
+      assert.equal(noJobId.get('j1')!.status, 'running')
 
-    it('skips approvals for jobIds not in state', () => {
-      const s = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
-      const approvals: ApprovalItem[] = [
+      const ghost = seedApprovalsFromSnapshot(running, [
         makeApprovalItem({ id: 'a1', jobId: 'ghost', status: 'pending' }),
-      ]
-      const result = seedApprovalsFromSnapshot(s, approvals)
-      assert.strictEqual(result, s)
-    })
+      ])
+      assert.strictEqual(ghost, running)
 
-    it('skips non-running workers (completed, failed)', () => {
-      let s = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
-      s = workerRunReducer(s, makeCompleted({ jobId: 'j1', output: 'done' }))
-      s = workerRunReducer(s, makeStarted({ jobId: 'j2' }))
-      s = workerRunReducer(s, makeFailed({ jobId: 'j2', error: 'err' }))
-      const approvals: ApprovalItem[] = [
-        makeApprovalItem({ id: 'a1', jobId: 'j1', status: 'pending' }),
-        makeApprovalItem({ id: 'a2', jobId: 'j2', status: 'pending' }),
-      ]
-      const result = seedApprovalsFromSnapshot(s, approvals)
-      assert.strictEqual(result, s)
+      let terminal = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
+      terminal = workerRunReducer(terminal, makeCompleted({ jobId: 'j1', output: 'done' }))
+      terminal = workerRunReducer(terminal, makeStarted({ jobId: 'j2' }))
+      terminal = workerRunReducer(terminal, makeFailed({ jobId: 'j2', error: 'err' }))
+      assert.strictEqual(
+        seedApprovalsFromSnapshot(terminal, [
+          makeApprovalItem({ id: 'a1', jobId: 'j1', status: 'pending' }),
+          makeApprovalItem({ id: 'a2', jobId: 'j2', status: 'pending' }),
+        ]),
+        terminal,
+      )
     })
 
     it('skips workers that are already pending_approval', () => {
