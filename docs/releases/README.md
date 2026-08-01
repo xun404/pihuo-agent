@@ -4,9 +4,9 @@ GitHub Releases for SwarmDesk use a **checked-in, bilingual notes file** per tag
 
 ## File layout
 
-| Path | Purpose |
-| ---- | ------- |
-| `docs/releases/README.md` | This structure contract |
+| Path                      | Purpose                                                         |
+| ------------------------- | --------------------------------------------------------------- |
+| `docs/releases/README.md` | This structure contract                                         |
 | `docs/releases/vX.Y.Z.md` | Notes for tag `vX.Y.Z` (must match root `package.json` version) |
 
 Before cutting a tag:
@@ -42,8 +42,8 @@ One short paragraph: what this product is / what this tag delivers.
 
 ### Downloads
 
-| Platform | Artifact |
-| -------- | -------- |
+| Platform | Artifact                  |
+| -------- | ------------------------- |
 | …        | `SwarmDesk-Agent-X.Y.Z-…` |
 
 ### Notes
@@ -66,8 +66,8 @@ One short paragraph: what this product is / what this tag delivers.
 
 ### 下载
 
-| 平台 | 产物 |
-| ---- | ---- |
+| 平台 | 产物                      |
+| ---- | ------------------------- |
 | …    | `SwarmDesk-Agent-X.Y.Z-…` |
 
 ### 说明
