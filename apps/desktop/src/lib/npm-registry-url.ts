@@ -7,8 +7,7 @@
 export const NPM_REGISTRY_HTTPS_RE = /^https:\/\/[^\s]+$/u
 
 export type NpmRegistryDraftValidation =
-  | { ok: true; value: string | undefined }
-  | { ok: false; reason: 'https' | 'space' | 'url' }
+  { ok: true; value: string | undefined } | { ok: false; reason: 'https' | 'space' | 'url' }
 
 export function validateNpmRegistryDraft(input: string): NpmRegistryDraftValidation {
   const trimmed = input.trim()
@@ -24,6 +23,7 @@ export function validateNpmRegistryDraft(input: string): NpmRegistryDraftValidat
   // strip trailing slash on root path for stable storage
   return {
     ok: true,
-    value: trimmed.endsWith('/') && new URL(trimmed).pathname === '/' ? trimmed.slice(0, -1) : trimmed,
+    value:
+      trimmed.endsWith('/') && new URL(trimmed).pathname === '/' ? trimmed.slice(0, -1) : trimmed,
   }
 }

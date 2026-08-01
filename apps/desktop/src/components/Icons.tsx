@@ -372,10 +372,12 @@ export function workerBrandClass(kind?: string | null, name?: string | null): st
  * Best registry agent id for icon resolution:
  * explicit iconAgentId → registry source id → undefined (brand fallback by name).
  */
-export function resolveWorkerIconAgentId(worker?: {
-  iconAgentId?: string
-  source?: { type?: string; registryId?: string } | null
-} | null): string | undefined {
+export function resolveWorkerIconAgentId(
+  worker?: {
+    iconAgentId?: string
+    source?: { type?: string; registryId?: string } | null
+  } | null,
+): string | undefined {
   if (!worker) return undefined
   const explicit = worker.iconAgentId?.trim()
   if (explicit) return explicit
@@ -690,7 +692,8 @@ export function IconMove(p: IconProps) {
 // 兼容项目自有 IconXxx（React.FC<IconProps>）与 lucide-react 图标（LucideIcon）。
 // lucide 组件的 props 是 IconProps 的超集（size/className 都支持），联合类型让 getToolIcon
 // 等映射函数可同时返回两类组件，调用方按 {size, className} 传参即可。
-type IconComponent = React.FC<IconProps> | React.FC<React.SVGProps<SVGSVGElement> & { size?: number }>
+type IconComponent =
+  React.FC<IconProps> | React.FC<React.SVGProps<SVGSVGElement> & { size?: number }>
 
 /**
  * 工具名 → 专属图标映射。

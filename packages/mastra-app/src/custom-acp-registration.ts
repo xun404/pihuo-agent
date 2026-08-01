@@ -51,7 +51,12 @@ function matchRegistryAgentForIcon(name: string, command: string): string | unde
   for (const a of agents) {
     const aid = a.id.toLowerCase()
     const aname = a.name.toLowerCase()
-    if (hay.includes(aid) || hay.includes(aname) || aname.includes(nameLower) || aid.includes(nameLower)) {
+    if (
+      hay.includes(aid) ||
+      hay.includes(aname) ||
+      aname.includes(nameLower) ||
+      aid.includes(nameLower)
+    ) {
       return a.id
     }
   }
@@ -64,7 +69,10 @@ function matchRegistryAgentForIcon(name: string, command: string): string | unde
   )
   let best: { id: string; score: number } | undefined
   for (const a of agents) {
-    const idTokens = a.id.toLowerCase().split(/[^a-z0-9]+/i).filter((t) => t.length >= 3)
+    const idTokens = a.id
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .filter((t) => t.length >= 3)
     const overlap = idTokens.filter((t) => cmdTokens.has(t)).length
     if (overlap > 0 && (!best || overlap > best.score)) best = { id: a.id, score: overlap }
   }
@@ -112,7 +120,10 @@ export function detectLaunchKind(input: {
   // Existing path (absolute or ~)-expanded) is a local executable.
   if (isAbsolute(expanded) || existsSync(expanded)) return 'local'
   // npm package shape: "@scope/name", "name@version", or scoped tarball spec.
-  if (/^(@[\w.-]+\/)?[\w.-]+(@[\w.^-]+)?$/.test(rawCommand) && (rawCommand.startsWith('@') || rawCommand.includes('@'))) {
+  if (
+    /^(@[\w.-]+\/)?[\w.-]+(@[\w.^-]+)?$/.test(rawCommand) &&
+    (rawCommand.startsWith('@') || rawCommand.includes('@'))
+  ) {
     return 'npx'
   }
   return 'system'
@@ -149,9 +160,7 @@ function materialize(
   // Resolve 'auto'/missing launchKind from the command/packageSpec so callers don't need to know
   // the local/system/npx distinction. Explicit choices are honored below.
   const launchKind: 'npx' | 'uvx' | 'system' | 'local' =
-    input.launchKind && input.launchKind !== 'auto'
-      ? input.launchKind
-      : detectLaunchKind(input)
+    input.launchKind && input.launchKind !== 'auto' ? input.launchKind : detectLaunchKind(input)
   if (launchKind === 'npx' || launchKind === 'uvx') {
     const packageSpec = input.packageSpec?.trim() || input.command?.trim()
     if (!packageSpec || /\s/u.test(packageSpec)) {
@@ -218,7 +227,11 @@ function materialize(
 async function probeCustomLaunch(
   input: CustomAcpRegistrationInput,
   deps: CustomAcpRegistrationDeps,
-): Promise<{ launch: ReturnType<typeof materialize>; launchDigest: string; probe: CapabilityProbeResult }> {
+): Promise<{
+  launch: ReturnType<typeof materialize>
+  launchDigest: string
+  probe: CapabilityProbeResult
+}> {
   const launch = materialize(input, deps.resolveExecutable ?? whichSync)
   const launchDigest = createHash('sha256').update(JSON.stringify(launch.launchSpec)).digest('hex')
   const env = buildEffectiveWorkerEnv({
@@ -250,7 +263,9 @@ export function findDuplicateCandidates(
     .filter((w) => {
       const sameCommand = w.command === command
       const sameAgent =
-        !!agentName && !!w.capabilitySummary?.agentName && w.capabilitySummary.agentName === agentName
+        !!agentName &&
+        !!w.capabilitySummary?.agentName &&
+        w.capabilitySummary.agentName === agentName
       return sameCommand || sameAgent
     })
     .map((w) => ({

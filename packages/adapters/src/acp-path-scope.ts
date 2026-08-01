@@ -57,9 +57,7 @@ function isWithinProject(projectRoot: string, target: string): boolean {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
-export function classifyAcpFilePath(
-  input: ClassifyAcpFilePathInput,
-): AcpFilePathClassification {
+export function classifyAcpFilePath(input: ClassifyAcpFilePathInput): AcpFilePathClassification {
   if (
     typeof input.projectRoot !== 'string' ||
     !input.projectRoot.trim() ||
@@ -79,9 +77,7 @@ export function classifyAcpFilePath(
     return { scope: 'unknown' }
   }
 
-  const candidate = isAbsolute(input.path)
-    ? resolve(input.path)
-    : resolve(projectRoot, input.path)
+  const candidate = isAbsolute(input.path) ? resolve(input.path) : resolve(projectRoot, input.path)
   const resolvedPath = canonicalTarget(candidate)
   if (!resolvedPath) return { scope: 'unknown', projectRoot }
 

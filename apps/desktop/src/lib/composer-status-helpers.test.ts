@@ -56,7 +56,9 @@ describe('summarizeTasks', () => {
 describe('taskDisplayText', () => {
   it('prefers activeForm for in_progress', () => {
     assert.equal(
-      taskDisplayText(task({ id: '1', content: 'Full', status: 'in_progress', activeForm: 'Short' })),
+      taskDisplayText(
+        task({ id: '1', content: 'Full', status: 'in_progress', activeForm: 'Short' }),
+      ),
       'Short',
     )
   })

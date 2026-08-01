@@ -132,7 +132,10 @@ describe('LocalStore Team members', () => {
       runtimeProfile: 'generic-acp',
     }
     // Ensure no reasoning field
-    assert.equal((workerWithoutReasoning as unknown as Record<string, unknown>).reasoning, undefined)
+    assert.equal(
+      (workerWithoutReasoning as unknown as Record<string, unknown>).reasoning,
+      undefined,
+    )
 
     assert.throws(
       () =>

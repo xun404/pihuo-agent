@@ -42,10 +42,7 @@ describe('extractFirstUserText', () => {
       ]),
       'real task',
     )
-    assert.equal(
-      extractFirstUserText([null, 42, 'stray', { role: 'user', content: 'ok' }]),
-      'ok',
-    )
+    assert.equal(extractFirstUserText([null, 42, 'stray', { role: 'user', content: 'ok' }]), 'ok')
   })
 })
 

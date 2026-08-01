@@ -1021,7 +1021,9 @@
   cursor: pointer;
   /* Fade-in when a worker is disabled (the button is conditionally rendered then). */
   animation: worker-card-delete-in var(--dur-fast) var(--ease-out);
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 @keyframes worker-card-delete-in {
   from {
@@ -4011,7 +4013,9 @@ button.prompt-role-summary {
   color: var(--text-1);
   font-size: var(--fs-xs);
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 .worker-role-chip:hover {
   background: var(--bg-active);

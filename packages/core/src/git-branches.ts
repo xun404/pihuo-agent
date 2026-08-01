@@ -125,7 +125,9 @@ export function parseBranchForEachRef(
  * Extract indented file paths that follow a "would be overwritten by checkout:" header.
  */
 function extractOverwritePaths(stderr: string): string[] | undefined {
-  const m = stderr.match(/would be overwritten by checkout:\r?\n([\s\S]*?)(?:\r?\n\r?\n|\r?\nPlease|\r?\nAborting|$)/i)
+  const m = stderr.match(
+    /would be overwritten by checkout:\r?\n([\s\S]*?)(?:\r?\n\r?\n|\r?\nPlease|\r?\nAborting|$)/i,
+  )
   if (!m || !m[1]) return undefined
   const paths = m[1]
     .split(/\r?\n/)
@@ -223,9 +225,7 @@ export async function listLocalBranches(rootPath: string): Promise<BranchListRes
   const currentName = headRefType === 'detached' ? null : currentBranch
 
   const branches = parseBranchForEachRef(forEachRef.stdout, currentName)
-  const dirtyFileCount = statusRes.stdout
-    .split(/\r?\n/)
-    .filter((l) => l.length > 0).length
+  const dirtyFileCount = statusRes.stdout.split(/\r?\n/).filter((l) => l.length > 0).length
 
   return {
     ok: true,

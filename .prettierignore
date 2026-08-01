@@ -10,3 +10,5 @@ packages/mastra-app/.mastra
 packages/adapters/src/bundled
 apps/desktop/dist-runtime
 **/*.map
+pnpm-lock.yaml
+packages/core/src/bundled/*.json

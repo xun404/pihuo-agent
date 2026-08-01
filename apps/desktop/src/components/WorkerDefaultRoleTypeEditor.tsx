@@ -100,7 +100,11 @@ export function WorkerDefaultRoleTypeEditor({ worker, onSave }: Props) {
                 onClick={() => void pick(role)}
               >
                 <span>{t(roleMessageKey(role))}</span>
-                {role === roleType && <span className="worker-role-check" aria-hidden>✓</span>}
+                {role === roleType && (
+                  <span className="worker-role-check" aria-hidden>
+                    ✓
+                  </span>
+                )}
               </button>
             ))}
           </motion.div>

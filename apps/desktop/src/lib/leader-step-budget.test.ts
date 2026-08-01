@@ -76,7 +76,10 @@ describe('extractBudgetEvents', () => {
     )
     assert.deepEqual(extractBudgetEvents([]), [])
 
-    const withMissingParts = extractBudgetEvents([{ role: 'user' }, mkMsg('assistant', mkBudgetParts())])
+    const withMissingParts = extractBudgetEvents([
+      { role: 'user' },
+      mkMsg('assistant', mkBudgetParts()),
+    ])
     assert.equal(withMissingParts.length, 1)
     assert.equal(withMissingParts[0].event.data.runId, 'run-1')
   })
@@ -141,7 +144,9 @@ describe('findLatestActionableBudget', () => {
       'last',
     )
     assert.equal(
-      findLatestActionableBudget([mkMsg('user', mkBudgetParts({ runId: 'weird', maxSteps: 5, usedSteps: 5 }))]),
+      findLatestActionableBudget([
+        mkMsg('user', mkBudgetParts({ runId: 'weird', maxSteps: 5, usedSteps: 5 })),
+      ]),
       null,
     )
   })

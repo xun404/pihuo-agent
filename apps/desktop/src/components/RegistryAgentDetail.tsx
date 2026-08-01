@@ -116,9 +116,7 @@ export function RegistryAgentDetail(props: {
           </span>
         </div>
       </header>
-      {option.description && (
-        <p className="registry-agent-detail-desc">{option.description}</p>
-      )}
+      {option.description && <p className="registry-agent-detail-desc">{option.description}</p>}
 
       <dl className="registry-agent-facts">
         <div>
@@ -223,7 +221,9 @@ export function RegistryAgentDetail(props: {
       </div>
 
       <div className="registry-agent-dist-field">
-        <label htmlFor="registry-agent-distribution">{t('workers.registryDetailDistribution')}</label>
+        <label htmlFor="registry-agent-distribution">
+          {t('workers.registryDetailDistribution')}
+        </label>
         <select
           id="registry-agent-distribution"
           className="settings-input ui-font"

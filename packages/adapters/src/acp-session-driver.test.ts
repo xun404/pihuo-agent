@@ -148,7 +148,10 @@ function createFakeAgent(opts: FakeAgentOpts = {}): AgentApp {
     })
 }
 
-async function setupDriver(opts: FakeAgentOpts = {}, cwd = SAFE_CWD): Promise<{
+async function setupDriver(
+  opts: FakeAgentOpts = {},
+  cwd = SAFE_CWD,
+): Promise<{
   driver: AcpSessionDriver
   agentApp: AgentApp
   agentStream: Stream

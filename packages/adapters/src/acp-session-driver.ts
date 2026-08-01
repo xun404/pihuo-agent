@@ -152,7 +152,8 @@ export class AcpSessionDriver {
   private _outputAcc: string = ''
   private permissionError: AcpSessionRuntimeError | null = null
   private operationTail: Promise<void> = Promise.resolve()
-  private configOptionsObserver: ((sessionId: string, options: readonly SessionConfigOption[]) => void) | null = null
+  private configOptionsObserver:
+    ((sessionId: string, options: readonly SessionConfigOption[]) => void) | null = null
 
   private constructor(app: ClientApp, cwd: string) {
     this.app = app

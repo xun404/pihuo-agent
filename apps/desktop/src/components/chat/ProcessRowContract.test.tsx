@@ -102,5 +102,4 @@ describe('collapsible process-row visual contract', () => {
     assert.match(html, /gpt-5\.6-codex/u)
     assert.match(html, />high</u)
   })
-
 })

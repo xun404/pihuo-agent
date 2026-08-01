@@ -13,14 +13,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
-import {
-  copyFileSync,
-  existsSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -162,7 +155,10 @@ function brandMacElectronApp() {
 
   // Refresh Launch Services / icon cache for this bundle (no Dock restart required).
   try {
-    spawnSync('touch', [appRoot, electronIcns].filter((p) => existsSync(p)))
+    spawnSync(
+      'touch',
+      [appRoot, electronIcns].filter((p) => existsSync(p)),
+    )
     const lsregister =
       '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
     if (existsSync(lsregister)) {

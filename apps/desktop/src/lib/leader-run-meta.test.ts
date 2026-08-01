@@ -189,15 +189,12 @@ describe('leader-run-meta', () => {
   })
 
   it('resolveLeaderActivity maps tools to activity keys and falls back to thinking', () => {
-    const {
-      resolveLeaderActivity,
-      mapToolNameToLeaderActivity,
-      normalizeLeaderToolName,
-    } = leaderRunMetaModule as typeof leaderRunMetaModule & {
-      resolveLeaderActivity: (parts: Array<Record<string, unknown>>) => string
-      mapToolNameToLeaderActivity: (name: string) => string
-      normalizeLeaderToolName: (name: string) => string
-    }
+    const { resolveLeaderActivity, mapToolNameToLeaderActivity, normalizeLeaderToolName } =
+      leaderRunMetaModule as typeof leaderRunMetaModule & {
+        resolveLeaderActivity: (parts: Array<Record<string, unknown>>) => string
+        mapToolNameToLeaderActivity: (name: string) => string
+        normalizeLeaderToolName: (name: string) => string
+      }
 
     assert.equal(normalizeLeaderToolName('tool-dispatchTeamMemberTool'), 'dispatch-team-member')
     assert.equal(mapToolNameToLeaderActivity('dispatch-team-member'), 'chat.activity.delegating')
@@ -217,7 +214,11 @@ describe('leader-run-meta', () => {
     )
     assert.equal(
       resolveLeaderActivity([
-        { type: 'tool-dispatch-team-member', state: 'input-streaming', toolName: 'dispatch-team-member' },
+        {
+          type: 'tool-dispatch-team-member',
+          state: 'input-streaming',
+          toolName: 'dispatch-team-member',
+        },
       ]),
       'chat.activity.delegating',
     )

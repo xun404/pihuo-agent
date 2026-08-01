@@ -27,7 +27,9 @@ async function getPageTarget() {
   const res = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`)
   const list = await res.json()
   // pick the main page (type=page, title != DevTools)
-  const page = list.find((t) => t.type === 'page' && t.title !== 'DevTools') ?? list.find((t) => t.type === 'page')
+  const page =
+    list.find((t) => t.type === 'page' && t.title !== 'DevTools') ??
+    list.find((t) => t.type === 'page')
   if (!page) throw new Error('no page target found')
   return page
 }
@@ -72,7 +74,10 @@ async function withCdp(fn) {
     onWs(ws, 'error', rej)
   })
   onWs(ws, 'message', (ev) => {
-    const raw = typeof ev?.data === 'string' ? ev.data : (ev?.data?.toString?.() ?? ev?.toString?.() ?? String(ev))
+    const raw =
+      typeof ev?.data === 'string'
+        ? ev.data
+        : (ev?.data?.toString?.() ?? ev?.toString?.() ?? String(ev))
     const m = JSON.parse(typeof raw === 'string' ? raw : raw.toString())
     if (m.id && pending.has(m.id)) {
       pending.get(m.id).resolve(m)
@@ -99,7 +104,9 @@ async function evalInPage(ws, send, expr) {
     awaitPromise: true,
   })
   if (r.result?.exceptionDetails) {
-    return { error: r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text }
+    return {
+      error: r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text,
+    }
   }
   return r.result?.result?.value
 }
@@ -112,17 +119,26 @@ await withCdp(async (ws, send) => {
       return Array.from(els).map(e => e.${prop});
     })()`
     const out = await evalInPage(ws, send, expr)
-    if (out?.error) { console.error('ERR:', out.error); process.exit(1) }
+    if (out?.error) {
+      console.error('ERR:', out.error)
+      process.exit(1)
+    }
     console.log(JSON.stringify(out, null, 2))
   } else if (cmd === 'eval') {
     const out = await evalInPage(ws, send, arg)
-    if (out?.error) { console.error('ERR:', out.error); process.exit(1) }
+    if (out?.error) {
+      console.error('ERR:', out.error)
+      process.exit(1)
+    }
     console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2))
   } else if (cmd === 'console') {
     // install a console message capture via Runtime, then wait briefly
     const msgs = []
     onWs(ws, 'message', (ev) => {
-      const raw = typeof ev?.data === 'string' ? ev.data : (ev?.data?.toString?.() ?? ev?.toString?.() ?? String(ev))
+      const raw =
+        typeof ev?.data === 'string'
+          ? ev.data
+          : (ev?.data?.toString?.() ?? ev?.toString?.() ?? String(ev))
       const m = JSON.parse(typeof raw === 'string' ? raw : raw.toString())
       if (m.method === 'Runtime.consoleAPICalled' || m.method === 'Runtime.exceptionThrown') {
         msgs.push(m.params)
@@ -148,7 +164,10 @@ await withCdp(async (ws, send) => {
       console.error('screenshot failed', r)
     }
   } else if (cmd === 'pageinfo') {
-    const out = await evalInPage(ws, send, `(() => ({
+    const out = await evalInPage(
+      ws,
+      send,
+      `(() => ({
       url: location.href,
       title: document.title,
       bodyClasses: document.body.className,
@@ -160,7 +179,8 @@ await withCdp(async (ws, send) => {
       homeHint: document.querySelector('.home-hint')?.textContent?.trim() ?? null,
       greeting: document.querySelector('.greeting')?.textContent?.trim() ?? null,
       composerToolsCount: document.querySelectorAll('.composer-tools').length,
-    }))()`)
+    }))()`,
+    )
     console.log(JSON.stringify(out, null, 2))
   } else {
     console.error('unknown command:', cmd)

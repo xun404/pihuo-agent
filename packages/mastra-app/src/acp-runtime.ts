@@ -225,7 +225,14 @@ export function initializeAcpRuntime(options: AcpRuntimeOptions = {}): AcpRuntim
   const store = options.store ?? getSharedStore({ mode: 'owner' })
 
   const catalog = new AcpSessionCatalog(resolved.catalogPath)
-  const fingerprintFn: AcpFingerprintFn = ({ command, args, model, reasoning, explicitEnv, ambientEnv }) =>
+  const fingerprintFn: AcpFingerprintFn = ({
+    command,
+    args,
+    model,
+    reasoning,
+    explicitEnv,
+    ambientEnv,
+  }) =>
     computeAcpExecutionFingerprint(
       command,
       [...args],

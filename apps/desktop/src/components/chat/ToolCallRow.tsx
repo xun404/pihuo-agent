@@ -105,10 +105,10 @@ export const ToolCallRow = memo(function ToolCallRow({
   const view = buildToolTerminalView(input, output, errorText)
   const hasDetail = Boolean(
     view.command ||
-      view.stdout ||
-      view.stderr ||
-      view.inputFields.length ||
-      view.outputFields.length,
+    view.stdout ||
+    view.stderr ||
+    view.inputFields.length ||
+    view.outputFields.length,
   )
   const isOpen = open
   const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: running })

@@ -28,7 +28,10 @@ describe('ACP path scope API', () => {
     mkdirSync(join(projectRoot, 'src'))
     writeFileSync(join(projectRoot, 'src', 'index.ts'), 'ok')
 
-    assert.equal(adapters.classifyAcpFilePath({ projectRoot, path: projectRoot }).scope, 'inside_project')
+    assert.equal(
+      adapters.classifyAcpFilePath({ projectRoot, path: projectRoot }).scope,
+      'inside_project',
+    )
     assert.equal(
       adapters.classifyAcpFilePath({ projectRoot, path: 'src/index.ts' }).scope,
       'inside_project',
@@ -78,7 +81,8 @@ describe('ACP path scope API', () => {
     assert.equal(adapters.classifyAcpFilePath({ projectRoot, path: '' }).scope, 'unknown')
     assert.equal(adapters.classifyAcpFilePath({ projectRoot, path: 'bad\0path' }).scope, 'unknown')
     assert.equal(
-      adapters.classifyAcpFilePath({ projectRoot: join(projectRoot, 'missing'), path: 'a.txt' }).scope,
+      adapters.classifyAcpFilePath({ projectRoot: join(projectRoot, 'missing'), path: 'a.txt' })
+        .scope,
       'unknown',
     )
   })

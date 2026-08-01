@@ -418,7 +418,10 @@ html[data-theme='dark'] {
   background: transparent;
   border-radius: var(--r-sm);
   color: var(--text-3);
-  transition: opacity var(--dur-instant) ease, color var(--dur-instant) ease, background var(--dur-instant) ease;
+  transition:
+    opacity var(--dur-instant) ease,
+    color var(--dur-instant) ease,
+    background var(--dur-instant) ease;
 }
 /* 仅当鼠标进入右侧 trail 区域时才淡入删除按钮（并淡出时间让位） */
 .sess-trail:hover .time {
@@ -502,7 +505,10 @@ html[data-theme='dark'] {
   cursor: pointer;
   color: var(--text-3);
   box-shadow: 0 0 0 1px var(--border-soft);
-  transition: color var(--dur-instant) ease, background var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
+  transition:
+    color var(--dur-instant) ease,
+    background var(--dur-instant) ease,
+    box-shadow var(--dur-instant) ease;
 }
 .sess-toggle:hover {
   color: var(--text-1);
@@ -652,7 +658,9 @@ html[data-theme='dark'] {
   color: var(--text-3);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 .sidebar-crews:hover .section-label-action,
 .section-label-action:focus-visible {

@@ -82,7 +82,10 @@ describe('prompt settings', () => {
       en,
       /Do not output implementation code, pseudocode, diffs, complete proto or message definitions, SQL or query statements, or method bodies/u,
     )
-    assert.match(en, /The File Change Plan describes only file responsibilities, behavior changes, and acceptance outcomes/u)
+    assert.match(
+      en,
+      /The File Change Plan describes only file responsibilities, behavior changes, and acceptance outcomes/u,
+    )
   })
 
   it('requires every plan to define a downstream Review Todo List', () => {

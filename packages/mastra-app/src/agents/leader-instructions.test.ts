@@ -170,7 +170,10 @@ describe('Leader instructions', () => {
 
     assert.match(instructions, /## Tone & communication style/u)
     assert.match(instructions, /Be pragmatic, concise, direct, and focused/u)
-    assert.match(instructions, /Lead with status, decisions, blockers, and Worker-provided evidence/u)
+    assert.match(
+      instructions,
+      /Lead with status, decisions, blockers, and Worker-provided evidence/u,
+    )
     assert.match(instructions, /Use emoji sparingly/u)
     assert.match(instructions, /not a prohibition/u)
   })

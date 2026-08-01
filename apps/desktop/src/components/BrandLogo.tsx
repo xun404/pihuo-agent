@@ -14,12 +14,7 @@ type BrandLogoProps = {
  * SwarmDesk final brand mark (PNG).
  * Single source: `/icon.png` (app plate) or `/icon-glyph.png` (no black plate).
  */
-export function BrandLogo({
-  className,
-  size = 88,
-  title,
-  variant = 'app',
-}: BrandLogoProps) {
+export function BrandLogo({ className, size = 88, title, variant = 'app' }: BrandLogoProps) {
   const src = variant === 'glyph' ? '/icon-glyph.png' : '/icon.png'
 
   return (

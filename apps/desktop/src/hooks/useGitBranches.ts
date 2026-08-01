@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import type {
-  BranchInfo,
-  BranchListResult,
-  BranchSwitchResult,
-} from '../lib/api'
+import type { BranchInfo, BranchListResult, BranchSwitchResult } from '../lib/api'
 
 export interface UseGitBranchesArgs {
   projectId: string | undefined
@@ -34,16 +30,37 @@ const EMPTY: UseGitBranchesResult = {
   error: null,
   mutationPending: false,
   refresh: async () => {},
-  switchTo: async () => ({ ok: false, action: 'switch', branchName: '', didChange: false, issues: [] }),
-  createAndSwitch: async () => ({ ok: false, action: 'create', branchName: '', didChange: false, issues: [] }),
-  commitAndSwitch: async () => ({ ok: false, action: 'switch', branchName: '', didChange: false, issues: [] }),
+  switchTo: async () => ({
+    ok: false,
+    action: 'switch',
+    branchName: '',
+    didChange: false,
+    issues: [],
+  }),
+  createAndSwitch: async () => ({
+    ok: false,
+    action: 'create',
+    branchName: '',
+    didChange: false,
+    issues: [],
+  }),
+  commitAndSwitch: async () => ({
+    ok: false,
+    action: 'switch',
+    branchName: '',
+    didChange: false,
+    issues: [],
+  }),
 }
 
 /**
  * Loads local git branches for a project and exposes switch / create / commit-and-switch mutations.
  * Auto-loads on projectId change; refreshes after each successful mutation.
  */
-export function useGitBranches({ projectId, enabled = true }: UseGitBranchesArgs): UseGitBranchesResult {
+export function useGitBranches({
+  projectId,
+  enabled = true,
+}: UseGitBranchesArgs): UseGitBranchesResult {
   const [loading, setLoading] = useState(false)
   const [isRepo, setIsRepo] = useState(false)
   const [currentBranchName, setCurrentBranchName] = useState<string | null>(null)
@@ -58,7 +75,7 @@ export function useGitBranches({ projectId, enabled = true }: UseGitBranchesArgs
     setCurrentBranchName(r.currentBranchName)
     setBranches(r.branches)
     setDirtyFileCount(r.dirtyFileCount)
-    setError(r.ok ? null : r.error ?? null)
+    setError(r.ok ? null : (r.error ?? null))
   }
 
   const refresh = useCallback(async () => {

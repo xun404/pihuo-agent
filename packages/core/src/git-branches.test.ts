@@ -57,7 +57,7 @@ describe('parseBranchForEachRef', () => {
 describe('classifySwitchError', () => {
   const cases: Array<[string, BranchSwitchIssueCode]> = [
     [
-      "error: Your local changes to the following files would be overwritten by checkout:\n\ta.ts\nPlease commit your changes or stash them before you switch branches.",
+      'error: Your local changes to the following files would be overwritten by checkout:\n\ta.ts\nPlease commit your changes or stash them before you switch branches.',
       'tracked-changes-would-be-overwritten',
     ],
     [
@@ -65,18 +65,12 @@ describe('classifySwitchError', () => {
       'untracked-changes-would-be-overwritten',
     ],
     ['error: you need to resolve your current index first', 'conflicts-present'],
-    [
-      'fatal: Another git process seems to be running in this repository',
-      'operation-in-progress',
-    ],
+    ['fatal: Another git process seems to be running in this repository', 'operation-in-progress'],
     [
       "fatal: 'feature/x' is already checked out at '/path/to/worktree'",
       'branch-in-other-worktree',
     ],
-    [
-      "error: pathspec 'nope' did not match any file(s) known to git",
-      'target-branch-not-found',
-    ],
+    ["error: pathspec 'nope' did not match any file(s) known to git", 'target-branch-not-found'],
   ]
   for (const [stderr, expected] of cases) {
     it(`classifies ${expected}`, () => {
@@ -97,7 +91,7 @@ describe('classifySwitchError', () => {
 
   it('extracts overwrite file paths', () => {
     const stderr =
-      "error: Your local changes to the following files would be overwritten by checkout:\n\ta.ts\n\tb.ts\nPlease commit your changes or stash them before you switch branches.\nAborting"
+      'error: Your local changes to the following files would be overwritten by checkout:\n\ta.ts\n\tb.ts\nPlease commit your changes or stash them before you switch branches.\nAborting'
     const issue = classifySwitchError(stderr)
     assert.equal(issue?.code, 'tracked-changes-would-be-overwritten')
     assert.deepEqual(issue?.paths, ['a.ts', 'b.ts'])

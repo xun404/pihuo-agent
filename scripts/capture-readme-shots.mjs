@@ -75,8 +75,7 @@ async function evalInPage(ws, expr) {
     awaitPromise: true,
   })
   if (r.result?.exceptionDetails) {
-    const msg =
-      r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text
+    const msg = r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text
     throw new Error(msg || 'eval failed')
   }
   return r.result?.result?.value

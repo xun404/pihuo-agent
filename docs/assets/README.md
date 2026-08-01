@@ -2,11 +2,11 @@
 
 Referenced by root `README.md` (English) and `docs/readme/README.zh-CN.md` (Chinese).
 
-| Path | Language | Purpose |
-| ---- | -------- | ------- |
-| `icon.png` | — | Brand mark |
-| `readme-hero.png` + `feature-wall/*` | **en** | Root README |
-| `zh/readme-hero.png` + `zh/feature-wall/*` | **zh** | Chinese README |
+| Path                                       | Language | Purpose        |
+| ------------------------------------------ | -------- | -------------- |
+| `icon.png`                                 | —        | Brand mark     |
+| `readme-hero.png` + `feature-wall/*`       | **en**   | Root README    |
+| `zh/readme-hero.png` + `zh/feature-wall/*` | **zh**   | Chinese README |
 
 ## Refresh screenshots (CDP)
 

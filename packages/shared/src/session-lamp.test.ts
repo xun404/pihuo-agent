@@ -51,7 +51,10 @@ describe('sessionLampClass', () => {
       lastReplyAt: iso(T0 - 500),
       lastReadAt: iso(T0 - 10_000),
     }
-    assert.equal(sessionLampClass(makeSession({ ...unreadBase, status: 'running' }), false, T0), 'run')
+    assert.equal(
+      sessionLampClass(makeSession({ ...unreadBase, status: 'running' }), false, T0),
+      'run',
+    )
     assert.equal(sessionLampClass(makeSession(unreadBase), true, T0), 'run')
 
     assert.equal(
@@ -71,7 +74,11 @@ describe('sessionLampClass', () => {
       'done',
     )
     assert.equal(
-      sessionLampClass(makeSession({ lastFinishedAt: iso(T0), lastReadAt: iso(T0 - 1) }), false, T0),
+      sessionLampClass(
+        makeSession({ lastFinishedAt: iso(T0), lastReadAt: iso(T0 - 1) }),
+        false,
+        T0,
+      ),
       'done',
     )
     assert.equal(
@@ -101,7 +108,11 @@ describe('sessionLampClass', () => {
     )
     assert.equal(sessionLampClass(makeSession(), false, T0), 'idle')
     assert.equal(
-      sessionLampClass(makeSession({ lastErrorAt: 'not-a-date', lastReadAt: undefined }), false, T0),
+      sessionLampClass(
+        makeSession({ lastErrorAt: 'not-a-date', lastReadAt: undefined }),
+        false,
+        T0,
+      ),
       'idle',
     )
   })

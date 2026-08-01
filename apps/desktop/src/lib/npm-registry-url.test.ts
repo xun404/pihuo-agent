@@ -10,7 +10,10 @@ describe('validateNpmRegistryDraft', () => {
 
   it('requires https:// and rejects spaces', () => {
     assert.equal(validateNpmRegistryDraft('http://registry.npmmirror.com').ok, false)
-    assert.equal(validateNpmRegistryDraft('https://registry.npmmirror.com/path with space').ok, false)
+    assert.equal(
+      validateNpmRegistryDraft('https://registry.npmmirror.com/path with space').ok,
+      false,
+    )
     assert.equal(validateNpmRegistryDraft(' https://registry.npmmirror.com').ok, false)
   })
 

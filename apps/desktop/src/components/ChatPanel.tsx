@@ -28,14 +28,7 @@ import { WorkerRunCard } from './WorkerRunCard'
 import { ComposerStatusRow } from './chat/ComposerStatusRow'
 import { TurnNavigator } from './chat/TurnNavigator'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
-import {
-  IconArrowUp,
-  IconBolt,
-  IconClock,
-  IconEdit,
-  IconFolder,
-  IconPanel,
-} from './Icons'
+import { IconArrowUp, IconBolt, IconClock, IconEdit, IconFolder, IconPanel } from './Icons'
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
@@ -1058,10 +1051,7 @@ export function ChatPanel({
   }, [session.lastChatError, session.status, busy, error, clearError])
 
   const persistChatError = useCallback(
-    (
-      friendly: { message: string; detail?: string; kind?: string },
-      opts?: { force?: boolean },
-    ) => {
+    (friendly: { message: string; detail?: string; kind?: string }, opts?: { force?: boolean }) => {
       const cb = onSessionStatusChangeRef.current
       if (!cb) return Promise.resolve()
       const sticky = serializeChatErrorForSticky({

@@ -83,7 +83,10 @@ function humanLabel(modelId: string): string {
   const bare = modelId.includes('/') ? modelId.split('/').slice(1).join('/') : modelId
   // gpt-5.6 → GPT-5.6 ; claude-sonnet-5 → Claude Sonnet 5 ; o4-mini → o4-mini
   if (/^gpt-/i.test(bare)) {
-    return bare.replace(/^gpt-/i, 'GPT-').replace(/-pro$/i, ' Pro').replace(/-mini$/i, ' mini')
+    return bare
+      .replace(/^gpt-/i, 'GPT-')
+      .replace(/-pro$/i, ' Pro')
+      .replace(/-mini$/i, ' mini')
   }
   if (/^o\d/i.test(bare)) return bare
   return bare
@@ -167,10 +170,7 @@ export function pickRecommended(
   return out
 }
 
-export function pickDefaultLeader(
-  providers: CuratedProvider[],
-  preferPrefixes: string[],
-): string {
+export function pickDefaultLeader(providers: CuratedProvider[], preferPrefixes: string[]): string {
   const all = providers.flatMap((p) => p.models.map((m) => m.id))
   for (const prefix of preferPrefixes) {
     const matches = all.filter((id) => id.startsWith(prefix)).sort(compareVersionDesc)
@@ -185,9 +185,7 @@ export function buildBuiltinCatalog(
   mastraPackageVersion: string,
   generatedAt = new Date().toISOString(),
 ): BuiltinProvidersCatalog {
-  const providers = policy.providers.map((p) =>
-    curateProvider(p, registryByProvider[p.id] ?? []),
-  )
+  const providers = policy.providers.map((p) => curateProvider(p, registryByProvider[p.id] ?? []))
   const recommended = pickRecommended(providers, policy.recommended)
   const defaultLeaderModel = pickDefaultLeader(providers, policy.defaultLeaderPreferPrefixes)
   return {

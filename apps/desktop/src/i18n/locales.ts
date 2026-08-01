@@ -1774,7 +1774,8 @@ const en: Dict = {
   'settings.aboutBody':
     'SwarmDesk is a local multi-agent command center for ACP workers. A Mastra Supervisor (Leader) plans and delegates — Claude Code, Codex, OpenCode, and Registry agents run on your machine and are tracked in one desktop app. Available on macOS, Windows, and Linux.',
   'settings.ossTitle': 'Open source',
-  'settings.ossIntro': 'Major open-source projects this app depends on directly (not a full transitive list).',
+  'settings.ossIntro':
+    'Major open-source projects this app depends on directly (not a full transitive list).',
   'settings.ossCount': '{count}',
   'settings.addProvider': 'Add provider',
   'settings.addModel': 'Add model',

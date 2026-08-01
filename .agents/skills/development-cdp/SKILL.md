@@ -33,7 +33,7 @@ confusion:
   launched without `SWARMDESK_AGENT_CDP_PORT` — restart via
   `npm run desktop`; you cannot attach after the fact.
 
-A Chrome/Edge tab on `localhost:5173` is *not* the app (no
+A Chrome/Edge tab on `localhost:5173` is _not_ the app (no
 `window.routerAgents`, every call 401s). Always drive the Electron renderer.
 
 ## Start the desktop app

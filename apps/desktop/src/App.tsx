@@ -6,12 +6,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import type {
-  Project,
-  Session,
-  SessionPermissionMode,
-  WorkerJob,
-} from '@swarmdesk-agent/shared'
+import type { Project, Session, SessionPermissionMode, WorkerJob } from '@swarmdesk-agent/shared'
 import {
   SESSION_LAMP_ACTIVE_TTL_MS,
   sessionHasUnreadLamp,
@@ -282,10 +277,7 @@ function AppShell({
         // Prefer the project the draft was opened for (sidebar "+" on a project),
         // not whatever the previous active session belonged to.
         let projectId =
-          pendingNewSession?.projectId ??
-          activeProject?.id ??
-          snapshot.activeProjectId ??
-          undefined
+          pendingNewSession?.projectId ?? activeProject?.id ?? snapshot.activeProjectId ?? undefined
         if (!projectId) {
           const path = await pickProjectDirectory({ title: t('sidebar.openProject') })
           if (!path) return false

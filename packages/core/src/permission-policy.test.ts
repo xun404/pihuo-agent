@@ -112,12 +112,7 @@ describe('fail-closed option handling', () => {
   })
 
   it('treats unknown tool kinds as other', () => {
-    const result = decide(
-      'unknown-kind' as AcpToolKind,
-      'default',
-      'inside_project',
-      [allowOnce],
-    )
+    const result = decide('unknown-kind' as AcpToolKind, 'default', 'inside_project', [allowOnce])
     assert.equal(result.mode, 'manual')
   })
 })

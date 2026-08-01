@@ -150,7 +150,13 @@ function DiffBody({
               <span className="unified-diff-gutter old tabular">{line.oldNo ?? ''}</span>
               <span className="unified-diff-gutter new tabular">{line.newNo ?? ''}</span>
               <span className="unified-diff-sign" aria-hidden>
-                {line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : line.kind === 'ctx' ? ' ' : ''}
+                {line.kind === 'add'
+                  ? '+'
+                  : line.kind === 'del'
+                    ? '−'
+                    : line.kind === 'ctx'
+                      ? ' '
+                      : ''}
               </span>
               {line.kind === 'add' || line.kind === 'del' || line.kind === 'ctx' ? (
                 <DiffCode className="unified-diff-code" code={line.content} filePath={filePath} />
@@ -408,15 +414,9 @@ export function ChangedFilesDiffPanel({ open, onClose, projectId, files }: Props
 
   const allFiles = files as GitFileRow[]
   // Stable path signature — parent re-polls status and creates new array refs often.
-  const filesSig = useMemo(
-    () => allFiles.map((f) => f.path).join('\n'),
-    [allFiles],
-  )
+  const filesSig = useMemo(() => allFiles.map((f) => f.path).join('\n'), [allFiles])
   const counts = useMemo(() => countScopes(allFiles), [allFiles])
-  const visibleFiles = useMemo(
-    () => filterFilesByScope(allFiles, scope),
-    [allFiles, scope],
-  )
+  const visibleFiles = useMemo(() => filterFilesByScope(allFiles, scope), [allFiles, scope])
 
   const wasOpenRef = useRef(false)
   const prevScopeRef = useRef(scope)
@@ -517,7 +517,11 @@ export function ChangedFilesDiffPanel({ open, onClose, projectId, files }: Props
               <div className="diff-scope-menu" role="listbox">
                 {(
                   [
-                    { id: 'working' as const, label: t('chat.diff.scope.working'), n: counts.working },
+                    {
+                      id: 'working' as const,
+                      label: t('chat.diff.scope.working'),
+                      n: counts.working,
+                    },
                     { id: 'staged' as const, label: t('chat.diff.scope.staged'), n: counts.staged },
                     { id: 'turn' as const, label: t('chat.diff.scope.turn'), n: counts.turn },
                   ] as const
@@ -536,9 +540,7 @@ export function ChangedFilesDiffPanel({ open, onClose, projectId, files }: Props
                         setScope(opt.id)
                         setScopeOpen(false)
                       }}
-                      title={
-                        disabled ? t('chat.diff.scope.turnHint') : undefined
-                      }
+                      title={disabled ? t('chat.diff.scope.turnHint') : undefined}
                     >
                       <span>{opt.label}</span>
                       <span className="diff-scope-option-count">{opt.n}</span>
@@ -557,9 +559,7 @@ export function ChangedFilesDiffPanel({ open, onClose, projectId, files }: Props
                 title={anyExpanded ? t('chat.diff.collapseAll') : t('chat.diff.expandAll')}
               >
                 {anyExpanded ? <ListCollapse size={14} /> : <ListTree size={14} />}
-                <span>
-                  {anyExpanded ? t('chat.diff.collapseAll') : t('chat.diff.expandAll')}
-                </span>
+                <span>{anyExpanded ? t('chat.diff.collapseAll') : t('chat.diff.expandAll')}</span>
               </button>
             )}
           </div>
@@ -578,13 +578,9 @@ export function ChangedFilesDiffPanel({ open, onClose, projectId, files }: Props
             <button
               type="button"
               className={`diff-tool-btn${layout === 'side-by-side' ? ' is-on' : ''}`}
-              title={
-                layout === 'side-by-side' ? t('chat.diff.unified') : t('chat.diff.sideBySide')
-              }
+              title={layout === 'side-by-side' ? t('chat.diff.unified') : t('chat.diff.sideBySide')}
               aria-pressed={layout === 'side-by-side'}
-              onClick={() =>
-                setLayout((m) => (m === 'unified' ? 'side-by-side' : 'unified'))
-              }
+              onClick={() => setLayout((m) => (m === 'unified' ? 'side-by-side' : 'unified'))}
             >
               <Columns2 size={14} />
               <span>

@@ -23,10 +23,7 @@ import {
   persistedRegistryPath,
   type RegistrySnapshot,
 } from '@swarmdesk-agent/core'
-import {
-  buildBuiltinCatalog,
-  type BuiltinProvidersPolicy,
-} from './curate-builtin-providers.ts'
+import { buildBuiltinCatalog, type BuiltinProvidersPolicy } from './curate-builtin-providers.ts'
 
 const require = createRequire(import.meta.url)
 const here = dirname(fileURLToPath(import.meta.url))
@@ -72,7 +69,9 @@ function buildAllowlistedSnapshot(
   for (const id of allowIds) {
     const p = rawProviders[id]
     if (!p) {
-      console.warn(`[sync:model-registry] policy provider "${id}" missing from Mastra registry — skipped`)
+      console.warn(
+        `[sync:model-registry] policy provider "${id}" missing from Mastra registry — skipped`,
+      )
       continue
     }
     providers.push({

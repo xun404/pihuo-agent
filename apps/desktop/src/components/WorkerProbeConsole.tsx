@@ -104,8 +104,7 @@ export function WorkerProbeConsole({ worker, onProbed }: Props) {
       } else {
         push('info', t('workers.probeLogNoAuth'))
       }
-      const ready =
-        after.readiness?.status === 'ready' || after.readiness?.status === 'degraded'
+      const ready = after.readiness?.status === 'ready' || after.readiness?.status === 'degraded'
       push(
         ready ? 'ok' : after.readiness?.status === 'auth_required' ? 'warn' : 'err',
         t('workers.probeLogResult', {

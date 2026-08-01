@@ -141,7 +141,10 @@ describe('Session permission mode service', () => {
 
     assert.equal(store.listApprovals().find((item) => item.id === first.id)?.status, 'cancelled')
     assert.equal(store.listApprovals().find((item) => item.id === second.id)?.status, 'allowed')
-    assert.equal(result.approvals.some((item) => item.id === second.id), true)
+    assert.equal(
+      result.approvals.some((item) => item.id === second.id),
+      true,
+    )
   })
 
   it('reads the current Session mode instead of the Job legacy snapshot', () => {

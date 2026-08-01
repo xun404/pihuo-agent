@@ -112,10 +112,7 @@ import {
   attachChatRunSubscriber,
   abortChatRun,
 } from './chat-run-hub.js'
-import {
-  buildLeaderRunMetaDbMessage,
-  persistUserTurnUpFront,
-} from './persist-user-turn.js'
+import { buildLeaderRunMetaDbMessage, persistUserTurnUpFront } from './persist-user-turn.js'
 import { coalesceAssistantTurns } from './coalesce-assistant-turns.js'
 import { RequestContext } from '@mastra/core/request-context'
 import { leaderAgent } from './agents/leader-agent.js'
@@ -1507,9 +1504,11 @@ const server = createServer(async (req, res) => {
           return
         }
         const filePath = url.searchParams.get('path')?.trim() ?? ''
-        const staged = url.searchParams.get('staged') === '1' || url.searchParams.get('staged') === 'true'
+        const staged =
+          url.searchParams.get('staged') === '1' || url.searchParams.get('staged') === 'true'
         const contextRaw = url.searchParams.get('contextLines')
-        const contextLines = contextRaw != null && contextRaw !== '' ? Number(contextRaw) : undefined
+        const contextLines =
+          contextRaw != null && contextRaw !== '' ? Number(contextRaw) : undefined
         if (!filePath) {
           send(res, 400, { ok: false, error: 'path required' })
           return

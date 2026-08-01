@@ -369,30 +369,33 @@ export function useAppState() {
   }
 
   /** Create a pending session locally (no server call). Created on first message send. */
-  const createPendingSession = useCallback((projectId: string, mode: LeaderMode = 'build') => {
-    const memoryThreadId = `thread_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`
-    setPendingNewSession({
-      projectId,
-      mode,
-      memoryThreadId,
-    })
-    // Point home / active project at the draft target immediately so greeting,
-    // context bar, and first-message createSession all bind the same project —
-    // not the previous session's project.
-    setSnapshot((prev) =>
-      prev.activeProjectId === projectId ? prev : { ...prev, activeProjectId: projectId },
-    )
-    // Note: do NOT set activeSessionId=null here — server polling would overwrite it.
-    // ChatWorkspace checks pendingNewSession to decide whether to show empty composer.
-    void api
-      .activateProject(projectId)
-      .then(({ snapshot: next }) => {
-        applySnapshot(next, ++applyGenRef.current)
+  const createPendingSession = useCallback(
+    (projectId: string, mode: LeaderMode = 'build') => {
+      const memoryThreadId = `thread_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`
+      setPendingNewSession({
+        projectId,
+        mode,
+        memoryThreadId,
       })
-      .catch(() => {
-        // Local draft + optimistic activeProjectId still work offline.
-      })
-  }, [applySnapshot])
+      // Point home / active project at the draft target immediately so greeting,
+      // context bar, and first-message createSession all bind the same project —
+      // not the previous session's project.
+      setSnapshot((prev) =>
+        prev.activeProjectId === projectId ? prev : { ...prev, activeProjectId: projectId },
+      )
+      // Note: do NOT set activeSessionId=null here — server polling would overwrite it.
+      // ChatWorkspace checks pendingNewSession to decide whether to show empty composer.
+      void api
+        .activateProject(projectId)
+        .then(({ snapshot: next }) => {
+          applySnapshot(next, ++applyGenRef.current)
+        })
+        .catch(() => {
+          // Local draft + optimistic activeProjectId still work offline.
+        })
+    },
+    [applySnapshot],
+  )
 
   /** Clear pending session (e.g. when user selects another session). */
   const clearPendingSession = useCallback(() => {

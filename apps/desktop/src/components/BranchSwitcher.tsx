@@ -6,11 +6,7 @@ import type { MessageKey } from '../i18n/locales'
 import { useToast } from './Toast'
 import { IconBranch, IconCheck, IconPlus } from './Icons'
 import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
-import type {
-  BranchSwitchIssue,
-  BranchSwitchIssueCode,
-  BranchSwitchResult,
-} from '../lib/api'
+import type { BranchSwitchIssue, BranchSwitchIssueCode, BranchSwitchResult } from '../lib/api'
 import type { Project, WorkerJob, WorkerRegistration } from '@swarmdesk-agent/shared'
 import { isJobOpen } from '@swarmdesk-agent/shared'
 
@@ -68,7 +64,9 @@ export function BranchSwitcher({ project, snapshotWorkers, snapshotJobs, onAfter
   })
 
   const issueLocaleKey = (code: BranchSwitchIssueCode | undefined): MessageKey => {
-    const key = code ? `git.branchSwitcher.error.${code}` : 'git.branchSwitcher.error.request-failed'
+    const key = code
+      ? `git.branchSwitcher.error.${code}`
+      : 'git.branchSwitcher.error.request-failed'
     return key as MessageKey
   }
 
@@ -113,7 +111,7 @@ export function BranchSwitcher({ project, snapshotWorkers, snapshotJobs, onAfter
 
   const triggerLabel = git.loading
     ? t('git.branchSwitcher.loading')
-    : git.currentBranchName ?? t('git.branchSwitcher.detached')
+    : (git.currentBranchName ?? t('git.branchSwitcher.detached'))
 
   return (
     <div className="ctx branch-switcher" ref={wrapRef}>
@@ -274,9 +272,7 @@ function CreateBranchDialog({
     <div className="branch-dialog-overlay" role="dialog" aria-modal="true">
       <div className="branch-dialog">
         <h4>{t('git.branchSwitcher.createDialog.title')}</h4>
-        <p className="settings-field-hint">
-          {t('git.branchSwitcher.createDialog.description')}
-        </p>
+        <p className="settings-field-hint">{t('git.branchSwitcher.createDialog.description')}</p>
         <label className="settings-field">
           <span>{t('git.branchSwitcher.createDialog.nameLabel')}</span>
           <input

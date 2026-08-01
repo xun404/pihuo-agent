@@ -277,11 +277,7 @@ export function ComposerToolbar({
   useEffect(() => {
     if (!teamMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
     const onDoc = (e: MouseEvent) => {
-      if (
-        teamMenuOpen &&
-        teamWrapRef.current &&
-        !teamWrapRef.current.contains(e.target as Node)
-      ) {
+      if (teamMenuOpen && teamWrapRef.current && !teamWrapRef.current.contains(e.target as Node)) {
         setTeamMenuOpen(false)
       }
       // model menu + its sub-panels + ctx tip all live inside model-wrap:
@@ -303,14 +299,7 @@ export function ComposerToolbar({
 
   // —— Close all popovers when the window loses focus (Alt-Tab / app switch) ——
   useEffect(() => {
-    if (
-      !teamMenuOpen &&
-      !modelMenuOpen &&
-      !thinkMenuOpen &&
-      !ctxTipOpen &&
-      !modelSideOpen
-    )
-      return
+    if (!teamMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen && !modelSideOpen) return
     const onBlur = () => {
       setTeamMenuOpen(false)
       setModelMenuOpen(false)

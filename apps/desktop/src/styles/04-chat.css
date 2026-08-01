@@ -1098,7 +1098,9 @@ html[data-theme='dark'] .md-code-block-wrap {
 .thinking-block.live .thinking-block-label {
   color: var(--text-2);
   opacity: 0.85;
-  transition: opacity var(--dur-base) ease, color var(--dur-base) ease;
+  transition:
+    opacity var(--dur-base) ease,
+    color var(--dur-base) ease;
 }
 .thinking-block:not(.live):not(.is-open) .thinking-block-label {
   color: var(--text-3);
@@ -2040,8 +2042,10 @@ html[data-theme='dark'] .md-code-block-wrap {
   background: var(--text-4);
   border-radius: var(--r-pill);
   transform-origin: left center;
-  transition: transform var(--dur-fast) var(--ease-out),
-    opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
 }
 /* fisheye 等级（由 JS 设 transform/opacity，class 控制颜色）*/
 .turn-nav-tick.peak .turn-nav-bar {
@@ -2138,5 +2142,3 @@ html[data-theme='dark'] .md-code-block-wrap {
     display: none;
   }
 }
-
-

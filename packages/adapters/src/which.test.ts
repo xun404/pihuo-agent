@@ -76,11 +76,7 @@ test('configureLoginShellPath harvests PATH from the login shell so new dirs res
   writeFileSync(exe, '#!/bin/sh\necho ok\n', { mode: 0o755 })
   chmodSync(exe, 0o755)
   const stubShell = join(newBin, 'stub-shell')
-  writeFileSync(
-    stubShell,
-    `#!/bin/sh\nprintf '%s' "${newBin}"\n`,
-    { mode: 0o755 },
-  )
+  writeFileSync(stubShell, `#!/bin/sh\nprintf '%s' "${newBin}"\n`, { mode: 0o755 })
   chmodSync(stubShell, 0o755)
   const savedShell = process.env.SHELL
   process.env.SHELL = stubShell

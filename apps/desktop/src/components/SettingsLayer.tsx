@@ -126,10 +126,7 @@ export function SettingsLayer({
   if (!mounted) return null
 
   return (
-    <div
-      className={`view-layer view-layer-settings${open ? ' is-open' : ''}`}
-      aria-hidden={!open}
-    >
+    <div className={`view-layer view-layer-settings${open ? ' is-open' : ''}`} aria-hidden={!open}>
       {panel}
     </div>
   )
@@ -137,7 +134,5 @@ export function SettingsLayer({
 
 /** Open settings from anywhere without React state in the caller. */
 export function openSettings(tab?: SettingsTab): void {
-  window.dispatchEvent(
-    new CustomEvent(OPEN_SETTINGS_EVENT, { detail: tab ? { tab } : {} }),
-  )
+  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: tab ? { tab } : {} }))
 }

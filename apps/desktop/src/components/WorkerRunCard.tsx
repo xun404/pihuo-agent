@@ -298,11 +298,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
               </WorkerActionSection>
             )}
             {isPendingApproval && approval && (
-              <WorkerActionSection
-                kind="approval"
-                label={t('workers.runApproval')}
-                marker="!"
-              >
+              <WorkerActionSection kind="approval" label={t('workers.runApproval')} marker="!">
                 <div className="worker-action-approval-detail">
                   {approval.toolKind
                     ? `${TOOL_KIND_LABELS[approval.toolKind] ?? approval.toolKind} · `
@@ -406,7 +402,6 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 <span className="tx">{t('workers.runTruncated')}</span>
               </div>
             )}
-
           </div>
         </div>
       )}

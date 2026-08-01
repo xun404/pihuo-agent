@@ -350,14 +350,7 @@ export async function getGitFileDiff(
 
   if (isUntracked && !staged) {
     // Full-file add: git diff --no-index exits 1 when files differ — capture stdout.
-    const diff = await runGit(root, [
-      'diff',
-      contextArg,
-      '--no-index',
-      '--',
-      '/dev/null',
-      relative,
-    ])
+    const diff = await runGit(root, ['diff', contextArg, '--no-index', '--', '/dev/null', relative])
     patch = diff.stdout
     if (!patch && existsSync(join(root, relative))) {
       // Fallback: read file and synthesize a simple add patch

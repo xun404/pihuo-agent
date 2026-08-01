@@ -4,11 +4,9 @@ import { describe, it } from 'node:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { ToolCallRow } from './ToolCallRow.js'
 
-(globalThis as typeof globalThis & { React: typeof React }).React = React
+;(globalThis as typeof globalThis & { React: typeof React }).React = React
 
-function render(
-  overrides: Partial<React.ComponentProps<typeof ToolCallRow>> = {},
-): string {
+function render(overrides: Partial<React.ComponentProps<typeof ToolCallRow>> = {}): string {
   return renderToStaticMarkup(
     <ToolCallRow
       name="getActiveContextTool"

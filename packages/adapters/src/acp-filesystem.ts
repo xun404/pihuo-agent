@@ -84,10 +84,7 @@ export async function writeAcpTextFileWithPermission(
     } catch {
       return { ok: false, error: 'Permission request failed' }
     }
-    if (
-      permission.outcome !== 'selected' ||
-      permission.optionId !== FILESYSTEM_ALLOW_ONCE_ID
-    ) {
+    if (permission.outcome !== 'selected' || permission.optionId !== FILESYSTEM_ALLOW_ONCE_ID) {
       return { ok: false, error: 'Write not allowed' }
     }
   }

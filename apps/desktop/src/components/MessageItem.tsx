@@ -185,10 +185,7 @@ function MessageItemImpl({
             ? Math.max(0, (sealedEnd - sealedStart) / 1000)
             : null
         const durationLabel = durationSec != null ? formatElapsedHms(durationSec, locale) : ''
-        const startLabel =
-          sealedStart != null
-            ? formatClockTime(sealedStart, locale)
-            : ''
+        const startLabel = sealedStart != null ? formatClockTime(sealedStart, locale) : ''
         const currentActivity = live
           ? resolveLeaderActivity(message.parts as Array<Record<string, unknown>>)
           : ''
@@ -290,8 +287,7 @@ function MessageItemImpl({
       const liveMs = toolStartTimes.current.has(key)
         ? Date.now() - toolStartTimes.current.get(key)!
         : 0
-      const showDuration =
-        finalDuration != null ? finalDuration : liveMs > 0 ? liveMs / 1000 : null
+      const showDuration = finalDuration != null ? finalDuration : liveMs > 0 ? liveMs / 1000 : null
 
       // While dispatch is still streaming without output.jobId, suppress the
       // tool row — the worker is rendered by livePlacements at the tail.
@@ -361,9 +357,7 @@ function MessageItemImpl({
                 cardPlacement.state.status === 'running' ||
                   cardPlacement.state.status === 'pending_approval',
               )}
-              onToggle={(o) =>
-                setMetaOpen((prev) => setRecordKey(prev, cardPlacement.jobId, o))
-              }
+              onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, cardPlacement.jobId, o))}
               tick={tick}
               resolving={resolving}
               onResolveApproval={onResolveApproval}
@@ -385,12 +379,7 @@ function MessageItemImpl({
     if (part.type === 'data-worker-run') {
       const data = (part as { type: 'data-worker-run'; data: WorkerRunEvent }).data
       const wp = placementByJobId.get(data.jobId)
-      if (
-        !wp ||
-        wp.source !== 'message' ||
-        wp.messageIndex !== msgIdx ||
-        wp.partIndex !== i
-      )
+      if (!wp || wp.source !== 'message' || wp.messageIndex !== msgIdx || wp.partIndex !== i)
         return null
       return (
         <WorkerRunCard
@@ -477,9 +466,7 @@ function MessageItemImpl({
               <>
                 <WorkedForSection
                   open={workedOpen}
-                  onToggle={(o) =>
-                    setMetaOpen((prev) => setRecordKey(prev, workedKey, o))
-                  }
+                  onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, workedKey, o))}
                   label={workedLabel}
                 >
                   {processNodes}

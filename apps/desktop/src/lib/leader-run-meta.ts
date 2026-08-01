@@ -46,9 +46,7 @@ type RunMessage = {
  * request is waiting for its first assistant chunk, this deliberately returns
  * undefined instead of reusing (and overwriting timing for) the previous turn.
  */
-export function findCurrentTurnAssistant<T extends { role: string }>(
-  messages: T[],
-): T | undefined {
+export function findCurrentTurnAssistant<T extends { role: string }>(messages: T[]): T | undefined {
   let lastUserIndex = -1
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.role === 'user') {
@@ -140,7 +138,10 @@ function assistantMetadataModel(msg: RunMessage): string | undefined {
   return provider ? `${provider}/${modelId}` : modelId
 }
 
-function precedingUserTimestamp(messages: RunMessage[], assistantIndex: number): number | undefined {
+function precedingUserTimestamp(
+  messages: RunMessage[],
+  assistantIndex: number,
+): number | undefined {
   for (let index = assistantIndex - 1; index >= 0; index -= 1) {
     const message = messages[index]
     if (message?.role !== 'user') continue
@@ -193,7 +194,10 @@ export function mapToolNameToLeaderActivity(toolName: string): LeaderActivityKey
   if (!n) return 'chat.activity.thinking'
 
   // —— Router session tools (exact / specific) ——
-  if (n.includes('dispatch') && (n.includes('team') || n.includes('member') || n.includes('worker')))
+  if (
+    n.includes('dispatch') &&
+    (n.includes('team') || n.includes('member') || n.includes('worker'))
+  )
     return 'chat.activity.delegating'
   if (n.includes('dispatch')) return 'chat.activity.delegating'
 
@@ -210,10 +214,7 @@ export function mapToolNameToLeaderActivity(toolName: string): LeaderActivityKey
     n.includes('member')
   )
     return 'chat.activity.managingTeam'
-  if (
-    (n.includes('save') || n.includes('delete') || n.includes('apply')) &&
-    n.includes('template')
-  )
+  if ((n.includes('save') || n.includes('delete') || n.includes('apply')) && n.includes('template'))
     return 'chat.activity.managingTemplates'
 
   if (n.includes('get') && n.includes('job')) return 'chat.activity.managingJobs'
@@ -363,11 +364,7 @@ export function extractPrecedingUserMeta(
  *
  * Optional `timeZone` overrides the zone (IANA). Labels like "CST" are intentionally omitted.
  */
-export function formatClockTime(
-  ts: number,
-  locale: string,
-  opts?: { timeZone?: string },
-): string {
+export function formatClockTime(ts: number, locale: string, opts?: { timeZone?: string }): string {
   try {
     const loc = locale === 'zh' || locale.startsWith('zh') ? 'zh-CN' : 'en-US'
     return new Date(ts).toLocaleString(loc, {
@@ -412,7 +409,11 @@ export function resolveLeaderRunMeta(
   const msgTs = parseMessageTimestamp(msg)
 
   const startedAt =
-    durable.startedAt ?? client?.startedAt ?? precedingUserTimestamp(messages, assistantIndex) ?? msgTs ?? undefined
+    durable.startedAt ??
+    client?.startedAt ??
+    precedingUserTimestamp(messages, assistantIndex) ??
+    msgTs ??
+    undefined
   let endedAt = durable.endedAt ?? client?.endedAt
 
   // Legacy history has no data-leader-run-meta marker. Mastra persists the

@@ -150,7 +150,12 @@ describe('coalesceAssistantTurns', () => {
         parts: [
           {
             type: 'data-leader-step-budget',
-            data: { runId: 'run-1', maxSteps: 20, steps: 20, finishReason: 'tool-result-incomplete' },
+            data: {
+              runId: 'run-1',
+              maxSteps: 20,
+              steps: 20,
+              finishReason: 'tool-result-incomplete',
+            },
           },
         ],
         metadata: { leaderStepBudget: { runId: 'run-1', steps: 20 } },

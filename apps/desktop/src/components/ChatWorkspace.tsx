@@ -156,8 +156,7 @@ export function ChatWorkspace({
   // —— Empty-state ComposerToolbar presets (permission / model / thinking) ——
   // Loaded from settings once; selections here are passed to onComposeFirstMessage
   // so the new session inherits them.
-  const [presetPermissionMode, setPresetPermissionMode] =
-    useState<SessionPermissionMode>('default')
+  const [presetPermissionMode, setPresetPermissionMode] = useState<SessionPermissionMode>('default')
   const [presetModel, setPresetModel] = useState('')
   const [presetThinking, setPresetThinking] = useState<ThinkingIntensity>('medium')
   const [presetModels, setPresetModels] = useState<ModelOption[]>([])

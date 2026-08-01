@@ -94,8 +94,7 @@ export const SECRET_ENV_KEYS = [
 ] as string[]
 
 export const DEFAULT_LEADER_MODEL =
-  typeof builtinCatalog.defaultLeaderModel === 'string' &&
-  builtinCatalog.defaultLeaderModel.trim()
+  typeof builtinCatalog.defaultLeaderModel === 'string' && builtinCatalog.defaultLeaderModel.trim()
     ? builtinCatalog.defaultLeaderModel.trim()
     : (MASTRA_PROVIDERS[0]?.models[0]?.id ?? 'openai/gpt-4o')
 
@@ -104,9 +103,7 @@ export const RECOMMENDED_MODELS: { id: string; label: string; reason: string }[]
   Array.isArray(builtinCatalog.recommended) && builtinCatalog.recommended.length > 0
     ? builtinCatalog.recommended
     : MASTRA_PROVIDERS.slice(0, 5).flatMap((p) =>
-        p.models[0]
-          ? [{ id: p.models[0].id, label: p.models[0].label, reason: 'flagship' }]
-          : [],
+        p.models[0] ? [{ id: p.models[0].id, label: p.models[0].label, reason: 'flagship' }] : [],
       )
 
 /** Product featured layer — intersect with RegistrySnapshot for default UI lists */

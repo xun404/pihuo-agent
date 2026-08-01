@@ -31,11 +31,7 @@ describe('GitHub Actions workflow contract', () => {
           permissions: { contents: 'write' },
           jobs: {
             quality: {
-              steps: [
-                { run: 'npm test' },
-                { run: 'npm run typecheck' },
-                { run: 'npm run build' },
-              ],
+              steps: [{ run: 'npm test' }, { run: 'npm run typecheck' }, { run: 'npm run build' }],
             },
           },
         }),
@@ -51,11 +47,7 @@ describe('GitHub Actions workflow contract', () => {
           permissions: { contents: 'read' },
           jobs: {
             quality: {
-              steps: [
-                { run: 'npm test' },
-                { run: 'npm run typecheck' },
-                { run: 'npm run build' },
-              ],
+              steps: [{ run: 'npm test' }, { run: 'npm run typecheck' }, { run: 'npm run build' }],
             },
             package: {
               strategy: {

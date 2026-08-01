@@ -41,8 +41,7 @@ export function WorkerExecutionConfigEditor({
       value: option.modelId,
       label: option.name || option.modelId,
       description: option.description,
-      secondary:
-        option.name && option.name !== option.modelId ? option.modelId : undefined,
+      secondary: option.name && option.name !== option.modelId ? option.modelId : undefined,
     }))
   }, [model, worker.availableModels])
   const dirty =

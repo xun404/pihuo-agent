@@ -133,12 +133,11 @@
   position: relative;
   border: 1px solid var(--border-soft);
   border-radius: var(--r-lg);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-surface) 92%, var(--bg-hover)) 0%,
-      var(--bg-surface) 48%
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 92%, var(--bg-hover)) 0%,
+    var(--bg-surface) 48%
+  );
   box-shadow: var(--shadow-xs);
   overflow: hidden;
   transition:
@@ -607,13 +606,12 @@ textarea.settings-input.role-form-instructions {
   padding: 14px 16px;
   border: 1px solid var(--border-soft);
   border-radius: var(--r-lg);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--purple) 10%, var(--bg-surface)) 0%,
-      color-mix(in srgb, var(--blue) 6%, var(--bg-surface)) 55%,
-      var(--bg-surface) 100%
-    );
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--purple) 10%, var(--bg-surface)) 0%,
+    color-mix(in srgb, var(--blue) 6%, var(--bg-surface)) 55%,
+    var(--bg-surface) 100%
+  );
 }
 .team-library-chrome-mark {
   display: inline-flex;

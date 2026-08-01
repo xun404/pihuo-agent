@@ -79,15 +79,12 @@ export function MotionPreferenceProvider({ children }: Props) {
     applyMotionDataset(reduceMotion)
   }, [reduceMotion])
 
-  const setPreference = useCallback(
-    (mode: MotionPreference) => {
-      saveMotionPreference(mode)
-      setPreferenceState(mode)
-      // Apply CSS hook in the same turn so "off" kills motion before next paint.
-      applyMotionDataset(resolveReduceMotion(mode, getSystemPrefersReducedMotion()))
-    },
-    [],
-  )
+  const setPreference = useCallback((mode: MotionPreference) => {
+    saveMotionPreference(mode)
+    setPreferenceState(mode)
+    // Apply CSS hook in the same turn so "off" kills motion before next paint.
+    applyMotionDataset(resolveReduceMotion(mode, getSystemPrefersReducedMotion()))
+  }, [])
 
   const value = useMemo(
     () => ({ preference, setPreference, reduceMotion }),
@@ -100,8 +97,7 @@ export function MotionPreferenceProvider({ children }: Props) {
   // - When "on", explicitly pass skipAnimations={false} and a non-zero default transition so
   //   toggling off→on does not leave a stuck duration:0 from the previous config merge.
   // - useReducedMotion() only reads the OS and ignores MotionConfig — use this context instead.
-  const framerReduced =
-    preference === 'off' ? 'always' : preference === 'on' ? 'never' : 'user'
+  const framerReduced = preference === 'off' ? 'always' : preference === 'on' ? 'never' : 'user'
 
   return (
     <MotionPreferenceContext.Provider value={value}>

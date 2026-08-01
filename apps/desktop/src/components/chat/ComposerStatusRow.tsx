@@ -20,12 +20,7 @@ type Props = {
   gitRefreshToken?: number
 }
 
-function ComposerStatusRowImpl({
-  projectId,
-  enabled = true,
-  tasks,
-  gitRefreshToken = 0,
-}: Props) {
+function ComposerStatusRowImpl({ projectId, enabled = true, tasks, gitRefreshToken = 0 }: Props) {
   const hasTasks = Boolean(tasks && tasks.length > 0)
   // No project and no tasks: nothing to reserve (home empty without folder).
   if (!projectId && !hasTasks) return null

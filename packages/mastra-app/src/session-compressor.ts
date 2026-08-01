@@ -175,10 +175,7 @@ export async function compressSessionContext(
           : null
     }
   } catch (err) {
-    console.error(
-      '[session-compressor] recall failed',
-      err instanceof Error ? err.message : err,
-    )
+    console.error('[session-compressor] recall failed', err instanceof Error ? err.message : err)
     return null
   }
   if (stored.length <= keepRecent) return null // nothing early enough to compress
@@ -279,7 +276,11 @@ export async function compressSessionContext(
     // We do NOT save the digest in this case (it would duplicate context).
     console.error(
       '[session-compressor] deleteMessages failed — thread left partially inconsistent',
-      { threadId, attemptedCount: earlyIdsToDelete.length, error: err instanceof Error ? err.message : err },
+      {
+        threadId,
+        attemptedCount: earlyIdsToDelete.length,
+        error: err instanceof Error ? err.message : err,
+      },
     )
     return null
   }
@@ -302,10 +303,10 @@ export async function compressSessionContext(
       ],
     })
   } catch (err) {
-    console.error(
-      '[session-compressor] digest persist failed (deletion already applied)',
-      { threadId, error: err instanceof Error ? err.message : err },
-    )
+    console.error('[session-compressor] digest persist failed (deletion already applied)', {
+      threadId,
+      error: err instanceof Error ? err.message : err,
+    })
     // Deletion already happened; the digest just isn't saved. Not catastrophic:
     // the thread lost early history but the tail is intact. Report partial.
     return {
@@ -327,7 +328,10 @@ export async function compressSessionContext(
     const afterRecall = await leaderMemory.recall({ threadId, perPage: false })
     const afterCount = (afterRecall.messages ?? []).length
     const existing = (await leaderMemory.getThreadById({ threadId }))?.metadata
-    const merged = { ...(existing && typeof existing === 'object' ? existing : {}), [LAST_COMPACTED_COUNT_KEY]: afterCount }
+    const merged = {
+      ...(existing && typeof existing === 'object' ? existing : {}),
+      [LAST_COMPACTED_COUNT_KEY]: afterCount,
+    }
     await leaderMemory.updateThread({
       id: threadId,
       title: threadTitle,
@@ -399,7 +403,7 @@ function messageToText(m: RecalledMessage): string {
   const parts = Array.isArray(c)
     ? c
     : c && typeof c === 'object' && Array.isArray((c as { parts?: unknown }).parts)
-      ? ((c as { parts: unknown[] }).parts)
+      ? (c as { parts: unknown[] }).parts
       : null
   if (!parts) {
     // Fallback: if it's a non-array object, try a JSON dump so we don't lose it
@@ -425,8 +429,10 @@ function messageToText(m: RecalledMessage): string {
 /** Normalize the model's digest output. */
 function cleanSummary(raw: string | null | undefined): string | null {
   if (!raw) return null
-  return raw
-    .replace(/^```markdown\s*|^```\s*/i, '')
-    .replace(/\s*```\s*$/, '')
-    .trim() || null
+  return (
+    raw
+      .replace(/^```markdown\s*|^```\s*/i, '')
+      .replace(/\s*```\s*$/, '')
+      .trim() || null
+  )
 }

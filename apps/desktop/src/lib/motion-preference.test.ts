@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  isMotionPreference,
-  motionDatasetValue,
-  resolveReduceMotion,
-} from './motion-preference.js'
+import { isMotionPreference, motionDatasetValue, resolveReduceMotion } from './motion-preference.js'
 
 test('isMotionPreference accepts only system/on/off', () => {
   assert.equal(isMotionPreference('system'), true)

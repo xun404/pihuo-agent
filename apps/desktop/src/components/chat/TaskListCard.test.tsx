@@ -43,7 +43,9 @@ describe('TaskListCard', () => {
     )
     assert.doesNotMatch(html, /class="task-row-role(?:\s|"| role-)/u)
     assert.ok(html.indexOf('>Task<') < html.indexOf('>plan<'))
-    assert.ok(html.indexOf('>plan<') < html.indexOf('分析 queryReportPartialFields 代码结构，设计方案'))
+    assert.ok(
+      html.indexOf('>plan<') < html.indexOf('分析 queryReportPartialFields 代码结构，设计方案'),
+    )
     assert.doesNotMatch(html, /分析 queryReportPartialFields 代码结构，设计 period_value 支持方案/u)
   })
 

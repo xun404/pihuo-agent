@@ -433,7 +433,10 @@ describe('workerRunReducer', () => {
       assert.equal(get(running, 'job-1').status, 'running')
 
       const base = workerRunReducer(new Map(), makeStarted())
-      assert.equal(get(workerRunReducer(base, makeCompleted({ output: '# markdown' })), 'job-1').status, 'completed')
+      assert.equal(
+        get(workerRunReducer(base, makeCompleted({ output: '# markdown' })), 'job-1').status,
+        'completed',
+      )
       assert.equal(get(workerRunReducer(base, makeFailed()), 'job-1').status, 'failed')
       assert.equal(
         get(
@@ -488,14 +491,26 @@ describe('workerRunReducer', () => {
     it('returns the same Map for no-op events and a new Map on real changes', () => {
       const started = workerRunReducer(new Map(), makeStarted())
       assert.strictEqual(workerRunReducer(started, makeStarted()), started)
-      assert.strictEqual(workerRunReducer(started, makeDelta({ jobId: 'unknown', sequence: 1 })), started)
+      assert.strictEqual(
+        workerRunReducer(started, makeDelta({ jobId: 'unknown', sequence: 1 })),
+        started,
+      )
 
       let withDelta = workerRunReducer(started, makeDelta({ sequence: 1, delta: 'A' }))
       assert.notStrictEqual(withDelta, started)
-      assert.strictEqual(workerRunReducer(withDelta, makeDelta({ sequence: 1, delta: 'B' })), withDelta)
+      assert.strictEqual(
+        workerRunReducer(withDelta, makeDelta({ sequence: 1, delta: 'B' })),
+        withDelta,
+      )
 
-      const completed = workerRunReducer(started, makeCompleted({ output: 'done', truncated: false }))
-      assert.strictEqual(workerRunReducer(completed, makeDelta({ sequence: 1, delta: 'X' })), completed)
+      const completed = workerRunReducer(
+        started,
+        makeCompleted({ output: 'done', truncated: false }),
+      )
+      assert.strictEqual(
+        workerRunReducer(completed, makeDelta({ sequence: 1, delta: 'X' })),
+        completed,
+      )
       assert.strictEqual(
         workerRunReducer(completed, makeCompleted({ output: 'done', truncated: false })),
         completed,

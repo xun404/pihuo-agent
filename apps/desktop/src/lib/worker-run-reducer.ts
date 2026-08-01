@@ -103,8 +103,7 @@ export function terminalWorkerEventFromToolPart(part: {
     jobId: value.jobId,
     workerId: typeof value.workerId === 'string' ? value.workerId : undefined,
     workerName,
-    teamMemberName:
-      typeof value.teamMemberName === 'string' ? value.teamMemberName : undefined,
+    teamMemberName: typeof value.teamMemberName === 'string' ? value.teamMemberName : undefined,
     workerKind: inferredKind,
     role: typeof value.role === 'string' ? (value.role as WorkerRole) : undefined,
     model: typeof value.model === 'string' ? value.model : undefined,

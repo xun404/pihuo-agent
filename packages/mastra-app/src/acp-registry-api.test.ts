@@ -153,9 +153,7 @@ describe('acp-registry-api', () => {
     const oldInstallationId = worker.installationId!
     const newInstallationId = 'inst_materialized_replacement'
     const index = loadAcpAgentInstallationIndex()
-    const old = index.installations.find(
-      (item) => item.installationId === oldInstallationId,
-    )!
+    const old = index.installations.find((item) => item.installationId === oldInstallationId)!
     const materialized = {
       ...structuredClone(old),
       installationId: newInstallationId,
@@ -852,7 +850,9 @@ describe('acp-registry-api', () => {
       assert.equal(result.worker.readiness?.status, 'ready')
       assert.equal(result.worker.capabilitySummary?.agentName, 'OpenCode')
       assert.equal(
-        getSharedStore().listWorkers().find((item) => item.id === worker.id)?.readiness?.status,
+        getSharedStore()
+          .listWorkers()
+          .find((item) => item.id === worker.id)?.readiness?.status,
         'ready',
       )
       assert.deepEqual(loadAcpAgentInstallationIndex(), installationsBefore)
@@ -879,8 +879,7 @@ describe('acp-registry-api', () => {
           return probeResult({ status: 'ready', code: 'SESSION_READY' })
         },
       }),
-      (error: unknown) =>
-        error instanceof RegistryApiError && error.code === 'ACP_INSTALL_FAILED',
+      (error: unknown) => error instanceof RegistryApiError && error.code === 'ACP_INSTALL_FAILED',
     )
 
     assert.equal(probeCalls, 0)
@@ -1729,8 +1728,7 @@ describe('acp-registry-api', () => {
         },
       ),
       (error: unknown) =>
-        error instanceof RegistryRegistrationError &&
-        error.code === 'WORKER_DUPLICATE_REGISTRY',
+        error instanceof RegistryRegistrationError && error.code === 'WORKER_DUPLICATE_REGISTRY',
     )
 
     assert.equal(probeCalls, 0)

@@ -7,9 +7,15 @@ import { resolve } from 'node:path'
 const OWNER_LOCK = resolve(homedir(), '.config/swarmdesk-agent/data/acp-sessions.json.owner')
 
 console.log('[restart] killing stale processes...')
-try { execSync('pkill -9 -f Electron', { stdio: 'ignore' }) } catch {}
-try { execSync('pkill -9 -f vite-electron', { stdio: 'ignore' }) } catch {}
-try { execSync('pkill -9 -f "tsx watch"', { stdio: 'ignore' }) } catch {}
+try {
+  execSync('pkill -9 -f Electron', { stdio: 'ignore' })
+} catch {}
+try {
+  execSync('pkill -9 -f vite-electron', { stdio: 'ignore' })
+} catch {}
+try {
+  execSync('pkill -9 -f "tsx watch"', { stdio: 'ignore' })
+} catch {}
 execSync('sleep 2', { stdio: 'ignore' })
 
 for (const port of [5173, 4111, 8315]) {
@@ -32,7 +38,7 @@ const child = spawn('npm', ['run', 'desktop'], { detached: true, stdio: 'ignore'
 child.unref()
 
 console.log('[restart] waiting for services...')
-await new Promise(r => setTimeout(r, 14000))
+await new Promise((r) => setTimeout(r, 14000))
 
 try {
   const api = await fetch('http://127.0.0.1:4111/health')

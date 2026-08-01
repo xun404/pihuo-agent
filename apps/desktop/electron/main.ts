@@ -701,8 +701,7 @@ function registerIpc(): void {
           payload.workerTimeouts !== undefined
             ? parseWorkerTimeoutSettings(payload.workerTimeouts)
             : prev.workerTimeouts,
-        npmRegistry:
-          payload.npmRegistry !== undefined ? (nextNpmRegistry ?? '') : prev.npmRegistry,
+        npmRegistry: payload.npmRegistry !== undefined ? (nextNpmRegistry ?? '') : prev.npmRegistry,
         customProviders:
           payload.customProviders !== undefined
             ? payload.customProviders.map((c) => ({

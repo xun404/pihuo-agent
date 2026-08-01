@@ -40,10 +40,7 @@ describe('clampThink', () => {
   })
 
   it('picks max when supported contains max', () => {
-    assert.equal(
-      clampThink(undefined, ['off', 'low', 'medium', 'high', 'xhigh', 'max']),
-      'max',
-    )
+    assert.equal(clampThink(undefined, ['off', 'low', 'medium', 'high', 'xhigh', 'max']), 'max')
   })
 
   it('returns the only supported level when a single-item list is given', () => {

@@ -84,10 +84,7 @@ export function cleanProviderDetail(text: string): string | undefined {
   return t
 }
 
-function withDetail(
-  base: FriendlyChatError,
-  original: string | undefined,
-): FriendlyChatError {
+function withDetail(base: FriendlyChatError, original: string | undefined): FriendlyChatError {
   const detail = original ? cleanProviderDetail(original) : undefined
   if (!detail) return base
   if (detail === base.message.trim()) return base
@@ -124,10 +121,7 @@ export function formatChatError(
     const summary = stickySplit[1]!.trim()
     const detail = cleanProviderDetail(stickySplit[2]!)
     if (summary === copy.model.trim()) {
-      return withDetail(
-        { kind: 'model', message: copy.model, action: 'open_settings' },
-        detail,
-      )
+      return withDetail({ kind: 'model', message: copy.model, action: 'open_settings' }, detail)
     }
     if (summary === copy.missingKey.trim()) {
       return withDetail(
@@ -136,10 +130,7 @@ export function formatChatError(
       )
     }
     if (summary === copy.billing.trim()) {
-      return withDetail(
-        { kind: 'billing', message: copy.billing, action: 'open_settings' },
-        detail,
-      )
+      return withDetail({ kind: 'billing', message: copy.billing, action: 'open_settings' }, detail)
     }
     // Prefer original as primary when sticky was stored that way
     if (detail) {

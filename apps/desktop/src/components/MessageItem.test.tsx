@@ -24,8 +24,7 @@ const STRINGS: Partial<Record<string, string>> = {
   'chat.think.medium': '中',
 }
 
-const t: MessageItemProps['t'] = (key, vars) =>
-  formatMessage(STRINGS[key] ?? key, vars)
+const t: MessageItemProps['t'] = (key, vars) => formatMessage(STRINGS[key] ?? key, vars)
 
 function renderLeader(options: { live: boolean; parts: UIMessage['parts'] }): string {
   const messages = [

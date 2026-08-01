@@ -354,8 +354,22 @@ describe('computeAcpExecutionFingerprint', () => {
   it('same inputs across instances produce same digest', () => {
     const workerEnv = { MY_VAR: 'val' }
     const ambientEnv = { PATH: '/usr/bin', HOME: '/home/u' }
-    const f1 = computeAcpExecutionFingerprint('cmd', ['a', 'b'], 'm1', undefined, workerEnv, ambientEnv)
-    const f2 = computeAcpExecutionFingerprint('cmd', ['a', 'b'], 'm1', undefined, workerEnv, ambientEnv)
+    const f1 = computeAcpExecutionFingerprint(
+      'cmd',
+      ['a', 'b'],
+      'm1',
+      undefined,
+      workerEnv,
+      ambientEnv,
+    )
+    const f2 = computeAcpExecutionFingerprint(
+      'cmd',
+      ['a', 'b'],
+      'm1',
+      undefined,
+      workerEnv,
+      ambientEnv,
+    )
     assert.equal(f1, f2)
     assert.match(f1, /^[0-9a-f]{64}$/)
   })
@@ -410,7 +424,14 @@ describe('computeAcpExecutionFingerprint', () => {
   })
 
   it('fingerprint is hex string', () => {
-    const fp = computeAcpExecutionFingerprint('cmd', ['a'], 'm1', undefined, { K: 'v' }, { PATH: '/bin' })
+    const fp = computeAcpExecutionFingerprint(
+      'cmd',
+      ['a'],
+      'm1',
+      undefined,
+      { K: 'v' },
+      { PATH: '/bin' },
+    )
     assert.match(fp, /^[0-9a-f]{64}$/)
   })
 

@@ -22,11 +22,7 @@ export function filterSettingsSearchOptions(
   return limit === undefined ? filtered : filtered.slice(0, Math.max(0, limit))
 }
 
-export function moveSettingsSearchHighlight(
-  current: number,
-  key: string,
-  count: number,
-): number {
+export function moveSettingsSearchHighlight(current: number, key: string, count: number): number {
   if (count <= 0) return -1
   if (key === 'ArrowDown') return current < 0 ? 0 : (current + 1) % count
   if (key === 'ArrowUp') return current < 0 ? count - 1 : (current - 1 + count) % count

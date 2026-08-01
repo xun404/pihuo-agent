@@ -9,12 +9,18 @@ import {
 
 describe('host-log', () => {
   it('treats EPIPE and destroyed streams as ignorable', () => {
-    assert.equal(isIgnorableHostWriteError(Object.assign(new Error('pipe'), { code: 'EPIPE' })), true)
+    assert.equal(
+      isIgnorableHostWriteError(Object.assign(new Error('pipe'), { code: 'EPIPE' })),
+      true,
+    )
     assert.equal(
       isIgnorableHostWriteError(Object.assign(new Error('gone'), { code: 'ERR_STREAM_DESTROYED' })),
       true,
     )
-    assert.equal(isIgnorableHostWriteError(Object.assign(new Error('disk'), { code: 'ENOSPC' })), false)
+    assert.equal(
+      isIgnorableHostWriteError(Object.assign(new Error('disk'), { code: 'ENOSPC' })),
+      false,
+    )
   })
 
   it('skips writes when the host stream is not writable', () => {

@@ -28,9 +28,7 @@ describe('parseUnifiedDiff', () => {
   })
 
   it('toSideBySideRows pairs del/add', () => {
-    const lines = parseUnifiedDiff(
-      ['@@ -1,2 +1,2 @@', ' same', '-old', '+new'].join('\n'),
-    )
+    const lines = parseUnifiedDiff(['@@ -1,2 +1,2 @@', ' same', '-old', '+new'].join('\n'))
     const rows = toSideBySideRows(lines)
     const body = rows.filter((r) => !r.full)
     assert.equal(body.length, 2)

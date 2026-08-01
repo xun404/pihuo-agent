@@ -27,8 +27,7 @@ function fieldValue(value: unknown): string {
     if (value.length === 0) return '—'
     if (
       value.every(
-        (item) =>
-          item == null || ['string', 'number', 'boolean', 'bigint'].includes(typeof item),
+        (item) => item == null || ['string', 'number', 'boolean', 'bigint'].includes(typeof item),
       )
     ) {
       return value.map(fieldValue).join(', ')

@@ -323,9 +323,7 @@ describe('Session approval policy', () => {
     }
     writeFileSync(path, JSON.stringify(raw), 'utf8')
 
-    const modes = new LocalStore(path)
-      .snapshot()
-      .sessions.map((session) => session.permissionMode)
+    const modes = new LocalStore(path).snapshot().sessions.map((session) => session.permissionMode)
     assert.deepEqual(modes, ['default', 'auto', 'auto', 'default', 'default'])
   })
 

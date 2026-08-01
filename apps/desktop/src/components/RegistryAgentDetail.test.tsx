@@ -5,11 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import { I18nProvider } from '../i18n/I18nProvider.js'
 import type { WorkerRegistryOption } from '../lib/worker-registry.js'
-import {
-  digestsEqual,
-  formatDigestShort,
-  RegistryAgentDetail,
-} from './RegistryAgentDetail.js'
+import { digestsEqual, formatDigestShort, RegistryAgentDetail } from './RegistryAgentDetail.js'
 
 const option: WorkerRegistryOption = {
   id: 'fixture-agent',

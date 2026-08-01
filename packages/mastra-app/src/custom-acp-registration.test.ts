@@ -230,10 +230,7 @@ test('custom ACP registration auto-detects npx from a package command', async ()
     },
   )
   assert.equal(worker.source?.type, 'custom')
-  assert.equal(
-    worker.source?.type === 'custom' ? worker.source.launchKind : undefined,
-    'npx',
-  )
+  assert.equal(worker.source?.type === 'custom' ? worker.source.launchKind : undefined, 'npx')
   // npx invocation shape: runner + -y + packageSpec.
   assert.equal(worker.command, '/resolved/npx')
   assert.deepEqual(worker.args, ['-y', '@scope/agent@1'])

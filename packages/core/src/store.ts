@@ -212,26 +212,25 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
       const legacyPolicy = isValidSessionApprovalPolicy((s as Partial<Session>).approvalPolicy)
         ? (s as Partial<Session>).approvalPolicy
         : 'manual'
-      const permissionMode = isValidSessionPermissionMode(
-        (s as Partial<Session>).permissionMode,
-      )
+      const permissionMode = isValidSessionPermissionMode((s as Partial<Session>).permissionMode)
         ? (s as Partial<Session>).permissionMode
         : permissionModeFromLegacyPolicy((s as Partial<Session>).approvalPolicy)
       return {
-      ...s,
-      approvalPolicy: legacyPolicy,
-      permissionMode,
-      // Legacy snapshots have no read watermark: treat "last modified" as the
-      // last time the user saw the session so old sessions don't all light up
-      // unread error/done lamps after upgrade.
-      lastReadAt: (s as Partial<Session>).lastReadAt ?? s.updatedAt,
-      roleReviewState: (s as Partial<Session>).roleReviewState ?? 'prompted',
-      teamRevision:
-        Number.isInteger((s as Partial<Session>).teamRevision) &&
-        ((s as Partial<Session>).teamRevision ?? 0) > 0
-          ? (s as Partial<Session>).teamRevision!
-          : 1,
-    }}) as Session[]
+        ...s,
+        approvalPolicy: legacyPolicy,
+        permissionMode,
+        // Legacy snapshots have no read watermark: treat "last modified" as the
+        // last time the user saw the session so old sessions don't all light up
+        // unread error/done lamps after upgrade.
+        lastReadAt: (s as Partial<Session>).lastReadAt ?? s.updatedAt,
+        roleReviewState: (s as Partial<Session>).roleReviewState ?? 'prompted',
+        teamRevision:
+          Number.isInteger((s as Partial<Session>).teamRevision) &&
+          ((s as Partial<Session>).teamRevision ?? 0) > 0
+            ? (s as Partial<Session>).teamRevision!
+            : 1,
+      }
+    }) as Session[]
   const sessionIds = new Set(sessions.map((session) => session.id))
   const workerIds = new Set(workers.map((worker) => worker.id))
   const teamMembers = (raw.teamMembers ?? []).filter(

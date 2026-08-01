@@ -98,7 +98,10 @@ export function toSideBySideRows(lines: DiffLine[]): SideBySideRow[] {
     const line = lines[i]!
     if (line.kind === 'meta' || line.kind === 'hunk' || line.kind === 'other') {
       rows.push({
-        full: { kind: line.kind === 'hunk' ? 'hunk' : line.kind === 'meta' ? 'meta' : 'other', content: line.content },
+        full: {
+          kind: line.kind === 'hunk' ? 'hunk' : line.kind === 'meta' ? 'meta' : 'other',
+          content: line.content,
+        },
         left: { no: null, content: '', kind: 'empty' },
         right: { no: null, content: '', kind: 'empty' },
       })

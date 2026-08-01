@@ -35,7 +35,8 @@ export function ConfirmAddCliDialog({ open, preview, onCancel, onConfirm, onReus
   // Primary button is disabled only when the agent is unauthenticated (must log in first).
   // Probe failures can be force-added; duplicates let the user pick add-new.
   const primaryDisabled = isAuthRequired
-  const reuseTarget = choice !== 'add_new' ? conflicts.find((c) => c.workerId === choice) : undefined
+  const reuseTarget =
+    choice !== 'add_new' ? conflicts.find((c) => c.workerId === choice) : undefined
 
   const handlePrimary = () => {
     if (hasConflicts && reuseTarget) {
@@ -56,7 +57,9 @@ export function ConfirmAddCliDialog({ open, preview, onCancel, onConfirm, onReus
       <div className="confirm-add-cli">
         <h3 className="confirm-add-cli-title">{t('workers.confirmTitle')}</h3>
 
-        {!isProbeFailed && <p className="confirm-add-cli-subtitle">{t('workers.confirmConnected')}</p>}
+        {!isProbeFailed && (
+          <p className="confirm-add-cli-subtitle">{t('workers.confirmConnected')}</p>
+        )}
         {isProbeFailed && <p className="confirm-add-cli-warn">{t('workers.confirmProbeFailed')}</p>}
 
         {/* Parameter card: the ACP agent identity surfaced from initialize. */}
@@ -122,7 +125,9 @@ export function ConfirmAddCliDialog({ open, preview, onCancel, onConfirm, onReus
         )}
 
         {/* State 3: probe failed — allow force add. */}
-        {isProbeFailed && <p className="confirm-add-cli-hint">{t('workers.confirmProbeFailedHint')}</p>}
+        {isProbeFailed && (
+          <p className="confirm-add-cli-hint">{t('workers.confirmProbeFailedHint')}</p>
+        )}
 
         {/* State 2: duplicate — let user choose add-new vs reuse. */}
         {hasConflicts && !isAuthRequired && (

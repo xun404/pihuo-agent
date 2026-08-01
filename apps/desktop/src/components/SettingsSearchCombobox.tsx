@@ -138,9 +138,7 @@ export function SettingsSearchCombobox({
         setQuery('')
         setOpen(true)
       }
-      setHighlighted((current) =>
-        moveSettingsSearchHighlight(current, event.key, filtered.length),
-      )
+      setHighlighted((current) => moveSettingsSearchHighlight(current, event.key, filtered.length))
       return
     }
     if (event.key === 'Enter' && open && highlighted >= 0) {
@@ -206,9 +204,7 @@ export function SettingsSearchCombobox({
                   <span className="worker-registry-option-id mono">{option.secondary}</span>
                 ) : null}
               </span>
-              {desc ? (
-                <span className="settings-search-option-desc">{desc}</span>
-              ) : null}
+              {desc ? <span className="settings-search-option-desc">{desc}</span> : null}
             </button>
           )
         })
@@ -256,17 +252,17 @@ export function SettingsSearchCombobox({
         {((!open && (query.trim().length > 0 || Boolean(value))) ||
           (open && query.trim().length > 0)) &&
           !disabled && (
-          <button
-            type="button"
-            className="worker-registry-clear"
-            aria-label={t('settings.clear')}
-            tabIndex={-1}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={clearSelection}
-          >
-            ×
-          </button>
-        )}
+            <button
+              type="button"
+              className="worker-registry-clear"
+              aria-label={t('settings.clear')}
+              tabIndex={-1}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={clearSelection}
+            >
+              ×
+            </button>
+          )}
       </div>
 
       {canPortal
