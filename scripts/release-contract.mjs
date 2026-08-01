@@ -1,9 +1,9 @@
 // Required for the currently enabled package matrix (mac arm64 + linux x64).
-// electron-builder maps deb arch `x64` to Debian arch name `amd64` in ${arch}.
+// electron-builder maps ${arch} differently per target: AppImage → x86_64, deb → amd64.
 const REQUIRED_ASSET_PATTERNS = {
   macDmg: /^SwarmDesk-Agent-.+-mac-arm64\.dmg$/,
   macZip: /^SwarmDesk-Agent-.+-mac-arm64\.zip$/,
-  linuxAppImage: /^SwarmDesk-Agent-.+-linux-x64\.AppImage$/,
+  linuxAppImage: /^SwarmDesk-Agent-.+-linux-(?:x64|x86_64)\.AppImage$/,
   linuxDeb: /^SwarmDesk-Agent-.+-linux-(?:x64|amd64)\.deb$/,
 }
 

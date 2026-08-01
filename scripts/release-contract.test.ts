@@ -11,10 +11,11 @@ import {
 } from './release-contract.mjs'
 
 // Enabled package matrix: mac arm64 + linux x64 (Windows matrix currently disabled).
+// Names match electron-builder ${arch} mapping: AppImage x86_64, deb amd64.
 const requiredAssets = [
   'SwarmDesk-Agent-0.1.0-mac-arm64.dmg',
   'SwarmDesk-Agent-0.1.0-mac-arm64.zip',
-  'SwarmDesk-Agent-0.1.0-linux-x64.AppImage',
+  'SwarmDesk-Agent-0.1.0-linux-x86_64.AppImage',
   'SwarmDesk-Agent-0.1.0-linux-amd64.deb',
 ]
 const completeAssets = [...requiredAssets, 'SwarmDesk-Agent-0.1.0-win-x64.exe']
@@ -42,7 +43,7 @@ describe('desktop release contract', () => {
     })
   })
 
-  it('accepts Windows when present and accepts linux-x64.deb as well as amd64', () => {
+  it('accepts Windows when present and accepts alternate linux arch tokens', () => {
     assert.deepEqual(verifyReleaseAssets(completeAssets), {
       macDmg: true,
       macZip: true,
