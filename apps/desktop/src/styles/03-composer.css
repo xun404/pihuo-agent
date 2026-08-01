@@ -8,17 +8,20 @@
   z-index: 5;
 }
 
-/* OpenChamber-style status row above composer card */
+/* Status row above composer card.
+   Fixed min-height slot — never collapse to display:none (CLS: git/task load). */
 .composer-status-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 1.25rem;
+  /* trigger pad 3+3 + line ~1.2 * sm ≈ 26–28px */
+  min-height: 28px;
   margin-bottom: 6px;
   padding: 2px 2px 0;
   position: relative;
   z-index: 6;
+  box-sizing: border-box;
   /* Local scrim: remaining message ink under chips fades into dock bg */
   background: linear-gradient(
     to bottom,
@@ -27,12 +30,10 @@
     var(--bg-main) 100%
   );
 }
-/* Collapse when both sides rendered nothing */
+/* Empty (no bars yet / clean tree): keep the slot, hide content so layout is stable */
 .composer-status-row:not(:has(.pending-changes-bar)):not(:has(.task-status-bar)) {
-  display: none;
-  margin: 0;
-  min-height: 0;
-  padding: 0;
+  visibility: hidden;
+  pointer-events: none;
   background: none;
 }
 .composer-status-left,
@@ -353,7 +354,7 @@
   color: var(--text-1);
 }
 
-/* —— Changed files diff modal (OpenChamber-style) —— */
+/* —— Changed files diff modal —— */
 .changed-files-diff-modal {
   width: min(960px, calc(100vw - 48px));
   max-height: min(80vh, 720px);
@@ -1703,6 +1704,13 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* Reserve chip width so loading → model id does not shift toolbar (CLS). */
+  min-width: 0;
+}
+.model-wrap > .chip.menu {
+  min-width: 9.5rem;
+  max-width: min(220px, 42vw);
+  justify-content: space-between;
 }
 /* 模型主菜单：靠右、偏窄（只 2 行）*/
 .model-wrap .pop-menu.model-menu {

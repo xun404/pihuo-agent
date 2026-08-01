@@ -29,6 +29,14 @@
   justify-content: center;
   padding: var(--sp-6) var(--sp-6) var(--sp-8);
   gap: var(--sp-6);
+  /* Avoid layout thrash from late-loading status chips shifting the centered column */
+  width: 100%;
+  min-width: 0;
+}
+/* Home composer column: fixed max width + stable top slot for status row (CLS). */
+.home .composer-stack.home-composer-stack {
+  width: min(var(--messages-max), 100%);
+  flex-shrink: 0;
 }
 /* 空态品牌标：SVG 自带圆角卡片与内建动画；外层只负责入场/浮动 */
 .logo-cloud {
@@ -77,8 +85,11 @@
     transform: translateY(-8px);
   }
 }
+:root[data-motion='reduce'] .logo-cloud {
+  animation: none !important;
+}
 @media (prefers-reduced-motion: reduce) {
-  .logo-cloud {
+  :root:not([data-motion='full']) .logo-cloud {
     animation: none !important;
   }
 }
@@ -116,8 +127,13 @@
     transform: translateY(0);
   }
 }
+:root[data-motion='reduce'] .greeting,
+:root[data-motion='reduce'] .subhead {
+  animation: none !important;
+}
 @media (prefers-reduced-motion: reduce) {
-  .greeting {
+  :root:not([data-motion='full']) .greeting,
+  :root:not([data-motion='full']) .subhead {
     animation: none !important;
   }
 }

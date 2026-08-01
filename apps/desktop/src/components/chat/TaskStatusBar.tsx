@@ -1,5 +1,5 @@
 /**
- * Composer-adjacent task progress (OpenChamber StatusRow right side).
+ * Composer-adjacent task progress.
  * Expandable popover with completed/total list — replaces ProcessFloatPanel.
  */
 import { memo, useEffect, useRef, useState } from 'react'

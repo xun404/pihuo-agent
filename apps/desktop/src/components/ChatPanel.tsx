@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useReducedMotion } from 'framer-motion'
+import { Check, Copy } from 'lucide-react'
+import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import type {
@@ -17,7 +18,7 @@ import { api, abortChatRun, chatUrl, clearDesktopToken, ensureDesktopToken } fro
 import { ThrottledChat } from '../lib/throttled-chat'
 import { useI18n } from '../i18n/I18nProvider'
 import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
-import { formatChatError } from '../lib/chat-errors'
+import { formatChatError, serializeChatErrorForSticky } from '../lib/chat-errors'
 import { enrichLastUserMessageForWire, parseRouterUserMessage } from '../lib/user-message-display'
 import { MarkdownContent } from './MarkdownContent'
 import { MessageItem } from './MessageItem'
@@ -34,7 +35,6 @@ import {
   IconEdit,
   IconFolder,
   IconPanel,
-  IconSupervisor,
 } from './Icons'
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
@@ -221,7 +221,7 @@ export function ChatPanel({
   createSession,
 }: Props) {
   const { t, locale } = useI18n()
-  const reduceMotion = useReducedMotion()
+  const { reduceMotion } = useMotionPreference()
   const { sendShortcut } = useSendShortcut()
   const { composing, onCompositionStart, onCompositionEnd } = useComposing()
   const [input, setInput] = useState('')
@@ -395,10 +395,17 @@ export function ChatPanel({
     setCompactionMarkers([])
   }, [session.id])
 
-  // After leaving settings, re-fetch so newly configured keys / intensity appear
+  // After leaving settings, re-fetch so newly configured keys / intensity appear.
+  // Event bus (not settingsOpen prop) — avoids re-rendering every ChatPanel on open/close.
+  // Only the active panel reloads models to keep close INP small.
   useEffect(() => {
-    if (settingsOpen === false) void loadModels()
-  }, [settingsOpen, session.id, loadModels])
+    if (!isActive) return
+    const onClosed = () => {
+      void loadModels()
+    }
+    window.addEventListener('swarmdesk-agent:settings-closed', onClosed)
+    return () => window.removeEventListener('swarmdesk-agent:settings-closed', onClosed)
+  }, [loadModels, isActive])
 
   const transport = useMemo(
     () =>
@@ -514,10 +521,11 @@ export function ChatPanel({
 
   const handleChatError = useCallback((err: unknown) => {
     const friendly = formatChatError(err, errorCopyRef.current)
-    const key = `error:${friendly.message}`
+    const sticky = serializeChatErrorForSticky(friendly)
+    const key = `error:${sticky}`
     if (lastStatusPostRef.current === key) return
     lastStatusPostRef.current = key
-    onSessionStatusChangeRef.current?.('error', { lastChatError: friendly.message })
+    onSessionStatusChangeRef.current?.('error', { lastChatError: sticky })
   }, [])
 
   // One ThrottledChat per memory thread (vercel/ai#6166 workaround: publish a
@@ -1050,13 +1058,21 @@ export function ChatPanel({
   }, [session.lastChatError, session.status, busy, error, clearError])
 
   const persistChatError = useCallback(
-    (friendly: { message: string }, opts?: { force?: boolean }) => {
+    (
+      friendly: { message: string; detail?: string; kind?: string },
+      opts?: { force?: boolean },
+    ) => {
       const cb = onSessionStatusChangeRef.current
       if (!cb) return Promise.resolve()
-      const key = `error:${friendly.message}`
+      const sticky = serializeChatErrorForSticky({
+        kind: (friendly.kind as 'generic') || 'generic',
+        message: friendly.message,
+        detail: friendly.detail,
+      })
+      const key = `error:${sticky}`
       if (!opts?.force && lastStatusPostRef.current === key) return Promise.resolve()
       lastStatusPostRef.current = key
-      return Promise.resolve(cb('error', { lastChatError: friendly.message }))
+      return Promise.resolve(cb('error', { lastChatError: sticky }))
     },
     [],
   )
@@ -1085,9 +1101,10 @@ export function ChatPanel({
     return () => {
       const err = displayErrorRef.current
       if (!err?.message) return
-      const key = `error:${err.message}`
+      const sticky = serializeChatErrorForSticky(err)
+      const key = `error:${sticky}`
       lastStatusPostRef.current = key
-      onSessionStatusChangeRef.current?.('error', { lastChatError: err.message })
+      onSessionStatusChangeRef.current?.('error', { lastChatError: sticky })
     }
   }, [])
 
@@ -1101,11 +1118,61 @@ export function ChatPanel({
     void persistChatError(displayError, { force: true }).finally(go)
   }, [displayError, persistChatError, onOpenSettings])
 
+  const [errorCopied, setErrorCopied] = useState(false)
+  const errorCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (errorCopiedTimerRef.current) clearTimeout(errorCopiedTimerRef.current)
+    }
+  }, [])
+  // Reset "已复制" when the error content changes
+  useEffect(() => {
+    setErrorCopied(false)
+    if (errorCopiedTimerRef.current) {
+      clearTimeout(errorCopiedTimerRef.current)
+      errorCopiedTimerRef.current = null
+    }
+  }, [displayError?.message, displayError?.detail, displayError?.href])
+
+  const copyErrorCard = useCallback(async () => {
+    if (!displayError) return
+    const lines = [t('chat.error'), displayError.message.trim()]
+    if (displayError.detail?.trim() && displayError.detail.trim() !== displayError.message.trim()) {
+      lines.push('', displayError.detail.trim())
+    }
+    if (displayError.href?.trim()) {
+      lines.push('', displayError.href.trim())
+    }
+    const text = lines.filter((l, i) => l !== '' || (i > 0 && lines[i - 1] !== '')).join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setErrorCopied(true)
+      if (errorCopiedTimerRef.current) clearTimeout(errorCopiedTimerRef.current)
+      errorCopiedTimerRef.current = setTimeout(() => setErrorCopied(false), 1600)
+    } catch {
+      /* ignore clipboard failures */
+    }
+  }, [displayError, t])
+
   const errorBlock = displayError ? (
-    <div className="chat-error-block chat-error-in-bubble" role="alert">
-      <span className="chat-error-label">{t('chat.error')}</span>
-      <div className="chat-error-body">{displayError.message}</div>
-      <div className="chat-error-actions">
+    <div className="chat-error-card user-select-text" role="alert">
+      <div className="chat-error-card-head">
+        <div className="chat-error-card-title">{t('chat.error')}</div>
+        <button
+          type="button"
+          className={`chat-error-copy${errorCopied ? ' is-copied' : ''}`}
+          onClick={() => void copyErrorCard()}
+          aria-label={errorCopied ? t('chat.errorCopied') : t('chat.errorCopy')}
+        >
+          {errorCopied ? <Check size={13} /> : <Copy size={13} />}
+          <span>{errorCopied ? t('chat.errorCopied') : t('chat.errorCopy')}</span>
+        </button>
+      </div>
+      <div className="chat-error-card-body">{displayError.message}</div>
+      {displayError.detail && displayError.detail.trim() !== displayError.message.trim() && (
+        <pre className="chat-error-card-detail">{displayError.detail}</pre>
+      )}
+      <div className="chat-error-card-actions">
         {displayError.href && (
           <a
             className="btn btn-soft btn-sm chat-error-action"
@@ -1113,18 +1180,21 @@ export function ChatPanel({
             target="_blank"
             rel="noreferrer"
           >
-            {t('chat.errorOpenBilling')}
+            {displayError.kind === 'billing' ? t('chat.errorOpenBilling') : t('chat.errorOpenLink')}
           </a>
         )}
-        {displayError.action === 'open_settings' && onOpenSettings && (
-          <button
-            type="button"
-            className="btn btn-soft btn-sm chat-error-action"
-            onClick={openSettingsFromError}
-          >
-            {t('chat.openSettings')}
-          </button>
-        )}
+        {(displayError.action === 'open_settings' ||
+          displayError.kind === 'missing_key' ||
+          displayError.kind === 'model') &&
+          onOpenSettings && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm chat-error-action"
+              onClick={openSettingsFromError}
+            >
+              {t('chat.openSettings')}
+            </button>
+          )}
       </div>
     </div>
   ) : null
@@ -1409,19 +1479,9 @@ export function ChatPanel({
           .map((m) => (
             <CompactionMarker key={m.id} status={m.status} freedTokens={m.freedTokens} />
           ))}
-        {/* 尚无 assistant 回复时（失败在首包前）：单独一张卡承载错误 */}
+        {/* 尚无 assistant 回复时（失败在首包前）：与 Leader 扁平样式一致，无 sup-card 旧壳 */}
         {displayError && !errorBelongsInLastAssistant && (
-          <div className="msg leader">
-            <div className="sup-card">
-              <div className="sup-header">
-                <span className="sup-avatar" aria-hidden>
-                  <IconSupervisor size={14} />
-                </span>
-                <span className="sup-name">{t('chat.leader')}</span>
-              </div>
-              <div className="sup-body">{errorBlock}</div>
-            </div>
-          </div>
+          <div className="msg leader msg-error-standalone">{errorBlock}</div>
         )}
         {livePlacements.map((wp) => (
           <WorkerRunCard
@@ -1488,7 +1548,7 @@ export function ChatPanel({
     handleContinueBudget,
   ])
 
-  // Task list snapshot for composer status row (OpenChamber-style)
+  // Task list snapshot for composer status row
   const taskSnapshot = useMemo(() => findLatestTaskList(messages), [messages])
   const [gitRefreshToken, setGitRefreshToken] = useState(0)
   const handleRefreshGit = useCallback(() => {

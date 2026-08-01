@@ -1,6 +1,6 @@
 /**
- * OpenChamber-style stacked changed-files viewer:
- * - Scope: 已更改 / 已暂存 / 上一轮
+ * Stacked changed-files viewer:
+ * - Scope: working / staged / last turn
  * - Expandable per-file rows + expand/collapse all
  * - Unified / side-by-side, wrap, full-file context
  */

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { evaluateTeamTemplateAvailability } from '@swarmdesk-agent/shared'
+import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import type {
   ApprovalItem,
   LeaderMode,
@@ -143,6 +145,7 @@ export function ChatWorkspace({
   createSession,
 }: Props) {
   const { t, locale } = useI18n()
+  const { reduceMotion } = useMotionPreference()
   const { sendShortcut } = useSendShortcut()
   const { composing, onCompositionStart, onCompositionEnd } = useComposing()
   const [aliveIds, setAliveIds] = useState<string[]>([])
@@ -342,131 +345,145 @@ export function ChatWorkspace({
     if (sent) setFirstMessage('')
   }
 
-  const emptyComposer = showEmptyComposer ? (
-    <main className="main home-main home-overlay">
-      {/* Titleband only — content must not be window-drag */}
-      <div className="window-drag-top" aria-hidden />
-      <div className="home">
-        <div className="logo-cloud" aria-hidden>
-          <BrandLogo size={88} variant="glyph" />
-        </div>
-        <h1 className="greeting">
-          {homeProject ? (
-            <>
-              {t('chat.greeting', { project: '\uE000' }).split('\uE000')[0]}
-              <em>{homeProject.name}</em>
-              {t('chat.greeting', { project: '\uE000' }).split('\uE000')[1]}
-            </>
-          ) : (
-            t('chat.greetingNoProject')
-          )}
-        </h1>
-        <p className="home-hint">{t(hintKey)}</p>
-        {onComposeFirstMessage && (
-          <div className="composer-stack home-composer-stack">
-            <ComposerStatusRow
-              projectId={homeProject?.id}
-              enabled
-              gitRefreshToken={homeGitRefreshToken}
-            />
-          <form
-            className="composer-card home-composer"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void submitFirstMessage()
-            }}
-          >
-            <div className="context-bar">
-              {!homeProject && onPickFolder && (
-                <button
-                  type="button"
-                  className="ctx"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    onPickFolder()
-                  }}
-                >
-                  <IconFolder size={13} />
-                  {t('chat.openFolder')}
-                </button>
-              )}
-              {homeProject && (
-                <>
-                  <span className="ctx" title={homeProject.rootPath}>
-                    <IconFolder size={13} />
-                    {homeProject.name}
-                  </span>
-                  <BranchSwitcher
-                    project={homeProject}
-                    snapshotWorkers={snapshotWorkers}
-                    snapshotJobs={snapshotJobs}
-                    onAfterSwitch={handleHomeRefreshGit}
-                  />
-                </>
-              )}
-            </div>
-            <textarea
-              className="composer-input"
-              value={firstMessage}
-              onChange={(e) => setFirstMessage(e.target.value)}
-              placeholder={t('chat.placeholderHome')}
-              rows={3}
-              onKeyDown={(e) => {
-                if (isComposerSendKey(e, sendShortcut, composing())) {
-                  e.preventDefault()
-                  void submitFirstMessage()
-                }
-              }}
-              onCompositionStart={onCompositionStart}
-              onCompositionEnd={onCompositionEnd}
-              disabled={!serverUp || creatingFromComposer}
-            />
-            <div className="composer-tools">
-              <ComposerToolbar
-                permissionMode={presetPermissionMode}
-                selectedModel={presetModel}
-                thinkingIntensity={presetThinking}
-                models={presetModels}
-                modelsLoading={presetModelsLoading}
-                tokenCount={0}
-                locale={locale}
-                persistThinking={false}
-                onPermissionModeChange={setPresetPermissionMode}
-                onModelChange={setPresetModel}
-                onThinkingChange={setPresetThinking}
-                onOpenSettings={onOpenSettings}
-                teamTemplateOptions={teamTemplateOptions}
-                selectedTeamTemplateId={selectedTeamTemplateId}
-                onTeamTemplateChange={setSelectedTeamTemplateId}
-              />
-              <button
-                type="submit"
-                className={`send${creatingFromComposer ? ' sending' : ''}`}
-                disabled={!firstMessage.trim() || !serverUp || creatingFromComposer}
-                title={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
-                aria-label={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
-              >
-                {creatingFromComposer ? <span className="send-spinner" /> : <IconArrowUp />}
-              </button>
-            </div>
-          </form>
-          </div>
-        )}
-        {!serverUp && (
-          <p className="home-hint" style={{ color: 'var(--danger)' }}>
-            {t('chat.serverDown')}
-          </p>
-        )}
-      </div>
-    </main>
-  ) : null
+  const homeTransition = {
+    duration: reduceMotion ? 0 : 0.12,
+    ease: [0.32, 0.72, 0, 1] as const,
+  }
 
   return (
     <div className="chat-workspace">
-      {emptyComposer}
+      <AnimatePresence initial={false}>
+        {showEmptyComposer && (
+          <motion.main
+            key="home-overlay"
+            className="main home-main home-overlay"
+            initial={reduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={reduceMotion ? undefined : { opacity: 0 }}
+            transition={homeTransition}
+          >
+            {/* Titleband only — content must not be window-drag */}
+            <div className="window-drag-top" aria-hidden />
+            <div className="home">
+              <div className="logo-cloud" aria-hidden>
+                <BrandLogo size={88} variant="glyph" />
+              </div>
+              <h1 className="greeting">
+                {homeProject ? (
+                  <>
+                    {t('chat.greeting', { project: '\uE000' }).split('\uE000')[0]}
+                    <em>{homeProject.name}</em>
+                    {t('chat.greeting', { project: '\uE000' }).split('\uE000')[1]}
+                  </>
+                ) : (
+                  t('chat.greetingNoProject')
+                )}
+              </h1>
+              <p className="home-hint">{t(hintKey)}</p>
+              {onComposeFirstMessage && (
+                <div className="composer-stack home-composer-stack">
+                  <ComposerStatusRow
+                    projectId={homeProject?.id}
+                    enabled
+                    gitRefreshToken={homeGitRefreshToken}
+                  />
+                  <form
+                    className="composer-card home-composer"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      void submitFirstMessage()
+                    }}
+                  >
+                    <div className="context-bar">
+                      {!homeProject && onPickFolder && (
+                        <button
+                          type="button"
+                          className="ctx"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            onPickFolder()
+                          }}
+                        >
+                          <IconFolder size={13} />
+                          {t('chat.openFolder')}
+                        </button>
+                      )}
+                      {homeProject && (
+                        <>
+                          <span className="ctx" title={homeProject.rootPath}>
+                            <IconFolder size={13} />
+                            {homeProject.name}
+                          </span>
+                          <BranchSwitcher
+                            project={homeProject}
+                            snapshotWorkers={snapshotWorkers}
+                            snapshotJobs={snapshotJobs}
+                            onAfterSwitch={handleHomeRefreshGit}
+                          />
+                        </>
+                      )}
+                    </div>
+                    <textarea
+                      className="composer-input"
+                      value={firstMessage}
+                      onChange={(e) => setFirstMessage(e.target.value)}
+                      placeholder={t('chat.placeholderHome')}
+                      rows={3}
+                      onKeyDown={(e) => {
+                        if (isComposerSendKey(e, sendShortcut, composing())) {
+                          e.preventDefault()
+                          void submitFirstMessage()
+                        }
+                      }}
+                      onCompositionStart={onCompositionStart}
+                      onCompositionEnd={onCompositionEnd}
+                      disabled={!serverUp || creatingFromComposer}
+                    />
+                    <div className="composer-tools">
+                      <ComposerToolbar
+                        permissionMode={presetPermissionMode}
+                        selectedModel={presetModel}
+                        thinkingIntensity={presetThinking}
+                        models={presetModels}
+                        modelsLoading={presetModelsLoading}
+                        tokenCount={0}
+                        locale={locale}
+                        persistThinking={false}
+                        onPermissionModeChange={setPresetPermissionMode}
+                        onModelChange={setPresetModel}
+                        onThinkingChange={setPresetThinking}
+                        onOpenSettings={onOpenSettings}
+                        teamTemplateOptions={teamTemplateOptions}
+                        selectedTeamTemplateId={selectedTeamTemplateId}
+                        onTeamTemplateChange={setSelectedTeamTemplateId}
+                      />
+                      <button
+                        type="submit"
+                        className={`send${creatingFromComposer ? ' sending' : ''}`}
+                        disabled={!firstMessage.trim() || !serverUp || creatingFromComposer}
+                        title={creatingFromComposer ? t('common.loading') : t('chat.placeholder')}
+                        aria-label={
+                          creatingFromComposer ? t('common.loading') : t('chat.placeholder')
+                        }
+                      >
+                        {creatingFromComposer ? <span className="send-spinner" /> : <IconArrowUp />}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+              {!serverUp && (
+                <p className="home-hint" style={{ color: 'var(--danger)' }}>
+                  {t('chat.serverDown')}
+                </p>
+              )}
+            </div>
+          </motion.main>
+        )}
+      </AnimatePresence>
       {mounted.map(({ session: s, project: p }) => {
-        // Hide all panels when the empty composer overlay is shown, but keep
-        // them MOUNTED so their useChat state survives the overlay.
+        // Keep panels MOUNTED under the home overlay so useChat state survives.
+        // Visual show/hide is opacity crossfade via .active (not display:none).
         const hidden = showEmptyComposer
         const isActive = !hidden && s.id === session.id
         return (
@@ -474,7 +491,6 @@ export function ChatWorkspace({
             key={s.id}
             className={`chat-workspace-pane${isActive ? ' active' : ''}`}
             aria-hidden={!isActive}
-            style={{ display: isActive ? 'flex' : 'none' }}
           >
             <ChatPanel
               project={p}

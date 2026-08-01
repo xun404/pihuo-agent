@@ -159,17 +159,18 @@ export const ToolCallRow = memo(function ToolCallRow({
             </span>
           )}
         </span>
-        {durationSec != null && (
-          <span className={`tool-row-duration${running ? ' live' : ''}`}>
-            {formatElapsedSeconds(durationSec)}
-          </span>
-        )}
         {errorText ? <span className="tool-row-error">{errorLabel}</span> : null}
         {cmdPreview && !isOpen ? (
           <span className="tool-row-cmd mono" title={cmdPreview}>
             {cmdPreview}
           </span>
         ) : null}
+        {/* Duration always last — no margin-left:auto / right-dock */}
+        {durationSec != null && (
+          <span className={`tool-row-duration${running ? ' live' : ''}`}>
+            {formatElapsedSeconds(durationSec)}
+          </span>
+        )}
       </div>
 
       {shouldRender && hasDetail && (
@@ -182,7 +183,7 @@ export const ToolCallRow = memo(function ToolCallRow({
               transition: 'opacity 180ms ease-out, transform 180ms ease-out',
             }}
           >
-            {/* OpenChamber 风格：输入/输出各自是完整内容块，多行文本只显示一个标记。 */}
+            {/* Input/output as full content blocks; multi-line text shares one marker. */}
             {view.command && (
               <div className="tool-row-block tool-row-block-input">
                 <span className="tool-row-block-marker" aria-hidden>

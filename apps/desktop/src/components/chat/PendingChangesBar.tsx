@@ -1,5 +1,5 @@
 /**
- * Composer-adjacent pending git changes (OpenChamber PendingChangesBar).
+ * Composer-adjacent pending git changes.
  * Click a file → ChangedFilesDiffPanel (unified diff viewer).
  */
 import { memo, useCallback, useEffect, useRef, useState } from 'react'

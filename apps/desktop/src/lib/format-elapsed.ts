@@ -37,3 +37,30 @@ export function formatElapsedHms(sec: number, locale = 'zh'): string {
   }
   return zh ? `${s}秒` : `${s}s`
 }
+
+/**
+ * Compact duration for process summary rows (worked-for / tool / worker).
+ * Always latin units (7m 53s), trims zero units.
+ */
+export function formatElapsedCompact(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0
+  const total = Math.floor(sec)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+
+  if (h > 0) {
+    if (m === 0 && s === 0) return `${h}h`
+    if (s === 0) return `${h}h ${m}m`
+    return `${h}h ${m}m ${s}s`
+  }
+  if (m > 0) {
+    if (s === 0) return `${m}m`
+    return `${m}m ${s}s`
+  }
+  if (sec < 10) {
+    const tenths = Math.floor(sec * 10) / 10
+    return `${tenths.toFixed(1)}s`
+  }
+  return `${s}s`
+}

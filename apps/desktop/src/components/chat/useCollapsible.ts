@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { animate, type AnimationPlaybackControls } from 'framer-motion'
+import { documentPrefersReducedMotion } from '../../lib/motion-preference'
 
 /**
  * 展开动画配置。
@@ -11,8 +12,7 @@ const TRANSITION = { duration: 0.22, ease: [0.4, 0, 0.2, 1] as const }
 const UNMOUNT_DELAY_MS = 220
 
 function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return documentPrefersReducedMotion()
 }
 
 interface CollapsibleOptions {

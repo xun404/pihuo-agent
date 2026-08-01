@@ -252,8 +252,12 @@ html[data-theme='dark'] {
     background-position: 100% 50%;
   }
 }
+:root[data-motion='reduce'] .brand .brand-name {
+  animation: none;
+  background-position: 40% 50%;
+}
 @media (prefers-reduced-motion: reduce) {
-  .brand .brand-name {
+  :root:not([data-motion='full']) .brand .brand-name {
     animation: none;
     background-position: 40% 50%;
   }
@@ -559,8 +563,11 @@ html[data-theme='dark'] {
 .sidebar-section.sidebar-projects.is-open {
   grid-template-rows: max-content minmax(0, 1fr);
 }
+:root[data-motion='reduce'] .sidebar-section.sidebar-projects {
+  transition: none;
+}
 @media (prefers-reduced-motion: reduce) {
-  .sidebar-section.sidebar-projects {
+  :root:not([data-motion='full']) .sidebar-section.sidebar-projects {
     transition: none;
   }
 }
@@ -785,8 +792,11 @@ html[data-theme='dark'] {
 .proj-sessions.is-open {
   grid-template-rows: 1fr;
 }
+:root[data-motion='reduce'] .proj-sessions {
+  transition: none;
+}
 @media (prefers-reduced-motion: reduce) {
-  .proj-sessions {
+  :root:not([data-motion='full']) .proj-sessions {
     transition: none;
   }
 }
@@ -887,9 +897,13 @@ html[data-theme='dark'] {
     transform: scale(0.9);
   }
 }
+:root[data-motion='reduce'] .sess.run .dot,
+:root[data-motion='reduce'] .sess.approve .dot {
+  animation: none;
+}
 @media (prefers-reduced-motion: reduce) {
-  .sess.run .dot,
-  .sess.approve .dot {
+  :root:not([data-motion='full']) .sess.run .dot,
+  :root:not([data-motion='full']) .sess.approve .dot {
     animation: none;
   }
 }

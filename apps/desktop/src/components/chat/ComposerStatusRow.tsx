@@ -1,7 +1,10 @@
 /**
- * OpenChamber-style status row above the composer:
+ * Status row above the composer:
  * left = workspace pending changes, right = task progress.
- * Collapses entirely when both sides are empty (`:has` in CSS).
+ *
+ * Always reserves a fixed-height slot when a project (or tasks) is present so
+ * git/task data arriving later does not shift the composer (CLS).
+ * Empty content stays in-flow but invisible via `.is-empty`.
  */
 import { memo } from 'react'
 import type { TaskItem } from './TaskListCard'
@@ -24,6 +27,7 @@ function ComposerStatusRowImpl({
   gitRefreshToken = 0,
 }: Props) {
   const hasTasks = Boolean(tasks && tasks.length > 0)
+  // No project and no tasks: nothing to reserve (home empty without folder).
   if (!projectId && !hasTasks) return null
 
   return (

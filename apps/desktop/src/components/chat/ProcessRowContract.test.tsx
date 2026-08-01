@@ -28,8 +28,10 @@ describe('collapsible process-row visual contract', () => {
         streaming={false}
         open
         onToggle={() => undefined}
-        label="思考"
         streamingLabel="思考中"
+        doneLabel="已思考"
+        doneLabelFor={(time) => `已思考 ${time}`}
+        locale="zh"
       />,
     )
     const tool = renderToStaticMarkup(

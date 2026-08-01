@@ -240,20 +240,17 @@ describe('leader-run-meta', () => {
     )
   })
 
-  it('formatClockTime uses CST (Asia/Shanghai) and i18n label', () => {
-    // 2026-07-16 08:30:05 UTC → 16:30:05 CST
-    const s = formatClockTime(Date.UTC(2026, 6, 16, 8, 30, 5), 'zh', {
-      timeZoneLabel: 'CST',
-    })
+  it('formatClockTime uses system local zone without a CST suffix', () => {
+    const s = formatClockTime(Date.UTC(2026, 6, 16, 8, 30, 5), 'zh')
     assert.match(s, /2026/)
-    assert.match(s, /CST/)
-    assert.match(s, /16:30:05/)
+    assert.doesNotMatch(s, /CST/)
   })
 
-  it('formatClockTime en locale still labels CST', () => {
-    const s = formatClockTime(Date.UTC(2026, 6, 16, 8, 30, 5), 'en', {
-      timeZoneLabel: 'CST',
+  it('formatClockTime can pin an explicit IANA zone without a label', () => {
+    const s = formatClockTime(Date.UTC(2026, 6, 16, 8, 30, 5), 'zh', {
+      timeZone: 'Asia/Shanghai',
     })
-    assert.match(s, /CST/)
+    assert.match(s, /16:30:05/)
+    assert.doesNotMatch(s, /CST/)
   })
 })

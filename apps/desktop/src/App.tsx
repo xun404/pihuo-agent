@@ -6,7 +6,6 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type {
   Project,
   Session,
@@ -21,11 +20,12 @@ import {
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { RightPanel } from './components/RightPanel'
-import { SettingsPanel } from './components/SettingsPanel'
+import { SettingsLayer, openSettings } from './components/SettingsLayer'
 import { useAppState } from './hooks/useAppState'
 import { I18nProvider, useI18n } from './i18n/I18nProvider'
 import type { Locale } from './i18n/locales'
 import { ThemeProvider } from './theme/ThemeProvider'
+import { MotionPreferenceProvider } from './motion/MotionPreferenceProvider'
 import { ToastProvider, useToast } from './components/Toast'
 import { pickProjectDirectory } from './lib/native-dialogs'
 import { ConfirmDialog, type ConfirmDialogConfig } from './components/ui/ConfirmDialog'
@@ -37,9 +37,6 @@ import {
   saveDrawerWidth,
   saveSidebarWidth,
 } from './lib/panel-widths'
-
-/** Settings ↔ workspace view transition (aligned with Modal timing). */
-const VIEW_EASE = [0.4, 0, 0.2, 1] as const
 
 const EMPTY_JOBS: WorkerJob[] = []
 
@@ -76,16 +73,9 @@ function AppShell({
 }: ReturnType<typeof useAppState>) {
   const { t } = useI18n()
   const { error: toastError, info: toastInfo } = useToast()
-  const reduceMotion = useReducedMotion()
-  const viewTransition = {
-    duration: reduceMotion ? 0.01 : 0.22,
-    ease: VIEW_EASE,
-  }
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsTab, setSettingsTab] = useState<
-    'general' | 'model' | 'prompts' | 'workers' | 'about' | undefined
-  >()
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  /** Keep inspector drawer mounted after first open to avoid remount jank. */
+  const [inspectorMounted, setInspectorMounted] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth())
   const [drawerWidth, setDrawerWidth] = useState(() => loadDrawerWidth())
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
@@ -151,7 +141,9 @@ function AppShell({
   }, [activeSessionId, activeErrAt, activeReplyAt, activeFinishedAt, activeReadAt])
 
   useEffect(() => {
-    const openSettingsTab = (tab?: string) => {
+    // Electron menu: About → settings/about, Settings… → settings/general
+    // SettingsLayer owns open state; only bridge the menu IPC → event bus here.
+    const unsubMenu = window.routerAgents?.onOpenSettings?.((tab?: string) => {
       if (
         tab === 'workers' ||
         tab === 'model' ||
@@ -159,25 +151,49 @@ function AppShell({
         tab === 'general' ||
         tab === 'about'
       ) {
-        setSettingsTab(tab)
+        openSettings(tab)
+      } else if (tab) {
+        openSettings('workers')
       } else {
-        setSettingsTab('workers')
+        openSettings()
       }
-      setSettingsOpen(true)
-      setInspectorOpen(false)
-    }
-    const onOpen = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ tab?: string }>).detail
-      openSettingsTab(detail?.tab)
-    }
-    window.addEventListener('swarmdesk-agent:open-settings', onOpen)
-    // Electron menu: About → settings/about, Settings… → settings/general
-    const unsubMenu = window.routerAgents?.onOpenSettings?.(openSettingsTab)
+    })
     return () => {
-      window.removeEventListener('swarmdesk-agent:open-settings', onOpen)
       unsubMenu?.()
     }
   }, [])
+
+  // Home empty-composer view has no room for the crew inspector; close it on entry.
+  useEffect(() => {
+    if (pendingNewSession || !activeSession) {
+      setInspectorOpen(false)
+    }
+  }, [pendingNewSession, activeSession])
+
+  useEffect(() => {
+    if (inspectorOpen) setInspectorMounted(true)
+  }, [inspectorOpen])
+
+  // Warm-mount inspector during idle so first open isn't a cold RightPanel render.
+  useEffect(() => {
+    if (!activeSession) return
+    let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    let idleId: number | undefined
+    const warm = () => {
+      if (!cancelled) setInspectorMounted(true)
+    }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(warm, { timeout: 2000 })
+    } else {
+      timeoutId = setTimeout(warm, 800)
+    }
+    return () => {
+      cancelled = true
+      if (idleId != null && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId)
+      if (timeoutId != null) clearTimeout(timeoutId)
+    }
+  }, [activeSession?.id])
 
   const beginSidebarResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -341,211 +357,175 @@ function AppShell({
     deleteSession(session.id).catch((e) => toastError(String(e)))
   }
 
-  const leaveSettings = () => {
-    setSettingsOpen(false)
-    // Pick up sticky-error clears / model list after credentials change
-    void refresh()
-  }
+  const onSettingsOpen = useCallback(() => {
+    setInspectorOpen(false)
+  }, [])
 
   return (
     <div className="app-root">
       <div className="window app-window">
-        {/* 设置全页 ↔ 工作区：AnimatePresence 延迟卸载以播放退场 */}
-        <AnimatePresence mode="wait" initial={false}>
-          {settingsOpen ? (
-            <motion.div
-              key="settings"
-              className="view-layer"
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28 }}
-              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28 }}
-              transition={viewTransition}
-            >
-              <SettingsPanel
-                onClose={leaveSettings}
-                initialTab={settingsTab}
-                workers={snapshot.workers}
-                projectId={snapshot.activeProjectId}
-                onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
-                onSetWorkerDefaultRoleType={(id, role) => setWorkerDefaultRoleType(id, role)}
-                onHealthAllWorkers={() => healthAllWorkers()}
-                onRegisterCustomAcpWorker={(body) => registerCustomAcpWorker(body)}
+        {/* Workspace never unmounts for settings — SettingsLayer is an isolated overlay. */}
+        <div className="view-layer">
+          <div
+            className={`shell${inspectorOpen ? ' with-inspector' : ''}`}
+            style={
+              {
+                '--sidebar-w': `${sidebarWidth}px`,
+                '--drawer-w': `${drawerWidth}px`,
+              } as CSSProperties
+            }
+          >
+            <LeftSidebar
+              projects={snapshot.projects}
+              sessions={snapshot.sessions}
+              teamTemplates={snapshot.teamTemplates}
+              workers={snapshot.workers}
+              activeProjectId={snapshot.activeProjectId}
+              // HomeChat / pending new session: no server session yet — clear highlight.
+              activeSessionId={pendingNewSession ? null : snapshot.activeSessionId}
+              busySessionIds={busySessionIds}
+              onSelectSession={(s) => {
+                clearPendingSession()
+                void activateSession(s)
+              }}
+              onSelectProject={(p) =>
+                void activateProject(p.id).catch((e) => toastError(String(e)))
+              }
+              onNewSession={onNewSession}
+              onNewSessionForProject={onNewSessionForProject}
+              onOpenProject={onOpenProject}
+              onDeleteProject={onDeleteProject}
+              onDeleteSession={onDeleteSession}
+              onOpenSettings={(tab) => openSettings(tab)}
+              onTeamTemplatesChanged={() => void refresh()}
+            />
+            <div
+              className="panel-resizer panel-resizer-left"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t('layout.resizeSidebar')}
+              aria-valuenow={sidebarWidth}
+              aria-valuemin={180}
+              aria-valuemax={360}
+              onPointerDown={beginSidebarResize}
+            />
+
+            <div className="main-column">
+              <ChatWorkspace
+                project={activeProject}
+                session={activeSession}
+                sessions={snapshot.sessions}
+                projects={snapshot.projects}
+                serverUp={serverUp}
+                onRenameSession={onRenameSession}
+                onOpenSettings={(tab) => openSettings(tab)}
                 onRefreshSnapshot={() => void refresh()}
-              />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="workspace"
-              className="view-layer"
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
-              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
-              transition={viewTransition}
-            >
-              <div
-                className={`shell${inspectorOpen ? ' with-inspector' : ''}`}
-                style={
-                  {
-                    '--sidebar-w': `${sidebarWidth}px`,
-                    '--drawer-w': `${drawerWidth}px`,
-                  } as CSSProperties
+                onBusySessionsChange={setBusySessionIds}
+                onSetPermissionMode={(sessionId, permissionMode) =>
+                  setSessionPermissionMode(sessionId, permissionMode).then(
+                    () => undefined,
+                    (e) => {
+                      toastError(String(e))
+                      throw e
+                    },
+                  )
                 }
+                onSessionStatusChange={(sessionId, status, opts) =>
+                  setSessionStatus(sessionId, status, opts)
+                }
+                resolving={resolvingState}
+                snapshotApprovals={snapshot.approvals}
+                snapshotJobs={snapshot.jobs ?? EMPTY_JOBS}
+                snapshotWorkers={snapshot.workers}
+                snapshotTeamTemplates={snapshot.teamTemplates}
+                onResolveApproval={(id, optionId, decision, surface) =>
+                  void resolveApproval(id, decision, optionId, surface).catch((e) =>
+                    toastError(String(e)),
+                  )
+                }
+                onResetContext={(jobId) =>
+                  void resetAcpContext(jobId).catch((e) => toastError(String(e)))
+                }
+                inspectorOpen={inspectorOpen}
+                onToggleInspector={() => setInspectorOpen((v) => !v)}
+                onRefreshGit={() => void refresh()}
+                onComposeFirstMessage={onComposeFirstMessage}
+                onPickFolder={onOpenProject}
+                pendingComposerForSession={pendingComposerForSession}
+                onInitialInputConsumed={() => setPendingComposerForSession(null)}
+                creatingFromComposer={creatingFromComposer}
+                pendingNewSession={pendingNewSession}
+                clearPendingSession={clearPendingSession}
+                createSession={createSession}
+              />
+            </div>
+
+            {/* Keep drawer mounted after first open; CSS show/hide (no remount / no exit jank). */}
+            {inspectorMounted && (
+              <div
+                className={`inspector-host drawer${inspectorOpen ? ' is-open' : ' is-closed'}`}
+                aria-hidden={!inspectorOpen}
               >
-                <LeftSidebar
-                  projects={snapshot.projects}
-                  sessions={snapshot.sessions}
-                  teamTemplates={snapshot.teamTemplates}
-                  workers={snapshot.workers}
-                  activeProjectId={snapshot.activeProjectId}
-                  // HomeChat / pending new session: no server session yet — clear highlight.
-                  activeSessionId={pendingNewSession ? null : snapshot.activeSessionId}
-                  busySessionIds={busySessionIds}
-                  onSelectSession={(s) => {
-                    clearPendingSession()
-                    void activateSession(s)
-                  }}
-                  onSelectProject={(p) =>
-                    void activateProject(p.id).catch((e) => toastError(String(e)))
-                  }
-                  onNewSession={onNewSession}
-                  onNewSessionForProject={onNewSessionForProject}
-                  onOpenProject={onOpenProject}
-                  onDeleteProject={onDeleteProject}
-                  onDeleteSession={onDeleteSession}
-                  onOpenSettings={(tab) => {
-                    if (tab) setSettingsTab(tab)
-                    setSettingsOpen(true)
-                    setInspectorOpen(false)
-                  }}
-                  onTeamTemplatesChanged={() => void refresh()}
-                />
                 <div
-                  className="panel-resizer panel-resizer-left"
+                  className="panel-resizer panel-resizer-right"
                   role="separator"
                   aria-orientation="vertical"
-                  aria-label={t('layout.resizeSidebar')}
-                  aria-valuenow={sidebarWidth}
-                  aria-valuemin={180}
-                  aria-valuemax={360}
-                  onPointerDown={beginSidebarResize}
+                  aria-label={t('layout.resizeInspector')}
+                  aria-valuenow={drawerWidth}
+                  aria-valuemin={260}
+                  aria-valuemax={480}
+                  onPointerDown={beginDrawerResize}
                 />
-
-                <div className="main-column">
-                  <ChatWorkspace
-                    project={activeProject}
-                    session={activeSession}
-                    sessions={snapshot.sessions}
-                    projects={snapshot.projects}
-                    serverUp={serverUp}
-                    onRenameSession={onRenameSession}
-                    onOpenSettings={(tab) => {
-                      if (tab) setSettingsTab(tab)
-                      setSettingsOpen(true)
-                      setInspectorOpen(false)
+                <div className="drawer-panel">
+                  <RightPanel
+                    workers={snapshot.workers}
+                    teamMembers={snapshot.teamMembers.filter(
+                      (role) => role.chatSessionId === activeSession?.id && !role.archivedAt,
+                    )}
+                    approvals={snapshot.approvals ?? []}
+                    projectId={activeProject?.id ?? null}
+                    sessionId={activeSession?.id ?? null}
+                    onCreateTeamMember={async (body) => {
+                      if (!activeSession) throw new Error('Chat session is required')
+                      await createTeamMember(activeSession.id, body)
                     }}
-                    onRefreshSnapshot={() => void refresh()}
-                    settingsOpen={false}
-                    onBusySessionsChange={setBusySessionIds}
-                    onSetPermissionMode={(sessionId, permissionMode) =>
-                      setSessionPermissionMode(sessionId, permissionMode).then(
-                        () => undefined,
-                        (e) => {
-                          toastError(String(e))
-                          throw e
-                        },
-                      )
-                    }
-                    onSessionStatusChange={(sessionId, status, opts) =>
-                      setSessionStatus(sessionId, status, opts)
-                    }
-                    resolving={resolvingState}
-                    snapshotApprovals={snapshot.approvals}
-                    snapshotJobs={snapshot.jobs ?? EMPTY_JOBS}
-                    snapshotWorkers={snapshot.workers}
-                    snapshotTeamTemplates={snapshot.teamTemplates}
+                    onUpdateTeamMember={async (id, body) => {
+                      if (!activeSession) throw new Error('Chat session is required')
+                      await updateTeamMember(activeSession.id, id, body)
+                    }}
+                    onArchiveTeamMember={async (id, expectedRevision) => {
+                      if (!activeSession) throw new Error('Chat session is required')
+                      await archiveTeamMember(activeSession.id, id, expectedRevision)
+                    }}
+                    onResetTeamMemberSession={async (id) => {
+                      if (!activeSession) throw new Error('Chat session is required')
+                      await resetTeamMemberSession(activeSession.id, id)
+                    }}
                     onResolveApproval={(id, optionId, decision, surface) =>
                       void resolveApproval(id, decision, optionId, surface).catch((e) =>
                         toastError(String(e)),
                       )
                     }
-                    onResetContext={(jobId) =>
-                      void resetAcpContext(jobId).catch((e) => toastError(String(e)))
-                    }
-                    inspectorOpen={inspectorOpen}
-                    onToggleInspector={() => setInspectorOpen((v) => !v)}
-                    onRefreshGit={() => void refresh()}
-                    onComposeFirstMessage={onComposeFirstMessage}
-                    onPickFolder={onOpenProject}
-                    pendingComposerForSession={pendingComposerForSession}
-                    onInitialInputConsumed={() => setPendingComposerForSession(null)}
-                    creatingFromComposer={creatingFromComposer}
-                    pendingNewSession={pendingNewSession}
-                    clearPendingSession={clearPendingSession}
-                    createSession={createSession}
+                    resolving={resolvingState}
+                    onRefreshSnapshot={() => void refresh()}
                   />
                 </div>
-
-                <AnimatePresence>
-                  {inspectorOpen && (
-                    <motion.div
-                      key="inspector-drawer"
-                      className="inspector-host drawer"
-                      initial={{ x: '100%', opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
-                      exit={{ x: '100%', opacity: 0 }}
-                      transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.32, 0.72, 0, 1] }}
-                    >
-                      <div
-                        className="panel-resizer panel-resizer-right"
-                        role="separator"
-                        aria-orientation="vertical"
-                        aria-label={t('layout.resizeInspector')}
-                        aria-valuenow={drawerWidth}
-                        aria-valuemin={260}
-                        aria-valuemax={480}
-                        onPointerDown={beginDrawerResize}
-                      />
-                      <div className="drawer-panel">
-                        <RightPanel
-                          workers={snapshot.workers}
-                          teamMembers={snapshot.teamMembers.filter(
-                            (role) => role.chatSessionId === activeSession?.id && !role.archivedAt,
-                          )}
-                          approvals={snapshot.approvals ?? []}
-                          projectId={activeProject?.id ?? null}
-                          sessionId={activeSession?.id ?? null}
-                          onCreateTeamMember={async (body) => {
-                            if (!activeSession) throw new Error('Chat session is required')
-                            await createTeamMember(activeSession.id, body)
-                          }}
-                          onUpdateTeamMember={async (id, body) => {
-                            if (!activeSession) throw new Error('Chat session is required')
-                            await updateTeamMember(activeSession.id, id, body)
-                          }}
-                          onArchiveTeamMember={async (id, expectedRevision) => {
-                            if (!activeSession) throw new Error('Chat session is required')
-                            await archiveTeamMember(activeSession.id, id, expectedRevision)
-                          }}
-                          onResetTeamMemberSession={async (id) => {
-                            if (!activeSession) throw new Error('Chat session is required')
-                            await resetTeamMemberSession(activeSession.id, id)
-                          }}
-                          onResolveApproval={(id, optionId, decision, surface) =>
-                            void resolveApproval(id, decision, optionId, surface).catch((e) =>
-                              toastError(String(e)),
-                            )
-                          }
-                          resolving={resolvingState}
-                          onRefreshSnapshot={() => void refresh()}
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            )}
+          </div>
+        </div>
+
+        <SettingsLayer
+          workers={snapshot.workers}
+          projectId={snapshot.activeProjectId}
+          onToggleWorker={(id, enabled) => void toggleWorker(id, enabled)}
+          onSetWorkerDefaultRoleType={(id, role) => setWorkerDefaultRoleType(id, role)}
+          onHealthAllWorkers={() => healthAllWorkers()}
+          onRegisterCustomAcpWorker={(body) => registerCustomAcpWorker(body)}
+          onRefreshSnapshot={() => void refresh()}
+          onOpen={onSettingsOpen}
+        />
+
         <ConfirmDialog
           open={!!pendingConfirm}
           config={pendingConfirm}
@@ -561,14 +541,16 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <I18nProvider
-        serverLocale={state.snapshot.locale}
-        onLocaleChange={(locale: Locale) => void state.setLocale(locale)}
-      >
-        <ToastProvider>
-          <AppShell {...state} />
-        </ToastProvider>
-      </I18nProvider>
+      <MotionPreferenceProvider>
+        <I18nProvider
+          serverLocale={state.snapshot.locale}
+          onLocaleChange={(locale: Locale) => void state.setLocale(locale)}
+        >
+          <ToastProvider>
+            <AppShell {...state} />
+          </ToastProvider>
+        </I18nProvider>
+      </MotionPreferenceProvider>
     </ThemeProvider>
   )
 }

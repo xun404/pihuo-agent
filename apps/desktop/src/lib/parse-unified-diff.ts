@@ -90,7 +90,7 @@ export type SideBySideRow = {
   right: { no: number | null; content: string; kind: SideCellKind }
 }
 
-/** Pair unified lines into side-by-side rows (OpenChamber-style). */
+/** Pair unified lines into side-by-side rows. */
 export function toSideBySideRows(lines: DiffLine[]): SideBySideRow[] {
   const rows: SideBySideRow[] = []
   let i = 0

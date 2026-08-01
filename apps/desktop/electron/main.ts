@@ -81,8 +81,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Optional Chrome DevTools Protocol for headless inspection/debugging.
 // The development launcher defaults this to 8315; packaged apps remain off by default.
 // SWARMDESK_AGENT_CDP_PORT can override the port (loopback only).
-app.commandLine.appendSwitch('disable-gpu')
-app.commandLine.appendSwitch('disable-software-rasterizer')
+// Optional escape hatch for broken GPU drivers (disables hardware acceleration).
+if (process.env.SWARMDESK_AGENT_DISABLE_GPU === '1') {
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-software-rasterizer')
+}
 if (process.env.SWARMDESK_AGENT_CDP_PORT) {
   app.commandLine.appendSwitch('remote-debugging-port', process.env.SWARMDESK_AGENT_CDP_PORT)
   app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1')

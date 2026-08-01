@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import type {
   CustomAcpLaunchKind,
   CustomAcpRegistrationInput,
@@ -40,7 +40,11 @@ import { ProviderLogo, getProviderIconMeta } from '../lib/provider-icons'
 import { useTheme, type ColorPalette, type ThemeMode } from '../theme/ThemeProvider'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import type { SendShortcut } from '../lib/send-shortcut'
+import { useMotionPreference } from '../motion/MotionPreferenceProvider'
+import type { MotionPreference } from '../lib/motion-preference'
 import { BrandLogo } from './BrandLogo'
+import { OpenSourceCredits } from './OpenSourceCredits'
+import { SettingsSelect } from './SettingsSelect'
 import { Expandable } from './ui/Expandable'
 
 const SETTINGS_TAB_EASE = [0.4, 0, 0.2, 1] as const
@@ -212,9 +216,13 @@ export function SettingsPanel({
   const { t, locale, setLocale } = useI18n()
   const { mode: themeMode, setMode: setThemeMode, palette, setPalette } = useTheme()
   const { sendShortcut, setSendShortcut } = useSendShortcut()
-  const reduceMotion = useReducedMotion()
+  const {
+    preference: motionPreference,
+    setPreference: setMotionPreference,
+    reduceMotion,
+  } = useMotionPreference()
   const tabMotion = {
-    duration: reduceMotion ? 0.01 : 0.18,
+    duration: reduceMotion ? 0 : 0.16,
     ease: SETTINGS_TAB_EASE,
   }
   const { success: toastSuccess, error: toastError } = useToast()
@@ -1415,56 +1423,69 @@ export function SettingsPanel({
                 <div className="lbl">{t('settings.appearance')}</div>
                 <div className="sub">{t('settings.appearanceDesc')}</div>
               </div>
-              <select
-                className="field-select settings-select"
-                style={{ minWidth: 140, width: 'auto' }}
+              <SettingsSelect
+                minWidth={140}
                 value={appearanceChoice(themeMode, palette)}
-                onChange={(e) =>
-                  applyAppearanceChoice(
-                    e.target.value as AppearanceChoice,
-                    setThemeMode,
-                    setPalette,
-                  )
+                onChange={(v) =>
+                  applyAppearanceChoice(v as AppearanceChoice, setThemeMode, setPalette)
                 }
                 aria-label={t('settings.appearance')}
-              >
-                <option value="system">{t('appearance.system')}</option>
-                <option value="classic">{t('appearance.classic')}</option>
-                <option value="dark">{t('appearance.dark')}</option>
-                <option value="warm">{t('appearance.warm')}</option>
-              </select>
+                options={[
+                  { value: 'system', label: t('appearance.system') },
+                  { value: 'classic', label: t('appearance.classic') },
+                  { value: 'dark', label: t('appearance.dark') },
+                  { value: 'warm', label: t('appearance.warm') },
+                ]}
+              />
             </div>
             <div className="settings-row card-row">
               <div className="lbl-block">
                 <div className="lbl">{t('settings.language')}</div>
                 <div className="sub">{t('settings.languageDesc')}</div>
               </div>
-              <select
-                className="field-select settings-select"
-                style={{ minWidth: 140, width: 'auto' }}
+              <SettingsSelect
+                minWidth={140}
                 value={locale}
-                onChange={(e) => setLocale(e.target.value as Locale)}
+                onChange={(v) => setLocale(v as Locale)}
                 aria-label={t('settings.language')}
-              >
-                <option value="zh">{t('lang.zh')}</option>
-                <option value="en">{t('lang.en')}</option>
-              </select>
+                options={[
+                  { value: 'zh', label: t('lang.zh') },
+                  { value: 'en', label: t('lang.en') },
+                ]}
+              />
             </div>
             <div className="settings-row card-row">
               <div className="lbl-block">
                 <div className="lbl">{t('settings.sendShortcut')}</div>
                 <div className="sub">{t('settings.sendShortcutDesc')}</div>
               </div>
-              <select
-                className="field-select settings-select"
-                style={{ minWidth: 140, width: 'auto' }}
+              <SettingsSelect
+                minWidth={140}
                 value={sendShortcut}
-                onChange={(e) => setSendShortcut(e.target.value as SendShortcut)}
+                onChange={(v) => setSendShortcut(v as SendShortcut)}
                 aria-label={t('settings.sendShortcut')}
-              >
-                <option value="enter">{t('settings.sendShortcutEnter')}</option>
-                <option value="mod-enter">{t('settings.sendShortcutModEnter')}</option>
-              </select>
+                options={[
+                  { value: 'enter', label: t('settings.sendShortcutEnter') },
+                  { value: 'mod-enter', label: t('settings.sendShortcutModEnter') },
+                ]}
+              />
+            </div>
+            <div className="settings-row card-row">
+              <div className="lbl-block">
+                <div className="lbl">{t('settings.motion')}</div>
+                <div className="sub">{t('settings.motionDesc')}</div>
+              </div>
+              <SettingsSelect
+                minWidth={140}
+                value={motionPreference}
+                onChange={(v) => setMotionPreference(v as MotionPreference)}
+                aria-label={t('settings.motion')}
+                options={[
+                  { value: 'system', label: t('settings.motionSystem') },
+                  { value: 'on', label: t('settings.motionOn') },
+                  { value: 'off', label: t('settings.motionOff') },
+                ]}
+              />
             </div>
           </div>
           <WorkerTimeoutSettingsEditor
@@ -2909,6 +2930,9 @@ export function SettingsPanel({
                 </div>
               </div>
             )}
+          </div>
+          <div className="settings-form-card about-oss-card">
+            <OpenSourceCredits />
           </div>
         </div>
       )}

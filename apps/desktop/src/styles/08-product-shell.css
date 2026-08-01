@@ -46,6 +46,9 @@ select,
 .msg .bubble,
 .msg pre,
 .msg code,
+.chat-error-card,
+.chat-error-card .chat-error-card-body,
+.chat-error-card .chat-error-card-detail,
 .thinking-block-body,
 .thinking-block-body *,
 .task-row-detail,
@@ -71,6 +74,7 @@ select,
 }
 
 .app-window {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -81,7 +85,7 @@ select,
   background: var(--bg-main);
 }
 
-/* Full-view layer for settings ↔ workspace AnimatePresence transitions */
+/* Full-view layer: workspace stays mounted; settings is an overlay (INP-friendly). */
 .view-layer {
   flex: 1;
   min-height: 0;
@@ -98,6 +102,33 @@ select,
   min-height: 0;
   height: 100%;
 }
+/* Settings overlay: workspace stays mounted (INP). Enter/exit uses transform+opacity.
+   Closed keeps the tree warm-mounted; data-motion=reduce zeros transition via global rules. */
+.view-layer-settings {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: var(--bg-main);
+  transform: translateX(28px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out),
+    visibility 0s linear var(--dur-base);
+  will-change: transform, opacity;
+}
+.view-layer-settings.is-open {
+  transform: translateX(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out),
+    visibility 0s linear 0s;
+}
 
 /* body-row equivalent */
 .shell {
@@ -110,13 +141,13 @@ select,
 }
 .shell.with-inspector {
   /* grid 始终 2 列（sidebar + main），drawer 用 absolute 浮在右侧。
-     main-column 用 padding-right 让出 drawer 空间（CSS transition 平滑过渡），
-     避免 grid-template-columns 切换导致 main 瞬间跳变。*/
+     main-column 用 padding-right 瞬时让位（不动画），仅 drawer 用 transform 滑入，
+     避免 padding 回流 + transform 双轨并行导致的挤压感与卡顿。*/
   gap: 0 var(--sp-2);
   padding: 0 var(--sp-2) var(--sp-2) 0;
   align-items: stretch;
 }
-/* main-column 让出 drawer 空间（transition 在 .main-column base 声明，class 切换双向触发）*/
+/* main-column 让出 drawer 空间：瞬时切换，不参与 transition */
 .shell.with-inspector > .main-column {
   padding-right: calc(var(--drawer-w) + var(--sp-2));
 }
@@ -159,20 +190,39 @@ body.is-resizing-panels .panel-resizer:active::after {
   width: 6px;
 }
 .inspector-host.drawer {
-  /* absolute 浮在 shell 右侧（不参与 grid 流），right 始终保持，
-     折叠时不会因 class 移除跑偏。transform 滑入/滑出由 framer-motion 控制。
+  /* absolute 浮在 shell 右侧（不参与 grid 流）。常驻挂载，用 is-open/is-closed 切换。
      四周留 var(--sp-2) 边距，与 shell padding / sidebar 外边距一致。*/
   position: absolute;
   top: var(--sp-2);
   right: var(--sp-2);
   bottom: var(--sp-2);
   width: var(--drawer-w);
+  z-index: 15;
   /* 覆盖 .drawer { height: 100% }（05）和 .inspector-host.drawer { flex:1 }（06）。
      absolute + top + bottom + height:auto 让高度自动 = 父级 - 上下边距。*/
   height: auto !important;
   flex: none !important;
-  /* 动画期间内容保持目标宽度，容器宽度变化只裁切不重排 */
   overflow: hidden;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out),
+    visibility 0s linear 0s;
+}
+.inspector-host.drawer.is-open {
+  transform: translateX(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.inspector-host.drawer.is-closed {
+  transform: translateX(calc(100% + var(--sp-2)));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out),
+    visibility 0s linear var(--dur-base);
 }
 .inspector-host.drawer .drawer-panel {
   /* 自适应 drawer 外框内部宽度（drawer 用 transform 滑入，不再用 width 动画，
@@ -206,9 +256,8 @@ body.is-resizing-panels * {
   background: var(--bg-main);
   position: relative;
   /* inspector 让位：base 0，.with-inspector 时覆盖为 drawer-w。
-     transition 在 base 声明，class 切换时双向触发（含折叠时 padding→0 的过渡）。*/
+     故意不做 padding 过渡——布局属性动画会整列回流，与 drawer transform 打架。*/
   padding-right: 0;
-  transition: padding-right var(--dur-base) var(--ease-out);
 }
 
 /* Sidebar fills its grid column (width from --sidebar-w) */
@@ -221,9 +270,38 @@ body.is-resizing-panels * {
 
 .chat-workspace {
   position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
 }
-.chat-workspace,
-.chat-workspace-pane,
+/* Keep-alive panes stack absolutely and crossfade via .active (no display hard-cut). */
+.chat-workspace-pane {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: transparent;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    visibility 0s linear var(--dur-fast);
+}
+.chat-workspace-pane.active {
+  z-index: 1;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    visibility 0s linear 0s;
+}
 .chat-panel,
 .main,
 .home-main {
@@ -233,12 +311,12 @@ body.is-resizing-panels * {
   flex-direction: column;
   background: transparent;
 }
-/* Empty-composer overlay: covers the hidden panels so their useChat state
+/* Empty-composer overlay: covers keep-alive panels so their useChat state
    survives while the user composes a new session's first message. */
 .home-main.home-overlay {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   background: var(--bg-main);
 }
 
@@ -415,18 +493,30 @@ body.is-resizing-panels * {
   flex-direction: column;
   overflow: hidden;
 }
-/* 常规 / Worker / 关于：整页内容区可滚，标题在内部顶部固定观感 */
+/* 常规 / Worker / 关于：整页内容区可滚。
+   子项必须 flex-shrink:0，否则内容被压扁、scrollHeight==clientHeight 无法滚动。 */
 .settings-general,
 .settings-workers,
 .settings-about {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  /* bottom padding so last card isn't flush against the edge when scrolled */
+  padding-bottom: var(--sp-6, 24px);
+  overscroll-behavior: contain;
 }
-/* 常规页多卡纵向节奏：外观卡与 Worker 超时卡对齐 */
-.settings-general > .settings-form-card + .settings-form-card {
+.settings-general > *,
+.settings-workers > *,
+.settings-about > * {
+  flex-shrink: 0;
+}
+/* 常规 / 关于：多卡纵向节奏 */
+.settings-general > .settings-form-card + .settings-form-card,
+.settings-about > .settings-form-card + .settings-form-card {
   margin-top: var(--sp-4);
 }
 /* 模型设置 / 编组：标题+描述不滚；下方 model-layout 可滚、撑满 */
@@ -639,6 +729,8 @@ body.is-resizing-panels * {
   max-width: 420px;
   line-height: var(--lh-snug);
   margin: 0;
+  /* Reserve 2 lines so random hint strings of different length do not shift the composer (CLS). */
+  min-height: calc(var(--fs-sm) * var(--lh-snug) * 2);
 }
 
 /* Composer 默认宽 = 消息列（空态 / dock 共用） */
@@ -852,16 +944,32 @@ body {
 
 /* =========================================================
    Motion · reduced-motion 全局兜底（v4 对齐）
-   覆盖现有 4 个分散块的缺口：thinking-pulse / toast-in / 全部 transition。
-   关键：用 0.01ms 而非 none —— 避免破坏依赖 animationend/transitionend 的逻辑。
-   与上方 4 个逐块覆盖共存（不删，避免回归）。
+   由 MotionPreferenceProvider 写 data-motion=reduce|full：
+   - reduce：强制减动效（设置「关闭」或 system+OS reduce）
+   - full：强制完整动效（设置「开启」，可覆盖 OS）
+   无 data-motion 时回退系统 prefers-reduced-motion（首屏/无 JS）。
+   用 0.01ms 而非 none —— 避免破坏依赖 animationend/transitionend 的逻辑。
    ========================================================= */
+/* Hard kill CSS motion when user chose off (or system reduce).
+   Prefer animation/transition:none so infinite keyframes truly stop. */
+:root[data-motion='reduce'] *,
+:root[data-motion='reduce'] *::before,
+:root[data-motion='reduce'] *::after {
+  animation: none !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition: none !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  :root:not([data-motion='full']) *,
+  :root:not([data-motion='full']) *::before,
+  :root:not([data-motion='full']) *::after {
+    animation: none !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition: none !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

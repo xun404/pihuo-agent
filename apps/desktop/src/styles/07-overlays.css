@@ -142,6 +142,7 @@
   border-top: 1px solid var(--border-soft);
   margin-top: 0;
 }
+.settings-form-card .settings-select-wrap,
 .settings-form-card .settings-select,
 .settings-form-card .field-select.settings-select {
   flex-shrink: 0;

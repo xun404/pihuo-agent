@@ -3,7 +3,8 @@
  * Uses the same lightweight tokenizer as the diff viewer.
  */
 import { memo, useCallback, useMemo, useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, WrapText } from 'lucide-react'
+import { useI18n } from '../../i18n/I18nProvider'
 import { highlightLine } from '../../lib/diff-syntax-highlight'
 
 type Props = {
@@ -72,6 +73,7 @@ function renderTokens(line: string, lang: string) {
 }
 
 function MdCodeBlockImpl({ code, language, className }: Props) {
+  const { t } = useI18n()
   const lang = useMemo(() => normalizeLang(language), [language])
   const lines = useMemo(() => {
     // Drop trailing fence newline that react-markdown leaves on
@@ -79,6 +81,8 @@ function MdCodeBlockImpl({ code, language, className }: Props) {
     return raw.length === 0 ? [''] : raw.split('\n')
   }, [code])
   const [copied, setCopied] = useState(false)
+  // Ephemeral: default no wrap; not persisted across remounts / sessions
+  const [wrap, setWrap] = useState(false)
 
   const onCopy = useCallback(async () => {
     try {
@@ -93,20 +97,38 @@ function MdCodeBlockImpl({ code, language, className }: Props) {
   const gutterDigits = String(lines.length).length
 
   return (
-    <div className={`md-code-block-wrap${className ? ` ${className}` : ''}`} data-lang={lang || 'text'}>
+    <div
+      className={`md-code-block-wrap${wrap ? ' is-wrap' : ' is-nowrap'}${className ? ` ${className}` : ''}`}
+      data-lang={lang || 'text'}
+    >
       <div className="md-code-block-head">
         <span className="md-code-block-lang">{displayLang(lang)}</span>
-        <button
-          type="button"
-          className={`md-code-block-copy${copied ? ' is-copied' : ''}`}
-          onClick={() => void onCopy()}
-          aria-label={copied ? 'Copied' : 'Copy code'}
-        >
-          {copied ? <Check size={13} /> : <Copy size={13} />}
-          <span>{copied ? 'Copied' : 'Copy'}</span>
-        </button>
+        <div className="md-code-block-actions">
+          <button
+            type="button"
+            className={`md-code-block-action${wrap ? ' is-on' : ''}`}
+            onClick={() => setWrap((v) => !v)}
+            aria-pressed={wrap}
+            title={t('chat.diff.wrap')}
+          >
+            <WrapText size={13} aria-hidden />
+            <span>{t('chat.diff.wrapShort')}</span>
+          </button>
+          <button
+            type="button"
+            className={`md-code-block-action md-code-block-copy${copied ? ' is-copied' : ''}`}
+            onClick={() => void onCopy()}
+            aria-label={copied ? 'Copied' : 'Copy code'}
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+            <span>{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+        </div>
       </div>
-      <pre className="md-code-block" style={{ ['--md-gutter-ch' as string]: `${gutterDigits}ch` }}>
+      <pre
+        className={`md-code-block${wrap ? ' is-wrap' : ' is-nowrap'}`}
+        style={{ ['--md-gutter-ch' as string]: `${gutterDigits}ch` }}
+      >
         {lines.map((line, i) => (
           <div key={i} className="md-code-line">
             <span className="md-code-ln" aria-hidden>

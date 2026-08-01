@@ -260,72 +260,9 @@
 }
 /* Leader：过程块等距；整段消息块用内边距形成阅读岛 */
 /* ============================================================
-   ★ Supervisor 卡片（sup-card / sup-header / sup-body / sup-footer）
-   取代旧的 .msg.leader 容器 + msg-role-row + msg-run-meta。
+   Leader 扁平布局：.sup-body 仍为内容列容器（无 sup-card 卡片壳）。
+   旧 sup-card / sup-header / Supervisor 头像样式已移除。
    ============================================================ */
-.sup-card {
-  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--r-xl);
-  padding: var(--sp-3) var(--sp-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  box-sizing: border-box;
-}
-.sup-header {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: 22px;
-}
-.sup-avatar {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-sm);
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--bg-surface) 82%, #e6c873 18%),
-    var(--bg-hover)
-  );
-  display: grid;
-  place-items: center;
-  color: var(--text-1);
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, #c69a2d 26%, var(--border-soft));
-  overflow: hidden;
-}
-.sup-avatar svg,
-.sup-avatar .queen-bee {
-  width: 14px;
-  height: 14px;
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-.sup-name {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--text-1);
-}
-.sup-model {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  color: var(--text-3);
-  background: var(--bg-hover);
-  padding: 1px 7px;
-  border-radius: var(--r-pill);
-}
-.sup-model .i {
-  width: 9px;
-  height: 9px;
-  flex-shrink: 0;
-}
 .sup-status .pip {
   width: 6px;
   height: 6px;
@@ -517,9 +454,8 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-/* leader 旧规则清理后的消息间距 */
+/* leader 扁平消息间距 */
 .msg.leader {
-  /* 仅保留 flex 基础——卡片样式移至 .sup-card */
   align-items: stretch;
   gap: 5px;
   box-sizing: border-box;
@@ -697,7 +633,15 @@ html[data-theme='dark'] .md-code-block-wrap {
   text-transform: none;
   color: var(--text-2);
   font-weight: var(--fw-medium);
+  min-width: 0;
 }
+.md-code-block-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.md-code-block-action,
 .md-code-block-copy {
   display: inline-flex;
   align-items: center;
@@ -715,9 +659,14 @@ html[data-theme='dark'] .md-code-block-wrap {
     color var(--dur-instant) var(--ease-out),
     background var(--dur-instant) var(--ease-out);
 }
+.md-code-block-action:hover,
 .md-code-block-copy:hover {
   color: var(--text-1);
   background: color-mix(in srgb, var(--text-1) 6%, transparent);
+}
+.md-code-block-action.is-on {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 8%, transparent);
 }
 .md-code-block-copy.is-copied {
   color: var(--green, #1a9e5c);
@@ -740,8 +689,13 @@ html[data-theme='dark'] .md-code-block-wrap {
 .md-code-line {
   display: flex;
   align-items: flex-start;
-  min-width: min-content;
   width: 100%;
+}
+.md-code-block.is-nowrap .md-code-line {
+  min-width: min-content;
+}
+.md-code-block.is-wrap .md-code-line {
+  min-width: 0;
 }
 .md-code-line:hover {
   background: color-mix(in srgb, var(--text-1) 3.5%, transparent);
@@ -760,13 +714,20 @@ html[data-theme='dark'] .md-code-block-wrap {
 .md-code-src {
   flex: 1 1 auto;
   padding: 0 12px 0 12px;
-  white-space: pre;
   font-family: inherit;
   font-size: inherit;
   font-weight: 400;
   background: transparent !important;
   color: inherit;
   min-width: 0;
+}
+.md-code-block.is-nowrap .md-code-src {
+  white-space: pre;
+}
+.md-code-block.is-wrap .md-code-src {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 /* empty line still needs height */
 .md-code-src:empty::after {
@@ -1128,24 +1089,19 @@ html[data-theme='dark'] .md-code-block-wrap {
 .thinking-block-label {
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  color: var(--text-2);
+  color: var(--text-3);
   line-height: 1.25;
   flex-shrink: 0;
   white-space: nowrap;
 }
+/* Live label slightly brighter; done summary stays secondary */
 .thinking-block.live .thinking-block-label {
-  opacity: 0.7;
-  transition: opacity var(--dur-base) ease;
+  color: var(--text-2);
+  opacity: 0.85;
+  transition: opacity var(--dur-base) ease, color var(--dur-base) ease;
 }
-.thinking-block-preview {
-  font-size: 12px;
+.thinking-block:not(.live):not(.is-open) .thinking-block-label {
   color: var(--text-3);
-  opacity: 0.72;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  flex: 1 1 auto;
 }
 /* 内层容器：配合外层 height 动画做 opacity + translateY。
    注意：不要在内层/body 设 max-height 或 margin——会钳制外层 scrollHeight 测量，
@@ -1166,13 +1122,17 @@ html[data-theme='dark'] .md-code-block-wrap {
   white-space: pre-wrap;
   line-height: 1.45;
   opacity: 0.92;
-  /* 流式时内联增长（不锁 max-height），结束后才滚动框 */
 }
+/* Streaming: cap height + bottom fade so long reasoning does not fill the viewport */
 .thinking-block-body.live {
   color: var(--text-2);
   opacity: 0.95;
+  max-height: 8.75rem;
+  overflow: auto;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%);
 }
-/* 结束态（非 live）：内容过长时滚动框，避免撑爆消息列 */
+/* 结束态（展开查看）：内容过长时滚动框，避免撑爆消息列 */
 .thinking-block:not(.live) .thinking-block-body {
   max-height: 240px;
   overflow: auto;
@@ -1222,7 +1182,7 @@ html[data-theme='dark'] .md-code-block-wrap {
   flex: 1 1 auto;
   max-width: min(520px, 58vw);
 }
-/* 工具展开体：OpenChamber 风格的输入/输出块，保留共用的左侧 guide。 */
+/* Tool expand body: input/output blocks with shared left guide. */
 .tool-row .node-body-inner,
 .worker-run .node-body-inner {
   display: flex;
@@ -1341,6 +1301,73 @@ html[data-theme='dark'] .md-code-block-wrap {
   margin: 0;
 }
 
+/* ============ Turn process summary (worked-for collapse) ============ */
+.worked-for {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 4px;
+}
+.worked-for-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 2px 2px 2px 1px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-3);
+  width: fit-content;
+  box-sizing: border-box;
+}
+.worked-for-summary:hover {
+  color: var(--text-2);
+}
+.worked-for-summary:focus-visible {
+  outline: 2px solid var(--border-focus, var(--accent));
+  outline-offset: 2px;
+}
+.worked-for-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.worked-for-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  color: inherit;
+  opacity: 0.75;
+  transition: transform var(--dur-base) var(--ease-out);
+  transform: rotate(0deg);
+}
+.worked-for-chevron.is-open {
+  transform: rotate(90deg);
+}
+.worked-for-rule {
+  width: 100%;
+  height: 0;
+  margin: 2px 0 0;
+  border-top: 1px solid var(--border);
+  opacity: 0.7;
+}
+.worked-for-collapse {
+  /* height animated by useCollapsible */
+}
+.worked-for-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 4px;
+  width: 100%;
+}
+
 /* —— Worker 行（线稿 node-row 1:1，与 tool-row-summary 同款）——
    关键：head 是纯排版行，无 padding/bg/radius。与 thinking/tool 视觉统一。*/
 .worker-run {
@@ -1455,8 +1482,8 @@ html[data-theme='dark'] .md-code-block-wrap {
   color: var(--text-4);
   user-select: none;
 }
+/* Status + duration trail after name/role/model — keep inline, do not dock right */
 .worker-card-head .status {
-  margin-left: auto;
   font-family: var(--mono);
   font-size: var(--fs-2xs);
   font-variant-numeric: tabular-nums;
@@ -1801,54 +1828,118 @@ html[data-theme='dark'] .md-code-block-wrap {
   padding: var(--sp-4);
   text-align: center;
 }
-.chat-error-block {
-  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
-  background: var(--danger-soft);
-  border-radius: var(--r-lg);
-  padding: var(--sp-3);
-  margin: 0 0 var(--sp-2);
-  /* 防止长 URL 把卡撑破右缘（再被 messages-scroll overflow-x 裁掉） */
-  max-width: 100%;
+/* 对话错误卡（扁平 Leader 风格，无 Supervisor 旧卡片壳） */
+.chat-error-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
+  max-width: 100%;
   min-width: 0;
+  margin: 4px 0 0;
+  padding: 12px 14px;
   box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--danger-soft) 88%, var(--bg-surface));
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-/* 嵌在 Supervisor 卡内：与正文同内缩；不用 margin+width:100% 以免右缘溢出 */
-.msg.leader > .chat-error-block.chat-error-in-bubble {
-  margin-left: var(--leader-content-indent-l, 12px);
-  margin-right: var(--leader-content-indent-r, 16px);
-  margin-top: 4px;
-  margin-bottom: 0;
-  /* flex 列里 stretch 会扣掉水平 margin；禁止 max-width:100% 顶满父级 */
-  width: auto;
-  max-width: none;
-  min-width: 0;
+.msg.leader > .chat-error-card,
+.msg.leader .sup-body > .chat-error-card {
   align-self: stretch;
+}
+.msg-error-standalone {
+  width: 100%;
+  max-width: var(--messages-max);
+  margin-inline: auto;
+  padding: 0 2px;
   box-sizing: border-box;
 }
-.chat-error-label {
-  display: block;
+.chat-error-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.chat-error-card-title {
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   color: var(--danger);
-  margin-bottom: 4px;
-}
-.chat-error-body {
-  font-size: var(--fs-sm);
-  color: color-mix(in srgb, var(--danger) 75%, var(--text-1));
   line-height: var(--lh-snug);
-  overflow-wrap: anywhere;
-  word-break: break-word;
   min-width: 0;
 }
-.chat-error-actions {
+.chat-error-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur-instant) ease,
+    background var(--dur-instant) ease;
+}
+.chat-error-copy:hover {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+}
+.chat-error-copy.is-copied {
+  color: var(--green, #2f9e64);
+}
+.chat-error-card-body {
+  font-size: var(--fs-sm);
+  color: color-mix(in srgb, var(--danger) 70%, var(--text-1));
+  line-height: var(--lh-snug);
+  min-width: 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* Original provider text (when different from the primary line) */
+.chat-error-card-detail {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 14%, var(--border-soft));
+  color: var(--text-2);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--fs-2xs);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-height: 12rem;
+  overflow: auto;
+  min-width: 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.chat-error-card,
+.chat-error-card * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.chat-error-copy,
+.chat-error-copy * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.chat-error-card-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
   min-width: 0;
+  padding-top: 2px;
 }
 .chat-error-action {
   margin-top: 0;
@@ -1872,6 +1963,7 @@ html[data-theme='dark'] .md-code-block-wrap {
   /*
    * 顶部透明 → 主底色：消息滚入时渐隐，避免与 status row 文字重叠。
    * 在 status row 高度附近已接近不透明。
+   * padding-top 覆盖 status row 槽（28+6）+ 渐变带余量，高度稳定减少 CLS。
    */
   background: linear-gradient(
     to bottom,
@@ -1883,6 +1975,8 @@ html[data-theme='dark'] .md-code-block-wrap {
   );
   padding-top: 44px;
   box-sizing: border-box;
+  /* Contain horizontal shifts from chip label changes inside the dock */
+  contain: layout;
 }
 .composer-dock .composer-stack {
   /* 与消息列同一 max 宽 */

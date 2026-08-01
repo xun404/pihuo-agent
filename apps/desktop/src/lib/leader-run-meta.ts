@@ -151,9 +151,8 @@ function precedingUserTimestamp(messages: RunMessage[], assistantIndex: number):
 
 /**
  * Footer activity codes while the Leader turn is live.
- * OpenChamber-style phrases (searching / delegating / composing …) are the
- * reference set; values are i18n keys under chat.activity.*.
- * Unknown tools and empty parts deliberately fall back to thinking.
+ * Activity phrases (searching / delegating / composing …) map to i18n keys
+ * under chat.activity.*. Unknown tools and empty parts fall back to thinking.
  */
 export type LeaderActivityKey =
   | 'chat.activity.thinking'
@@ -238,7 +237,7 @@ export function mapToolNameToLeaderActivity(toolName: string): LeaderActivityKey
   )
     return 'chat.activity.updatingTodos'
 
-  // —— Generic ACP / CLI tools (OpenChamber reference) ——
+  // —— Generic ACP / CLI tools ——
   if (
     n.includes('bash') ||
     n.includes('shell') ||
@@ -323,7 +322,7 @@ export function resolveLeaderActivity(parts: Array<Record<string, unknown>>): Le
     }
 
     if (type === 'text') {
-      // Composing reply body (OpenChamber: "composing").
+      // Composing reply body.
       const text = typeof part.text === 'string' ? part.text : ''
       if (part.state === 'streaming' || (text.trim() && part.state !== 'done')) {
         return 'chat.activity.composing'
@@ -358,25 +357,21 @@ export function extractPrecedingUserMeta(
   return {}
 }
 
-/** Display clock times in China Standard Time (Asia/Shanghai, UTC+8). */
-export const DISPLAY_TIME_ZONE = 'Asia/Shanghai'
-
 /**
- * Format a run start time as date + time + timezone label (default CST).
- * Always converts with Asia/Shanghai; locale / tzLabel are i18n-friendly.
- * Example: 2026/07/16 18:51:33 CST
+ * Format a run start time with the **system local timezone** (no CST / fixed-zone label).
+ * Example: 2026/08/01 09:20:06
+ *
+ * Optional `timeZone` overrides the zone (IANA). Labels like "CST" are intentionally omitted.
  */
 export function formatClockTime(
   ts: number,
   locale: string,
-  opts?: { timeZoneLabel?: string; timeZone?: string },
+  opts?: { timeZone?: string },
 ): string {
-  const tz = opts?.timeZone ?? DISPLAY_TIME_ZONE
-  const tzLabel = opts?.timeZoneLabel ?? 'CST'
   try {
     const loc = locale === 'zh' || locale.startsWith('zh') ? 'zh-CN' : 'en-US'
-    const formatted = new Date(ts).toLocaleString(loc, {
-      timeZone: tz,
+    return new Date(ts).toLocaleString(loc, {
+      ...(opts?.timeZone ? { timeZone: opts.timeZone } : {}),
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -385,10 +380,8 @@ export function formatClockTime(
       second: '2-digit',
       hour12: false,
     })
-    return `${formatted} ${tzLabel}`.trim()
   } catch {
-    // Fallback: still force +08:00 offset roughly via ISO (UTC) + label
-    return `${new Date(ts).toISOString().replace('T', ' ').slice(0, 19)} UTC ${tzLabel}`.trim()
+    return new Date(ts).toISOString().replace('T', ' ').slice(0, 19)
   }
 }
 

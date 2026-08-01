@@ -49,6 +49,9 @@ export type MessageKey =
   | 'chat.errorNetwork'
   | 'chat.errorOffline'
   | 'chat.errorOpenBilling'
+  | 'chat.errorOpenLink'
+  | 'chat.errorCopy'
+  | 'chat.errorCopied'
   | 'chat.greeting'
   | 'chat.greetingNoProject'
   | 'chat.subhead'
@@ -92,6 +95,10 @@ export type MessageKey =
   | 'chat.think.xhigh'
   | 'chat.thinking'
   | 'chat.thinkingLive'
+  | 'chat.thinkingDone'
+  | 'chat.thinkingDoneFor'
+  | 'chat.worked.done'
+  | 'chat.worked.for'
   | 'chat.activity.thinking'
   | 'chat.activity.composing'
   | 'chat.activity.command'
@@ -305,6 +312,9 @@ export type MessageKey =
   | 'role.review'
   | 'role.test'
   | 'settings.aboutBody'
+  | 'settings.ossTitle'
+  | 'settings.ossIntro'
+  | 'settings.ossCount'
   | 'settings.addProvider'
   | 'settings.addModel'
   | 'settings.addModelBtn'
@@ -367,6 +377,11 @@ export type MessageKey =
   | 'settings.sendShortcutDesc'
   | 'settings.sendShortcutEnter'
   | 'settings.sendShortcutModEnter'
+  | 'settings.motion'
+  | 'settings.motionDesc'
+  | 'settings.motionSystem'
+  | 'settings.motionOn'
+  | 'settings.motionOff'
   | 'settings.modelDocs'
   | 'settings.modelId'
   | 'settings.modelNotFeatured'
@@ -744,6 +759,9 @@ const zh: Dict = {
   'chat.errorNetwork': '无法连接本地服务，请确认 API 已启动。',
   'chat.errorOffline': '服务未连接，请稍后重试。',
   'chat.errorOpenBilling': '打开账单页',
+  'chat.errorOpenLink': '查看详情',
+  'chat.errorCopy': '复制',
+  'chat.errorCopied': '已复制',
   'chat.greeting': '我们应该在 {project} 中构建什么？',
   'chat.greetingNoProject': '我们应该构建什么？',
   'chat.subhead': '派发多个 Agent Worker 协同完成编码、审查与规划。Leader 统筹，Worker 各司其职。',
@@ -836,6 +854,10 @@ const zh: Dict = {
   'chat.diff.collapseAll': '全部折叠',
   'chat.thinking': '思考',
   'chat.thinkingLive': '思考中',
+  'chat.thinkingDone': '已思考',
+  'chat.thinkingDoneFor': '已思考 {time}',
+  'chat.worked.done': '已处理',
+  'chat.worked.for': '已处理 {time}',
   'chat.activity.thinking': '思考中',
   'chat.activity.composing': '撰写中',
   'chat.activity.command': '执行命令',
@@ -1008,7 +1030,10 @@ const zh: Dict = {
   'role.review': '审查',
   'role.test': '测试',
   'settings.aboutBody':
-    'SwarmDesk 是 macOS 桌面多智能体指挥台：Leader 编排，本机 CLI Workers 经 ACP 执行。',
+    'SwarmDesk 是本机多智能体指挥台（ACP）。Mastra Supervisor（Leader）负责规划与委派；Claude Code、Codex、OpenCode 与 Registry Agent 在本地执行，统一在桌面应用中跟踪。支持 macOS、Windows 与 Linux。',
+  'settings.ossTitle': '开源项目',
+  'settings.ossIntro': '本产品直接依赖的主要开源项目（非完整传递依赖清单）。',
+  'settings.ossCount': '{count} 项',
   'settings.addProvider': '添加供应商',
   'settings.addModel': '添加模型',
   'settings.addModelBtn': '+ 添加',
@@ -1027,7 +1052,7 @@ const zh: Dict = {
   'settings.descPrompts': '设置 Leader 和各类角色在后续任务中使用的默认提示词。',
   'settings.descWorkers': '注册与管理 CLI Worker（Claude Code / Codex / OpenCode 等）。',
   'settings.descTeams': '查看、重命名与删除已保存的协作编组；新建与应用到会话在 Chat Team 中完成。',
-  'settings.descAbout': '产品信息与版本。',
+  'settings.descAbout': '产品信息、版本与开源致谢。',
   'settings.cancelEdit': '取消编辑',
   'settings.clear': '清除',
   'settings.configured': '已配置',
@@ -1078,6 +1103,11 @@ const zh: Dict = {
   'settings.sendShortcutDesc': '输入框中发送消息的快捷键',
   'settings.sendShortcutEnter': 'Enter',
   'settings.sendShortcutModEnter': '⌘/Ctrl+Enter',
+  'settings.motion': '动画',
+  'settings.motionDesc': '面板开合、过渡与装饰动效；关闭可减轻卡顿',
+  'settings.motionSystem': '跟随系统',
+  'settings.motionOn': '开启',
+  'settings.motionOff': '关闭',
   'settings.modelDocs': '文档',
   'settings.modelId': '模型 id',
   'settings.modelNotFeatured': '非精选',
@@ -1109,7 +1139,7 @@ const zh: Dict = {
   'settings.runtime.npmRegistryErrorHttps': '必须以 https:// 开头',
   'settings.runtime.npmRegistryErrorSpace': '不能包含空格等非法字符',
   'settings.runtime.saveSuccess': '运行设置已保存',
-  'settings.runtime.workerTimeouts': '运行时',
+  'settings.runtime.workerTimeouts': 'Worker执行设置',
   'settings.runtime.workerTimeoutsDesc': 'Leader 步数预算与 Worker 超时（分钟）。',
   'settings.runtime.workerTimeoutsSave': '保存',
   'settings.runtime.minutesUnit': '分钟',
@@ -1461,6 +1491,9 @@ const en: Dict = {
   'chat.errorNetwork': 'Cannot reach the local API. Make sure it is running.',
   'chat.errorOffline': 'Service is offline. Please retry shortly.',
   'chat.errorOpenBilling': 'Open billing',
+  'chat.errorOpenLink': 'View details',
+  'chat.errorCopy': 'Copy',
+  'chat.errorCopied': 'Copied',
   'chat.greeting': 'What should we build in {project}?',
   'chat.greetingNoProject': 'What should we build?',
   'chat.subhead':
@@ -1555,6 +1588,10 @@ const en: Dict = {
   'chat.diff.collapseAll': 'Collapse all',
   'chat.thinking': 'Thinking',
   'chat.thinkingLive': 'Thinking',
+  'chat.thinkingDone': 'Thought',
+  'chat.thinkingDoneFor': 'Thought for {time}',
+  'chat.worked.done': 'Worked',
+  'chat.worked.for': 'Worked for {time}',
   'chat.activity.thinking': 'thinking',
   'chat.activity.composing': 'composing',
   'chat.activity.command': 'running command',
@@ -1735,7 +1772,10 @@ const en: Dict = {
   'role.review': 'Review',
   'role.test': 'Test',
   'settings.aboutBody':
-    'SwarmDesk is a macOS multi-agent console: the Leader orchestrates, local CLI workers run via ACP.',
+    'SwarmDesk is a local multi-agent command center for ACP workers. A Mastra Supervisor (Leader) plans and delegates — Claude Code, Codex, OpenCode, and Registry agents run on your machine and are tracked in one desktop app. Available on macOS, Windows, and Linux.',
+  'settings.ossTitle': 'Open source',
+  'settings.ossIntro': 'Major open-source projects this app depends on directly (not a full transitive list).',
+  'settings.ossCount': '{count}',
   'settings.addProvider': 'Add provider',
   'settings.addModel': 'Add model',
   'settings.addModelBtn': '+ Add',
@@ -1756,7 +1796,7 @@ const en: Dict = {
   'settings.descWorkers': 'Register and manage CLI workers (Claude Code / Codex / OpenCode).',
   'settings.descTeams':
     'Browse, rename, and delete saved collaborative crews. Create and apply crews from Chat Team.',
-  'settings.descAbout': 'Product info and version.',
+  'settings.descAbout': 'Product info, version, and open-source credits.',
   'settings.cancelEdit': 'Cancel',
   'settings.clear': 'Clear',
   'settings.configured': 'Ready',
@@ -1809,6 +1849,11 @@ const en: Dict = {
   'settings.sendShortcutDesc': 'Keyboard shortcut to send from the composer',
   'settings.sendShortcutEnter': 'Enter',
   'settings.sendShortcutModEnter': '⌘/Ctrl+Enter',
+  'settings.motion': 'Animation',
+  'settings.motionDesc': 'Panel transitions and decorative motion; turn off to reduce jank',
+  'settings.motionSystem': 'System',
+  'settings.motionOn': 'On',
+  'settings.motionOff': 'Off',
   'settings.modelDocs': 'Docs',
   'settings.modelId': 'Model id',
   'settings.modelNotFeatured': 'Not featured',
@@ -1843,7 +1888,7 @@ const en: Dict = {
   'settings.runtime.npmRegistryErrorHttps': 'Must start with https://',
   'settings.runtime.npmRegistryErrorSpace': 'Must not contain spaces or illegal characters',
   'settings.runtime.saveSuccess': 'Runtime settings saved',
-  'settings.runtime.workerTimeouts': 'Runtime',
+  'settings.runtime.workerTimeouts': 'Worker execution settings',
   'settings.runtime.workerTimeoutsDesc': 'Leader step budget and Worker timeouts (minutes).',
   'settings.runtime.workerTimeoutsSave': 'Save',
   'settings.runtime.minutesUnit': 'min',

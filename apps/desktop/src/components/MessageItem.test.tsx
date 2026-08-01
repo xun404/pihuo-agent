@@ -3,20 +3,29 @@ import { describe, it } from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { UIMessage } from '@ai-sdk/react'
+import { formatMessage } from '../i18n/locales.js'
 import { MessageItem, type MessageItemProps } from './MessageItem.js'
 
 ;(globalThis as typeof globalThis & { React: typeof React }).React = React
 
-const t: MessageItemProps['t'] = (key) =>
-  ({
-    'chat.thinking': '思考',
-    'chat.thinkingLive': '思考中',
-    'chat.runPlaceholder': '运行中',
-    'chat.toolError': '工具错误',
-    'chat.runTzCst': 'CST',
-    'chat.think.high': '高',
-    'chat.think.medium': '中',
-  })[key] ?? key
+const STRINGS: Partial<Record<string, string>> = {
+  'chat.thinking': '思考',
+  'chat.thinkingLive': '思考中',
+  'chat.thinkingDone': '已思考',
+  'chat.thinkingDoneFor': '已思考 {time}',
+  'chat.worked.done': '已处理',
+  'chat.worked.for': '已处理 {time}',
+  'chat.activity.command': 'Command',
+  'chat.activity.thinking': '思考中',
+  'chat.runPlaceholder': '运行中',
+  'chat.toolError': '工具错误',
+  'chat.runTzCst': 'CST',
+  'chat.think.high': '高',
+  'chat.think.medium': '中',
+}
+
+const t: MessageItemProps['t'] = (key, vars) =>
+  formatMessage(STRINGS[key] ?? key, vars)
 
 function renderLeader(options: { live: boolean; parts: UIMessage['parts'] }): string {
   const messages = [
@@ -104,7 +113,8 @@ describe('MessageItem Leader footer', () => {
     assert.match(value, /deepseek-v4-flash/)
     assert.match(value, />高</)
     assert.match(value, /1分13秒/)
-    assert.match(value, /CST/)
+    assert.doesNotMatch(value, /CST/)
+    assert.match(value, /2026/)
     assert.equal((value.match(/lead-footer-separator/g) ?? []).length, 3)
   })
 
@@ -127,5 +137,43 @@ describe('MessageItem Leader footer', () => {
     const value = footer(markup)
     assert.match(value, /2分/)
     assert.doesNotMatch(value, /1分13秒/)
+  })
+})
+
+describe('MessageItem Worked-for collapse', () => {
+  it('folds process trail under 已处理 and keeps final text outside when turn is done', () => {
+    const markup = renderLeader({
+      live: false,
+      parts: [
+        { type: 'reasoning', text: 'secret reasoning chain', state: 'done' } as never,
+        {
+          type: 'tool-bash',
+          toolCallId: 't1',
+          state: 'output-available',
+          input: { command: 'pwd' },
+          output: { stdout: '/tmp' },
+        } as never,
+        { type: 'text', text: '最终结果正文' },
+      ],
+    })
+    assert.match(markup, /class="worked-for"/u)
+    assert.match(markup, /已处理/u)
+    assert.match(markup, /最终结果正文/u)
+    // Default collapsed: process body unmounted
+    assert.doesNotMatch(markup, /secret reasoning chain/u)
+    assert.doesNotMatch(markup, /worked-for is-open/u)
+  })
+
+  it('keeps process rows visible in document order while the turn is live', () => {
+    const markup = renderLeader({
+      live: true,
+      parts: [
+        { type: 'reasoning', text: 'live reasoning', state: 'streaming' } as never,
+        { type: 'text', text: 'partial' },
+      ],
+    })
+    assert.doesNotMatch(markup, /class="worked-for"/u)
+    assert.match(markup, /live reasoning/u)
+    assert.match(markup, /partial/u)
   })
 })

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatElapsedHms, formatElapsedSeconds } from './format-elapsed.js'
+import { formatElapsedCompact, formatElapsedHms, formatElapsedSeconds } from './format-elapsed.js'
 
 describe('formatElapsedSeconds', () => {
   it('uses 0.1s steps under 10s', () => {
@@ -32,5 +32,16 @@ describe('formatElapsedHms', () => {
     assert.equal(formatElapsedHms(3.29, 'en'), '3.2s')
     assert.equal(formatElapsedHms(135, 'en'), '2m 15s')
     assert.equal(formatElapsedHms(3723, 'en'), '1h 2m 3s')
+  })
+})
+
+describe('formatElapsedCompact', () => {
+  it('formats compact latin units and trims zeros', () => {
+    assert.equal(formatElapsedCompact(3.29), '3.2s')
+    assert.equal(formatElapsedCompact(12), '12s')
+    assert.equal(formatElapsedCompact(60), '1m')
+    assert.equal(formatElapsedCompact(473), '7m 53s')
+    assert.equal(formatElapsedCompact(3600), '1h')
+    assert.equal(formatElapsedCompact(3723), '1h 2m 3s')
   })
 })

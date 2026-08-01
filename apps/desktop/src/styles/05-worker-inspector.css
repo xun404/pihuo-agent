@@ -401,8 +401,11 @@
   background: var(--danger-soft);
 }
 
+:root[data-motion='reduce'] .role-card-status.is-busy .role-card-status-dot {
+  animation: none;
+}
 @media (prefers-reduced-motion: reduce) {
-  .role-card-status.is-busy .role-card-status-dot {
+  :root:not([data-motion='full']) .role-card-status.is-busy .role-card-status-dot {
     animation: none;
   }
 }
