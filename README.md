@@ -24,7 +24,6 @@
 <h3 align="center"><a href="https://github.com/xun404/swarmdesk-agent/releases/latest"><ins>Download SwarmDesk</ins></a></h3>
 
 <p align="center">
-  <!-- Drop your hero screenshot at docs/assets/readme-hero.png -->
   <img src="docs/assets/readme-hero.png" alt="SwarmDesk desktop — Leader chat, workers, and project context" width="960" />
 </p>
 

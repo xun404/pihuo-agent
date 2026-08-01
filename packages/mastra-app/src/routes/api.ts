@@ -1368,20 +1368,21 @@ export const apiRoutes = [
   registerApiRoute('/api/demo/seed', {
     method: 'POST',
     handler: async (c) => {
-      const rootPath = process.cwd()
-      const project = store().upsertProject({
-        name: 'swarmdesk-agent',
-        rootPath,
-        defaultBranch: 'main',
-      })
-      const locale = store().getLocale()
-      const session = store().createSession({
-        projectId: project.id,
-        title: locale === 'en' ? 'Implement session sidebar' : '实现 Session 侧栏',
-        mode: 'build',
-        rolePrompts: loadSettings().prompts.roles,
-      })
-      return c.json({ project, session, snapshot: store().snapshot() })
+      try {
+        const body = (await c.req.json().catch(() => ({}))) as {
+          rootPath?: string
+          seedMemory?: boolean
+        }
+        const { seedDemoShowcase } = await import('../demo-seed.js')
+        const result = await seedDemoShowcase(store(), {
+          rootPath: body.rootPath,
+          seedMemory: body.seedMemory,
+        })
+        return c.json({ ...result, snapshot: store().snapshot() })
+      } catch (e) {
+        console.error('[api] demo seed failed', e)
+        return c.json({ error: 'Demo seed failed' }, 500)
+      }
     },
   }),
 ]

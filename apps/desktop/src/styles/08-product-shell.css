@@ -103,11 +103,13 @@ select,
   height: 100%;
 }
 /* Settings overlay: workspace stays mounted (INP). Enter/exit uses transform+opacity.
-   Closed keeps the tree warm-mounted; data-motion=reduce zeros transition via global rules. */
+   Closed keeps the tree warm-mounted; data-motion=reduce zeros transition via global rules.
+   z-index must sit above .panel-resizer (30) so sidebar/inspector drag handles cannot
+   steal pointer events while settings is open. */
 .view-layer-settings {
   position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: 40;
   background: var(--bg-main);
   transform: translateX(28px);
   opacity: 0;
@@ -128,6 +130,10 @@ select,
     transform var(--dur-base) var(--ease-out),
     opacity var(--dur-base) var(--ease-out),
     visibility 0s linear 0s;
+}
+/* Belt-and-suspenders: kill workspace panel resize hit targets under settings. */
+body:has(.view-layer-settings.is-open) .panel-resizer {
+  pointer-events: none;
 }
 
 /* body-row equivalent */

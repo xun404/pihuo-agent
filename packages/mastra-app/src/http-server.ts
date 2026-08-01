@@ -1596,25 +1596,21 @@ const server = createServer(async (req, res) => {
       }
 
       if (method === 'POST' && path === '/api/demo/seed') {
-        // Prefer monorepo root when API runs from packages/mastra-app
-        const rootPath =
-          process.env.SWARMDESK_AGENT_AGENTS_ROOT ??
-          (process.cwd().endsWith('mastra-app')
-            ? pathResolve(process.cwd(), '../..')
-            : process.cwd())
-        const project = store.upsertProject({
-          name: 'swarmdesk-agent',
-          rootPath: pathResolve(rootPath),
-          defaultBranch: 'main',
-        })
-        const locale = store.getLocale()
-        const session = store.createSession({
-          projectId: project.id,
-          title: locale === 'en' ? 'Implement session sidebar' : '实现 Session 侧栏',
-          mode: 'build',
-          rolePrompts: loadSettings().prompts.roles,
-        })
-        send(res, 200, { project, session, snapshot: store.snapshot() })
+        try {
+          const body = (await readJson(req).catch(() => ({}))) as {
+            rootPath?: string
+            seedMemory?: boolean
+          }
+          const { seedDemoShowcase } = await import('./demo-seed.js')
+          const result = await seedDemoShowcase(store, {
+            rootPath: body.rootPath,
+            seedMemory: body.seedMemory,
+          })
+          send(res, 200, { ...result, snapshot: store.snapshot() })
+        } catch (e) {
+          console.error('[http] demo seed failed', e)
+          send(res, 500, { error: 'Demo seed failed' })
+        }
         return
       }
 
