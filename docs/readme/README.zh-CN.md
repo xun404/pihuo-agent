@@ -24,7 +24,7 @@
 <h3 align="center"><a href="https://github.com/xun404/swarmdesk-agent/releases/latest"><ins>下载 SwarmDesk</ins></a></h3>
 
 <p align="center">
-  <img src="../assets/readme-hero.png" alt="SwarmDesk 桌面界面" width="960" />
+  <img src="../assets/zh/readme-hero.png" alt="SwarmDesk 桌面界面" width="960" />
 </p>
 
 ## 功能
@@ -39,7 +39,7 @@
 
 </td>
 <td width="50%">
-  <img src="../assets/feature-wall/leader-chat.png" alt="Leader 对话" width="100%" />
+  <img src="../assets/zh/feature-wall/leader-chat.png" alt="Leader 对话" width="100%" />
 </td>
 </tr>
 <tr>
@@ -51,7 +51,7 @@
 
 </td>
 <td width="50%">
-  <img src="../assets/feature-wall/worker-cards.png" alt="Worker 卡片" width="100%" />
+  <img src="../assets/zh/feature-wall/worker-cards.png" alt="Worker 卡片" width="100%" />
 </td>
 </tr>
 <tr>
@@ -65,7 +65,7 @@ ACP 权限请求出现在 Chat 与侧栏。每个 Session 使用二态盾牌按�
 
 </td>
 <td width="50%">
-  <img src="../assets/feature-wall/approvals.png" alt="审批" width="100%" />
+  <img src="../assets/zh/feature-wall/approvals.png" alt="审批" width="100%" />
 </td>
 </tr>
 <tr>
@@ -77,7 +77,7 @@ ACP 权限请求出现在 Chat 与侧栏。每个 Session 使用二态盾牌按�
 
 </td>
 <td width="50%">
-  <img src="../assets/feature-wall/registry.png" alt="Registry" width="100%" />
+  <img src="../assets/zh/feature-wall/registry.png" alt="Registry" width="100%" />
 </td>
 </tr>
 <tr>
@@ -89,7 +89,7 @@ ACP 权限请求出现在 Chat 与侧栏。每个 Session 使用二态盾牌按�
 
 </td>
 <td width="50%">
-  <img src="../assets/feature-wall/settings-models.png" alt="设置" width="100%" />
+  <img src="../assets/zh/feature-wall/settings-models.png" alt="设置" width="100%" />
 </td>
 </tr>
 <tr>
@@ -101,7 +101,7 @@ ACP 权限请求出现在 Chat 与侧栏。每个 Session 使用二态盾牌按�
 
 </td>
 <td width="50%">
-  <img src="../assets/feature-wall/sessions.png" alt="会话" width="100%" />
+  <img src="../assets/zh/feature-wall/sessions.png" alt="会话" width="100%" />
 </td>
 </tr>
 </table>

@@ -1,35 +1,32 @@
 # README media assets
 
-Referenced by root `README.md` and `docs/readme/README.zh-CN.md`.
+Referenced by root `README.md` (English) and `docs/readme/README.zh-CN.md` (Chinese).
 
-| File | Purpose |
-| ---- | ------- |
-| `icon.png` | Brand mark |
-| `readme-hero.png` | Hero under the tagline |
-| `feature-wall/leader-chat.png` | Leader chat |
-| `feature-wall/worker-cards.png` | Chat / worker process surface |
-| `feature-wall/approvals.png` | Approvals / team inspector surface |
-| `feature-wall/registry.png` | Agent Worker / registry surface |
-| `feature-wall/settings-models.png` | Models & API keys |
-| `feature-wall/sessions.png` | Projects & sessions sidebar |
+| Path | Language | Purpose |
+| ---- | -------- | ------- |
+| `icon.png` | — | Brand mark |
+| `readme-hero.png` + `feature-wall/*` | **en** | Root README |
+| `zh/readme-hero.png` + `zh/feature-wall/*` | **zh** | Chinese README |
 
 ## Refresh screenshots (CDP)
 
-Demo project: `docs/demo/swarmdesk-showcase`  
-Seed + capture:
+Demo project: `docs/demo/swarmdesk-showcase`
 
 ```bash
 # Terminal A — desktop with CDP
 npm run desktop
 
-# Terminal B — API must be healthy (:4111). If you killed the Electron-spawned API,
-# either restart desktop or run the API with desktop auth disabled for capture:
+# Terminal B — API healthy on :4111 (Electron-spawned, or):
 #   MASTRA_PORT=4111 SWARMDESK_AGENT_DESKTOP_AUTH=0 node --import tsx packages/mastra-app/src/http-server.ts
 
-node scripts/capture-readme-shots.mjs
+# English (default) → docs/assets/
+npm run capture:readme -- --locale en
+
+# Chinese → docs/assets/zh/
+npm run capture:readme -- --locale zh
 ```
 
-This calls `POST /api/demo/seed` (showcase project + sample chat history) then writes PNGs under `docs/assets/`.
+`POST /api/locale` + localStorage, then `POST /api/demo/seed` (showcase + sample history).
 
 ## Brand icon
 

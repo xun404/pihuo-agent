@@ -6,10 +6,12 @@
  *   npm run desktop   # CDP :8315, API :4111
  *
  * Usage:
- *   node scripts/capture-readme-shots.mjs
+ *   node scripts/capture-readme-shots.mjs --locale en
+ *   node scripts/capture-readme-shots.mjs --locale zh --out docs/assets/zh
  *   node scripts/capture-readme-shots.mjs --out docs/assets
  *
  * Seeds docs/demo/swarmdesk-showcase via POST /api/demo/seed, then drives the UI.
+ * Default: locale=en → docs/assets ; locale=zh → docs/assets/zh
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -18,12 +20,24 @@ import { fileURLToPath } from 'node:url'
 const CDP_HOST = process.env.CDP_HOST || '127.0.0.1'
 const CDP_PORT = process.env.CDP_PORT || '8315'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const OUT =
-  process.argv.includes('--out')
-    ? resolve(process.argv[process.argv.indexOf('--out') + 1] || join(ROOT, 'docs/assets'))
+
+function argValue(flag) {
+  const i = process.argv.indexOf(flag)
+  if (i < 0) return undefined
+  return process.argv[i + 1]
+}
+
+const LOCALE = (argValue('--locale') || process.env.CAPTURE_LOCALE || 'en').startsWith('zh')
+  ? 'zh'
+  : 'en'
+const OUT = argValue('--out')
+  ? resolve(argValue('--out'))
+  : LOCALE === 'zh'
+    ? join(ROOT, 'docs/assets/zh')
     : join(ROOT, 'docs/assets')
 
 const FEATURE = join(OUT, 'feature-wall')
+console.log(`capture locale=${LOCALE} out=${OUT}`)
 
 let WebSocketImpl
 if (typeof WebSocket !== 'undefined') WebSocketImpl = WebSocket
@@ -100,6 +114,42 @@ async function main() {
   await send(ws, 'Runtime.enable')
   await send(ws, 'Page.enable')
 
+  // Set UI + server locale first so seed titles and chrome match the README language.
+  const localeResult = await evalInPage(
+    ws,
+    `(async () => {
+      const tok = await window.routerAgents?.getDesktopToken?.();
+      const base = window.routerAgents?.apiBase || 'http://127.0.0.1:4111';
+      const h = { 'Content-Type': 'application/json' };
+      if (tok) {
+        h.Authorization = 'Bearer ' + tok;
+        h['X-SwarmDesk-Agent-Desktop-Token'] = tok;
+      }
+      const r = await fetch(base + '/api/locale', {
+        method: 'POST',
+        headers: h,
+        body: JSON.stringify({ locale: ${JSON.stringify(LOCALE)} }),
+      });
+      const j = await r.json().catch(() => ({}));
+      // Also flip client I18n if the provider is already mounted
+      try {
+        localStorage.setItem('swarmdesk-agent.locale', ${JSON.stringify(LOCALE)});
+      } catch {}
+      return { status: r.status, locale: j.locale, err: j.error };
+    })()`,
+  )
+  console.log('locale', localeResult)
+  // Reload so React I18nProvider picks up localStorage locale
+  await evalInPage(
+    ws,
+    `(() => {
+      try { localStorage.setItem('swarmdesk-agent.locale', ${JSON.stringify(LOCALE)}); } catch {}
+      location.reload();
+      return true;
+    })()`,
+  )
+  await sleep(3000)
+
   // Seed showcase project + chat history (token optional when API runs with DESKTOP_AUTH=0)
   const seed = await evalInPage(
     ws,
@@ -111,6 +161,12 @@ async function main() {
         h.Authorization = 'Bearer ' + tok;
         h['X-SwarmDesk-Agent-Desktop-Token'] = tok;
       }
+      // Ensure locale stuck after reload
+      await fetch(base + '/api/locale', {
+        method: 'POST',
+        headers: h,
+        body: JSON.stringify({ locale: ${JSON.stringify(LOCALE)} }),
+      });
       const r = await fetch(base + '/api/demo/seed', {
         method: 'POST',
         headers: h,
@@ -154,36 +210,35 @@ async function main() {
   await sleep(1000)
   await sleep(600)
 
-  // Select session in sidebar by title if needed
-  await evalInPage(
-    ws,
-    `(() => {
-      const title = ${JSON.stringify(seed.title || '')};
-      const row = [...document.querySelectorAll('.sess, .session-item, [data-session-id]')]
-        .find(el => (el.textContent || '').includes(title));
-      row?.click();
-      return { clicked: !!row, title };
-    })()`,
-  )
-
-  // Wait until history finishes loading (no "加载中…") and messages appear
-  for (let i = 0; i < 25; i++) {
+  // Select seeded session (match EN or ZH title from seed)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await evalInPage(
+      ws,
+      `(() => {
+        const title = ${JSON.stringify(seed.title || '')};
+        const row = [...document.querySelectorAll('.sess, .session-item, [data-session-id]')]
+          .find(el => (el.textContent || '').includes(title));
+        row?.click();
+        return { clicked: !!row, title, attempt: ${attempt} };
+      })()`,
+    )
+    await sleep(800)
     const ready = await evalInPage(
       ws,
       `(() => {
         const pane = [...document.querySelectorAll('.chat-workspace-pane, .main-column')]
           .find(p => getComputedStyle(p).display !== 'none') || document.body;
         const text = pane.innerText || '';
-        const loading = /加载中|Loading/i.test(text) && !pane.querySelector('.msg, .messages .msg');
+        const loading = /加载中|Loading/i.test(text) && !/Summarize|总结|Thinking|思考|Review checklist|检查清单/.test(text);
         const msgs = pane.querySelectorAll('.msg, [data-msg-id]').length;
-        return { loading, msgs, textSample: text.slice(0, 80) };
+        const hasDemo = /Summarize open tasks|总结 src\\/tasks|Review checklist|检查清单|Open board|当前看板/.test(text);
+        return { loading, msgs, hasDemo, textSample: text.slice(0, 120) };
       })()`,
     )
     console.log('history', ready)
-    if (!ready?.loading && (ready?.msgs > 0 || i > 8)) break
-    await sleep(300)
+    if (ready?.hasDemo || (ready?.msgs > 0 && !ready?.loading)) break
   }
-  await sleep(400)
+  await sleep(500)
 
   // Metrics for cropping
   const layout = await evalInPage(
