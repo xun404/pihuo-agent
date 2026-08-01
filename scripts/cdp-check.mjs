@@ -40,7 +40,7 @@ try {
   } else {
     WebSocketImpl = (await import('ws')).WebSocket
   }
-} catch (e) {
+} catch {
   console.error('No WebSocket available. Use Node 22+ or install ws.')
   process.exit(1)
 }
@@ -56,28 +56,29 @@ function send(ws, method, params = {}) {
   })
 }
 
+function onWs(ws, event, handler) {
+  if (typeof ws.addEventListener === 'function') {
+    ws.addEventListener(event, handler)
+  } else {
+    ws.on(event, handler)
+  }
+}
+
 async function withCdp(fn) {
   const page = await getPageTarget()
   const ws = new WebSocketImpl(page.webSocketDebuggerUrl)
   await new Promise((r, rej) => {
-    ws.addEventListener ? ws.addEventListener('open', r) : ws.on('open', r)
-    ws.addEventListener ? ws.addEventListener('error', rej) : ws.on('error', rej)
+    onWs(ws, 'open', r)
+    onWs(ws, 'error', rej)
   })
-  ws.addEventListener
-    ? ws.addEventListener('message', (ev) => {
-        const m = JSON.parse(typeof ev.data === 'string' ? ev.data : ev.data.toString())
-        if (m.id && pending.has(m.id)) {
-          pending.get(m.id).resolve(m)
-          pending.delete(m.id)
-        }
-      })
-    : ws.on('message', (data) => {
-        const m = JSON.parse(data.toString())
-        if (m.id && pending.has(m.id)) {
-          pending.get(m.id).resolve(m)
-          pending.delete(m.id)
-        }
-      })
+  onWs(ws, 'message', (ev) => {
+    const raw = typeof ev?.data === 'string' ? ev.data : (ev?.data?.toString?.() ?? ev?.toString?.() ?? String(ev))
+    const m = JSON.parse(typeof raw === 'string' ? raw : raw.toString())
+    if (m.id && pending.has(m.id)) {
+      pending.get(m.id).resolve(m)
+      pending.delete(m.id)
+    }
+  })
   try {
     await send(ws, 'Runtime.enable')
     await send(ws, 'Page.enable')
@@ -120,28 +121,22 @@ await withCdp(async (ws, send) => {
   } else if (cmd === 'console') {
     // install a console message capture via Runtime, then wait briefly
     const msgs = []
-    ws.addEventListener
-      ? ws.addEventListener('message', (ev) => {
-          const m = JSON.parse(typeof ev.data === 'string' ? ev.data : ev.data.toString())
-          if (m.method === 'Runtime.consoleAPICalled' || m.method === 'Runtime.exceptionThrown') {
-            msgs.push(m.params)
-          }
-        })
-      : ws.on('message', (data) => {
-          const m = JSON.parse(data.toString())
-          if (m.method === 'Runtime.consoleAPICalled' || m.method === 'Runtime.exceptionThrown') {
-            msgs.push(m.params)
-          }
-        })
+    onWs(ws, 'message', (ev) => {
+      const raw = typeof ev?.data === 'string' ? ev.data : (ev?.data?.toString?.() ?? ev?.toString?.() ?? String(ev))
+      const m = JSON.parse(typeof raw === 'string' ? raw : raw.toString())
+      if (m.method === 'Runtime.consoleAPICalled' || m.method === 'Runtime.exceptionThrown') {
+        msgs.push(m.params)
+      }
+    })
     // Trigger a fresh page error capture by checking existing logging via eval
-    const r = await send(ws, 'Runtime.evaluate', {
+    await send(ws, 'Runtime.evaluate', {
       expression: `(() => {
         const errors = (window.__capturedErrors ||= []);
         return 'page-alive:' + document.querySelectorAll('*').length + ' els';
       })()`,
       returnByValue: true,
     })
-    await new Promise((r) => setTimeout(r, 500))
+    await new Promise((resolve) => setTimeout(resolve, 500))
     console.log('--- console events captured in 500ms window ---')
     console.log(JSON.stringify(msgs, null, 2).slice(0, 3000))
   } else if (cmd === 'shot') {
