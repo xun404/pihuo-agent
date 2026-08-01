@@ -10,13 +10,14 @@ import {
   verifyRuntimeManifestContract,
 } from './release-contract.mjs'
 
-const completeAssets = [
+// Enabled package matrix: mac arm64 + linux x64 (Windows matrix currently disabled).
+const requiredAssets = [
   'SwarmDesk-Agent-0.1.0-mac-arm64.dmg',
   'SwarmDesk-Agent-0.1.0-mac-arm64.zip',
-  'SwarmDesk-Agent-0.1.0-win-x64.exe',
   'SwarmDesk-Agent-0.1.0-linux-x64.AppImage',
-  'SwarmDesk-Agent-0.1.0-linux-x64.deb',
+  'SwarmDesk-Agent-0.1.0-linux-amd64.deb',
 ]
+const completeAssets = [...requiredAssets, 'SwarmDesk-Agent-0.1.0-win-x64.exe']
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 describe('desktop release contract', () => {
@@ -31,7 +32,17 @@ describe('desktop release contract', () => {
     assert.throws(() => verifyPackageVersions('0.1.0', '0.2.0'), /Desktop package version/)
   })
 
-  it('accepts exactly one primary installer for every release target', () => {
+  it('accepts the enabled package matrix without Windows', () => {
+    assert.deepEqual(verifyReleaseAssets(requiredAssets), {
+      macDmg: true,
+      macZip: true,
+      windowsNsis: false,
+      linuxAppImage: true,
+      linuxDeb: true,
+    })
+  })
+
+  it('accepts Windows when present and accepts linux-x64.deb as well as amd64', () => {
     assert.deepEqual(verifyReleaseAssets(completeAssets), {
       macDmg: true,
       macZip: true,
@@ -39,6 +50,14 @@ describe('desktop release contract', () => {
       linuxAppImage: true,
       linuxDeb: true,
     })
+    assert.doesNotThrow(() =>
+      verifyReleaseAssets([
+        'SwarmDesk-Agent-0.1.0-mac-arm64.dmg',
+        'SwarmDesk-Agent-0.1.0-mac-arm64.zip',
+        'SwarmDesk-Agent-0.1.0-linux-x64.AppImage',
+        'SwarmDesk-Agent-0.1.0-linux-x64.deb',
+      ]),
+    )
   })
 
   it('ignores update metadata while checking primary installers', () => {
@@ -55,15 +74,15 @@ describe('desktop release contract', () => {
 
   it('rejects missing, duplicate, or unexpected architecture assets', () => {
     assert.throws(
-      () => verifyReleaseAssets(completeAssets.slice(1)),
+      () => verifyReleaseAssets(requiredAssets.slice(1)),
       /Missing release asset: macDmg/,
     )
     assert.throws(
-      () => verifyReleaseAssets([...completeAssets, completeAssets[0]!]),
+      () => verifyReleaseAssets([...requiredAssets, requiredAssets[0]!]),
       /Duplicate release asset: macDmg/,
     )
     assert.throws(
-      () => verifyReleaseAssets([...completeAssets, 'SwarmDesk-Agent-0.1.0-mac-x64.dmg']),
+      () => verifyReleaseAssets([...requiredAssets, 'SwarmDesk-Agent-0.1.0-mac-x64.dmg']),
       /Unexpected primary release asset/,
     )
   })

@@ -1,9 +1,20 @@
-const PRIMARY_ASSET_PATTERNS = {
+// Required for the currently enabled package matrix (mac arm64 + linux x64).
+// electron-builder maps deb arch `x64` to Debian arch name `amd64` in ${arch}.
+const REQUIRED_ASSET_PATTERNS = {
   macDmg: /^SwarmDesk-Agent-.+-mac-arm64\.dmg$/,
   macZip: /^SwarmDesk-Agent-.+-mac-arm64\.zip$/,
-  windowsNsis: /^SwarmDesk-Agent-.+-win-x64\.exe$/,
   linuxAppImage: /^SwarmDesk-Agent-.+-linux-x64\.AppImage$/,
-  linuxDeb: /^SwarmDesk-Agent-.+-linux-x64\.deb$/,
+  linuxDeb: /^SwarmDesk-Agent-.+-linux-(?:x64|amd64)\.deb$/,
+}
+
+// Optional while the Windows package matrix entry is disabled (GHA smoke hang).
+const OPTIONAL_ASSET_PATTERNS = {
+  windowsNsis: /^SwarmDesk-Agent-.+-win-x64\.exe$/,
+}
+
+const PRIMARY_ASSET_PATTERNS = {
+  ...REQUIRED_ASSET_PATTERNS,
+  ...OPTIONAL_ASSET_PATTERNS,
 }
 
 const PRIMARY_EXTENSION = /\.(?:dmg|zip|exe|AppImage|deb)$/
@@ -75,10 +86,18 @@ export function verifyReleaseAssets(fileNames) {
     }
   }
 
-  for (const [key, values] of Object.entries(matches)) {
+  for (const key of Object.keys(REQUIRED_ASSET_PATTERNS)) {
+    const values = matches[key]
     if (values.length === 0) throw new Error(`Missing release asset: ${key}`)
     if (values.length > 1) throw new Error(`Duplicate release asset: ${key}`)
   }
 
-  return Object.fromEntries(Object.keys(PRIMARY_ASSET_PATTERNS).map((key) => [key, true]))
+  for (const key of Object.keys(OPTIONAL_ASSET_PATTERNS)) {
+    const values = matches[key]
+    if (values.length > 1) throw new Error(`Duplicate release asset: ${key}`)
+  }
+
+  return Object.fromEntries(
+    Object.keys(PRIMARY_ASSET_PATTERNS).map((key) => [key, matches[key].length === 1]),
+  )
 }
