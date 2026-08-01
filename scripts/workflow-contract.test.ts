@@ -115,7 +115,15 @@ describe('GitHub Actions workflow contract', () => {
               { run: 'npm run smoke:packaged' },
             ],
           },
-          release: { permissions: { contents: 'write' } },
+          release: {
+            permissions: { contents: 'write' },
+            steps: [
+              { run: 'node scripts/verify-release-notes.mjs "docs/releases/${RELEASE_TAG}.md" "$RELEASE_TAG"' },
+              {
+                run: 'gh release create "$RELEASE_TAG" release-assets/* --notes-file "$NOTES_FILE" --title "$TITLE"',
+              },
+            ],
+          },
         },
       }),
     )

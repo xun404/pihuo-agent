@@ -81,4 +81,20 @@ export function validateReleaseWorkflow(workflow) {
     'Only the release aggregation job may request contents: write',
   )
   validateNativePackageJob(workflow.jobs.package, 'Release')
+
+  const releaseCommands = (workflow.jobs.release?.steps ?? [])
+    .map((step) => (typeof step?.run === 'string' ? step.run : ''))
+    .join('\n')
+  assert(
+    releaseCommands.includes('verify-release-notes.mjs'),
+    'Release aggregation must validate docs/releases notes structure',
+  )
+  assert(
+    releaseCommands.includes('--notes-file'),
+    'Release aggregation must publish checked-in bilingual notes via --notes-file',
+  )
+  assert(
+    !releaseCommands.includes('--generate-notes'),
+    'Release aggregation must not rely on GitHub --generate-notes alone',
+  )
 }
