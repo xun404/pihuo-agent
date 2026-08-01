@@ -1102,12 +1102,33 @@ describe('workerRunReducer', () => {
 
     it('skips workers that are already pending_approval', () => {
       let s = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
-      s = workerRunReducer(s, makeApprovalRequested({ jobId: 'j1' }))
+      // Live event sets approval-1; pin createdAt so snapshot re-seed cannot race by 1ms.
+      const liveAt = '2026-07-14T12:00:00.000Z'
+      s = workerRunReducer(
+        s,
+        makeApprovalRequested({
+          jobId: 'j1',
+          approval: makeApprovalItem({
+            id: 'approval-1',
+            jobId: 'j1',
+            status: 'pending',
+            createdAt: liveAt,
+          }),
+        }),
+      )
+      assert.equal(s.get('j1')!.status, 'pending_approval')
+      // Same-or-older snapshot row must not thrash the live pending card.
       const approvals: ApprovalItem[] = [
-        makeApprovalItem({ id: 'a1', jobId: 'j1', status: 'pending' }),
+        makeApprovalItem({
+          id: 'a1',
+          jobId: 'j1',
+          status: 'pending',
+          createdAt: liveAt,
+        }),
       ]
       const result = seedApprovalsFromSnapshot(s, approvals)
       assert.strictEqual(result, s)
+      assert.equal(result.get('j1')!.pendingApproval!.id, 'approval-1')
     })
 
     it('returns a new Map on change', () => {
