@@ -112,6 +112,7 @@ Open a local project path, keep multiple chat sessions, rename from the header, 
 - **Git &amp; files** — real `git status` and bounded project tree in the UI
 - **Step budget** — configurable Leader max steps with continue-on-same-thread
 - **Local-first** — data under `~/.config/swarmdesk-agent/` (no cloud account required)
+- **Custom themes** — load OpenChamber-compatible JSON themes with the [custom theme guide](./docs/custom-themes.md)
 - **ACP reasoning intensity** — per-agent raw reasoning values discovered from `configOptions` (e.g. `reasoning_effort` for Codex, `effort` for Claude). Three-level inheritance: TeamMember override → Worker default → ACP Agent default. When a Worker or model does not declare a reasoning selector, unconfigured roles continue normally; explicit reasoning values always fail closed instead of silently falling back.
 
 ---
