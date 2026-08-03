@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PromptSettings, WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
 
 type SettingsTab = 'general' | 'model' | 'prompts' | 'workers' | 'about'
+type DangerZoneAction =
+  'reset-settings' | 'clear-workers-and-crews' | 'clear-sessions' | 'clear-cache' | 'reset-all'
 type ThemeReloadResult = {
   directory: string
   themes: Array<{ filename: string; raw: unknown }>
@@ -52,6 +54,8 @@ contextBridge.exposeInMainWorld('routerAgents', {
       }[]
     }) => ipcRenderer.invoke('settings:save', payload),
     deleteSecret: (key: string) => ipcRenderer.invoke('settings:delete-secret', key),
+    dangerAction: (action: DangerZoneAction) =>
+      ipcRenderer.invoke('settings:danger-action', action),
   },
   dialog: {
     /**

@@ -342,9 +342,12 @@ export function clearAllSecrets(): void {
   if (existsSync(secretsPath())) unlinkSync(secretsPath())
 }
 
-function defaultAppSettings(): AppSettings {
+function defaultAppSettings(opts?: { useEnvironment?: boolean }): AppSettings {
   return {
-    leaderModel: process.env.LEADER_MODEL ?? DEFAULT_LEADER_MODEL,
+    leaderModel:
+      opts?.useEnvironment === false
+        ? DEFAULT_LEADER_MODEL
+        : (process.env.LEADER_MODEL ?? DEFAULT_LEADER_MODEL),
     thinkingIntensity: DEFAULT_THINKING_INTENSITY,
     customProviders: [],
     leaderMaxSteps: 500,
@@ -435,6 +438,14 @@ export function saveSettings(settings: Partial<AppSettings>): AppSettings {
   }
   atomicWritePrivateFile(settingsPath(), JSON.stringify(next, null, 2))
   return next
+}
+
+/** Reset persisted settings without inheriting a previously selected model from process.env. */
+export function resetSettingsToDefaults(): AppSettings {
+  ensureDir()
+  const defaults = defaultAppSettings({ useEnvironment: false })
+  atomicWritePrivateFile(settingsPath(), JSON.stringify(defaults, null, 2))
+  return defaults
 }
 
 /** Merge built-in + custom providers for settings UI / API */

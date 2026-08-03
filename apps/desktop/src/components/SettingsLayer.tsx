@@ -41,6 +41,7 @@ export function SettingsLayer({
   onHealthAllWorkers,
   onRegisterCustomAcpWorker,
   onRefreshSnapshot,
+  dangerStats,
   onOpen,
 }: {
   workers: WorkerRegistration[]
@@ -50,6 +51,13 @@ export function SettingsLayer({
   onHealthAllWorkers: () => void
   onRegisterCustomAcpWorker: (body: CustomAcpRegistrationInput) => Promise<unknown>
   onRefreshSnapshot: () => void
+  dangerStats: {
+    projects: number
+    workers: number
+    workerSessions: number
+    crews: number
+    chatSessions: number
+  }
   /** Fired when settings becomes visible (e.g. close inspector). */
   onOpen?: () => void
 }) {
@@ -131,6 +139,7 @@ export function SettingsLayer({
         onHealthAllWorkers={onHealthAllWorkers}
         onRegisterCustomAcpWorker={onRegisterCustomAcpWorker}
         onRefreshSnapshot={onRefreshSnapshot}
+        dangerStats={dangerStats}
       />
     </div>
   )

@@ -398,6 +398,13 @@ function AppShell({
           onHealthAllWorkers={() => healthAllWorkers()}
           onRegisterCustomAcpWorker={(body) => registerCustomAcpWorker(body)}
           onRefreshSnapshot={() => void refresh()}
+          dangerStats={{
+            projects: snapshot.projects.length,
+            workers: snapshot.workers.length,
+            workerSessions: snapshot.teamMembers.length,
+            crews: snapshot.teamTemplates.length,
+            chatSessions: snapshot.sessions.length,
+          }}
         />
 
         <ConfirmDialog

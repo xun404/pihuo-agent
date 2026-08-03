@@ -238,6 +238,16 @@ export function clearWorkerSecrets(workerId: string): { revision: number } {
   })
 }
 
+/** Remove every Worker-scoped credential record while retaining the encrypted file boundary. */
+export function clearAllWorkerSecrets(): { workers: number } {
+  return withMutationLock((file) => {
+    const workers = Object.keys(file.workers).length
+    if (workers === 0) return { result: { workers: 0 }, persist: false }
+    file.workers = {}
+    return { result: { workers }, persist: true }
+  })
+}
+
 /**
  * Load plaintext secrets for spawn injection only.
  * Never log / return from HTTP handlers.

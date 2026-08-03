@@ -82,6 +82,16 @@ function now(): string {
 // back-compat with the http-server import path.
 export { DEFAULT_SESSION_TITLE, isPlaceholderSessionTitle }
 
+export interface DangerZoneClearResult {
+  removedWorkers: number
+  removedWorkerSessions: number
+  removedCrews: number
+  removedChatSessions: number
+  removedJobs: number
+  removedApprovals: number
+  removedProjects: number
+}
+
 const APPROVAL_OPTION_KINDS = new Set([
   'allow_once',
   'allow_always',
@@ -477,6 +487,89 @@ export class LocalStore {
     if (chatSessionId) roles = roles.filter((role) => role.chatSessionId === chatSessionId)
     if (!options.includeArchived) roles = roles.filter((role) => !role.archivedAt)
     return structuredClone(roles)
+  }
+
+  /**
+   * Remove the persisted Worker roster and all Chat-scoped Worker assignments.
+   * Chat sessions and project records deliberately remain intact.  ACP live
+   * contexts and encrypted Worker secrets are cleaned by the danger-zone service
+   * before this transaction is committed.
+   */
+  clearWorkersAndCrews(): DangerZoneClearResult {
+    let result!: DangerZoneClearResult
+    this.commit((draft) => {
+      result = {
+        removedWorkers: draft.workers.length,
+        removedWorkerSessions: draft.teamMembers.length,
+        removedCrews: draft.teamTemplates.length,
+        removedChatSessions: 0,
+        removedJobs: draft.jobs?.length ?? 0,
+        removedApprovals: draft.approvals.length,
+        removedProjects: 0,
+      }
+      draft.workers = []
+      draft.teamMembers = []
+      draft.teamTemplates = []
+      draft.jobs = []
+      draft.approvals = []
+      for (const project of draft.projects) project.workerIds = []
+    })
+    return result
+  }
+
+  /**
+   * Remove all Chat/Router sessions and their Worker assignments/history while
+   * preserving projects, the global Worker roster, and saved crew templates.
+   */
+  clearAllChatSessions(): DangerZoneClearResult {
+    let result!: DangerZoneClearResult
+    this.commit((draft) => {
+      result = {
+        removedWorkers: 0,
+        removedWorkerSessions: draft.teamMembers.length,
+        removedCrews: 0,
+        removedChatSessions: draft.sessions.length,
+        removedJobs: draft.jobs?.length ?? 0,
+        removedApprovals: draft.approvals.length,
+        removedProjects: 0,
+      }
+      draft.sessions = []
+      draft.teamMembers = []
+      draft.jobs = []
+      draft.approvals = []
+      draft.activeSessionId = null
+    })
+    return result
+  }
+
+  /**
+   * Return the application to a metadata-free state.  Project directories and
+   * installed ACP/theme files live outside this snapshot and are not touched.
+   */
+  resetAllPersistedData(): DangerZoneClearResult {
+    let result!: DangerZoneClearResult
+    this.commit((draft) => {
+      result = {
+        removedWorkers: draft.workers.length,
+        removedWorkerSessions: draft.teamMembers.length,
+        removedCrews: draft.teamTemplates.length,
+        removedChatSessions: draft.sessions.length,
+        removedJobs: draft.jobs?.length ?? 0,
+        removedApprovals: draft.approvals.length,
+        removedProjects: draft.projects.length,
+      }
+      draft.projects = []
+      draft.sessions = []
+      draft.workers = []
+      draft.teamMembers = []
+      draft.teamTemplates = []
+      draft.jobs = []
+      draft.approvals = []
+      draft.activeProjectId = null
+      draft.activeSessionId = null
+      draft.locale = 'zh'
+    })
+    return result
   }
 
   getTeamMember(chatSessionId: string, teamMemberId: string): TeamMember | undefined {

@@ -439,6 +439,43 @@ export type MessageKey =
   | 'settings.descPrompts'
   | 'settings.descWorkers'
   | 'settings.descAbout'
+  | 'settings.danger.title'
+  | 'settings.danger.collapsedDesc'
+  | 'settings.danger.warning'
+  | 'settings.danger.warningTitle'
+  | 'settings.danger.warningConfirm'
+  | 'settings.danger.impactLabel'
+  | 'settings.danger.impactSettingsBasic'
+  | 'settings.danger.impactSettingsPrompts'
+  | 'settings.danger.impactSettingsModelsKeys'
+  | 'settings.danger.impactCache'
+  | 'settings.danger.workersCount'
+  | 'settings.danger.workerSessionsCount'
+  | 'settings.danger.crewsCount'
+  | 'settings.danger.chatSessionsCount'
+  | 'settings.danger.projectsCount'
+  | 'settings.danger.resetSettingsTitle'
+  | 'settings.danger.resetSettingsDesc'
+  | 'settings.danger.resetSettingsConfirm'
+  | 'settings.danger.resetSettingsButton'
+  | 'settings.danger.clearWorkersTitle'
+  | 'settings.danger.clearWorkersDesc'
+  | 'settings.danger.clearWorkersConfirm'
+  | 'settings.danger.clearWorkersButton'
+  | 'settings.danger.clearSessionsTitle'
+  | 'settings.danger.clearSessionsDesc'
+  | 'settings.danger.clearSessionsConfirm'
+  | 'settings.danger.clearSessionsButton'
+  | 'settings.danger.clearCacheTitle'
+  | 'settings.danger.clearCacheDesc'
+  | 'settings.danger.clearCacheConfirm'
+  | 'settings.danger.clearCacheButton'
+  | 'settings.danger.resetAllTitle'
+  | 'settings.danger.resetAllDesc'
+  | 'settings.danger.resetAllConfirm'
+  | 'settings.danger.resetAllButton'
+  | 'settings.danger.actionFailed'
+  | 'settings.danger.actionCompleted'
   | 'settings.runtime.leaderMaxSteps'
   | 'settings.runtime.leaderMaxStepsDesc'
   | 'settings.runtime.leaderMaxStepsError'
@@ -1115,6 +1152,53 @@ const zh: Dict = {
   'settings.descWorkers': '注册与管理 CLI Worker（Claude Code / Codex / OpenCode 等）。',
   'settings.descTeams': '查看、重命名与删除已保存的协作编组；新建与应用到会话在 Chat Team 中完成。',
   'settings.descAbout': '产品信息、版本与开源致谢。',
+  'settings.danger.title': '危险区域',
+  'settings.danger.collapsedDesc': '清理设置、Worker、聊天会话或缓存',
+  'settings.danger.warning':
+    '这些操作不可恢复，会永久删除本机数据。若有运行中的 Worker 任务，请先停止；不会删除主题文件、Worker 安装文件或应用本身。',
+  'settings.danger.warningTitle': '进入危险区域',
+  'settings.danger.warningConfirm': '我已了解，继续',
+  'settings.danger.impactLabel': '本操作影响',
+  'settings.danger.impactSettingsBasic': '基础设置、外观与语言',
+  'settings.danger.impactSettingsPrompts': '提示词',
+  'settings.danger.impactSettingsModelsKeys': '模型设置与 API 密钥',
+  'settings.danger.impactCache': '可重建的模型与运行缓存',
+  'settings.danger.workersCount': '注册 Worker/Agent',
+  'settings.danger.workerSessionsCount': 'Worker 会话成员',
+  'settings.danger.crewsCount': '已保存编组',
+  'settings.danger.chatSessionsCount': '聊天 Session',
+  'settings.danger.projectsCount': '项目记录',
+  'settings.danger.resetSettingsTitle': '重置全部设置',
+  'settings.danger.resetSettingsDesc':
+    '恢复基础设置、提示词与模型设置默认值，并删除已保存的 API 密钥。',
+  'settings.danger.resetSettingsConfirm':
+    '将恢复所有设置和提示词默认值，并清除本机保存的 API 密钥。聊天、Worker 与主题文件不会被删除。',
+  'settings.danger.resetSettingsButton': '重置设置',
+  'settings.danger.clearWorkersTitle': '清除所有 Worker 与编组',
+  'settings.danger.clearWorkersDesc':
+    '移除 Worker 注册、Worker 会话成员、编组模板、Worker 密钥及缓存；聊天 Session 保留。',
+  'settings.danger.clearWorkersConfirm':
+    '将清除注册 Worker/Agent、Worker 会话成员、编组模板、Worker 密钥和模型缓存，但保留聊天 Session 与项目记录。',
+  'settings.danger.clearWorkersButton': '清除 Worker 与编组',
+  'settings.danger.clearSessionsTitle': '删除所有聊天 Session',
+  'settings.danger.clearSessionsDesc':
+    '删除聊天 Session、Mastra 历史、ACP 上下文、关联 Worker 会话成员与任务历史；项目和 Worker 保留。',
+  'settings.danger.clearSessionsConfirm':
+    '将删除全部聊天 Session、Mastra 对话历史、ACP 上下文及其关联的 Worker 会话成员、审批和任务历史。项目、Worker 与编组模板保留。',
+  'settings.danger.clearSessionsButton': '删除聊天 Session',
+  'settings.danger.clearCacheTitle': '清除缓存',
+  'settings.danger.clearCacheDesc': '删除可重建的模型与运行缓存，不影响设置或安装文件。',
+  'settings.danger.clearCacheConfirm':
+    '将删除可重建的模型/运行缓存；不会删除设置、聊天、Worker、主题或安装文件。',
+  'settings.danger.clearCacheButton': '清除缓存',
+  'settings.danger.resetAllTitle': '全部重置',
+  'settings.danger.resetAllDesc':
+    '清空设置、Worker、编组、聊天 Session、项目记录和缓存；本地项目目录与安装文件保留。',
+  'settings.danger.resetAllConfirm':
+    '这是最彻底的重置：设置、密钥、Worker/Agent、编组、聊天 Session、项目记录和缓存都会删除。不会删除主题文件、Worker 安装文件或应用本身。',
+  'settings.danger.resetAllButton': '全部重置',
+  'settings.danger.actionFailed': '危险区操作失败，请稍后重试。',
+  'settings.danger.actionCompleted': '危险区操作已完成。',
   'settings.cancelEdit': '取消编辑',
   'settings.clear': '清除',
   'settings.configured': '已配置',
@@ -1892,6 +1976,54 @@ const en: Dict = {
   'settings.descTeams':
     'Browse, rename, and delete saved collaborative crews. Create and apply crews from Chat Team.',
   'settings.descAbout': 'Product info, version, and open-source credits.',
+  'settings.danger.title': 'Danger Zone',
+  'settings.danger.collapsedDesc': 'Clear settings, Workers, chat sessions, or caches',
+  'settings.danger.warning':
+    'These actions are irreversible and permanently delete local data. Stop any running Worker jobs first. Theme files, Worker installations, and the app itself are not removed.',
+  'settings.danger.warningTitle': 'Enter Danger Zone',
+  'settings.danger.warningConfirm': 'I understand — continue',
+  'settings.danger.impactLabel': 'This action affects',
+  'settings.danger.impactSettingsBasic': 'Basic settings, appearance, and language',
+  'settings.danger.impactSettingsPrompts': 'Prompts',
+  'settings.danger.impactSettingsModelsKeys': 'Model settings and API keys',
+  'settings.danger.impactCache': 'Rebuildable model and runtime caches',
+  'settings.danger.workersCount': 'Registered Workers/Agents',
+  'settings.danger.workerSessionsCount': 'Worker session members',
+  'settings.danger.crewsCount': 'Saved crews',
+  'settings.danger.chatSessionsCount': 'Chat Sessions',
+  'settings.danger.projectsCount': 'Project records',
+  'settings.danger.resetSettingsTitle': 'Reset all settings',
+  'settings.danger.resetSettingsDesc':
+    'Restore basic settings, prompts, and model settings, then remove saved API keys.',
+  'settings.danger.resetSettingsConfirm':
+    'All settings and prompts will return to defaults, and saved API keys will be removed. Chats, Workers, and theme files remain.',
+  'settings.danger.resetSettingsButton': 'Reset settings',
+  'settings.danger.clearWorkersTitle': 'Clear all Workers and crews',
+  'settings.danger.clearWorkersDesc':
+    'Remove Worker registrations, Worker session members, crew templates, Worker secrets, and caches; chat Sessions remain.',
+  'settings.danger.clearWorkersConfirm':
+    'Registered Workers/Agents, Worker session members, crew templates, Worker secrets, and model caches will be cleared. Chat Sessions and project records remain.',
+  'settings.danger.clearWorkersButton': 'Clear Workers & crews',
+  'settings.danger.clearSessionsTitle': 'Delete all chat Sessions',
+  'settings.danger.clearSessionsDesc':
+    'Delete chat Sessions, Mastra history, ACP contexts, linked Worker session members, and job history; projects and Workers remain.',
+  'settings.danger.clearSessionsConfirm':
+    'All chat Sessions, Mastra conversation history, ACP contexts, linked Worker session members, approvals, and job history will be deleted. Projects, Workers, and crew templates remain.',
+  'settings.danger.clearSessionsButton': 'Delete chat Sessions',
+  'settings.danger.clearCacheTitle': 'Clear cache',
+  'settings.danger.clearCacheDesc':
+    'Delete rebuildable model and runtime caches without touching settings or installations.',
+  'settings.danger.clearCacheConfirm':
+    'Rebuildable model/runtime caches will be deleted. Settings, chats, Workers, themes, and installation files remain.',
+  'settings.danger.clearCacheButton': 'Clear cache',
+  'settings.danger.resetAllTitle': 'Reset everything',
+  'settings.danger.resetAllDesc':
+    'Clear settings, Workers, crews, chat Sessions, project records, and caches; local project directories and installations remain.',
+  'settings.danger.resetAllConfirm':
+    'This is the most complete reset: settings, keys, Workers/Agents, crews, chat Sessions, project records, and caches will be deleted. Theme files, Worker installations, and the app itself remain.',
+  'settings.danger.resetAllButton': 'Reset everything',
+  'settings.danger.actionFailed': 'Danger-zone action failed. Try again later.',
+  'settings.danger.actionCompleted': 'Danger-zone action completed.',
   'settings.cancelEdit': 'Cancel',
   'settings.clear': 'Clear',
   'settings.configured': 'Ready',

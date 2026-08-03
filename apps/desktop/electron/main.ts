@@ -66,6 +66,8 @@ import {
   parseNpmRegistryInput,
   resolveSupportedThinkingIntensities,
   resolveRouterDataPaths,
+  resetSettingsForDangerZone,
+  type DangerZoneAction,
   isConfigurableSecretEnvKey,
   type CustomProviderSettings,
   type ThinkingIntensity,
@@ -240,6 +242,39 @@ async function verifiedDesktopApiToken(expectedChild?: ExpectedApiChild): Promis
   // Return the exact token that completed the identity + auth handshake. Do not
   // re-read runtime.json here: a concurrent owner rotation would create a TOCTOU.
   return desktopTok
+}
+
+async function requestDangerZoneAction(action: DangerZoneAction) {
+  const token = await verifiedDesktopApiToken()
+  if (!token) throw new Error('Desktop API is unavailable; retry after it is ready')
+  const response = await fetch(`${API_URL}/api/settings/danger-zone`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-SwarmDesk-Agent-Desktop-Token': token,
+    },
+    body: JSON.stringify({ action }),
+    signal: AbortSignal.timeout(30_000),
+  })
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: string
+    [key: string]: unknown
+  }
+  if (!response.ok) {
+    const error = new Error(
+      body.error ?? `Danger-zone action failed (${response.status})`,
+    ) as Error & {
+      code?: string
+      status?: number
+      openJobs?: number
+    }
+    error.code = typeof body.code === 'string' ? body.code : undefined
+    error.status = response.status
+    error.openJobs = typeof body.openJobs === 'number' ? body.openJobs : undefined
+    throw error
+  }
+  return body
 }
 
 async function canReuseExistingApi(expectedChild?: ExpectedApiChild): Promise<boolean> {
@@ -782,6 +817,48 @@ function registerIpc(): void {
       providers,
       customProviders,
     }
+  })
+
+  ipcMain.handle('settings:danger-action', async (event, action: DangerZoneAction) => {
+    requireTrustedRenderer(event)
+    const valid = new Set<DangerZoneAction>([
+      'reset-settings',
+      'clear-workers-and-crews',
+      'clear-sessions',
+      'clear-cache',
+      'reset-all',
+    ])
+    if (!valid.has(action)) throw new Error('Unsupported danger-zone action')
+
+    if (action === 'reset-settings') {
+      await requestDangerZoneAction(action)
+      const settings = resetSettingsForDangerZone()
+      process.env.LEADER_MODEL = settings.leaderModel
+      process.env.THINKING_INTENSITY = settings.thinkingIntensity
+      const ok = await restartApiServer('apply-settings')
+      return {
+        ok,
+        action,
+        settings,
+        error: ok ? undefined : 'Settings reset, but the API could not be restarted.',
+      }
+    }
+
+    const result = await requestDangerZoneAction(action)
+    if (action === 'reset-all') {
+      const settings = resetSettingsForDangerZone()
+      process.env.LEADER_MODEL = settings.leaderModel
+      process.env.THINKING_INTENSITY = settings.thinkingIntensity
+      const ok = await restartApiServer('apply-settings')
+      return {
+        ...result,
+        ok,
+        action,
+        settings,
+        error: ok ? undefined : 'Data reset completed, but the API could not be restarted.',
+      }
+    }
+    return { ...result, ok: true, action }
   })
 
   /**

@@ -48,6 +48,10 @@ import {
   type CustomProviderSettings,
   type ThinkingIntensity,
   type WorkerTimeoutSettings,
+  DangerZoneBusyError,
+  dangerZoneStats,
+  performDangerZoneAction,
+  type DangerZoneAction,
 } from '@swarmdesk-agent/core'
 import {
   configureWorkerEnvDefaults,
@@ -3015,6 +3019,66 @@ const server = createServer(async (req, res) => {
       }
 
       // —— Settings / secrets ——
+      if (method === 'GET' && path === '/api/settings/danger-zone') {
+        send(res, 200, { stats: dangerZoneStats(store.snapshot()) })
+        return
+      }
+
+      if (method === 'POST' && path === '/api/settings/danger-zone') {
+        const body = (await readJson(req)) as { action?: DangerZoneAction }
+        const action = body.action
+        if (action === 'reset-settings') {
+          const openJobs = store.countOpenJobs()
+          if (openJobs > 0) {
+            const error = new DangerZoneBusyError(openJobs)
+            send(res, 409, { error: error.message, code: error.code, openJobs: error.openJobs })
+            return
+          }
+          store.setLocale('zh')
+          send(res, 200, {
+            ok: true,
+            action,
+            stats: dangerZoneStats(store.snapshot()),
+            snapshot: store.snapshot(),
+          })
+          return
+        }
+        if (
+          action !== 'clear-workers-and-crews' &&
+          action !== 'clear-sessions' &&
+          action !== 'clear-cache' &&
+          action !== 'reset-all'
+        ) {
+          send(res, 400, { error: 'Unsupported danger-zone action', code: 'DANGER_ZONE_ACTION' })
+          return
+        }
+        try {
+          const outcome = await performDangerZoneAction(action, {
+            store,
+            runtime: sessionMgr,
+            deleteMemoryThreads: async (threadIds) => {
+              for (const threadId of threadIds) {
+                await leaderMemory.deleteThread(threadId)
+              }
+            },
+          })
+          send(res, 200, {
+            ok: true,
+            action,
+            result: outcome.result,
+            stats: dangerZoneStats(outcome.snapshot),
+            snapshot: outcome.snapshot,
+          })
+        } catch (error) {
+          if (error instanceof DangerZoneBusyError) {
+            send(res, 409, { error: error.message, code: error.code, openJobs: error.openJobs })
+            return
+          }
+          sendAcpOrUnexpectedFailure(res, error, `danger-zone ${action}`)
+        }
+        return
+      }
+
       if (method === 'GET' && path === '/api/settings') {
         const status = getSecretsStatus(SECRET_ENV_KEYS)
         send(res, 200, {

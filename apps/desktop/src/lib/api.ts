@@ -169,6 +169,9 @@ export interface ThreadMessagesResult {
   error?: string
 }
 
+export type DangerZoneAction =
+  'reset-settings' | 'clear-workers-and-crews' | 'clear-sessions' | 'clear-cache' | 'reset-all'
+
 export interface RegistryPrepareResult {
   installationId: string
   installation: {
@@ -982,6 +985,23 @@ export const api = {
     }>('/api/settings/secrets', {
       method: 'DELETE',
       body: JSON.stringify({ key }),
+    }),
+  dangerZoneAction: (action: Exclude<DangerZoneAction, 'reset-settings'>) =>
+    request<{
+      ok: boolean
+      action: Exclude<DangerZoneAction, 'reset-settings'>
+      result?: unknown
+      stats?: {
+        projects: number
+        workers: number
+        workerSessions: number
+        crews: number
+        chatSessions: number
+      }
+      snapshot?: AppSnapshot
+    }>('/api/settings/danger-zone', {
+      method: 'POST',
+      body: JSON.stringify({ action }),
     }),
   getGoal: (threadId?: string) =>
     request<{

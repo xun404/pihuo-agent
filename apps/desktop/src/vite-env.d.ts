@@ -50,6 +50,14 @@ interface Window {
         }[]
       }) => Promise<unknown>
       deleteSecret: (key: string) => Promise<unknown>
+      dangerAction?: (
+        action:
+          | 'reset-settings'
+          | 'clear-workers-and-crews'
+          | 'clear-sessions'
+          | 'clear-cache'
+          | 'reset-all',
+      ) => Promise<unknown>
     }
     dialog?: {
       openDirectory: (labels?: {

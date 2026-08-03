@@ -356,6 +356,53 @@ export const zhTW: Record<string, string> = {
   'settings.descWorkers': '註冊與管理 CLI Worker（Claude Code / Codex / OpenCode 等）。',
   'settings.descTeams': '查看、重命名與刪除已保存的協作編組；新建與應用到會話在 Chat Team 中完成。',
   'settings.descAbout': '產品信息、版本與開源致謝。',
+  'settings.danger.title': '危險區域',
+  'settings.danger.collapsedDesc': '清理設置、Worker、聊天會話或緩存',
+  'settings.danger.warning':
+    '這些操作不可恢復，會永久刪除本機數據。若有運行中的 Worker 任務，請先停止；不會刪除主題文件、Worker 安裝文件或應用本身。',
+  'settings.danger.warningTitle': '進入危險區域',
+  'settings.danger.warningConfirm': '我已了解，繼續',
+  'settings.danger.impactLabel': '本操作影響',
+  'settings.danger.impactSettingsBasic': '基礎設置、外觀與語言',
+  'settings.danger.impactSettingsPrompts': '提示詞',
+  'settings.danger.impactSettingsModelsKeys': '模型設置與 API 密鑰',
+  'settings.danger.impactCache': '可重建的模型與運行緩存',
+  'settings.danger.workersCount': '已註冊 Worker/Agent',
+  'settings.danger.workerSessionsCount': 'Worker 會話成員',
+  'settings.danger.crewsCount': '已保存編組',
+  'settings.danger.chatSessionsCount': '聊天 Session',
+  'settings.danger.projectsCount': '項目記錄',
+  'settings.danger.resetSettingsTitle': '重置全部設置',
+  'settings.danger.resetSettingsDesc':
+    '恢復基礎設置、提示詞與模型設置默認值，並刪除已保存的 API 密鑰。',
+  'settings.danger.resetSettingsConfirm':
+    '將恢復所有設置和提示詞默認值，並清除本機保存的 API 密鑰。聊天、Worker 與主題文件不會被刪除。',
+  'settings.danger.resetSettingsButton': '重置設置',
+  'settings.danger.clearWorkersTitle': '清除所有 Worker 與編組',
+  'settings.danger.clearWorkersDesc':
+    '移除 Worker 註冊、Worker 會話成員、編組模板、Worker 密鑰及緩存；聊天 Session 保留。',
+  'settings.danger.clearWorkersConfirm':
+    '將清除註冊 Worker/Agent、Worker 會話成員、編組模板、Worker 密鑰和模型緩存，但保留聊天 Session 與項目記錄。',
+  'settings.danger.clearWorkersButton': '清除 Worker 與編組',
+  'settings.danger.clearSessionsTitle': '刪除所有聊天 Session',
+  'settings.danger.clearSessionsDesc':
+    '刪除聊天 Session、Mastra 歷史、ACP 上下文、關聯 Worker 會話成員與任務歷史；項目和 Worker 保留。',
+  'settings.danger.clearSessionsConfirm':
+    '將刪除全部聊天 Session、Mastra 對話歷史、ACP 上下文及其關聯的 Worker 會話成員、審批和任務歷史。項目、Worker 與編組模板保留。',
+  'settings.danger.clearSessionsButton': '刪除聊天 Session',
+  'settings.danger.clearCacheTitle': '清除緩存',
+  'settings.danger.clearCacheDesc': '刪除可重建的模型與運行緩存，不影響設置或安裝文件。',
+  'settings.danger.clearCacheConfirm':
+    '將刪除可重建的模型/運行緩存；不會刪除設置、聊天、Worker、主題或安裝文件。',
+  'settings.danger.clearCacheButton': '清除緩存',
+  'settings.danger.resetAllTitle': '全部重置',
+  'settings.danger.resetAllDesc':
+    '清空設置、Worker、編組、聊天 Session、項目記錄和緩存；本地項目目錄與安裝文件保留。',
+  'settings.danger.resetAllConfirm':
+    '這是最徹底的重置：設置、密鑰、Worker/Agent、編組、聊天 Session、項目記錄和緩存都會刪除。不會刪除主題文件、Worker 安裝文件或應用本身。',
+  'settings.danger.resetAllButton': '全部重置',
+  'settings.danger.actionFailed': '危險區操作失敗，請稍後重試。',
+  'settings.danger.actionCompleted': '危險區操作已完成。',
   'settings.cancelEdit': '取消編輯',
   'settings.clear': '清除',
   'settings.configured': '已配置',

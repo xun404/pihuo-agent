@@ -168,6 +168,7 @@ export {
   clearAllSecrets,
   loadSettings,
   saveSettings,
+  resetSettingsToDefaults,
   applySecretsToEnv,
   isConfigurableSecretEnvKey,
   getSecretsStatus,
@@ -196,6 +197,7 @@ export {
   getWorkerSecretRevision,
   setWorkerSecret,
   clearWorkerSecrets,
+  clearAllWorkerSecrets,
   loadWorkerSecretsForSpawn,
   loadWorkerSecretsSnapshotForSpawn,
   workerSecretsFingerprintHmac,
@@ -205,6 +207,18 @@ export {
   type WorkerSecretRevisionHmacOptions,
   type WorkerSecretsSpawnSnapshot,
 } from './worker-secrets.js'
+export {
+  dangerZoneStats,
+  clearRebuildableCaches,
+  performDangerZoneAction,
+  resetSettingsForDangerZone,
+  DangerZoneBusyError,
+  type DangerZoneAction,
+  type DangerZoneStats,
+  type DangerZoneDependencies,
+  type DangerZoneRuntimeCleanup,
+  type DangerZoneActionResult,
+} from './danger-zone.js'
 export { normalizeApiStyle, type ApiStyle } from './models-catalog.js'
 export {
   DEFAULT_WORKER_TIMEOUT_SETTINGS,

@@ -1,4 +1,4 @@
-import { api, clearDesktopToken, ensureDesktopToken } from './api'
+import { api, clearDesktopToken, ensureDesktopToken, type DangerZoneAction } from './api'
 import type { AppSnapshot } from '@swarmdesk-agent/shared'
 import type { PromptSettings, WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
 
@@ -100,6 +100,42 @@ export type SaveSettingsPayload = {
   npmRegistry?: string | null
   secrets?: Record<string, string | null>
   customProviders?: CustomProvider[]
+}
+
+export async function performDangerZoneAction(action: DangerZoneAction): Promise<{
+  ok?: boolean
+  action?: DangerZoneAction
+  error?: string
+  snapshot?: AppSnapshot
+  stats?: {
+    projects: number
+    workers: number
+    workerSessions: number
+    crews: number
+    chatSessions: number
+  }
+  result?: unknown
+}> {
+  if (typeof window !== 'undefined' && window.routerAgents?.settings?.dangerAction) {
+    return (await window.routerAgents.settings.dangerAction(action)) as {
+      ok?: boolean
+      action?: DangerZoneAction
+      error?: string
+      snapshot?: AppSnapshot
+      stats?: {
+        projects: number
+        workers: number
+        workerSessions: number
+        crews: number
+        chatSessions: number
+      }
+      result?: unknown
+    }
+  }
+  if (action === 'reset-settings') {
+    throw new Error('Reset settings is only available through the Desktop owner process')
+  }
+  return api.dangerZoneAction(action)
 }
 
 export async function fetchSettings(): Promise<SettingsPayload> {

@@ -14,6 +14,7 @@ import { normalizePromptSettings } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   fetchSettings,
+  performDangerZoneAction,
   saveSettings,
   THINKING_INTENSITY_OPTIONS,
   DEFAULT_CUSTOM_THINKING_SUPPORT,
@@ -24,6 +25,7 @@ import {
   type ApiStyle,
   type ThinkingIntensity,
 } from '../lib/settings'
+import type { DangerZoneAction } from '../lib/api'
 import {
   api,
   type RegistryAuthenticateResult,
@@ -90,6 +92,15 @@ import { WorkerAuthTerminalModal } from './WorkerAuthTerminalModal'
 import { ConfirmAddCliDialog } from './ConfirmAddCliDialog'
 import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
 import { useAcpRegistryCatalog } from '../hooks/useAcpRegistryCatalog'
+import { resetRendererPreferences } from '../lib/reset-renderer-preferences'
+import {
+  DANGER_ACTION_IMPACT_IDS,
+  DANGER_IMPACT_STAT_KEYS,
+  resolveDangerZoneToggleIntent,
+  shouldCollapseDangerZoneForTab,
+  type DangerImpactId,
+  type DangerZoneStats,
+} from './settings-danger-zone'
 
 type TabId = 'general' | 'model' | 'prompts' | 'workers' | 'about'
 
@@ -104,6 +115,7 @@ interface Props {
   onHealthAllWorkers: () => void | Promise<unknown>
   onRegisterCustomAcpWorker: (body: CustomAcpRegistrationInput) => Promise<unknown>
   onRefreshSnapshot: () => void
+  dangerStats?: DangerZoneStats
 }
 
 const TAG_ZH: Record<string, string> = {
@@ -180,6 +192,13 @@ export function SettingsPanel({
   onHealthAllWorkers,
   onRegisterCustomAcpWorker,
   onRefreshSnapshot,
+  dangerStats = {
+    projects: 0,
+    workers: workers.length,
+    workerSessions: 0,
+    crews: 0,
+    chatSessions: 0,
+  },
 }: Props) {
   const { t, locale, setLocale } = useI18n()
   const {
@@ -268,6 +287,11 @@ export function SettingsPanel({
   } | null>(null)
   // Generic confirmation dialog state (delete/destroy actions), replacing native OS confirms.
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
+  const [dangerOpen, setDangerOpen] = useState(false)
+  const [dangerBusy, setDangerBusy] = useState<DangerZoneAction | null>(null)
+  useEffect(() => {
+    if (shouldCollapseDangerZoneForTab(tab)) setDangerOpen(false)
+  }, [tab])
   // Rail focus drives the workers-tab right panel: which agent/crew is selected, or special views.
   const [railFocus, setRailFocus] = useState<
     { type: 'agent'; id: string } | { type: 'crew'; id: string } | { type: 'register' } | null
@@ -1465,6 +1489,138 @@ export function SettingsPanel({
     })
   }
 
+  const dangerActionCopy: Record<
+    DangerZoneAction,
+    { title: string; description: string; confirm: string }
+  > = {
+    'reset-settings': {
+      title: t('settings.danger.resetSettingsTitle'),
+      description: t('settings.danger.resetSettingsConfirm'),
+      confirm: t('settings.danger.resetSettingsButton'),
+    },
+    'clear-workers-and-crews': {
+      title: t('settings.danger.clearWorkersTitle'),
+      description: t('settings.danger.clearWorkersConfirm'),
+      confirm: t('settings.danger.clearWorkersButton'),
+    },
+    'clear-sessions': {
+      title: t('settings.danger.clearSessionsTitle'),
+      description: t('settings.danger.clearSessionsConfirm'),
+      confirm: t('settings.danger.clearSessionsButton'),
+    },
+    'clear-cache': {
+      title: t('settings.danger.clearCacheTitle'),
+      description: t('settings.danger.clearCacheConfirm'),
+      confirm: t('settings.danger.clearCacheButton'),
+    },
+    'reset-all': {
+      title: t('settings.danger.resetAllTitle'),
+      description: t('settings.danger.resetAllConfirm'),
+      confirm: t('settings.danger.resetAllButton'),
+    },
+  }
+
+  const dangerImpactLabel = (id: DangerImpactId): string => {
+    switch (id) {
+      case 'settings-basic':
+        return t('settings.danger.impactSettingsBasic')
+      case 'settings-prompts':
+        return t('settings.danger.impactSettingsPrompts')
+      case 'settings-models-keys':
+        return t('settings.danger.impactSettingsModelsKeys')
+      case 'cache':
+        return t('settings.danger.impactCache')
+      case 'workers':
+        return t('settings.danger.workersCount')
+      case 'workerSessions':
+        return t('settings.danger.workerSessionsCount')
+      case 'crews':
+        return t('settings.danger.crewsCount')
+      case 'chatSessions':
+        return t('settings.danger.chatSessionsCount')
+      case 'projects':
+        return t('settings.danger.projectsCount')
+    }
+  }
+
+  const dangerImpactList = (action: DangerZoneAction) => (
+    <div className="settings-danger-impact-list" aria-label={t('settings.danger.impactLabel')}>
+      {DANGER_ACTION_IMPACT_IDS[action].map((id) => {
+        const statKey = DANGER_IMPACT_STAT_KEYS[id]
+        const value = statKey ? dangerStats[statKey] : undefined
+        return (
+          <span key={id} className="settings-danger-impact-chip">
+            <span>{dangerImpactLabel(id)}</span>
+            {value !== undefined && <b>{value}</b>}
+          </span>
+        )
+      })}
+    </div>
+  )
+
+  const openDangerWarning = () => {
+    setPendingConfirm({
+      title: t('settings.danger.warningTitle'),
+      message: (
+        <div className="settings-danger-confirm settings-danger-warning-confirm">
+          <p>{t('settings.danger.warning')}</p>
+        </div>
+      ),
+      confirmLabel: t('settings.danger.warningConfirm'),
+      cancelLabel: t('common.cancel'),
+      danger: true,
+      onConfirm: async () => {
+        setDangerOpen(true)
+      },
+    })
+  }
+
+  const toggleDangerZone = () => {
+    const intent = resolveDangerZoneToggleIntent(dangerOpen)
+    if (intent === 'close') {
+      setDangerOpen(false)
+    } else {
+      openDangerWarning()
+    }
+  }
+
+  const requestDangerAction = (action: DangerZoneAction) => {
+    const copy = dangerActionCopy[action]
+    setPendingConfirm({
+      title: copy.title,
+      message: (
+        <div className="settings-danger-confirm">
+          <p>{copy.description}</p>
+          {dangerImpactList(action)}
+        </div>
+      ),
+      confirmLabel: copy.confirm,
+      cancelLabel: t('common.cancel'),
+      danger: true,
+      onConfirm: async () => {
+        setDangerBusy(action)
+        try {
+          const result = await performDangerZoneAction(action)
+          const rendererReset = action === 'reset-settings' || action === 'reset-all'
+          if (result.ok === false && !rendererReset) {
+            throw new Error(result.error ?? t('settings.danger.actionFailed'))
+          }
+          onRefreshSnapshot?.()
+          if (rendererReset) {
+            resetRendererPreferences()
+            window.setTimeout(() => window.location.reload(), 0)
+          } else {
+            toastSuccess(t('settings.danger.actionCompleted'))
+          }
+        } catch (error) {
+          toastError(error instanceof Error ? error.message : t('settings.danger.actionFailed'))
+        } finally {
+          setDangerBusy(null)
+        }
+      },
+    })
+  }
+
   const body = (
     <div className="settings-body settings-page-body">
       {loading && <p className="settings-muted">{t('app.loading')}</p>}
@@ -1675,6 +1831,77 @@ export function SettingsPanel({
               </div>
             </div>
           </div>
+          <section className="settings-danger-zone" aria-label={t('settings.danger.title')}>
+            <button
+              type="button"
+              className="settings-danger-zone-toggle"
+              aria-expanded={dangerOpen}
+              onClick={toggleDangerZone}
+            >
+              <span>
+                <strong>{t('settings.danger.title')}</strong>
+                <small>{t('settings.danger.collapsedDesc')}</small>
+              </span>
+              <span aria-hidden>{dangerOpen ? '−' : '+'}</span>
+            </button>
+            {dangerOpen && (
+              <div className="settings-danger-zone-body">
+                <p className="settings-danger-zone-warning">{t('settings.danger.warning')}</p>
+                <div className="settings-danger-overview" aria-live="polite">
+                  {(
+                    [
+                      ['projects', t('settings.danger.projectsCount')],
+                      ['workers', t('settings.danger.workersCount')],
+                      ['workerSessions', t('settings.danger.workerSessionsCount')],
+                      ['crews', t('settings.danger.crewsCount')],
+                      ['chatSessions', t('settings.danger.chatSessionsCount')],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <span key={key} className="settings-danger-metric">
+                      <b>{dangerStats[key]}</b>
+                      <small>{label}</small>
+                    </span>
+                  ))}
+                </div>
+                <div className="settings-danger-actions">
+                  {(
+                    [
+                      'reset-settings',
+                      'clear-workers-and-crews',
+                      'clear-sessions',
+                      'clear-cache',
+                      'reset-all',
+                    ] as DangerZoneAction[]
+                  ).map((action) => (
+                    <div key={action} className="settings-danger-action-card">
+                      <div className="settings-danger-action-copy">
+                        <h4>{dangerActionCopy[action].title}</h4>
+                        <p>
+                          {action === 'reset-settings'
+                            ? t('settings.danger.resetSettingsDesc')
+                            : action === 'clear-workers-and-crews'
+                              ? t('settings.danger.clearWorkersDesc')
+                              : action === 'clear-sessions'
+                                ? t('settings.danger.clearSessionsDesc')
+                                : action === 'clear-cache'
+                                  ? t('settings.danger.clearCacheDesc')
+                                  : t('settings.danger.resetAllDesc')}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="settings-danger-action-button"
+                        disabled={dangerBusy !== null}
+                        onClick={() => requestDangerAction(action)}
+                      >
+                        {dangerActionCopy[action].confirm}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
         </div>
       )}
 
@@ -3039,11 +3266,6 @@ export function SettingsPanel({
             onConfirm={(decision) => void confirmCustomAcp(decision)}
             onReuse={() => setCustomPreview(null)}
           />
-          <ConfirmDialog
-            open={!!pendingConfirm}
-            config={pendingConfirm}
-            onClose={() => setPendingConfirm(null)}
-          />
         </div>
       )}
 
@@ -3134,6 +3356,10 @@ export function SettingsPanel({
             {body}
           </motion.div>
         </AnimatePresence>
+        {/* Shared confirmation layer: General Danger Zone and Worker actions both use this. */}
+        {pendingConfirm && (
+          <ConfirmDialog open config={pendingConfirm} onClose={() => setPendingConfirm(null)} />
+        )}
       </div>
     </div>
   )

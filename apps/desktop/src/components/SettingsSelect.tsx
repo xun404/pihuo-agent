@@ -28,6 +28,19 @@ type Props = {
 
 type MenuCoords = { top: number; left: number; width: number }
 
+/** Scroll only when the option is outside the menu's visible scrollport. */
+export function scrollOptionIntoView(
+  menu: HTMLElement | null,
+  option: HTMLElement | null,
+): boolean {
+  if (!menu || !option) return false
+  const menuRect = menu.getBoundingClientRect()
+  const optionRect = option.getBoundingClientRect()
+  if (optionRect.top >= menuRect.top && optionRect.bottom <= menuRect.bottom) return false
+  option.scrollIntoView({ block: 'nearest' })
+  return true
+}
+
 export function SettingsSelect({
   value,
   options,
@@ -40,6 +53,7 @@ export function SettingsSelect({
   const listId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const [coords, setCoords] = useState<MenuCoords>({ top: 0, left: 0, width: 0 })
@@ -72,6 +86,14 @@ export function SettingsSelect({
       window.removeEventListener('scroll', onScroll, true)
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open || highlighted < 0) return
+    const frame = window.requestAnimationFrame(() => {
+      scrollOptionIntoView(menuRef.current, optionRefs.current[highlighted] ?? null)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [open, highlighted, options.length])
 
   useEffect(() => {
     if (!open) return
@@ -165,6 +187,9 @@ export function SettingsSelect({
             return (
               <button
                 key={opt.value}
+                ref={(element) => {
+                  optionRefs.current[index] = element
+                }}
                 type="button"
                 role="option"
                 aria-selected={isSelected}
