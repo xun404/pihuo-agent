@@ -1,13 +1,18 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Copy } from 'lucide-react'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import type {
+  ApprovalItem,
+  CreateTeamMemberInput,
   LeaderMode,
   Project,
   Session,
   SessionPermissionMode,
+  TeamMember,
+  UpdateTeamMemberInput,
   WorkerJob,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
@@ -28,7 +33,16 @@ import { WorkerRunCard } from './WorkerRunCard'
 import { ComposerStatusRow } from './chat/ComposerStatusRow'
 import { TurnNavigator } from './chat/TurnNavigator'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
-import { IconArrowUp, IconBolt, IconClock, IconEdit, IconFolder, IconPanel } from './Icons'
+import {
+  IconApprovals,
+  IconArrowUp,
+  IconBolt,
+  IconClock,
+  IconCrew,
+  IconEdit,
+  IconFolder,
+} from './Icons'
+import { RightPanel, type InspectorTab } from './RightPanel'
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
@@ -66,7 +80,6 @@ import type {
   WorkerRunEvent,
   WorkerRunState,
   LeaderStepBudgetEvent,
-  ApprovalItem,
 } from '@swarmdesk-agent/shared'
 
 type ModelOption = {
@@ -139,8 +152,12 @@ interface Props {
   snapshotApprovals: ApprovalItem[]
   snapshotJobs: WorkerJob[]
   snapshotWorkers: WorkerRegistration[]
-  inspectorOpen?: boolean
-  onToggleInspector?: () => void
+  /** Active session crew members (not archived). */
+  teamMembers?: TeamMember[]
+  onCreateTeamMember?: (body: Omit<CreateTeamMemberInput, 'chatSessionId'>) => Promise<void>
+  onUpdateTeamMember?: (id: string, body: UpdateTeamMemberInput) => Promise<void>
+  onArchiveTeamMember?: (id: string, expectedRevision: number) => Promise<void>
+  onResetTeamMemberSession?: (id: string) => Promise<void>
   /** Fired after a successful git branch switch so parents can refresh git panels. */
   onRefreshGit?: () => void
   /** Pre-fill the composer once (e.g. text typed on the empty-state composer). */
@@ -187,7 +204,7 @@ const THINK_LABEL_KEY: Record<
 export function ChatPanel({
   project,
   session,
-  serverUp,
+  serverUp: _serverUp,
   isActive = true,
   onRenameSession,
   onOpenSettings,
@@ -202,8 +219,11 @@ export function ChatPanel({
   snapshotApprovals,
   snapshotJobs,
   snapshotWorkers,
-  inspectorOpen,
-  onToggleInspector,
+  teamMembers = [],
+  onCreateTeamMember,
+  onUpdateTeamMember,
+  onArchiveTeamMember,
+  onResetTeamMemberSession,
   onRefreshGit,
   initialInput,
   autoSendInitialInput,
@@ -256,8 +276,90 @@ export function ChatPanel({
   /** Compaction separators in the timeline (one per compress action). Each
    * carries an `afterMessageId` so it renders at the right spot in the stream. */
   const [compactionMarkers, setCompactionMarkers] = useState<CompactionMarkerData[]>([])
+  /** Header bubble: crew / approvals (null = closed). */
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab | null>(null)
+  const inspectorAnchorRef = useRef<HTMLDivElement>(null)
   const { success: toastSuccess, error: toastError } = useToast()
   const titleInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!isActive) setInspectorTab(null)
+  }, [isActive])
+
+  useEffect(() => {
+    if (!inspectorTab) return
+    const isPortaledOverlay = (target: EventTarget | null) => {
+      const el = target instanceof Element ? target : null
+      return Boolean(
+        el?.closest?.(
+          '.modal-overlay-anim, .text-prompt-overlay, .settings-overlay, [role="dialog"][aria-modal="true"]',
+        ),
+      )
+    }
+    const onDown = (event: MouseEvent) => {
+      if (inspectorAnchorRef.current?.contains(event.target as Node)) return
+      // Role / template modals portal to body — keep the bubble open.
+      if (isPortaledOverlay(event.target)) return
+      setInspectorTab(null)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (isPortaledOverlay(document.activeElement) || document.querySelector('.modal-overlay-anim'))
+        return
+      setInspectorTab(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [inspectorTab])
+
+  const pendingApprovalCount = useMemo(
+    () => snapshotApprovals.filter((item) => item.status === 'pending').length,
+    [snapshotApprovals],
+  )
+
+  const toggleInspectorTab = useCallback((tab: InspectorTab) => {
+    setInspectorTab((current) => (current === tab ? null : tab))
+  }, [])
+
+  const inspectorBubbleMotion = useMemo(
+    () =>
+      reduceMotion
+        ? {
+            initial: { opacity: 0 },
+            animate: { opacity: 1 },
+            exit: { opacity: 0 },
+            transition: { duration: 0.12 },
+          }
+        : {
+            initial: { opacity: 0, y: -6, scale: 0.96 },
+            animate: { opacity: 1, y: 0, scale: 1 },
+            exit: { opacity: 0, y: -4, scale: 0.98 },
+            transition: { duration: 0.18, ease: [0.32, 0.72, 0, 1] as const },
+          },
+    [reduceMotion],
+  )
+
+  const inspectorPanelMotion = useMemo(
+    () =>
+      reduceMotion
+        ? {
+            initial: { opacity: 0 },
+            animate: { opacity: 1 },
+            exit: { opacity: 0 },
+            transition: { duration: 0.1 },
+          }
+        : {
+            initial: { opacity: 0, x: 8 },
+            animate: { opacity: 1, x: 0 },
+            exit: { opacity: 0, x: -8 },
+            transition: { duration: 0.14, ease: [0.32, 0.72, 0, 1] as const },
+          },
+    [reduceMotion],
+  )
   const bottomRef = useRef<HTMLDivElement>(null)
   /** messages-scroll 容器：TurnNavigator 跳转 + 滚动监听用 */
   const messagesScrollRef = useRef<HTMLDivElement>(null)
@@ -1699,28 +1801,80 @@ export function ChatPanel({
           </div>
         )}
         <div className="spacer" />
-        {/* 后端在线状态靠右（非当前任务 busy） */}
-        {serverUp ? (
-          <span className="badge run" title={t('chat.serviceOnlineHint')}>
-            {t('chat.running')}
-          </span>
-        ) : (
-          <span className="badge offline" title={t('chat.serverDown')}>
-            {t('chat.serviceOffline')}
-          </span>
-        )}
-        {onToggleInspector && (
+        <div className="chat-head-tools" ref={inspectorAnchorRef}>
           <button
             type="button"
-            className="icon-btn"
-            title={inspectorOpen ? t('chat.inspectorClose') : t('chat.inspector')}
-            aria-label={inspectorOpen ? t('chat.inspectorClose') : t('chat.inspector')}
-            aria-pressed={inspectorOpen}
-            onClick={onToggleInspector}
+            className={`icon-btn chat-head-tool-btn${inspectorTab === 'roles' ? ' is-active' : ''}`}
+            title={t('right.roles')}
+            aria-label={t('right.roles')}
+            aria-expanded={inspectorTab === 'roles'}
+            aria-pressed={inspectorTab === 'roles'}
+            onClick={() => toggleInspectorTab('roles')}
           >
-            <IconPanel />
+            <IconCrew />
+            {teamMembers.length > 0 && (
+              <span className="chat-head-tool-badge" aria-hidden>
+                {teamMembers.length > 9 ? '9+' : teamMembers.length}
+              </span>
+            )}
           </button>
-        )}
+          <button
+            type="button"
+            className={`icon-btn chat-head-tool-btn${inspectorTab === 'approvals' ? ' is-active' : ''}`}
+            title={t('right.approvals')}
+            aria-label={t('right.approvals')}
+            aria-expanded={inspectorTab === 'approvals'}
+            aria-pressed={inspectorTab === 'approvals'}
+            onClick={() => toggleInspectorTab('approvals')}
+          >
+            <IconApprovals />
+            {pendingApprovalCount > 0 && (
+              <span className="chat-head-tool-badge is-warn" aria-hidden>
+                {pendingApprovalCount > 9 ? '9+' : pendingApprovalCount}
+              </span>
+            )}
+          </button>
+          <AnimatePresence>
+            {inspectorTab &&
+              onCreateTeamMember &&
+              onUpdateTeamMember &&
+              onArchiveTeamMember &&
+              onResetTeamMemberSession &&
+              onResolveApproval && (
+                <motion.div
+                  key="chat-inspector-bubble"
+                  className="chat-inspector-bubble"
+                  role="dialog"
+                  aria-label={inspectorTab === 'roles' ? t('right.roles') : t('right.approvals')}
+                  {...inspectorBubbleMotion}
+                >
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={inspectorTab}
+                      className="chat-inspector-bubble-pane"
+                      {...inspectorPanelMotion}
+                    >
+                      <RightPanel
+                        tab={inspectorTab}
+                        workers={snapshotWorkers}
+                        teamMembers={teamMembers}
+                        approvals={snapshotApprovals}
+                        projectId={project?.id ?? null}
+                        sessionId={session.id}
+                        onCreateTeamMember={onCreateTeamMember}
+                        onUpdateTeamMember={onUpdateTeamMember}
+                        onArchiveTeamMember={onArchiveTeamMember}
+                        onResetTeamMemberSession={onResetTeamMemberSession}
+                        onResolveApproval={onResolveApproval}
+                        resolving={resolving}
+                        onRefreshSnapshot={() => onRefreshSnapshot?.()}
+                      />
+                    </motion.div>
+                  </AnimatePresence>
+                </motion.div>
+              )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {!hasMessages || (!historyLoading && messages.length === 0) ? (

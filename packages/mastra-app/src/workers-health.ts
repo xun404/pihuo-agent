@@ -123,27 +123,37 @@ export function scheduleAutoWorkerHealth(): void {
   const healthTimer = setInterval(run, ttl)
   healthTimer.unref?.()
 
+  const refreshStaleModelCatalogs = (forceEmpty: boolean) => {
+    const workers = store()
+      .listWorkers()
+      .filter((w) => w.enabled)
+    for (const w of workers) {
+      const empty =
+        w.modelCatalogState === 'empty' ||
+        (!w.availableModels?.length && !w.modelsFetchedAt)
+      const stale =
+        empty ||
+        w.modelCatalogState === 'stale' ||
+        w.modelsState === 'stale' ||
+        !isModelCacheFresh(w.modelsFetchedAt, WORKER_MODELS_TTL_MS)
+      if (!stale) continue
+      // Newly registered workers have never been fetched — force once so the
+      // UI is not stuck empty until the 15-minute periodic tick.
+      void refreshWorkerModels(w.id, undefined, { force: forceEmpty && empty }).catch((e) => {
+        console.warn(`[workers-health] model cache refresh failed for ${w.name}`, e)
+      })
+    }
+  }
+
+  // Eager first pass shortly after boot (health is version-only and does not load models).
+  const startupModelsTimer = setTimeout(() => refreshStaleModelCatalogs(true), 2_500)
+  startupModelsTimer.unref?.()
+
   // Periodically refresh stale model caches via SWR (non-force, single-flight/backoff)
   const modelsRefreshMs = resolveWorkerPeriodicInterval(
     process.env.WORKER_MODELS_REFRESH_MS,
     900_000,
   )
-  const modelsTimer = setInterval(() => {
-    const workers = store()
-      .listWorkers()
-      .filter((w) => w.enabled)
-    for (const w of workers) {
-      const stale =
-        w.modelCatalogState === 'stale' ||
-        w.modelCatalogState === 'empty' ||
-        w.modelsState === 'stale' ||
-        !isModelCacheFresh(w.modelsFetchedAt, WORKER_MODELS_TTL_MS)
-      if (stale) {
-        void refreshWorkerModels(w.id, undefined, { force: false }).catch((e) => {
-          console.warn(`[workers-health] model cache refresh failed for ${w.name}`, e)
-        })
-      }
-    }
-  }, modelsRefreshMs)
+  const modelsTimer = setInterval(() => refreshStaleModelCatalogs(false), modelsRefreshMs)
   modelsTimer.unref?.()
 }

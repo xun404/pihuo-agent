@@ -11,11 +11,21 @@ type BrandLogoProps = {
 }
 
 /**
+ * Public asset URL relative to Vite `base` (must stay relative for packaged
+ * Electron `file://` loads — absolute `/icon.png` resolves to the OS root).
+ */
+function brandIconUrl(file: 'icon.png' | 'icon-glyph.png'): string {
+  const base = import.meta.env.BASE_URL || './'
+  // BASE_URL is always slash-terminated (`/` or `./`); avoid double slashes.
+  return `${base}${file}`
+}
+
+/**
  * SwarmDesk final brand mark (PNG).
- * Single source: `/icon.png` (app plate) or `/icon-glyph.png` (no black plate).
+ * Single source: public `icon.png` (app plate) or `icon-glyph.png` (no black plate).
  */
 export function BrandLogo({ className, size = 88, title, variant = 'app' }: BrandLogoProps) {
-  const src = variant === 'glyph' ? '/icon-glyph.png' : '/icon.png'
+  const src = brandIconUrl(variant === 'glyph' ? 'icon-glyph.png' : 'icon.png')
 
   return (
     <img

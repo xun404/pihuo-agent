@@ -33,15 +33,19 @@
   --border: rgba(60, 40, 20, 0.1);
   --border-soft: rgba(60, 40, 20, 0.06);
 
-  /* —— Color: brand / status —— */
-  --accent: #e8890c;
-  --blue: #3b6ff5;
-  --blue-soft: rgba(59, 111, 245, 0.1);
-  --green: #1a9e5c;
-  --green-soft: rgba(26, 158, 92, 0.12);
-  --purple: #7c5cfc;
-  --danger: #e04b4b;
-  --danger-soft: rgba(224, 75, 75, 0.1);
+  /* —— Color: brand / status（Mono Plus 风：低饱和灰调） —— */
+  --accent: #8a8178;
+  --accent-soft: rgba(80, 50, 20, 0.05);
+  --blue: #6a7e9e;
+  --blue-soft: rgba(106, 126, 158, 0.1);
+  --green: #6a8e6a;
+  --green-soft: rgba(106, 142, 106, 0.12);
+  --purple: #8a7a9a;
+  /* Warning stays muted amber even when classic palette remaps --accent → blue */
+  --warn: #9e8a6a;
+  --warn-soft: rgba(158, 138, 106, 0.12);
+  --danger: #9e6a6a;
+  --danger-soft: rgba(158, 106, 106, 0.1);
   --send-bg: #2a2d34;
 
   /* Brand chips */

@@ -1,11 +1,19 @@
-import type { WorkerReasoningSelector, WorkerReasoningCatalogEntry } from '@swarmdesk-agent/shared'
-import type { WorkerRegistration } from '@swarmdesk-agent/shared'
+import type {
+  WorkerModelCatalog,
+  WorkerReasoningSelector,
+  WorkerReasoningCatalogEntry,
+  WorkerRegistration,
+} from '@swarmdesk-agent/shared'
 import { getWorkerModelCatalogStore } from '@swarmdesk-agent/core'
 import { listAcpReasoningOptions } from '@swarmdesk-agent/adapters'
 import type { ListAcpReasoningOptionsResult } from '@swarmdesk-agent/adapters'
 
 function nowISO(): string {
   return new Date().toISOString()
+}
+
+function reasoningModelKey(model?: string): string {
+  return model?.trim() || '__default__'
 }
 
 export interface ReasoningOptionsResult {
@@ -18,15 +26,83 @@ export interface ReasoningOptionsResult {
   error?: string
 }
 
-function reasoningEntryFromCatalog(
+/**
+ * Look up a reasoning catalog entry for worker+model.
+ * When a project scope has no entry, fall back to the global catalog so
+ * discovery written under the other key still validates execution config.
+ */
+export function reasoningEntryFromCatalog(
   workerId: string,
   model?: string,
   scopeKey?: string | null,
 ): WorkerReasoningCatalogEntry | undefined {
-  const catalog = getWorkerModelCatalogStore().get(workerId, scopeKey)
-  if (!catalog?.reasoning) return undefined
-  const key = model?.trim() || '__default__'
-  return catalog.reasoning[key]
+  const key = reasoningModelKey(model)
+  const store = getWorkerModelCatalogStore()
+  const scoped = store.get(workerId, scopeKey)
+  if (scoped?.reasoning?.[key]) return scoped.reasoning[key]
+  if (scopeKey) {
+    const global = store.get(workerId)
+    if (global?.reasoning?.[key]) return global.reasoning[key]
+  }
+  return undefined
+}
+
+/**
+ * Persist a successful/failed reasoning entry onto the catalog for this scope.
+ * Creates a reasoning-only shell when no model catalog exists yet so later
+ * evaluateWorkerReasoningSelection can see the discovery result.
+ * (Pin validation already ignores shells without model candidates.)
+ */
+export function putReasoningCatalogEntry(
+  workerId: string,
+  model: string | undefined,
+  entry: WorkerReasoningCatalogEntry,
+  scopeKey?: string | null,
+): void {
+  const store = getWorkerModelCatalogStore()
+  const key = reasoningModelKey(model)
+  const scoped = store.get(workerId, scopeKey)
+  const global = scopeKey ? store.get(workerId) : undefined
+  const base: WorkerModelCatalog | undefined = scoped ?? (!scopeKey ? global : undefined)
+
+  if (base) {
+    store.put({
+      ...base,
+      version: 2,
+      reasoning: {
+        ...(base.reasoning ?? {}),
+        [key]: entry,
+      },
+    })
+    return
+  }
+
+  // Prefer writing onto an existing global catalog when scoped is missing,
+  // so model membership is not clobbered by a reasoning-only scoped shell.
+  if (scopeKey && global) {
+    store.put({
+      ...global,
+      version: 2,
+      reasoning: {
+        ...(global.reasoning ?? {}),
+        [key]: entry,
+      },
+    })
+  }
+
+  // Materialize the target scope key so scoped reads hit immediately.
+  store.put({
+    version: 2,
+    workerId,
+    scopeKey: scopeKey?.trim() || undefined,
+    source: 'acp_config_options',
+    fetchedAt: entry.fetchedAt,
+    expiresAt: entry.expiresAt,
+    providers: [],
+    shortlist: [],
+    searchIndex: [],
+    reasoning: { [key]: entry },
+  })
 }
 
 function isEntryFresh(entry: WorkerReasoningCatalogEntry): boolean {
@@ -146,34 +222,16 @@ export async function getWorkerReasoningOptionsWithWorker(
   // Live discovery
   const result = await listAcpReasoningOptions(worker, model, { cwd: opts?.cwd })
 
-  // Update cache if discovery succeeded.
-  // Never invent a model-catalog row with empty shortlist/searchIndex solely for
-  // reasoning — those shells poison pin validation (empty candidates → MODEL_REFRESH_FAILED).
-  // Only attach reasoning onto an existing catalog (scoped preferred, else global).
+  // Cache successful discovery so later execution-config / team-member validation
+  // can resolve the value without requiring a second fetch race.
   if (result.ok) {
     const fetchedAt = nowISO()
     const entry = buildSuccessfulReasoningCatalogEntry(model, result, fetchedAt)
     try {
-      const store = getWorkerModelCatalogStore()
-      const scoped = store.get(worker.id, scopeKey)
-      const global = scopeKey ? store.get(worker.id) : undefined
-      const cat = scoped ?? global
-      if (cat) {
-        store.put({
-          ...cat,
-          version: 2 as const,
-          reasoning: {
-            ...(cat.reasoning ?? {}),
-            [model?.trim() || '__default__']: entry,
-          },
-        })
-      }
+      putReasoningCatalogEntry(worker.id, model, entry, scopeKey)
     } catch {
       // Non-critical: cache write failure should not fail the request
     }
-  }
-
-  if (result.ok) {
     return {
       ok: true,
       supported: result.supported,
@@ -187,18 +245,12 @@ export async function getWorkerReasoningOptionsWithWorker(
   if (cached) {
     const errorCode = 'ACP_REASONING_CONFIGURATION_FAILED'
     try {
-      const store = getWorkerModelCatalogStore()
-      const cat = store.get(worker.id, scopeKey)
-      if (cat) {
-        store.put({
-          ...cat,
-          version: 2,
-          reasoning: {
-            ...(cat.reasoning ?? {}),
-            [model?.trim() || '__default__']: markReasoningCatalogEntryFailed(cached, errorCode),
-          },
-        })
-      }
+      putReasoningCatalogEntry(
+        worker.id,
+        model,
+        markReasoningCatalogEntryFailed(cached, errorCode),
+        scopeKey,
+      )
     } catch {
       // Non-critical: stale last-known-good data remains usable in memory.
     }
@@ -237,7 +289,7 @@ export function evaluateWorkerReasoningSelection(
     return {
       ok: false,
       errorCode: 'ACP_REASONING_UNSUPPORTED',
-      error: `No reasoning information found for worker ${workerId}${model ? ` model ${model}` : ''}. Fetch reasoning options first.`,
+      error: 'Reasoning options are not loaded for this worker/model yet. Try again after options load.',
     }
   }
 
@@ -258,4 +310,68 @@ export function evaluateWorkerReasoningSelection(
   }
 
   return { ok: true }
+}
+
+function evaluateAgainstSelector(
+  reasoning: string,
+  discovery: Pick<ReasoningOptionsResult, 'ok' | 'supported' | 'selector' | 'error' | 'errorCode'>,
+): { ok: boolean; errorCode?: string; error?: string } {
+  if (!discovery.ok) {
+    return {
+      ok: false,
+      errorCode: discovery.errorCode ?? 'ACP_REASONING_CONFIGURATION_FAILED',
+      error: discovery.error ?? publicReasoningDiscoveryError(),
+    }
+  }
+  if (!discovery.supported) {
+    return {
+      ok: false,
+      errorCode: 'ACP_REASONING_UNSUPPORTED',
+      error: 'ACP reasoning is not supported for this worker/model configuration.',
+    }
+  }
+  if (!discovery.selector?.options.some((option) => option.value === reasoning.trim())) {
+    return {
+      ok: false,
+      errorCode: 'ACP_REASONING_VALUE_UNAVAILABLE',
+      error: `The selected reasoning value "${reasoning.trim()}" is not available for the current model.`,
+    }
+  }
+  return { ok: true }
+}
+
+/**
+ * Validate a reasoning selection, auto-fetching ACP options when the catalog
+ * has no entry yet (common after model pin before the first options load).
+ * Validates against the live discovery result even if catalog persistence fails.
+ */
+export async function ensureWorkerReasoningSelection(
+  worker: Pick<WorkerRegistration, 'id' | 'name' | 'command' | 'args' | 'env' | 'kind'>,
+  model: string | undefined,
+  reasoning: string | undefined,
+  opts?: { cwd?: string; scopeKey?: string | null },
+): Promise<{ ok: boolean; errorCode?: string; error?: string }> {
+  if (!reasoning?.trim()) return { ok: true }
+
+  const first = evaluateWorkerReasoningSelection(worker.id, model, reasoning, {
+    scopeKey: opts?.scopeKey,
+  })
+  if (first.ok) return first
+  // Only auto-fetch when catalog is missing; unsupported / bad value are final.
+  if (first.errorCode !== 'ACP_REASONING_UNSUPPORTED') return first
+  if (reasoningEntryFromCatalog(worker.id, model, opts?.scopeKey)) return first
+
+  const discovery = await getWorkerReasoningOptionsWithWorker(worker, model, {
+    cwd: opts?.cwd,
+    force: true,
+    scopeKey: opts?.scopeKey,
+  })
+
+  const fromCatalog = evaluateWorkerReasoningSelection(worker.id, model, reasoning, {
+    scopeKey: opts?.scopeKey,
+  })
+  if (fromCatalog.ok) return fromCatalog
+
+  // Catalog write can fail (lock/corrupt); still accept a live-valid selection.
+  return evaluateAgainstSelector(reasoning, discovery)
 }

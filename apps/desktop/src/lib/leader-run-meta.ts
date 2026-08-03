@@ -366,7 +366,12 @@ export function extractPrecedingUserMeta(
  */
 export function formatClockTime(ts: number, locale: string, opts?: { timeZone?: string }): string {
   try {
-    const loc = locale === 'zh' || locale.startsWith('zh') ? 'zh-CN' : 'en-US'
+    const loc =
+      locale === 'zh-TW' || locale.toLowerCase().includes('hant') || locale.toLowerCase() === 'zh-tw'
+        ? 'zh-TW'
+        : locale === 'zh' || locale.startsWith('zh')
+          ? 'zh-CN'
+          : 'en-US'
     return new Date(ts).toLocaleString(loc, {
       ...(opts?.timeZone ? { timeZone: opts.timeZone } : {}),
       year: 'numeric',

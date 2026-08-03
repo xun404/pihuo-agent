@@ -28,9 +28,10 @@ import { useToast } from './Toast'
 import { TeamTemplateManager } from './TeamTemplateManager'
 
 export type InspectorTab = 'roles' | 'approvals'
-type Tab = InspectorTab
 
 interface Props {
+  /** Which bubble panel content to show (tabs live in chat header icons). */
+  tab: InspectorTab
   workers: WorkerRegistration[]
   teamMembers: TeamMember[]
   approvals: ApprovalItem[]
@@ -69,6 +70,7 @@ const EMPTY_ROLE_DRAFT: RoleDraft = {
 }
 
 export function RightPanel({
+  tab,
   workers,
   teamMembers,
   approvals,
@@ -84,7 +86,6 @@ export function RightPanel({
 }: Props) {
   const { t, locale } = useI18n()
   const { success: toastSuccess, error: toastError } = useToast()
-  const [tab, setTab] = useState<Tab>('roles')
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [roleDraft, setRoleDraft] = useState<RoleDraft>(EMPTY_ROLE_DRAFT)
@@ -205,26 +206,8 @@ export function RightPanel({
     Boolean(roleDraft.workerId) &&
     Boolean(roleDraft.instructions.trim())
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'roles', label: t('right.roles') },
-    { id: 'approvals', label: t('right.approvals') },
-  ]
-
   return (
-    <aside className="panel panel-right inspector-panel">
-      <div className="drawer-tabs">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={tab === item.id ? 'on' : ''}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
+    <aside className="chat-inspector-panel">
       {tab === 'roles' && (
         <div className="drawer-body tab-panel active crew-panel">
           <div className="crew-panel-toolbar">
@@ -334,7 +317,7 @@ export function RightPanel({
                               status={worker.readiness.status}
                               code={worker.readiness.code}
                               nextAction={worker.readiness.nextAction}
-                              locale={locale === 'zh' ? 'zh' : 'en'}
+                              locale={locale === 'en' ? 'en' : 'zh'}
                             />
                           ) : (
                             <span className="role-card-health">

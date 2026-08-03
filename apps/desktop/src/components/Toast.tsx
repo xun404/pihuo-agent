@@ -102,11 +102,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               className={`toast toast-${item.kind}`}
               role={item.kind === 'error' ? 'alert' : 'status'}
               onClick={() => dismiss(item.id)}
-              // 入场：opacity + translateY（替代 CSS toast-in）
-              initial={{ opacity: 0, y: -8 }}
+              // 入场：自底部略上浮（toast 锚在窗口下方）
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              // 退场：opacity + translateY 反向（toast-out 缓动）
-              exit={{ opacity: 0, y: -8 }}
+              exit={{ opacity: 0, y: 8 }}
               transition={{ duration: 0.22, ease: [0.175, 0.885, 0.32, 1] }}
               layout
             >

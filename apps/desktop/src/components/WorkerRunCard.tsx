@@ -12,6 +12,7 @@ import { resolveWorkerBrand, WorkerBrandLogo } from './Icons'
 import { formatElapsedSeconds } from '../lib/format-elapsed'
 import { shortModelId } from '../lib/leader-run-meta'
 import { useI18n } from '../i18n/I18nProvider'
+import { useStickScrollBottom } from '../lib/use-stick-scroll-bottom'
 import { useCollapsible } from './chat/useCollapsible'
 
 function ChevronIcon() {
@@ -204,6 +205,10 @@ export const WorkerRunCard = memo(function WorkerRunCard({
     open: isOpen,
     keepMounted: isRunning || !!publicError || isPendingApproval,
   })
+  const bodyScrollRef = useStickScrollBottom(
+    isOpen && (isRunning || isPendingApproval),
+    `${state.output?.length ?? 0}:${state.task?.length ?? 0}:${publicError?.length ?? 0}`,
+  )
 
   const statusClass =
     status === 'pending_approval' || status === 'failed' || status === 'timed_out'
@@ -283,6 +288,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
       {shouldRender && (
         <div ref={contentRef} aria-hidden={!isOpen} className="worker-card-collapse">
           <div
+            ref={bodyScrollRef}
             className="node-body-inner process-collapse-body"
             style={{
               opacity: isOpen ? 1 : 0,

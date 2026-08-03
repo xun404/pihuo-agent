@@ -29,10 +29,7 @@ import {
 } from '../acp-registry-api.js'
 import { getWorkerModels, evaluateWorkerModelPin, applyWorkerModelPin } from '../worker-models.js'
 import { resolveModelCatalogScopeKey } from '../worker-models.js'
-import {
-  getWorkerReasoningOptionsWithWorker,
-  evaluateWorkerReasoningSelection,
-} from '../worker-reasoning.js'
+import { getWorkerReasoningOptionsWithWorker } from '../worker-reasoning.js'
 import {
   assertTeamMemberModelAccepted,
   assertTeamMemberReasoningAccepted,
@@ -108,8 +105,8 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const body = (await c.req.json()) as { locale: Locale }
-      if (body.locale !== 'zh' && body.locale !== 'en') {
-        return c.json({ error: 'locale must be zh or en' }, 400)
+      if (body.locale !== 'zh' && body.locale !== 'zh-TW' && body.locale !== 'en') {
+        return c.json({ error: 'locale must be zh, zh-TW, or en' }, 400)
       }
       const locale = store().setLocale(body.locale)
       return c.json({ locale, snapshot: store().snapshot() })
@@ -963,11 +960,15 @@ export const apiRoutes = [
             : previous.reasoning
         if (effectiveReasoning) {
           const scopeKey = resolveModelCatalogScopeKey(requestedProject?.rootPath)
-          const reasoningCheck = evaluateWorkerReasoningSelection(
-            id,
+          const { ensureWorkerReasoningSelection } = await import('../worker-reasoning.js')
+          const reasoningCheck = await ensureWorkerReasoningSelection(
+            previous,
             effectiveModel,
             effectiveReasoning,
-            { scopeKey: scopeKey || undefined },
+            {
+              cwd: requestedProject?.rootPath,
+              scopeKey: scopeKey || undefined,
+            },
           )
           if (!reasoningCheck.ok) {
             return c.json(

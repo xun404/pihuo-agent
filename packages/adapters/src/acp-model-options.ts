@@ -7,11 +7,17 @@ export interface ModelOption {
   currentValue?: string
 }
 
+export type ModelOptionsErrorCode =
+  | 'ACP_MODELS_NOT_DECLARED'
+  | 'ACP_MODELS_NO_MODEL_OPTION'
+  | 'ACP_MODELS_EMPTY_VALUES'
+
 export interface ModelOptionsResult {
   ok: boolean
   models: ModelOption[]
   currentModelId?: string
   error?: string
+  errorCode?: ModelOptionsErrorCode
 }
 
 const MODEL_CATEGORIES = new Set(['model', 'model_config'])
@@ -36,6 +42,7 @@ export function extractModelOptions(
       ok: false,
       models: [],
       error: 'ACP agent did not declare any configOptions',
+      errorCode: 'ACP_MODELS_NOT_DECLARED',
     }
   }
 
@@ -46,6 +53,7 @@ export function extractModelOptions(
       ok: false,
       models: [],
       error: 'No model-like configOption found in session configOptions',
+      errorCode: 'ACP_MODELS_NO_MODEL_OPTION',
     }
   }
 
@@ -96,6 +104,7 @@ export function extractModelOptions(
       models: [],
       currentModelId,
       error: 'Model config option found but no selectable values declared',
+      errorCode: 'ACP_MODELS_EMPTY_VALUES',
     }
   }
 

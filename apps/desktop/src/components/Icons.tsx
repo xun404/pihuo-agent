@@ -110,7 +110,7 @@ export function IconCrew(p: IconProps) {
 
 /**
  * Leader / sidebar brand glyph (emoji stand-in).
- * Full app mark: apps/desktop/public/icon.png (BrandLogo).
+ * Full app mark: apps/desktop/public/icon.png via BrandLogo (BASE_URL-relative).
  */
 export function IconQueenBee({ className, size = 16, title }: IconProps) {
   return (
@@ -186,6 +186,16 @@ export function IconPanel(p: IconProps) {
     <svg {...baseProps(p)}>
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M15 4v16" />
+    </svg>
+  )
+}
+
+/** Pending approvals / permission requests */
+export function IconApprovals(p: IconProps) {
+  return (
+    <svg {...baseProps(p)}>
+      <path d="M12 3.2 19 6.2v5.1c0 4.4-2.9 7.5-7 9-4.1-1.5-7-4.6-7-9V6.2l7-3z" />
+      <path d="M9.2 12.1 11 13.9l3.8-3.8" />
     </svg>
   )
 }

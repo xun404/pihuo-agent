@@ -95,8 +95,14 @@ function formatCompact(n: number, locale: string): string {
   if (n >= 1000) {
     const k = n / 1000
     const digits = k >= 100 ? 0 : k >= 10 ? 1 : 1
+    const bcp47 =
+      locale === 'zh'
+        ? 'zh-CN'
+        : locale === 'zh-TW' || locale.startsWith('zh')
+          ? 'zh-TW'
+          : 'en-US'
     return (
-      new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+      new Intl.NumberFormat(bcp47, {
         maximumFractionDigits: digits,
         notation: 'compact',
       }).format(n) || String(n)

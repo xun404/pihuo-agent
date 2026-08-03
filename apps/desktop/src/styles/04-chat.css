@@ -99,12 +99,107 @@
   flex: 1;
   min-width: 8px;
 }
-.chat-head .badge {
-  flex-shrink: 0;
-}
 .chat-head .icon-btn {
   flex-shrink: 0;
+}
+.chat-head-tools {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
   margin-left: 4px;
+}
+.chat-head-tool-btn {
+  position: relative;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.chat-head-tool-btn:active {
+  transform: scale(0.94);
+}
+.chat-head-tool-btn.is-active {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.chat-head-tool-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: var(--r-pill);
+  background: var(--blue);
+  color: var(--text-inv, #fff);
+  font-size: 9px;
+  font-weight: var(--fw-semibold);
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 1.5px var(--bg-main);
+  animation: chat-head-badge-in 0.22s var(--ease-out) both;
+}
+.chat-head-tool-badge.is-warn {
+  background: var(--accent, var(--danger));
+}
+@keyframes chat-head-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.chat-inspector-bubble {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(72vh, 680px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform-origin: top right;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-popover, var(--shadow-composer, 0 12px 40px rgba(0, 0, 0, 0.18)));
+  will-change: opacity, transform;
+}
+.chat-inspector-bubble-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(72vh, 680px);
+  overflow: hidden;
+}
+.chat-inspector-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(72vh, 680px);
+  overflow: hidden;
+  background: transparent;
+}
+.chat-inspector-panel .drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  max-height: min(72vh, 680px);
+}
+/* Reduce-motion: skip badge pop and press scale */
+html[data-motion='reduce'] .chat-head-tool-badge {
+  animation: none;
+}
+html[data-motion='reduce'] .chat-head-tool-btn:active {
+  transform: none;
 }
 .badge {
   font-size: var(--fs-2xs);
@@ -121,7 +216,6 @@
 .badge.run {
   background: var(--green-soft);
   color: var(--green);
-  /* 后端服务在线 */
   letter-spacing: 0.01em;
 }
 .badge.offline {
@@ -596,22 +690,22 @@
   background: var(--bg-input);
   overflow: hidden;
   max-width: 100%;
-  /* syntax tokens (shared .syn-*) — theme-friendly defaults */
-  --diff-syn-keyword: #7c3aed;
-  --diff-syn-type: #0e7490;
-  --diff-syn-string: #047857;
-  --diff-syn-number: #c2410c;
+  /* syntax tokens (shared .syn-*) — Mono Plus 风低饱和灰彩 */
+  --diff-syn-keyword: #8a7a9a;
+  --diff-syn-type: #6a8a9a;
+  --diff-syn-string: #7a8e6a;
+  --diff-syn-number: #9a8068;
   --diff-syn-comment: var(--text-3);
-  --diff-syn-fn: #1d4ed8;
+  --diff-syn-fn: #6a7e9e;
   --diff-syn-punct: var(--text-2);
 }
 html[data-theme='dark'] .md-code-block-wrap {
-  --diff-syn-keyword: #c4b5fd;
-  --diff-syn-type: #67e8f9;
-  --diff-syn-string: #6ee7b7;
-  --diff-syn-number: #fbbf24;
-  --diff-syn-comment: color-mix(in srgb, var(--text-3) 90%, #94a3b8);
-  --diff-syn-fn: #93c5fd;
+  --diff-syn-keyword: #bda2e8;
+  --diff-syn-type: #8ab8cc;
+  --diff-syn-string: #9cb88c;
+  --diff-syn-number: #d4b69a;
+  --diff-syn-comment: color-mix(in srgb, var(--text-3) 90%, #b0a8a0);
+  --diff-syn-fn: #a2bee8;
   --diff-syn-punct: var(--text-3);
 }
 .md-code-block-head {
@@ -1125,14 +1219,19 @@ html[data-theme='dark'] .md-code-block-wrap {
   line-height: 1.45;
   opacity: 0.92;
 }
-/* Streaming: cap height + bottom fade so long reasoning does not fill the viewport */
+/*
+ * Streaming (live): grow with content — no max-height.
+ * 2d33212 capped this at 8.75rem which trapped growth inside an overflow box,
+ * so the main messages list stopped expanding and followTail could not stick.
+ * Completed (not live): keep a scroll box so re-expanded history stays compact.
+ */
 .thinking-block-body.live {
   color: var(--text-2);
   opacity: 0.95;
-  max-height: 8.75rem;
-  overflow: auto;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%);
+  max-height: none;
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 /* 结束态（展开查看）：内容过长时滚动框，避免撑爆消息列 */
 .thinking-block:not(.live) .thinking-block-body {

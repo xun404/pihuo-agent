@@ -9,7 +9,15 @@ import {
   type ReactNode,
 } from 'react'
 import type { Locale as SharedLocale } from '@swarmdesk-agent/shared'
-import { catalogs, detectLocale, formatMessage, type Locale, type MessageKey } from './locales'
+import {
+  catalogs,
+  detectLocale,
+  formatMessage,
+  isLocale,
+  localeToBcp47,
+  type Locale,
+  type MessageKey,
+} from './locales'
 
 interface I18nContextValue {
   locale: Locale
@@ -24,7 +32,7 @@ const STORAGE_KEY = 'swarmdesk-agent.locale'
 function readStoredLocale(): Locale | null {
   try {
     const v = localStorage.getItem(STORAGE_KEY)
-    if (v === 'zh' || v === 'en') return v
+    if (isLocale(v)) return v
   } catch {
     /* ignore */
   }
@@ -50,7 +58,7 @@ export function I18nProvider({ children, serverLocale, onLocaleChange }: Props) 
   }, [serverLocale])
 
   useEffect(() => {
-    document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en'
+    document.documentElement.lang = localeToBcp47(locale)
   }, [locale])
 
   const setLocale = useCallback(

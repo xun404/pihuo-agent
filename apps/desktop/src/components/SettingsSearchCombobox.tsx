@@ -29,6 +29,11 @@ interface Props {
   emptyLabel?: string
   /** Always-available empty selection (e.g. Agent default). value must be ''. */
   clearOption?: { label: string }
+  /**
+   * When true, Enter commits the typed query as a custom value (model id freeform).
+   * Useful when the Agent does not advertise a model list via ACP.
+   */
+  allowCustomValue?: boolean
   onChange: (value: string) => void
 }
 
@@ -49,6 +54,7 @@ export function SettingsSearchCombobox({
   placeholder,
   emptyLabel,
   clearOption,
+  allowCustomValue = false,
   onChange,
 }: Props) {
   const { t } = useI18n()
@@ -141,10 +147,20 @@ export function SettingsSearchCombobox({
       setHighlighted((current) => moveSettingsSearchHighlight(current, event.key, filtered.length))
       return
     }
-    if (event.key === 'Enter' && open && highlighted >= 0) {
+    if (event.key === 'Enter' && open) {
       event.preventDefault()
-      const option = filtered[highlighted]
-      if (option) selectOption(option)
+      if (highlighted >= 0) {
+        const option = filtered[highlighted]
+        if (option) selectOption(option)
+        return
+      }
+      if (allowCustomValue && query.trim()) {
+        const custom = query.trim()
+        onChange(custom)
+        setQuery(custom)
+        setOpen(false)
+        setHighlighted(-1)
+      }
       return
     }
     if (event.key === 'Escape') {
@@ -160,9 +176,25 @@ export function SettingsSearchCombobox({
       if (rootRef.current?.contains(nextTarget)) return
       if (listRef.current?.contains(nextTarget)) return
     }
+    if (allowCustomValue && open && query.trim() && query.trim() !== displayForValue) {
+      const custom = query.trim()
+      // Prefer exact option match over freeform when the typed text matches a row.
+      const exact = filtered.find(
+        (option) =>
+          option.value === custom ||
+          option.label === custom ||
+          option.secondary === custom,
+      )
+      if (exact) selectOption(exact)
+      else {
+        onChange(custom)
+        setQuery(custom)
+      }
+    } else {
+      setQuery(displayForValue)
+    }
     setOpen(false)
     setHighlighted(-1)
-    setQuery(displayForValue)
   }
 
   const statusEmpty = emptyLabel ?? t('reasoning.noMatches')
@@ -177,12 +209,14 @@ export function SettingsSearchCombobox({
         filtered.map((option, index) => {
           const selected = option.value === value
           const desc = option.description?.trim() || ''
-          const tipParts = [option.label, option.secondary, desc].filter(Boolean)
-          // Full text for hover when description may clamp to two lines.
-          const title =
-            desc.length > 0 || (option.secondary && option.secondary !== option.label)
-              ? tipParts.join('\n')
-              : undefined
+          const tipParts = [option.label, option.keywords, option.secondary, desc].filter(
+            (part, index, arr) => Boolean(part) && arr.indexOf(part) === index,
+          )
+          // Full text for hover (id + optional friendly name / description).
+          const title = tipParts.length > 1 || desc.length > 0 ? tipParts.join('\n') : undefined
+          const showSecondary = Boolean(
+            option.secondary && option.secondary !== option.label,
+          )
           return (
             <button
               id={`${listboxId}-option-${index}`}
@@ -198,9 +232,15 @@ export function SettingsSearchCombobox({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => selectOption(option)}
             >
-              <span className="settings-search-option-main">
-                <span className="worker-registry-option-name">{option.label}</span>
-                {option.secondary && option.secondary !== option.label ? (
+              <span
+                className={`settings-search-option-main${showSecondary ? ' has-secondary' : ''}`}
+              >
+                <span
+                  className={`worker-registry-option-name${showSecondary ? '' : ' mono is-id'}`}
+                >
+                  {option.label}
+                </span>
+                {showSecondary ? (
                   <span className="worker-registry-option-id mono">{option.secondary}</span>
                 ) : null}
               </span>

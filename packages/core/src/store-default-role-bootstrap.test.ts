@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PromptSettings, WorkerRegistration } from '@swarmdesk-agent/shared'
+import type { WorkerRegistration } from '@swarmdesk-agent/shared'
 import { DEFAULT_PROMPT_SETTINGS } from '@swarmdesk-agent/shared'
 import { LocalStore } from './store.js'
 
@@ -48,27 +48,20 @@ describe('Worker default role type Team bootstrap', () => {
     assert.equal(store.setWorkerDefaultRoleType(saved.id, 'coder').defaultRoleType, 'coder')
   })
 
-  it('atomically seeds enabled Workers from their role prompt defaults', () => {
+  it('does not auto-seed registered Workers into a new Chat Team', () => {
     store.upsertWorker({ ...worker('worker-enabled'), defaultRoleType: 'coder' })
     store.upsertWorker(worker('worker-disabled', false))
     const project = store.upsertProject({ name: 'P', rootPath: join(dir, 'project') })
-    const prompts: PromptSettings['roles'] = {
-      ...DEFAULT_PROMPT_SETTINGS.roles,
-      coder: 'Project coder default.',
-    }
 
-    const session = store.createSession({ projectId: project.id, rolePrompts: prompts })
+    const session = store.createSession({
+      projectId: project.id,
+      rolePrompts: DEFAULT_PROMPT_SETTINGS.roles,
+    })
     const members = store.listTeamMembers(session.id)
 
     assert.equal(session.teamRevision, 1)
     assert.equal(session.roleReviewState, 'pending')
-    assert.equal(members.length, 1)
-    assert.equal(members[0]?.workerId, 'worker-enabled')
-    assert.equal(members[0]?.name, 'Codex')
-    assert.equal(members[0]?.roleType, 'coder')
-    assert.equal(members[0]?.instructions, 'Project coder default.')
-    assert.equal(members[0]?.model, undefined)
-    assert.equal(members[0]?.revision, 1)
+    assert.equal(members.length, 0)
   })
 
   it('creates exactly a resolved initial Team in the Session commit', () => {
@@ -110,55 +103,64 @@ describe('Worker default role type Team bootstrap', () => {
     )
   })
 
-  it('rejects an explicitly empty initial Team without creating a Session', () => {
+  it('allows an empty initial Team without creating members', () => {
+    store.upsertWorker(worker('worker-enabled'))
     const project = store.upsertProject({ name: 'P', rootPath: join(dir, 'project') })
 
-    assert.throws(
-      () => store.createSession({ projectId: project.id, initialTeamMembers: [] }),
-      /Team requires at least one member/u,
-    )
-    assert.equal(store.listSessions().length, 0)
+    const session = store.createSession({ projectId: project.id, initialTeamMembers: [] })
+    assert.equal(store.listSessions().length, 1)
+    assert.equal(store.listTeamMembers(session.id).length, 0)
   })
 
-  it('keeps an existing Session prompt independent from later defaults', () => {
+  it('applies Worker defaultRoleType only when a member is created later', () => {
     store.upsertWorker({ ...worker('worker-enabled'), defaultRoleType: 'coder' })
     const project = store.upsertProject({ name: 'P', rootPath: join(dir, 'project') })
-    const first = store.createSession({
-      projectId: project.id,
-      rolePrompts: { ...DEFAULT_PROMPT_SETTINGS.roles, coder: 'First coder prompt.' },
+    const session = store.createSession({ projectId: project.id })
+
+    const member = store.createTeamMember({
+      chatSessionId: session.id,
+      workerId: 'worker-enabled',
+      name: 'Codex',
+      roleType: 'coder',
+      instructions: 'Project coder default.',
     })
 
     store.setWorkerDefaultRoleType('worker-enabled', 'review')
-    const second = store.createSession({
-      projectId: project.id,
-      rolePrompts: { ...DEFAULT_PROMPT_SETTINGS.roles, review: 'Current review prompt.' },
-    })
-
-    assert.equal(store.listTeamMembers(first.id)[0]?.instructions, 'First coder prompt.')
-    assert.equal(store.listTeamMembers(first.id)[0]?.roleType, 'coder')
-    assert.equal(store.listTeamMembers(second.id)[0]?.instructions, 'Current review prompt.')
-    assert.equal(store.listTeamMembers(second.id)[0]?.roleType, 'review')
+    assert.equal(member.roleType, 'coder')
+    assert.equal(store.listTeamMembers(session.id)[0]?.roleType, 'coder')
   })
 
   it('increments Team revision for persisted member mutations', () => {
     store.upsertWorker(worker('worker-enabled'))
     const project = store.upsertProject({ name: 'P', rootPath: join(dir, 'project') })
     const session = store.createSession({ projectId: project.id })
-    const member = store.listTeamMembers(session.id)[0]!
+    assert.equal(session.teamRevision, 1)
 
-    const updated = store.updateTeamMember(session.id, member.id, {
+    const member = store.createTeamMember({
+      chatSessionId: session.id,
+      workerId: 'worker-enabled',
       name: 'Generalist',
-      expectedRevision: member.revision,
+      roleType: 'general',
+      instructions: 'Help out.',
     })
     assert.equal(
       store.listSessions().find((candidate) => candidate.id === session.id)?.teamRevision,
       2,
     )
 
-    store.archiveTeamMember(session.id, member.id, updated.revision)
+    const updated = store.updateTeamMember(session.id, member.id, {
+      name: 'Generalist+',
+      expectedRevision: member.revision,
+    })
     assert.equal(
       store.listSessions().find((candidate) => candidate.id === session.id)?.teamRevision,
       3,
+    )
+
+    store.archiveTeamMember(session.id, member.id, updated.revision)
+    assert.equal(
+      store.listSessions().find((candidate) => candidate.id === session.id)?.teamRevision,
+      4,
     )
   })
 })

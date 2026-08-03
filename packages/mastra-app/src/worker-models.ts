@@ -342,34 +342,54 @@ async function executeRefresh(
   }
 
   const safeError = (result.error ?? 'Model refresh failed').slice(0, 500)
-  recordFailure(fk, nowMs)
+  const errorCode = result.errorCode?.trim() || 'ACP_MODELS'
+  // Agent capability gap (no model configOptions) is not a transient failure —
+  // skip backoff and avoid marking the worker unhealthy.
+  const modelsNotDeclared =
+    errorCode === 'ACP_MODELS_NOT_DECLARED' ||
+    errorCode === 'ACP_MODELS_NO_MODEL_OPTION' ||
+    errorCode === 'ACP_MODELS_EMPTY_VALUES'
+
+  if (!modelsNotDeclared) {
+    recordFailure(fk, nowMs)
+  } else {
+    clearFailure(fk)
+  }
 
   if (!result.ok && hadCache) {
     if (writeWorkerRow) {
       const staleWorker = store.setWorkerModelsStale(workerId, safeError)
       store.upsertWorker(
-        applyHealthReport(
-          {
-            ...staleWorker,
-            model: pin ?? staleWorker.model,
-            modelCatalogState: 'stale',
-          },
-          {
-            status: 'unhealthy',
-            level: 'acp_handshake',
-            checkedAt,
-            message: safeError,
-            hints: ['可稍后重试「更新模型列表」', '或手动填写 model id'],
-            detail: { errorCode: 'ACP_MODELS' },
-          },
-        ),
+        modelsNotDeclared
+          ? {
+              ...staleWorker,
+              model: pin ?? staleWorker.model,
+              modelCatalogState: 'empty' as const,
+              modelsState: 'stale' as const,
+              modelsError: safeError,
+            }
+          : applyHealthReport(
+              {
+                ...staleWorker,
+                model: pin ?? staleWorker.model,
+                modelCatalogState: 'stale',
+              },
+              {
+                status: 'unhealthy',
+                level: 'acp_handshake',
+                checkedAt,
+                message: safeError,
+                hints: ['可稍后重试「更新模型列表」', '或手动填写 model id'],
+                detail: { errorCode },
+              },
+            ),
       )
     }
     const existing = catalogStore.get(workerId, scopeKey || undefined)
     if (existing) {
       catalogStore.put({
         ...existing,
-        lastErrorCode: 'ACP_MODELS',
+        lastErrorCode: errorCode,
       })
     }
     const updated = store.listWorkers().find((w) => w.id === workerId) ?? worker
@@ -377,45 +397,73 @@ async function executeRefresh(
       ok: false,
       models: existing?.shortlist ?? worker.availableModels ?? [],
       error: safeError,
-      errorCode: 'ACP_MODELS',
+      errorCode,
       worker: updated,
       cached: true,
-      stale: true,
+      stale: !modelsNotDeclared,
       searchIndex: existing?.searchIndex,
       catalog: existing,
-      catalogState: 'stale',
+      catalogState: modelsNotDeclared ? 'empty' : 'stale',
     }
   }
 
   if (writeWorkerRow) {
     const staleWorker2 = store.setWorkerModelsStale(workerId, safeError)
     store.upsertWorker(
-      applyHealthReport(
-        {
-          ...staleWorker2,
-          model: pin ?? staleWorker2.model,
-          modelCatalogState: 'empty',
-        },
-        {
-          status: 'unhealthy',
-          level: 'acp_handshake',
-          checkedAt,
-          message: safeError,
-          hints: ['可稍后重试「更新模型列表」', '或手动填写 model id'],
-          detail: { errorCode: 'ACP_MODELS' },
-        },
-      ),
+      modelsNotDeclared
+        ? {
+            ...staleWorker2,
+            model: pin ?? staleWorker2.model,
+            modelCatalogState: 'empty' as const,
+            modelsState: 'stale' as const,
+            modelsError: safeError,
+          }
+        : applyHealthReport(
+            {
+              ...staleWorker2,
+              model: pin ?? staleWorker2.model,
+              modelCatalogState: 'empty',
+            },
+            {
+              status: 'unhealthy',
+              level: 'acp_handshake',
+              checkedAt,
+              message: safeError,
+              hints: ['可稍后重试「更新模型列表」', '或手动填写 model id'],
+              detail: { errorCode },
+            },
+          ),
     )
+  }
+  // Persist a shell catalog so pin validation can detect "agent has no models API".
+  if (modelsNotDeclared) {
+    try {
+      catalogStore.put({
+        version: 2,
+        workerId,
+        scopeKey: scopeKey || undefined,
+        source: 'acp_config_options',
+        fetchedAt: checkedAt,
+        expiresAt: new Date(nowMs + DEFAULT_CATALOG_TTL_MS).toISOString(),
+        providers: [],
+        shortlist: [],
+        searchIndex: [],
+        lastErrorCode: errorCode,
+        lastSuccessfulFetchedAt: undefined,
+      })
+    } catch {
+      // Non-critical
+    }
   }
   const updated = store.listWorkers().find((w) => w.id === workerId) ?? worker
   return {
     ok: false,
     models: [],
     error: safeError,
-    errorCode: 'ACP_MODELS',
+    errorCode,
     worker: updated,
     cached: false,
-    stale: true,
+    stale: !modelsNotDeclared,
     catalogState: 'empty',
   }
 }
@@ -679,6 +727,22 @@ export function evaluateWorkerModelPin(
   const catalogStore = opts?.catalogStore ?? getWorkerModelCatalogStore()
   const catalog = resolveCatalogForModelPin(workerId, opts?.cwd, catalogStore)
   const candidates = resolveEligibilityCandidates(worker, catalog) ?? []
+
+  // Empty shells are skipped by resolveCatalogForModelPin — read raw rows for the code.
+  const scopeKey = resolveModelCatalogScopeKey(opts?.cwd)
+  const rawCatalog =
+    catalogStore.get(workerId, scopeKey || undefined) ?? catalogStore.get(workerId)
+  // Agents that never advertise models via ACP (e.g. Grok Build) allow freeform pins.
+  const modelsNotDeclared =
+    rawCatalog?.lastErrorCode === 'ACP_MODELS_NOT_DECLARED' ||
+    rawCatalog?.lastErrorCode === 'ACP_MODELS_NO_MODEL_OPTION' ||
+    rawCatalog?.lastErrorCode === 'ACP_MODELS_EMPTY_VALUES' ||
+    /did not declare any configOptions|No model-like configOption|no selectable values/i.test(
+      worker.modelsError ?? '',
+    )
+  if (candidates.length === 0 && modelsNotDeclared) {
+    return { ok: true }
+  }
 
   let providers = providersToRecord(catalog?.providers)
   if (Object.keys(providers).length === 0 && candidates.length > 0) {

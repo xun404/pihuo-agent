@@ -78,6 +78,13 @@ export interface CustomAcpRegistrationInput {
   description?: string
   defaultModel?: string
   enabled?: boolean
+  /**
+   * Registry agent id used for the worker icon.
+   * - omit / undefined → auto-match from name+command against the local catalog
+   * - non-empty string → use that agent icon
+   * - empty string → no registry icon (brand fallback only)
+   */
+  iconAgentId?: string
   /** Confirm-time: allow persisting despite a probe failure (incompatible/failed). */
   force?: boolean
   /** Confirm-time: acknowledge the duplicate-CLI conflict and add anyway. */
@@ -336,6 +343,12 @@ export interface WorkerTimeoutSettings {
 
 /** Locale used only for built-in default prompt text (UI language). */
 export type PromptLocale = 'zh' | 'en'
+
+/** Map any UI locale to the prompt-default catalog (zh covers simplified + traditional). */
+export function toPromptLocale(locale: string | undefined | null): PromptLocale {
+  if (!locale) return 'zh'
+  return locale === 'en' || locale.startsWith('en') ? 'en' : 'zh'
+}
 
 const LEGACY_PLAN_PROMPT_ZH =
   '作为规划角色，分析目标、约束和代码现状，输出可执行且可验证的步骤；除非明确要求，不直接实施。'
@@ -672,7 +685,11 @@ export interface WorkerHealthReport {
   }
 }
 
-export type Locale = 'zh' | 'en'
+export type Locale = 'zh' | 'zh-TW' | 'en'
+
+export function isAppLocale(value: unknown): value is Locale {
+  return value === 'zh' || value === 'zh-TW' || value === 'en'
+}
 
 export const WORKER_ROLES: WorkerRole[] = ['plan', 'coder', 'review', 'test', 'research', 'general']
 
@@ -930,7 +947,7 @@ export interface WorkerRegistration {
   scope: 'global' | 'project'
   projectId?: string
   description: string
-  /** Role whose global default prompt seeds this Worker in a new Chat Team. */
+  /** Default role type when the user adds this Worker as a Team member. */
   defaultRoleType: WorkerRole
   /** Shortcut = worst of cliHealth and acpSessionHealth (kept for compatibility) */
   health: WorkerHealthStatus
@@ -1577,3 +1594,5 @@ export function isModelCacheFresh(
 ): boolean {
   return isTimestampFresh(modelsFetchedAt, ttlMs, nowMs)
 }
+
+export { matchRegistryAgentForIcon } from './worker-icon-match.js'

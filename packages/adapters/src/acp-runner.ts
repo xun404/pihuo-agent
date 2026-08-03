@@ -184,6 +184,8 @@ export interface ListAcpModelsResult {
   /** Full ACP candidate set */
   models: WorkerModelOption[]
   error?: string
+  /** Stable machine code when ok is false (e.g. agent has no model configOptions). */
+  errorCode?: string
   shortlist?: ShortlistEntry[]
   /** Shortlist as WorkerModelOption (for availableModels) */
   shortlistModels?: WorkerModelOption[]
@@ -247,7 +249,15 @@ export async function listAcpModels(
         {},
         async (handle) => {
           if (!handle.modelOptions.ok || handle.modelOptions.models.length === 0) {
-            throw new Error(handle.modelOptions.error ?? 'No models found in configOptions')
+            const err = new Error(handle.modelOptions.error ?? 'No models found in configOptions') as Error & {
+              errorCode?: string
+            }
+            err.errorCode =
+              handle.modelOptions.errorCode ??
+              (handle.modelOptions.models.length === 0 && handle.modelOptions.ok
+                ? 'ACP_MODELS_EMPTY_VALUES'
+                : 'ACP_MODELS')
+            throw err
           }
           return handle.modelOptions.models.map((m) => ({
             modelId: m.modelId,
@@ -317,10 +327,19 @@ export async function listAcpModels(
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
+    const errorCode =
+      e && typeof e === 'object' && 'errorCode' in e && typeof (e as { errorCode?: unknown }).errorCode === 'string'
+        ? String((e as { errorCode: string }).errorCode)
+        : /did not declare any configOptions/i.test(msg)
+          ? 'ACP_MODELS_NOT_DECLARED'
+          : /No model-like configOption/i.test(msg)
+            ? 'ACP_MODELS_NO_MODEL_OPTION'
+            : 'ACP_MODELS'
     return {
       ok: false,
       models: [],
       error: msg,
+      errorCode,
     }
   }
 }

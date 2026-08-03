@@ -20,63 +20,27 @@ import type {
   WorkerLaunchSpec,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
+import { matchRegistryAgentForIcon } from '@swarmdesk-agent/shared'
 import { resolveLocalRegistryCatalog } from './acp-registry-service.js'
+import { refreshWorkerModels } from './worker-models.js'
 
-/**
- * Best-effort fuzzy match of a custom-registered worker (by name + command)
- * against the local registry catalog, so a manually-added CLI can reuse the
- * matching agent's icon. Returns the agentId or undefined.
- *
- * Matching priority:
- *  1. command/package contains the agent id or a known suffix (e.g.
- *     "@agentclientprotocol/claude-agent-acp" → claude-acp)
- *  2. name contains the agent id or display name
- *  3. token overlap between command tokens and agent id tokens
- */
-function matchRegistryAgentForIcon(name: string, command: string): string | undefined {
+/** Resolve icon agent id: explicit input wins; empty string clears; omit → auto-match. */
+export function resolveCustomWorkerIconAgentId(
+  name: string,
+  command: string,
+  iconAgentId?: string,
+): string | undefined {
+  if (iconAgentId !== undefined) {
+    const trimmed = iconAgentId.trim()
+    return trimmed || undefined
+  }
   let agents: { id: string; name: string }[] = []
   try {
     agents = resolveLocalRegistryCatalog().snapshot.agents.map((a) => ({ id: a.id, name: a.name }))
   } catch {
     return undefined
   }
-  if (agents.length === 0) return undefined
-  const hay = `${name} ${command}`.toLowerCase()
-  // 1. command/package contains agent id suffix
-  for (const a of agents) {
-    if (command.toLowerCase().includes(a.id)) return a.id
-  }
-  // 2. name matches agent id or display name (substring either direction)
-  const nameLower = name.toLowerCase()
-  for (const a of agents) {
-    const aid = a.id.toLowerCase()
-    const aname = a.name.toLowerCase()
-    if (
-      hay.includes(aid) ||
-      hay.includes(aname) ||
-      aname.includes(nameLower) ||
-      aid.includes(nameLower)
-    ) {
-      return a.id
-    }
-  }
-  // 3. token overlap (e.g. "claude code" vs "claude-acp")
-  const cmdTokens = new Set(
-    command
-      .toLowerCase()
-      .split(/[^a-z0-9]+/i)
-      .filter((t) => t.length >= 3),
-  )
-  let best: { id: string; score: number } | undefined
-  for (const a of agents) {
-    const idTokens = a.id
-      .toLowerCase()
-      .split(/[^a-z0-9]+/i)
-      .filter((t) => t.length >= 3)
-    const overlap = idTokens.filter((t) => cmdTokens.has(t)).length
-    if (overlap > 0 && (!best || overlap > best.score)) best = { id: a.id, score: overlap }
-  }
-  return best?.id
+  return matchRegistryAgentForIcon(name, command, agents)
 }
 
 export class CustomAcpRegistrationError extends Error {
@@ -396,7 +360,12 @@ export async function registerCustomAcpWorker(
     launchSpec: launch.launchSpec,
     readiness: probe.readiness,
     capabilitySummary: probe.capabilitySummary as WorkerRegistration['capabilitySummary'],
-    iconAgentId: matchRegistryAgentForIcon(name, launch.command),
+    iconAgentId: resolveCustomWorkerIconAgentId(name, launch.command, input.iconAgentId),
   }
-  return store.upsertWorkerLogged(worker)
+  const saved = store.upsertWorkerLogged(worker)
+  // Populate model catalog in the background so execution-config pickers are not empty.
+  void refreshWorkerModels(saved.id, undefined, { force: true }).catch((e) => {
+    console.warn(`[custom-acp] model catalog refresh after register failed for ${saved.name}`, e)
+  })
+  return saved
 }

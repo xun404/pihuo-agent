@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Brain } from 'lucide-react'
 import { formatElapsedHms } from '../../lib/format-elapsed'
+import { useStickScrollBottom } from '../../lib/use-stick-scroll-bottom'
 import { useCollapsible } from './useCollapsible'
 
 type Props = {
@@ -116,6 +117,8 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   const isOpen = open
   const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: streaming })
   const elapsedMs = useThinkingElapsedMs(streaming, persistKey)
+  // If a height cap is reintroduced later, keep the live body pinned to the tail.
+  const bodyScrollRef = useStickScrollBottom(streaming && isOpen, text.length)
 
   const summaryLabel = (() => {
     if (streaming) return streamingLabel
@@ -167,7 +170,12 @@ export const ThinkingBlock = memo(function ThinkingBlock({
               transition: 'opacity 180ms ease-out, transform 180ms ease-out',
             }}
           >
-            <div className={`thinking-block-body${streaming ? ' live' : ''}`}>{text || '…'}</div>
+            <div
+              ref={bodyScrollRef}
+              className={`thinking-block-body${streaming ? ' live' : ''}`}
+            >
+              {text || '…'}
+            </div>
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ import {
   toolCommandPreview,
   type ToolField,
 } from '../../lib/tool-terminal-display'
+import { useStickScrollBottom } from '../../lib/use-stick-scroll-bottom'
 import { useCollapsible } from './useCollapsible'
 import { getToolIcon } from '../Icons'
 
@@ -113,6 +114,10 @@ export const ToolCallRow = memo(function ToolCallRow({
   const isOpen = open
   const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: running })
   const ToolIconComp = getToolIcon(name)
+  const bodyScrollRef = useStickScrollBottom(
+    running && isOpen,
+    `${view.stdout?.length ?? 0}:${view.stderr?.length ?? 0}:${view.outputFields.length}`,
+  )
 
   const toggle = useCallback(() => {
     if (!hasDetail) return
@@ -176,6 +181,7 @@ export const ToolCallRow = memo(function ToolCallRow({
       {shouldRender && hasDetail && (
         <div ref={contentRef} aria-hidden={!isOpen} className="tool-row-collapse">
           <div
+            ref={bodyScrollRef}
             className="node-body-inner process-collapse-body"
             style={{
               opacity: isOpen ? 1 : 0,

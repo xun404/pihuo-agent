@@ -358,6 +358,11 @@ function restoreQuarantinedLegacyNpx(input: { installDir: string; quarantine?: s
   }
 }
 
+export type RegistryPrepareProgress = {
+  stage: string
+  progress?: number
+}
+
 export async function prepareRegistryWorker(input: {
   body: RegistryPrepareBody
   fetchImpl?: typeof fetch
@@ -368,6 +373,8 @@ export async function prepareRegistryWorker(input: {
   downloadHeaderTimeoutMs?: number
   downloadStallTimeoutMs?: number
   packageInstaller?: PrepareRequest['packageInstaller']
+  /** Optional coarse progress for UI (stage + 0..1). Never throws from the callback. */
+  onProgress?: (event: RegistryPrepareProgress) => void
 }): Promise<{
   installation: AcpAgentInstallationRecord
   prepare: PrepareResult
@@ -378,6 +385,18 @@ export async function prepareRegistryWorker(input: {
   return withRegistryPrepareLock(key, input.signal, () =>
     prepareRegistryWorkerUnlocked(lockedInput),
   )
+}
+
+function emitPrepareProgress(
+  onProgress: ((event: RegistryPrepareProgress) => void) | undefined,
+  event: RegistryPrepareProgress,
+): void {
+  if (!onProgress) return
+  try {
+    onProgress(event)
+  } catch {
+    // Progress is best-effort UI signal; never fail the install path.
+  }
 }
 
 async function prepareRegistryWorkerUnlocked(input: {
@@ -393,6 +412,7 @@ async function prepareRegistryWorkerUnlocked(input: {
   /** No-progress stall deadline for the response body; a steady stream is never killed. */
   downloadStallTimeoutMs?: number
   packageInstaller?: PrepareRequest['packageInstaller']
+  onProgress?: (event: RegistryPrepareProgress) => void
 }): Promise<{
   installation: AcpAgentInstallationRecord
   prepare: PrepareResult
@@ -430,12 +450,17 @@ async function prepareRegistryWorkerUnlocked(input: {
     : undefined
 
   const agentsRoot = join(resolveRouterDataPaths().dataDir, 'agents')
+  emitPrepareProgress(input.onProgress, { stage: 'fetching_icon', progress: 0.15 })
   // Download the registry icon (SVG) to the agent's version dir so it can be
   // rendered locally without depending on the remote CDN. Failure is non-fatal:
   // a missing icon falls back to the kind-based default in the UI.
   const iconPath = await downloadAgentIcon(agent.icon, agentsRoot, agent.id, agent.version, {
     fetchImpl: input.fetchImpl,
     signal: input.signal,
+  })
+  emitPrepareProgress(input.onProgress, {
+    stage: input.body.distribution === 'binary' ? 'downloading' : 'installing',
+    progress: 0.35,
   })
   let existing = findInstallation({
     registryId: agent.id,
@@ -491,6 +516,7 @@ async function prepareRegistryWorkerUnlocked(input: {
       downloadStallTimeoutMs: input.downloadStallTimeoutMs,
       packageInstaller: input.packageInstaller,
     })
+    emitPrepareProgress(input.onProgress, { stage: 'finalizing', progress: 0.88 })
   } catch (e) {
     if (referencedLegacyNpx && legacyQuarantine) {
       restoreQuarantinedLegacyNpx({

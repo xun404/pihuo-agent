@@ -1615,8 +1615,8 @@ const server = createServer(async (req, res) => {
 
       if (method === 'POST' && path === '/api/locale') {
         const body = (await readJson(req)) as { locale: Locale }
-        if (body.locale !== 'zh' && body.locale !== 'en') {
-          send(res, 400, { error: 'locale must be zh or en' })
+        if (body.locale !== 'zh' && body.locale !== 'zh-TW' && body.locale !== 'en') {
+          send(res, 400, { error: 'locale must be zh, zh-TW, or en' })
           return
         }
         const locale = store.setLocale(body.locale)
@@ -2329,14 +2329,17 @@ const server = createServer(async (req, res) => {
                 : undefined
               : previous.reasoning
           if (effectiveReasoning) {
-            const { evaluateWorkerReasoningSelection } = await import('./worker-reasoning.js')
+            const { ensureWorkerReasoningSelection } = await import('./worker-reasoning.js')
             const { resolveModelCatalogScopeKey } = await import('./worker-models.js')
             const scopeKey = resolveModelCatalogScopeKey(requestedProject?.rootPath)
-            const reasoningCheck = evaluateWorkerReasoningSelection(
-              execMatch.id!,
+            const reasoningCheck = await ensureWorkerReasoningSelection(
+              previous,
               effectiveModel,
               effectiveReasoning,
-              { scopeKey: scopeKey || undefined },
+              {
+                cwd: requestedProject?.rootPath,
+                scopeKey: scopeKey || undefined,
+              },
             )
             if (!reasoningCheck.ok) {
               send(res, 400, {

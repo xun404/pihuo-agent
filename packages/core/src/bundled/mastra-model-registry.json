@@ -2,7 +2,7 @@
   "version": 1,
   "source": "bundled",
   "mastraPackageVersion": "1.51.0",
-  "generatedAt": "2026-07-21T05:33:44.829Z",
+  "generatedAt": "2026-08-01T13:32:00.268Z",
   "providers": [
     {
       "id": "openai",

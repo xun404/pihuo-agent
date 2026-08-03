@@ -696,6 +696,7 @@ export const api = {
       ok: boolean
       models: { modelId: string; name: string; description?: string }[]
       error?: string
+      /** e.g. ACP_MODELS_NOT_DECLARED when the agent has no model configOptions */
       errorCode?: string
       worker?: WorkerRegistration
       snapshot?: AppSnapshot

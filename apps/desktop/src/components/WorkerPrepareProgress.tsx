@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useI18n } from '../i18n/I18nProvider'
+import type { MessageKey } from '../i18n/locales'
 import { api, type RegistryOperationSnapshot, type RegistryPrepareResult } from '../lib/api'
 
 type PrepareOperation = RegistryOperationSnapshot<RegistryPrepareResult>
+type PrepareEvent = PrepareOperation['events'][number]
 
 function terminal(status: RegistryOperationSnapshot['status']): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled'
@@ -44,6 +46,75 @@ export async function pollRegistryOperationUntilTerminal<T = RegistryPrepareResu
   }
 }
 
+/** Map owner stage tokens to localized labels. Unknown stages fall back to running. */
+export function prepareStageLabel(
+  stage: string | undefined,
+  status: RegistryOperationSnapshot['status'],
+  t: (key: MessageKey) => string,
+): string {
+  if (status === 'queued' && (!stage || stage === 'queued')) {
+    return t('workers.registryPrepareQueued')
+  }
+  if (status === 'succeeded' || stage === 'succeeded') {
+    return t('workers.registryPrepareComplete')
+  }
+  if (status === 'cancelled' || stage === 'cancelled') {
+    return t('workers.registryPrepareCancelled')
+  }
+  if (status === 'failed' || stage === 'failed') {
+    return t('workers.registryPrepareFailed')
+  }
+  switch (stage) {
+    case 'resolving':
+    case 'queued':
+    case 'running':
+      return t('workers.registryPrepareStageResolving')
+    case 'fetching_icon':
+      return t('workers.registryPrepareStageFetchingIcon')
+    case 'downloading':
+      return t('workers.registryPrepareStageDownloading')
+    case 'installing':
+    case 'preparing':
+      return t('workers.registryPrepareStageInstalling')
+    case 'finalizing':
+      return t('workers.registryPrepareStageFinalizing')
+    case 'authenticating':
+      return t('workers.registryPrepareStageAuthenticating')
+    default:
+      return t('workers.registryPrepareRunning')
+  }
+}
+
+/** Collapse consecutive identical stages so the log stays readable. */
+export function collapsePrepareLogEvents(events: PrepareEvent[]): PrepareEvent[] {
+  const out: PrepareEvent[] = []
+  for (const event of events) {
+    const prev = out[out.length - 1]
+    if (prev && prev.stage === event.stage && prev.status === event.status) {
+      // Keep the latest timestamp/progress for the same stage.
+      out[out.length - 1] = event
+      continue
+    }
+    out.push(event)
+  }
+  return out
+}
+
+function formatLogTime(iso: string, locale: string): string {
+  const date = new Date(iso)
+  if (!Number.isFinite(date.getTime())) return ''
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(date)
+  } catch {
+    return date.toISOString().slice(11, 19)
+  }
+}
+
 export function WorkerPrepareProgress(props: {
   initial: PrepareOperation
   onSucceeded: (result: RegistryPrepareResult) => void
@@ -51,8 +122,9 @@ export function WorkerPrepareProgress(props: {
   onRetry?: () => void
   onCancel?: () => void
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [snapshot, setSnapshot] = useState(props.initial)
+  const logEndRef = useRef<HTMLDivElement | null>(null)
   const callbacks = useRef({
     onSucceeded: props.onSucceeded,
     onFailed: props.onFailed,
@@ -92,17 +164,18 @@ export function WorkerPrepareProgress(props: {
     return () => controller.abort()
   }, [props.initial.operationId, t])
 
-  const latestEvent = snapshot.events.at(-1)
-  const label =
-    snapshot.status === 'queued'
-      ? t('workers.registryPrepareQueued')
-      : snapshot.status === 'running'
-        ? t('workers.registryPrepareRunning')
-        : snapshot.status === 'succeeded'
-          ? t('workers.registryPrepareComplete')
-          : snapshot.status === 'cancelled'
-            ? t('workers.registryPrepareCancelled')
-            : t('workers.registryPrepareFailed')
+  const logLines = useMemo(
+    () => collapsePrepareLogEvents(snapshot.events),
+    [snapshot.events],
+  )
+
+  // Auto-scroll as new stages arrive.
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [logLines.length, snapshot.status, snapshot.error])
+
+  const bcp47 = locale === 'zh' ? 'zh-CN' : locale === 'zh-TW' ? 'zh-TW' : 'en-US'
+  const isActive = !terminal(snapshot.status)
 
   const cancel = async () => {
     try {
@@ -118,15 +191,55 @@ export function WorkerPrepareProgress(props: {
   return (
     <div className={`worker-prepare-progress status-${snapshot.status}`} role="status">
       <div className="worker-prepare-progress-head">
-        <span>{label}</span>
+        <span>{t('workers.registryPrepareLogTitle')}</span>
         {snapshot.code && <code>{snapshot.code}</code>}
       </div>
-      {latestEvent?.progress !== undefined && (
-        <progress max={1} value={latestEvent.progress} aria-label={label} />
-      )}
-      {snapshot.error && <p className="settings-field-hint">{snapshot.error}</p>}
+      <div className="worker-prepare-log" aria-live="polite" aria-relevant="additions">
+        {logLines.length === 0 && (
+          <div className="worker-prepare-log-line is-pending">
+            <span className="worker-prepare-log-time">···</span>
+            <span className="worker-prepare-log-msg">{t('workers.registryPrepareQueued')}</span>
+          </div>
+        )}
+        {logLines.map((event, index) => {
+          const isLast = index === logLines.length - 1
+          const lineStatus =
+            event.status === 'failed' || event.stage === 'failed'
+              ? 'error'
+              : event.status === 'succeeded' || event.stage === 'succeeded'
+                ? 'ok'
+                : event.status === 'cancelled' || event.stage === 'cancelled'
+                  ? 'warn'
+                  : isLast && isActive
+                    ? 'active'
+                    : 'done'
+          return (
+            <div
+              key={`${event.sequence}-${event.stage}`}
+              className={`worker-prepare-log-line is-${lineStatus}`}
+            >
+              <span className="worker-prepare-log-time">
+                {formatLogTime(event.at, bcp47) || '···'}
+              </span>
+              <span className="worker-prepare-log-msg">
+                {prepareStageLabel(event.stage, event.status, t)}
+                {isLast && isActive && lineStatus === 'active' ? (
+                  <span className="worker-prepare-log-spinner" aria-hidden />
+                ) : null}
+              </span>
+            </div>
+          )
+        })}
+        {snapshot.error && (
+          <div className="worker-prepare-log-line is-error">
+            <span className="worker-prepare-log-time">!</span>
+            <span className="worker-prepare-log-msg">{snapshot.error}</span>
+          </div>
+        )}
+        <div ref={logEndRef} />
+      </div>
       <div className="worker-prepare-progress-actions">
-        {!terminal(snapshot.status) && (
+        {isActive && (
           <button type="button" className="btn-ghost" onClick={() => void cancel()}>
             {t('workers.registryPrepareCancel')}
           </button>

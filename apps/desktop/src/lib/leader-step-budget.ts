@@ -58,8 +58,8 @@ export function findLatestActionableBudget(
   return null
 }
 
-export function buildContinuePrompt(locale: 'zh' | 'en' = 'zh'): string {
-  if (locale === 'en') {
+export function buildContinuePrompt(locale: string = 'zh'): string {
+  if (locale === 'en' || locale.startsWith('en')) {
     return 'Continue the unfinished task from the previous turn. Process the latest tool result first, and do not repeat completed steps.'
   }
   return '继续完成上一轮未完成的任务。请先处理最后一个工具结果，不要重复已完成步骤。'

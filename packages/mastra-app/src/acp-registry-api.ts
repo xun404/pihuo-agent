@@ -50,6 +50,7 @@ import {
   type RegistryRegisterBody,
 } from './acp-worker-registration.js'
 import { detachWorkerFromInstallation } from './acp-worker-detach.js'
+import { refreshWorkerModels } from './worker-models.js'
 import {
   applyReadinessToWorker,
   bumpAuthRevision,
@@ -701,12 +702,14 @@ export async function apiPrepareRegistry(
   options: {
     signal?: AbortSignal
     packageInstaller?: Parameters<typeof prepareRegistryWorker>[0]['packageInstaller']
+    onProgress?: Parameters<typeof prepareRegistryWorker>[0]['onProgress']
   } = {},
 ) {
   const result = await prepareRegistryWorker({
     body,
     signal: options.signal,
     packageInstaller: options.packageInstaller,
+    onProgress: options.onProgress,
   })
   return {
     installationId: result.installation.installationId,
@@ -735,6 +738,11 @@ export async function apiRegisterRegistry(body: RegistryRegisterBody) {
   const saved = store().upsertWorker({
     ...worker,
     defaultRoleType: 'general',
+  })
+  // Fire-and-forget: populate availableModels so default-model pickers work
+  // without waiting for the 15-minute health tick or opening the editor.
+  void refreshWorkerModels(saved.id, undefined, { force: true }).catch((e) => {
+    console.warn(`[registry] model catalog refresh after register failed for ${saved.name}`, e)
   })
   return { worker: saved, snapshot: store().snapshot() }
 }
@@ -769,8 +777,12 @@ export function apiStartPrepareRegistry(
   return manager.start({
     kind: 'prepare',
     run: async (signal, report) => {
-      report({ stage: 'preparing', progress: 0.1 })
-      return prepare(body, { signal })
+      report({ stage: 'resolving', progress: 0.08 })
+      return prepare(body, {
+        signal,
+        // Forward coarse stages so the settings progress UI moves during long installs.
+        onProgress: report,
+      })
     },
     mapError: (error) => {
       const projected = publicError(error)

@@ -43,7 +43,9 @@
     "smoke:acp-registry": "node scripts/acp-registry-smoke.mjs",
     "capture:readme": "node scripts/capture-readme-shots.mjs",
     "capture:readme:en": "node scripts/capture-readme-shots.mjs --locale en",
-    "capture:readme:zh": "node scripts/capture-readme-shots.mjs --locale zh"
+    "capture:readme:zh": "node scripts/capture-readme-shots.mjs --locale zh",
+    "generate:zh-TW": "node scripts/generate-zh-tw-locale.mjs",
+    "generate:app-icons": "python3 scripts/generate-app-icons.py"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -70,6 +72,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.7.0",
+    "opencc-js": "^1.4.1",
     "prettier": "^3.9.5",
     "typescript-eslint": "^8.64.0",
     "yaml": "2.9.0"

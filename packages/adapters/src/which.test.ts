@@ -79,12 +79,26 @@ test('configureLoginShellPath harvests PATH from the login shell so new dirs res
   writeFileSync(stubShell, `#!/bin/sh\nprintf '%s' "${newBin}"\n`, { mode: 0o755 })
   chmodSync(stubShell, 0o755)
   const savedShell = process.env.SHELL
+  const savedPath = process.env.PATH
+  // Dock-like minimal PATH: harvest must still surface the shell dirs.
+  process.env.PATH = '/usr/bin:/bin'
   process.env.SHELL = stubShell
   try {
     configureLoginShellPath()
     assert.equal(whichSync('harvested-cmd'), exe)
+    // process.env.PATH itself must gain the harvested dir so resolveAcpRunner / spawn see it.
+    assert.ok(
+      (process.env.PATH ?? '').split(':').includes(newBin),
+      'harvested dir must be merged into process.env.PATH',
+    )
+    assert.ok(
+      (process.env.PATH ?? '').startsWith(newBin),
+      'harvested dirs should prepend process.env.PATH',
+    )
   } finally {
     process.env.SHELL = savedShell
+    if (savedPath === undefined) delete process.env.PATH
+    else process.env.PATH = savedPath
     // Restore the default harvest so other tests aren't affected by the stub PATH.
     configureLoginShellPath()
   }

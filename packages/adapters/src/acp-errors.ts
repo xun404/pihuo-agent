@@ -24,6 +24,13 @@ export type PublicErrorCode =
   | 'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE'
   | 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED'
   | 'RUNTIME_AUTH_FAILED'
+  | 'ACP_REASONING_UNSUPPORTED'
+  | 'ACP_REASONING_VALUE_UNAVAILABLE'
+  | 'ACP_REASONING_CONFIGURATION_FAILED'
+  | 'ACP_MODELS_NOT_DECLARED'
+  | 'ACP_MODELS_NO_MODEL_OPTION'
+  | 'ACP_MODELS_EMPTY_VALUES'
+  | 'ACP_MODELS'
 
 const PUBLIC_ERROR_MESSAGES: Record<PublicErrorCode, { zh: string; en: string }> = {
   MODEL_CATALOG_STALE: {
@@ -65,6 +72,34 @@ const PUBLIC_ERROR_MESSAGES: Record<PublicErrorCode, { zh: string; en: string }>
   RUNTIME_AUTH_FAILED: {
     zh: '运行时鉴权失败，请检查密钥配置',
     en: 'Runtime authentication failed; check API keys',
+  },
+  ACP_REASONING_UNSUPPORTED: {
+    zh: '当前 Worker/模型暂不支持推理强度，或选项尚未加载完成，请稍后重试',
+    en: 'Reasoning is unsupported for this worker/model, or options are still loading; try again',
+  },
+  ACP_REASONING_VALUE_UNAVAILABLE: {
+    zh: '所选推理强度对该模型不可用，请重新选择',
+    en: 'Selected reasoning level is not available for this model; pick another',
+  },
+  ACP_REASONING_CONFIGURATION_FAILED: {
+    zh: '无法获取推理强度选项，请检查 Worker 状态后重试',
+    en: 'Failed to load reasoning options; check the Worker and retry',
+  },
+  ACP_MODELS_NOT_DECLARED: {
+    zh: '该 Agent 未通过 ACP 声明模型列表。可保持默认，或手动输入 model id 后回车保存',
+    en: 'This agent does not advertise models via ACP. Keep the default, or type a model id and press Enter',
+  },
+  ACP_MODELS_NO_MODEL_OPTION: {
+    zh: '该 Agent 的 ACP 配置中没有模型选项，可使用默认模型或手动填写 model id',
+    en: 'No model option in ACP config; use the agent default or enter a model id',
+  },
+  ACP_MODELS_EMPTY_VALUES: {
+    zh: '模型配置项存在但没有可选值，请改用默认模型或手动填写',
+    en: 'Model config exists but lists no values; use default or enter a model id',
+  },
+  ACP_MODELS: {
+    zh: '从 ACP 加载模型列表失败，请稍后重试',
+    en: 'Failed to load models from ACP; try again later',
   },
 }
 

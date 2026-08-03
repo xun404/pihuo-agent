@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   CustomAcpRegistrationInput,
   WorkerRegistration,
@@ -11,9 +11,27 @@ type SettingsTab = 'general' | 'model' | 'prompts' | 'workers' | 'about'
 export const OPEN_SETTINGS_EVENT = 'swarmdesk-agent:open-settings'
 export const SETTINGS_CLOSED_EVENT = 'swarmdesk-agent:settings-closed'
 
+function resolveSettingsTab(nextTab?: string): SettingsTab | undefined {
+  if (
+    nextTab === 'workers' ||
+    nextTab === 'model' ||
+    nextTab === 'prompts' ||
+    nextTab === 'general' ||
+    nextTab === 'about'
+  ) {
+    return nextTab
+  }
+  if (nextTab) return 'workers'
+  return undefined
+}
+
 /**
  * Isolated settings host: owns open/mounted state so toggling settings does NOT
  * re-render the workspace tree (major INP win — AppShell stays still).
+ *
+ * Each time settings is opened from a closed state, SettingsPanel remounts so
+ * unsaved drafts (API keys, registration form, rail focus, …) do not leak into
+ * the next visit.
  */
 export function SettingsLayer({
   workers,
@@ -38,20 +56,22 @@ export function SettingsLayer({
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState<SettingsTab | undefined>()
+  /** Bumped on each closed→open transition to remount SettingsPanel. */
+  const [instanceKey, setInstanceKey] = useState(0)
+  const openRef = useRef(false)
 
   useEffect(() => {
     const openTo = (nextTab?: string) => {
-      if (
-        nextTab === 'workers' ||
-        nextTab === 'model' ||
-        nextTab === 'prompts' ||
-        nextTab === 'general' ||
-        nextTab === 'about'
-      ) {
-        setTab(nextTab)
-      } else if (nextTab) {
-        setTab('workers')
+      const resolved = resolveSettingsTab(nextTab)
+      if (!openRef.current) {
+        // Fresh visit: drop previous ephemeral UI state.
+        setInstanceKey((k) => k + 1)
+        setTab(resolved ?? 'general')
+      } else if (resolved) {
+        // Already open: only switch tab when caller pinpoints one.
+        setTab(resolved)
       }
+      openRef.current = true
       setMounted(true)
       setOpen(true)
       onOpen?.()
@@ -66,6 +86,7 @@ export function SettingsLayer({
   }, [onOpen])
 
   // Idle warm-mount so first open isn't a cold 200–300ms SettingsPanel render.
+  // The warm instance is discarded on the first real open via instanceKey bump.
   useEffect(() => {
     let cancelled = false
     let timeoutId: ReturnType<typeof setTimeout> | undefined
@@ -87,6 +108,7 @@ export function SettingsLayer({
 
   const leave = useCallback(() => {
     // Flip closed first for immediate paint; side effects after next frame.
+    openRef.current = false
     setOpen(false)
     requestAnimationFrame(() => {
       window.dispatchEvent(new Event(SETTINGS_CLOSED_EVENT))
@@ -94,11 +116,12 @@ export function SettingsLayer({
     })
   }, [onRefreshSnapshot])
 
-  // Keep panel element identity stable across open toggles so React does not
-  // reconcile the entire settings tree on every show/hide (INP).
-  const panel = useMemo(
-    () => (
+  if (!mounted) return null
+
+  return (
+    <div className={`view-layer view-layer-settings${open ? ' is-open' : ''}`} aria-hidden={!open}>
       <SettingsPanel
+        key={instanceKey}
         onClose={leave}
         initialTab={tab}
         workers={workers}
@@ -109,25 +132,6 @@ export function SettingsLayer({
         onRegisterCustomAcpWorker={onRegisterCustomAcpWorker}
         onRefreshSnapshot={onRefreshSnapshot}
       />
-    ),
-    [
-      leave,
-      tab,
-      workers,
-      projectId,
-      onToggleWorker,
-      onSetWorkerDefaultRoleType,
-      onHealthAllWorkers,
-      onRegisterCustomAcpWorker,
-      onRefreshSnapshot,
-    ],
-  )
-
-  if (!mounted) return null
-
-  return (
-    <div className={`view-layer view-layer-settings${open ? ' is-open' : ''}`} aria-hidden={!open}>
-      {panel}
     </div>
   )
 }

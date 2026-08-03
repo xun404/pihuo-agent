@@ -73,7 +73,7 @@
   padding: 2px 2px 6px;
 }
 .section-hint.is-warn {
-  color: var(--accent);
+  color: var(--warn);
 }
 
 /* 协作组工具栏 + 模板/成员操作 */
@@ -1139,8 +1139,8 @@ textarea.settings-input.team-member-prompt-input {
   white-space: nowrap;
 }
 .team-role-tag.tone-plan {
-  color: #5b4bc9;
-  background: color-mix(in srgb, #5b4bc9 12%, transparent);
+  color: #8a7a9a;
+  background: color-mix(in srgb, #8a7a9a 12%, transparent);
 }
 .team-role-tag.tone-coder {
   color: var(--blue);
@@ -1155,8 +1155,8 @@ textarea.settings-input.team-member-prompt-input {
   background: var(--green-soft);
 }
 .team-role-tag.tone-research {
-  color: #0f8a8a;
-  background: color-mix(in srgb, #0f8a8a 12%, transparent);
+  color: #6a8a9a;
+  background: color-mix(in srgb, #6a8a9a 12%, transparent);
 }
 .team-role-tag.tone-general {
   color: var(--text-2);

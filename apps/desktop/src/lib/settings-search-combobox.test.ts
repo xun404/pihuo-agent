@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   filterSettingsSearchOptions,
+  isRedundantModelDisplayName,
   labelForSettingsSearchValue,
   moveSettingsSearchHighlight,
+  toReasoningSearchOption,
+  toWorkerModelSearchOption,
   type SettingsSearchOption,
 } from './settings-search-combobox.js'
 
@@ -16,6 +19,98 @@ const options: SettingsSearchOption[] = [
     secondary: 'zhipuai-coding-plan/glm-4.7',
   },
 ]
+
+describe('isRedundantModelDisplayName / toWorkerModelSearchOption', () => {
+  it('always surfaces modelId as the sole visible label', () => {
+    assert.deepEqual(
+      toWorkerModelSearchOption({
+        modelId: 'opencode-go/deepseek-v4-flash',
+        name: 'OpenCode Go/DeepSeek V4 Flash (...)',
+      }),
+      {
+        value: 'opencode-go/deepseek-v4-flash',
+        label: 'opencode-go/deepseek-v4-flash',
+        description: undefined,
+        keywords: undefined,
+      },
+    )
+    assert.deepEqual(
+      toWorkerModelSearchOption({
+        modelId: 'opencode/deepseek-v4-flash',
+        name: 'OpenCode Zen/DeepSeek V4 Flash',
+      }),
+      {
+        value: 'opencode/deepseek-v4-flash',
+        label: 'opencode/deepseek-v4-flash',
+        description: undefined,
+        keywords: 'OpenCode Zen/DeepSeek V4 Flash',
+      },
+    )
+  })
+
+  it('keeps non-redundant names as search keywords only', () => {
+    assert.equal(
+      isRedundantModelDisplayName('Claude Sonnet 4', 'anthropic/claude-sonnet-4-20250514'),
+      false,
+    )
+    assert.deepEqual(
+      toWorkerModelSearchOption({
+        modelId: 'anthropic/claude-sonnet-4-20250514',
+        name: 'Claude Sonnet 4',
+        description: 'Balanced',
+      }),
+      {
+        value: 'anthropic/claude-sonnet-4-20250514',
+        label: 'anthropic/claude-sonnet-4-20250514',
+        description: 'Balanced',
+        keywords: 'Claude Sonnet 4',
+      },
+    )
+    assert.deepEqual(
+      filterSettingsSearchOptions(
+        [
+          toWorkerModelSearchOption({
+            modelId: 'anthropic/claude-sonnet-4-20250514',
+            name: 'Claude Sonnet 4',
+          }),
+        ],
+        'sonnet',
+      ).map((o) => o.value),
+      ['anthropic/claude-sonnet-4-20250514'],
+    )
+  })
+})
+
+describe('toReasoningSearchOption', () => {
+  it('shows a single label and does not dual-render name + value', () => {
+    assert.deepEqual(toReasoningSearchOption({ value: 'high', name: 'High' }), {
+      value: 'high',
+      label: 'High',
+      description: undefined,
+      keywords: undefined,
+    })
+    assert.deepEqual(toReasoningSearchOption({ value: 'max', name: 'Max' }), {
+      value: 'max',
+      label: 'Max',
+      description: undefined,
+      keywords: undefined,
+    })
+    assert.equal(toReasoningSearchOption({ value: 'high', name: 'High' }).secondary, undefined)
+  })
+
+  it('keeps raw value searchable when the label is more than a case change', () => {
+    const option = toReasoningSearchOption({
+      value: 'xhigh',
+      name: 'Extra high',
+    })
+    assert.equal(option.label, 'Extra high')
+    assert.equal(option.keywords, 'xhigh')
+    assert.deepEqual(
+      filterSettingsSearchOptions([option], 'xhigh').map((o) => o.value),
+      ['xhigh'],
+    )
+  })
+})
 
 describe('filterSettingsSearchOptions', () => {
   it('matches label, value, description, and secondary', () => {

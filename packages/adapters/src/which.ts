@@ -39,10 +39,25 @@ function detectDefaultShell(): string {
 }
 
 /**
+ * Merge harvested login-shell dirs into `process.env.PATH` so every PATH-based
+ * lookup (not only {@link whichSync}) sees nvm/homebrew bins when the app was
+ * launched from Dock/Finder with a minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`).
+ * Login-shell dirs come first so user-installed runners win over system stubs.
+ */
+function applyHarvestedPathToProcessEnv(dirs: string[]): void {
+  const current = (process.env.PATH ?? '').split(delimiter).filter(Boolean)
+  const merged = Array.from(new Set([...dirs, ...current]))
+  if (merged.length > 0) process.env.PATH = merged.join(delimiter)
+}
+
+/**
  * Run a login+interactive shell once and harvest its $PATH into {@link extraPathDirs}. This is the
  * sindresorhus/shell-env algorithm, trimmed to PATH-only: it mirrors what the user's terminal sees
  * (sourcing ~/.zshrc etc.) so binaries like `kimi`, `opencode` resolve the same way they do in the
  * shell. Call once at API boot; never per-request (it spawns a shell).
+ *
+ * Also rewrites `process.env.PATH` so `resolveAcpRunner` / child spawns inherit the full
+ * login-shell PATH. Dock-launched GUI apps otherwise cannot find `npx`/`uvx`/`node`.
  *
  * Silently degrades: Windows has no login-shell concept, and any failure (missing shell, timeout,
  * empty output) leaves the existing fallback dirs in place. Must never throw — boot must not break.
@@ -59,10 +74,13 @@ export function configureLoginShellPath(): void {
     ZSH_TMUX_AUTOSTARTED: 'true',
   }
   const shell = detectDefaultShell()
+  // Heavy zsh configs (nvm, oh-my-zsh, …) routinely take 4–8s on cold start; a
+  // short deadline leaves Dock-launched apps stuck with a minimal PATH and
+  // registry install fails with ACP_RUNNER_MISSING for npx/uvx.
   const result = spawnSync(shell, ['-ilc', 'printf %s "$PATH"'], {
     env,
     encoding: 'utf8',
-    timeout: 4000,
+    timeout: 15_000,
     stdio: ['ignore', 'pipe', 'ignore'],
   })
   if (result.status === 0 && result.stdout) {
@@ -72,6 +90,7 @@ export function configureLoginShellPath(): void {
       .filter((d) => d.length > 0 && existsSync(d))
     if (dirs.length > 0) {
       extraPathDirs = Array.from(new Set(dirs))
+      applyHarvestedPathToProcessEnv(extraPathDirs)
       return
     }
   }

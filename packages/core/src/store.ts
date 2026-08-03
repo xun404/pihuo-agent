@@ -266,7 +266,8 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
     jobs,
     activeProjectId,
     activeSessionId,
-    locale: raw.locale === 'en' || raw.locale === 'zh' ? raw.locale : 'zh',
+    locale:
+      raw.locale === 'en' || raw.locale === 'zh' || raw.locale === 'zh-TW' ? raw.locale : 'zh',
     revision: typeof raw.revision === 'number' && Number.isFinite(raw.revision) ? raw.revision : 0,
   }
 }
@@ -1058,24 +1059,10 @@ export class LocalStore {
         lastReadAt: timestamp,
       }
       d.sessions.unshift(session)
-      const rolePrompts = input.rolePrompts ?? DEFAULT_PROMPT_SETTINGS.roles
-      if (input.initialTeamMembers && input.initialTeamMembers.length === 0) {
-        throw new Error('Team requires at least one member')
-      }
+      // Team is empty by default. Workers join only when the user (or a team
+      // template) actively defines members — registering a worker alone is not enough.
       const initialMembers: Array<Omit<CreateTeamMemberInput, 'chatSessionId'>> =
-        input.initialTeamMembers ??
-        d.workers
-          .filter((worker) => worker.enabled)
-          .map((worker) => {
-            const roleType = normalizeWorkerDefaultRoleType(worker.defaultRoleType)
-            return {
-              workerId: worker.id,
-              name: worker.name,
-              roleType,
-              instructions: rolePrompts[roleType],
-              enabled: true,
-            }
-          })
+        input.initialTeamMembers ?? []
       const seededRoles: TeamMember[] = initialMembers.map((member) => {
         const worker = d.workers.find(
           (candidate) => candidate.id === member.workerId && candidate.enabled,
@@ -1096,13 +1083,16 @@ export class LocalStore {
           roleType: member.roleType,
           instructions,
           model: member.model?.trim() || undefined,
+          reasoning: member.reasoning?.trim() || undefined,
           enabled: member.enabled ?? true,
           revision: 1,
           createdAt: timestamp,
           updatedAt: timestamp,
         }
       })
-      d.teamMembers = [...seededRoles, ...(d.teamMembers ?? [])]
+      if (seededRoles.length > 0) {
+        d.teamMembers = [...seededRoles, ...(d.teamMembers ?? [])]
+      }
       d.activeSessionId = session.id
       d.activeProjectId = project.id
     })

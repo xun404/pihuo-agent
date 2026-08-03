@@ -4,6 +4,9 @@ import electron from 'vite-plugin-electron/simple'
 import path from 'node:path'
 
 export default defineConfig({
+  // Relative base so packaged Electron `file://` loads resolve assets next to
+  // index.html. Absolute `/…` paths break under file:// (they hit the OS root).
+  base: './',
   plugins: [
     react(),
     ...(process.env.ELECTRON === '1'

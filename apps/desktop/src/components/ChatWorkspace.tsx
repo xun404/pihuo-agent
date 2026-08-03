@@ -4,11 +4,14 @@ import { evaluateTeamTemplateAvailability } from '@swarmdesk-agent/shared'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import type {
   ApprovalItem,
+  CreateTeamMemberInput,
   LeaderMode,
   Project,
   Session,
   SessionPermissionMode,
+  TeamMember,
   TeamTemplate,
+  UpdateTeamMemberInput,
   WorkerJob,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
@@ -26,6 +29,7 @@ import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
 import { IconArrowUp, IconFolder } from './Icons'
 import { ComposerStatusRow } from './chat/ComposerStatusRow'
+import { SETTINGS_CLOSED_EVENT } from './SettingsLayer'
 
 /**
  * Empty-state hint pool. Each time the user lands on the empty Chat state
@@ -65,6 +69,7 @@ interface Props {
   snapshotApprovals: ApprovalItem[]
   snapshotJobs: WorkerJob[]
   snapshotWorkers: WorkerRegistration[]
+  snapshotTeamMembers: TeamMember[]
   snapshotTeamTemplates: TeamTemplate[]
   resolving?: Record<string, boolean>
   onResolveApproval?: (
@@ -74,8 +79,21 @@ interface Props {
     surface: 'chat' | 'panel',
   ) => void
   onResetContext?: (jobId: string) => void
-  inspectorOpen?: boolean
-  onToggleInspector?: () => void
+  onCreateTeamMember?: (
+    sessionId: string,
+    body: Omit<CreateTeamMemberInput, 'chatSessionId'>,
+  ) => Promise<void>
+  onUpdateTeamMember?: (
+    sessionId: string,
+    id: string,
+    body: UpdateTeamMemberInput,
+  ) => Promise<void>
+  onArchiveTeamMember?: (
+    sessionId: string,
+    id: string,
+    expectedRevision: number,
+  ) => Promise<void>
+  onResetTeamMemberSession?: (sessionId: string, id: string) => Promise<void>
   /** Fired after a git branch switch so parents can refresh git panels. */
   onRefreshGit?: () => void
   /** Empty-state composer: fired with the user's first message text + the
@@ -128,12 +146,15 @@ export function ChatWorkspace({
   snapshotApprovals,
   snapshotJobs,
   snapshotWorkers,
+  snapshotTeamMembers,
   snapshotTeamTemplates,
   resolving = {},
   onResolveApproval,
   onResetContext,
-  inspectorOpen,
-  onToggleInspector,
+  onCreateTeamMember,
+  onUpdateTeamMember,
+  onArchiveTeamMember,
+  onResetTeamMemberSession,
   onRefreshGit,
   onComposeFirstMessage,
   onPickFolder,
@@ -208,6 +229,16 @@ export function ChatWorkspace({
 
   useEffect(() => {
     void loadPresetModels()
+  }, [loadPresetModels])
+
+  // Home empty-state owns its own model list (not ChatPanel). Re-fetch after
+  // settings close so newly saved API keys appear without remounting the app.
+  useEffect(() => {
+    const onClosed = () => {
+      void loadPresetModels()
+    }
+    window.addEventListener(SETTINGS_CLOSED_EVENT, onClosed)
+    return () => window.removeEventListener(SETTINGS_CLOSED_EVENT, onClosed)
   }, [loadPresetModels])
 
   const draftProjectId = pendingNewSession?.projectId ?? project?.id
@@ -530,11 +561,28 @@ export function ChatWorkspace({
               snapshotApprovals={snapshotApprovals}
               snapshotJobs={snapshotJobs}
               snapshotWorkers={snapshotWorkers}
+              teamMembers={snapshotTeamMembers.filter(
+                (role) => role.chatSessionId === s.id && !role.archivedAt,
+              )}
               resolving={resolving}
               onResolveApproval={onResolveApproval}
               onResetContext={onResetContext}
-              inspectorOpen={inspectorOpen}
-              onToggleInspector={onToggleInspector}
+              onCreateTeamMember={
+                onCreateTeamMember ? (body) => onCreateTeamMember(s.id, body) : undefined
+              }
+              onUpdateTeamMember={
+                onUpdateTeamMember ? (id, body) => onUpdateTeamMember(s.id, id, body) : undefined
+              }
+              onArchiveTeamMember={
+                onArchiveTeamMember
+                  ? (id, rev) => onArchiveTeamMember(s.id, id, rev)
+                  : undefined
+              }
+              onResetTeamMemberSession={
+                onResetTeamMemberSession
+                  ? (id) => onResetTeamMemberSession(s.id, id)
+                  : undefined
+              }
               onRefreshGit={onRefreshGit}
               pendingNewSession={pendingNewSession}
               clearPendingSession={clearPendingSession}

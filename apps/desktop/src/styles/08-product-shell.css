@@ -815,7 +815,7 @@ body.is-resizing-panels * {
   color: var(--text-3);
 }
 .section-hint.is-warn {
-  color: var(--accent);
+  color: var(--warn);
 }
 .inspector-list-row .git-status-badge {
   width: 22px;

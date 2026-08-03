@@ -111,10 +111,16 @@ import { WorkerProbeConsole } from './WorkerProbeConsole'
 import { PromptSettingsEditor } from './PromptSettingsEditor'
 import { WorkerTimeoutSettingsEditor } from './WorkerTimeoutSettingsEditor'
 import { WorkerExecutionConfigEditor } from './WorkerExecutionConfigEditor'
+import { WorkerIconPicker } from './WorkerIconPicker'
 import {
   createWorkerDraftFromRegistry,
   resolveWorkerRegistrationRoute,
 } from '../lib/worker-registry'
+import {
+  matchNpmRegistryPreset,
+  NPM_REGISTRY_PRESETS,
+  type NpmRegistryPresetId,
+} from '../lib/npm-registry-url'
 import { WorkerReadinessBadge } from './WorkerReadinessBadge'
 import { WorkerPrepareProgress, pollRegistryOperationUntilTerminal } from './WorkerPrepareProgress'
 import { RegistryAgentDetail } from './RegistryAgentDetail'
@@ -241,6 +247,9 @@ export function SettingsPanel({
   const [regCustomLaunchKind, setRegCustomLaunchKind] = useState<CustomAcpLaunchKind>('auto')
   const [regEnv, setRegEnv] = useState<Record<string, string>>({})
   const [regDescription, setRegDescription] = useState('')
+  /** Manual registration icon: undefined = auto-match; '' = none; id = explicit. */
+  const [regIconAgentId, setRegIconAgentId] = useState<string | undefined>(undefined)
+  const [regIconUserPicked, setRegIconUserPicked] = useState(false)
   const [regSelectedId, setRegSelectedId] = useState<string | null>(null)
   const [regDistribution, setRegDistribution] = useState<'npx' | 'uvx' | 'binary'>('npx')
   const [regManifestDigest, setRegManifestDigest] = useState<string>('')
@@ -368,7 +377,7 @@ export function SettingsPanel({
     if (!raw) return t('workers.registryBundledAtRelease')
     const date = new Date(raw)
     if (!Number.isFinite(date.getTime())) return t('workers.registryBundledAtRelease')
-    return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+    return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : locale === 'zh-TW' ? 'zh-TW' : 'en-US', {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(date)
@@ -1005,7 +1014,7 @@ export function SettingsPanel({
     }
   }, [])
 
-  const persistNpmRegistry = async (raw: string) => {
+  const persistNpmRegistry = async (raw: string, opts?: { notify?: boolean }) => {
     const { validateNpmRegistryDraft } = await import('../lib/npm-registry-url.js')
     const validated = validateNpmRegistryDraft(raw)
     if (!validated.ok) {
@@ -1034,8 +1043,9 @@ export function SettingsPanel({
             }
           : prev,
       )
+      if (opts?.notify) toastSuccess(t('settings.runtime.npmRegistryUpdated'))
     } catch {
-      // Silent auto-save.
+      // Silent auto-save for typed input; preset path still shows toast only on success above.
     } finally {
       setNpmRegistrySaving(false)
     }
@@ -1061,6 +1071,35 @@ export function SettingsPanel({
     })
   }
 
+  const applyNpmRegistryPreset = (url: string) => {
+    if (npmRegistrySaveTimer.current) {
+      clearTimeout(npmRegistrySaveTimer.current)
+      npmRegistrySaveTimer.current = null
+    }
+    setNpmRegistryDraft(url)
+    setNpmRegistryError(null)
+    void persistNpmRegistry(url, { notify: true })
+  }
+
+  const activeNpmPresetId = useMemo(
+    () => matchNpmRegistryPreset(npmRegistryDraft),
+    [npmRegistryDraft],
+  )
+
+  const npmPresetLabel = (id: NpmRegistryPresetId) =>
+    t(
+      (
+        {
+          system: 'settings.runtime.npmPreset.system',
+          npmjs: 'settings.runtime.npmPreset.npmjs',
+          yarn: 'settings.runtime.npmPreset.yarn',
+          npmmirror: 'settings.runtime.npmPreset.npmmirror',
+          huawei: 'settings.runtime.npmPreset.huawei',
+          tencent: 'settings.runtime.npmPreset.tencent',
+        } as const
+      )[id],
+    )
+
   const navItems: { id: TabId; label: string }[] = [
     { id: 'general', label: t('settings.navGeneral') },
     { id: 'model', label: t('settings.navModel') },
@@ -1069,7 +1108,8 @@ export function SettingsPanel({
     { id: 'about', label: t('settings.navAbout') },
   ]
 
-  const tagText = (tag: string) => (locale === 'zh' ? (TAG_ZH[tag] ?? tag) : (TAG_EN[tag] ?? tag))
+  const tagText = (tag: string) =>
+    locale === 'en' ? (TAG_EN[tag] ?? tag) : (TAG_ZH[tag] ?? tag)
 
   const selectedRegistryOption = useMemo(
     () => workerRegistry.find((o) => o.id === regSelectedId) ?? null,
@@ -1187,6 +1227,8 @@ export function SettingsPanel({
     setRegCustomLaunchKind('system')
     setRegEnv({})
     setRegDescription('')
+    setRegIconAgentId(undefined)
+    setRegIconUserPicked(false)
     setRegSelectedId(null)
     setRegManifestDigest('')
     setRegVersion('')
@@ -1196,6 +1238,19 @@ export function SettingsPanel({
     setPendingRegistryPrepare(null)
     setRegBusy(false)
   }
+
+  const iconPickerOptions = useMemo(
+    () => workerRegistry.map((o) => ({ id: o.id, name: o.name })),
+    [workerRegistry],
+  )
+
+  const onManualIconChange = useCallback(
+    (next: { iconAgentId: string | undefined; userPicked: boolean }) => {
+      setRegIconAgentId(next.iconAgentId)
+      setRegIconUserPicked(next.userPicked)
+    },
+    [],
+  )
 
   const resetWorkerRegistration = () => {
     clearRegistrationForm()
@@ -1286,6 +1341,11 @@ export function SettingsPanel({
           env: Object.keys(regEnv).length > 0 ? regEnv : undefined,
           enabled: false,
           description: regDescription.trim() || undefined,
+          // Always send: undefined auto-match is resolved by leaving the field off;
+          // empty string clears; non-empty locks the user's pick (or current auto id).
+          ...(regIconUserPicked || regIconAgentId !== undefined
+            ? { iconAgentId: regIconAgentId ?? '' }
+            : {}),
         }
         const { preview } = await api.previewCustomAcpWorker(customInput)
         setCustomPreview({ preview, input: customInput })
@@ -1444,12 +1504,13 @@ export function SettingsPanel({
                 <div className="sub">{t('settings.languageDesc')}</div>
               </div>
               <SettingsSelect
-                minWidth={140}
+                minWidth={160}
                 value={locale}
                 onChange={(v) => setLocale(v as Locale)}
                 aria-label={t('settings.language')}
                 options={[
                   { value: 'zh', label: t('lang.zh') },
+                  { value: 'zh-TW', label: t('lang.zh-TW') },
                   { value: 'en', label: t('lang.en') },
                 ]}
               />
@@ -1517,7 +1578,39 @@ export function SettingsPanel({
               </div>
             </header>
             <div className="settings-runtime-rows">
-              <div className="settings-row-block" style={{ padding: '12px 0' }}>
+              <div className="settings-row-block settings-npm-registry-block">
+                <div className="settings-field" style={{ margin: 0 }}>
+                  <span className="field-label">{t('settings.runtime.npmPresets')}</span>
+                  <div
+                    className="npm-registry-presets"
+                    role="group"
+                    aria-label={t('settings.runtime.npmPresets')}
+                  >
+                    {NPM_REGISTRY_PRESETS.map((preset) => {
+                      const active = activeNpmPresetId === preset.id
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          className={`npm-registry-preset-chip${active ? ' is-active' : ''}`}
+                          disabled={npmRegistrySaving}
+                          aria-pressed={active}
+                          title={preset.url || t('settings.runtime.npmPreset.system')}
+                          onClick={() => applyNpmRegistryPreset(preset.url)}
+                        >
+                          <span className="npm-registry-preset-label">
+                            {npmPresetLabel(preset.id)}
+                          </span>
+                          {preset.region === 'cn' && (
+                            <span className="npm-registry-preset-region">
+                              {t('settings.runtime.npmPresetRegion.cn')}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
                 <label className="settings-field" style={{ margin: 0 }}>
                   <span className="field-label">{t('settings.runtime.npmRegistryUrl')}</span>
                   <input
@@ -2522,7 +2615,7 @@ export function SettingsPanel({
                                 status={w.readiness.status}
                                 code={w.readiness.code}
                                 nextAction={w.readiness.nextAction}
-                                locale={locale === 'zh' ? 'zh' : 'en'}
+                                locale={locale === 'en' ? 'en' : 'zh'}
                               />
                             )}
                           </div>
@@ -2561,7 +2654,11 @@ export function SettingsPanel({
                             <span className="worker-health-value">
                               {cs?.probedAt
                                 ? new Date(cs.probedAt).toLocaleString(
-                                    locale === 'zh' ? 'zh-CN' : 'en-US',
+                                    locale === 'zh'
+                                      ? 'zh-CN'
+                                      : locale === 'zh-TW'
+                                        ? 'zh-TW'
+                                        : 'en-US',
                                   )
                                 : '—'}
                             </span>
@@ -2601,6 +2698,7 @@ export function SettingsPanel({
                         </div>
 
                         <WorkerExecutionConfigEditor
+                          key={w.id}
                           worker={w}
                           projectId={projectId}
                           onSaved={onRefreshSnapshot}
@@ -2758,6 +2856,15 @@ export function SettingsPanel({
                           onChange={(e) => setRegName(e.target.value)}
                         />
                       </div>
+                      <WorkerIconPicker
+                        options={iconPickerOptions}
+                        name={regName}
+                        command={regCommand}
+                        value={regIconAgentId}
+                        userPicked={regIconUserPicked}
+                        disabled={regBusy}
+                        onChange={onManualIconChange}
+                      />
                       <div className="settings-field">
                         <label htmlFor="worker-reg-launch">{t('workers.customLaunchKind')}</label>
                         <select

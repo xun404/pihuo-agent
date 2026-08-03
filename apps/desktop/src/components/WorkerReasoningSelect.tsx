@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, type WorkerReasoningOptionsResponse } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
+import { toReasoningSearchOption } from '../lib/settings-search-combobox'
 import { SettingsSearchCombobox, type SettingsSearchOption } from './SettingsSearchCombobox'
 
 interface Props {
@@ -74,16 +75,14 @@ export function WorkerReasoningSelect({
 
   const fallbackLabel = inheritLabel ?? t('reasoning.agentDefault')
   const options = useMemo((): SettingsSearchOption[] => {
-    const rows: SettingsSearchOption[] = (result?.selector?.options ?? []).map((option) => ({
-      value: option.value,
-      label: option.name || option.value,
-      secondary: option.name && option.name !== option.value ? option.value : undefined,
-    }))
+    const rows: SettingsSearchOption[] = (result?.selector?.options ?? []).map((option) =>
+      toReasoningSearchOption(option),
+    )
     if (value && !rows.some((option) => option.value === value)) {
       rows.unshift({
         value,
         label: t('reasoning.unavailable', { value }),
-        secondary: value,
+        keywords: value,
       })
     }
     return rows

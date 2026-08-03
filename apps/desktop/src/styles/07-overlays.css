@@ -70,12 +70,11 @@
   position: relative;
 }
 
-/* —— Global toast：窗口下 1/3 居中，不挡操作 —— */
+/* —— Global toast：窗口底部居中，略抬起避开边缘与底栏 —— */
 .toast-host {
   position: fixed;
   left: 50%;
-  /* 下半区约 1/3 处：距底 ~33vh */
-  bottom: 33vh;
+  bottom: max(48px, calc(24px + env(safe-area-inset-bottom, 0px)));
   transform: translateX(-50%);
   z-index: 10000;
   display: flex;
@@ -119,7 +118,7 @@
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;

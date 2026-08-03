@@ -114,7 +114,10 @@ export type EnrichUserMessageOpts = {
  */
 export function enrichUserMessageForLeader(userText: string, opts: EnrichUserMessageOpts): string {
   const text = userText.trim()
-  const langHint = opts.locale === 'zh' ? 'Respond in Chinese. ' : 'Respond in English. '
+  const langHint =
+    opts.locale === 'en' || (opts.locale && opts.locale.startsWith('en'))
+      ? 'Respond in English. '
+      : 'Respond in Chinese. '
 
   const prefix =
     opts.mode === 'ask'

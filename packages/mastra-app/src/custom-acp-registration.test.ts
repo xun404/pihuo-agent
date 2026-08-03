@@ -9,6 +9,7 @@ import {
   findDuplicateCandidates,
   previewCustomAcpWorker,
   registerCustomAcpWorker,
+  resolveCustomWorkerIconAgentId,
 } from './custom-acp-registration.js'
 
 const dirs: string[] = []
@@ -372,4 +373,62 @@ test('findDuplicateCandidates matches by command or agentName', () => {
   const { store } = makeStore()
   // No workers → no candidates.
   assert.equal(findDuplicateCandidates(store, 'Kimi CLI', '/resolved/kimi').length, 0)
+})
+
+test('resolveCustomWorkerIconAgentId honors explicit pick, empty clear, and auto-match', () => {
+  // Empty string clears (no registry icon).
+  assert.equal(resolveCustomWorkerIconAgentId('Claude', 'claude', ''), undefined)
+  // Explicit non-empty wins over auto-match heuristics.
+  assert.equal(
+    resolveCustomWorkerIconAgentId('Claude', 'claude', 'codex-acp'),
+    'codex-acp',
+  )
+  // Undefined → auto path (may or may not match depending on local catalog; must not throw).
+  assert.doesNotThrow(() => resolveCustomWorkerIconAgentId('Claude Code', 'claude', undefined))
+})
+
+test('registerCustomAcpWorker persists explicit iconAgentId', async () => {
+  const { dir, store } = makeStore()
+  const worker = await registerCustomAcpWorker(
+    {
+      name: 'My Agent',
+      launchKind: 'system',
+      command: 'my-agent',
+      iconAgentId: 'claude-acp',
+    },
+    {
+      store,
+      cwd: dir,
+      resolveExecutable: (command) => `/resolved/${command}`,
+      probe: async () => ({
+        readiness: { status: 'ready', checkedAt: '2026-07-22T00:00:00.000Z' },
+        authMethods: [],
+        capabilitySummary: { probedAt: '2026-07-22T00:00:00.000Z' },
+      }),
+    },
+  )
+  assert.equal(worker.iconAgentId, 'claude-acp')
+})
+
+test('registerCustomAcpWorker empty iconAgentId skips auto-match', async () => {
+  const { dir, store } = makeStore()
+  const worker = await registerCustomAcpWorker(
+    {
+      name: 'Claude Code',
+      launchKind: 'system',
+      command: 'claude',
+      iconAgentId: '',
+    },
+    {
+      store,
+      cwd: dir,
+      resolveExecutable: (command) => `/resolved/${command}`,
+      probe: async () => ({
+        readiness: { status: 'ready', checkedAt: '2026-07-22T00:00:00.000Z' },
+        authMethods: [],
+        capabilitySummary: { probedAt: '2026-07-22T00:00:00.000Z' },
+      }),
+    },
+  )
+  assert.equal(worker.iconAgentId, undefined)
 })

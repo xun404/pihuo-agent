@@ -1,6 +1,26 @@
 import type { WorkerRole } from '@swarmdesk-agent/shared'
+import { zhTW as zhTWRaw } from './zh-TW.catalog.js'
 
-export type Locale = 'zh' | 'en'
+/** UI language codes. `zh` = 简体中文, `zh-TW` = 繁體中文. */
+export type Locale = 'zh' | 'zh-TW' | 'en'
+
+export const SUPPORTED_LOCALES: readonly Locale[] = ['zh', 'zh-TW', 'en'] as const
+
+export function isLocale(value: unknown): value is Locale {
+  return value === 'zh' || value === 'zh-TW' || value === 'en'
+}
+
+/** BCP 47 tag for Intl / HTML lang. */
+export function localeToBcp47(locale: Locale): string {
+  if (locale === 'zh') return 'zh-CN'
+  if (locale === 'zh-TW') return 'zh-TW'
+  return 'en'
+}
+
+/** True for any Chinese UI locale (simplified or traditional). */
+export function isChineseLocale(locale: string): boolean {
+  return locale === 'zh' || locale === 'zh-TW' || locale.startsWith('zh')
+}
 
 export type MessageKey =
   | 'permissions.autoOff'
@@ -216,6 +236,7 @@ export type MessageKey =
   | 'jobs.title'
   | 'lang.en'
   | 'lang.zh'
+  | 'lang.zh-TW'
   | 'prompt.browse'
   | 'prompt.cancel'
   | 'prompt.noFolder'
@@ -418,6 +439,15 @@ export type MessageKey =
   | 'settings.runtime.npmRegistryPh'
   | 'settings.runtime.npmRegistryErrorHttps'
   | 'settings.runtime.npmRegistryErrorSpace'
+  | 'settings.runtime.npmRegistryUpdated'
+  | 'settings.runtime.npmPresets'
+  | 'settings.runtime.npmPreset.system'
+  | 'settings.runtime.npmPreset.npmjs'
+  | 'settings.runtime.npmPreset.yarn'
+  | 'settings.runtime.npmPreset.npmmirror'
+  | 'settings.runtime.npmPreset.huawei'
+  | 'settings.runtime.npmPreset.tencent'
+  | 'settings.runtime.npmPresetRegion.cn'
   | 'settings.runtime.saveSuccess'
   | 'settings.runtime.workerTimeouts'
   | 'settings.runtime.workerTimeoutsDesc'
@@ -584,6 +614,10 @@ export type MessageKey =
   | 'workers.deleteErrorReferenced'
   | 'workers.deleteErrorGeneric'
   | 'workers.formName'
+  | 'workers.formIcon'
+  | 'workers.formIconHint'
+  | 'workers.iconNone'
+  | 'workers.iconAutoMatched'
   | 'workers.formPrimary'
   | 'workers.formRoles'
   | 'workers.formSave'
@@ -615,6 +649,7 @@ export type MessageKey =
   | 'workers.modelCatalogEmpty'
   | 'workers.modelCatalogStale'
   | 'workers.modelComboHint'
+  | 'workers.modelNoAcpList'
   | 'workers.modelDefault'
   | 'workers.modelFetch'
   | 'workers.modelLoading'
@@ -668,9 +703,16 @@ export type MessageKey =
   | 'workers.registryPrepareFailed'
   | 'workers.registryDuplicate'
   | 'workers.duplicateName'
+  | 'workers.registryPrepareLogTitle'
   | 'workers.registryPrepareQueued'
   | 'workers.registryPrepareRetry'
   | 'workers.registryPrepareRunning'
+  | 'workers.registryPrepareStageResolving'
+  | 'workers.registryPrepareStageFetchingIcon'
+  | 'workers.registryPrepareStageDownloading'
+  | 'workers.registryPrepareStageInstalling'
+  | 'workers.registryPrepareStageFinalizing'
+  | 'workers.registryPrepareStageAuthenticating'
   | 'workers.registryRegistering'
   | 'workers.registryRunnerBinary'
   | 'workers.registryRunnerNpx'
@@ -931,8 +973,9 @@ const zh: Dict = {
   'jobs.needSession': '请先打开一个 Session 再派发。',
   'jobs.retry': '重试',
   'jobs.title': 'Worker 任务',
-  'lang.en': 'EN',
-  'lang.zh': '中文',
+  'lang.en': 'English',
+  'lang.zh': '简体中文',
+  'lang.zh-TW': '繁體中文',
   'prompt.browse': '选择文件夹…',
   'prompt.cancel': '取消',
   'prompt.noFolder': '未能读取文件夹绝对路径。请重试选择，或直接把路径粘贴到输入框。',
@@ -942,7 +985,8 @@ const zh: Dict = {
   'right.approvals': '审批',
   'right.jobs': 'Jobs',
   'right.roles': '协作组',
-  'right.rolesHint': '协作组属于当前会话。同一 Worker 可绑定多个成员，各自拥有独立会话与提示词。',
+  'right.rolesHint':
+    '协作组属于当前会话。请主动添加成员并定义角色后，Worker 才会参与协作。同一 Worker 可绑定多个成员。',
   'roles.acpDefault': 'ACP 默认模型',
   'roles.add': '添加成员',
   'roles.archive': '归档',
@@ -1133,11 +1177,20 @@ const zh: Dict = {
   'settings.runtime.leaderMaxStepsDesc': '单次任务可执行的最大步数，默认 500',
   'settings.runtime.leaderMaxStepsError': '请输入 10 到 1000 之间的整数',
   'settings.runtime.npmRegistry': 'npm 镜像',
-  'settings.runtime.npmRegistryDesc': 'npx 拉包使用的 registry；留空用系统默认。',
+  'settings.runtime.npmRegistryDesc': 'npx 拉包使用的 registry；留空用系统默认。可点预设一键切换。',
   'settings.runtime.npmRegistryUrl': 'Registry URL',
-  'settings.runtime.npmRegistryPh': 'https://registry.npmmirror.com',
+  'settings.runtime.npmRegistryPh': '留空使用系统默认',
   'settings.runtime.npmRegistryErrorHttps': '必须以 https:// 开头',
   'settings.runtime.npmRegistryErrorSpace': '不能包含空格等非法字符',
+  'settings.runtime.npmRegistryUpdated': 'npm 镜像已更新。',
+  'settings.runtime.npmPresets': '常用镜像',
+  'settings.runtime.npmPreset.system': '系统默认',
+  'settings.runtime.npmPreset.npmjs': 'npm 官方',
+  'settings.runtime.npmPreset.yarn': 'Yarn',
+  'settings.runtime.npmPreset.npmmirror': 'npmmirror（淘宝）',
+  'settings.runtime.npmPreset.huawei': '华为云',
+  'settings.runtime.npmPreset.tencent': '腾讯云',
+  'settings.runtime.npmPresetRegion.cn': '国内',
   'settings.runtime.saveSuccess': '运行设置已保存',
   'settings.runtime.workerTimeouts': 'Worker执行设置',
   'settings.runtime.workerTimeoutsDesc': 'Leader 步数预算与 Worker 超时（分钟）。',
@@ -1157,7 +1210,7 @@ const zh: Dict = {
   'settings.prompts.leaderHint': '此内容会附加在内置协议和工具约束之后，从下一轮对话开始生效。',
   'settings.prompts.roles': '角色默认提示词',
   'settings.prompts.rolesHint':
-    '用于新会话的协作组成员，以及成员编辑器中的“使用角色默认提示词”；不会覆盖已有成员。',
+    '用于添加协作组成员时的默认提示词，以及成员编辑器中的“使用角色默认提示词”；不会覆盖已有成员。',
   'settings.prompts.reset': '恢复默认',
   'settings.prompts.save': '保存',
   'settings.prompts.saved': '提示词已保存，将用于后续新建协作组成员和下一轮 Leader 对话。',
@@ -1308,6 +1361,10 @@ const zh: Dict = {
   'workers.enablingAuthRequired': '该 Agent 需要先完成认证才能启用',
   'workers.enablingFailed': '探测未通过，无法启用',
   'workers.formName': '名称',
+  'workers.formIcon': '图标',
+  'workers.formIconHint': '默认按名称匹配 Registry 图标，可手动更换。',
+  'workers.iconNone': '默认品牌标',
+  'workers.iconAutoMatched': '自动匹配',
   'workers.formPrimary': '主角色',
   'workers.formRoles': '可兼角色',
   'workers.formSave': '保存',
@@ -1340,6 +1397,8 @@ const zh: Dict = {
   'workers.modelCatalogEmpty': '无目录',
   'workers.modelCatalogStale': '目录过期',
   'workers.modelComboHint': '选择模型；选「加载/更新列表」会启动 ACP 拉取',
+  'workers.modelNoAcpList':
+    '该 Agent 未通过 ACP 声明模型列表。可保持默认，或手动输入 model id 后回车保存。',
   'workers.modelDefault': '默认（CLI）',
   'workers.modelFetch': '↻ 从 ACP 加载模型列表…',
   'workers.modelLoading': '正在从 ACP 加载…',
@@ -1399,9 +1458,16 @@ const zh: Dict = {
   'workers.registryPrepareFailed': '准备失败',
   'workers.registryDuplicate': '该 Registry Agent 已注册，无需重复添加',
   'workers.duplicateName': '已存在同名 Worker，请更换名称',
+  'workers.registryPrepareLogTitle': '准备日志',
   'workers.registryPrepareQueued': '等待准备…',
   'workers.registryPrepareRetry': '重试',
   'workers.registryPrepareRunning': '正在准备 Agent…',
+  'workers.registryPrepareStageResolving': '正在解析安装计划…',
+  'workers.registryPrepareStageFetchingIcon': '正在获取图标…',
+  'workers.registryPrepareStageDownloading': '正在下载安装包…',
+  'workers.registryPrepareStageInstalling': '正在安装依赖…',
+  'workers.registryPrepareStageFinalizing': '正在写入安装记录…',
+  'workers.registryPrepareStageAuthenticating': '正在认证…',
   'workers.registryRegistering': '正在注册 Worker…',
   'workers.registryRunnerBinary': '受信 binary 安装目录（无需系统 runner）',
   'workers.registryRunnerNpx': '需要 Node.js 和 npx',
@@ -1671,8 +1737,9 @@ const en: Dict = {
   'jobs.needSession': 'Open a session before dispatching.',
   'jobs.retry': 'Retry',
   'jobs.title': 'Worker jobs',
-  'lang.en': 'EN',
-  'lang.zh': '中文',
+  'lang.en': 'English',
+  'lang.zh': '简体中文',
+  'lang.zh-TW': '繁體中文',
   'prompt.browse': 'Browse…',
   'prompt.cancel': 'Cancel',
   'prompt.noFolder': 'No path received. Pick a folder and click Open, or paste a path.',
@@ -1683,7 +1750,7 @@ const en: Dict = {
   'right.jobs': 'Jobs',
   'right.roles': 'Crew',
   'right.rolesHint':
-    'The crew belongs to this session. One Worker may back multiple members with isolated sessions and prompts.',
+    'The crew belongs to this session. Add members and define roles before Workers join. One Worker may back multiple members.',
   'roles.acpDefault': 'ACP default model',
   'roles.add': 'Add member',
   'roles.archive': 'Archive',
@@ -1883,11 +1950,20 @@ const en: Dict = {
   'settings.runtime.leaderMaxStepsError': 'Please enter an integer between 10 and 1000',
   'settings.runtime.npmRegistry': 'npm registry',
   'settings.runtime.npmRegistryDesc':
-    'Registry for npx package installs. Leave empty for system default.',
+    'Registry for npx package installs. Leave empty for system default. Use a preset to switch quickly.',
   'settings.runtime.npmRegistryUrl': 'Registry URL',
-  'settings.runtime.npmRegistryPh': 'https://registry.npmmirror.com',
+  'settings.runtime.npmRegistryPh': 'Leave empty for system default',
   'settings.runtime.npmRegistryErrorHttps': 'Must start with https://',
   'settings.runtime.npmRegistryErrorSpace': 'Must not contain spaces or illegal characters',
+  'settings.runtime.npmRegistryUpdated': 'npm registry updated.',
+  'settings.runtime.npmPresets': 'Presets',
+  'settings.runtime.npmPreset.system': 'System default',
+  'settings.runtime.npmPreset.npmjs': 'npm official',
+  'settings.runtime.npmPreset.yarn': 'Yarn',
+  'settings.runtime.npmPreset.npmmirror': 'npmmirror (China)',
+  'settings.runtime.npmPreset.huawei': 'Huawei Cloud',
+  'settings.runtime.npmPreset.tencent': 'Tencent Cloud',
+  'settings.runtime.npmPresetRegion.cn': 'China',
   'settings.runtime.saveSuccess': 'Runtime settings saved',
   'settings.runtime.workerTimeouts': 'Worker execution settings',
   'settings.runtime.workerTimeoutsDesc': 'Leader step budget and Worker timeouts (minutes).',
@@ -1911,7 +1987,7 @@ const en: Dict = {
     'Appended after the protected protocol and tool contract; applies from the next turn.',
   'settings.prompts.roles': 'Default role prompts',
   'settings.prompts.rolesHint':
-    'Used for new session crew members and the explicit “Use role default prompt” action. Existing members are never overwritten.',
+    'Used when adding crew members and the explicit “Use role default prompt” action. Existing members are never overwritten.',
   'settings.prompts.reset': 'Restore default',
   'settings.prompts.save': 'Save',
   'settings.prompts.saved': 'Prompts saved for future crew members and the next Leader turn.',
@@ -2068,6 +2144,10 @@ const en: Dict = {
   'workers.enablingAuthRequired': 'This agent requires authentication before it can be enabled',
   'workers.enablingFailed': 'Probe did not pass; cannot enable',
   'workers.formName': 'Name',
+  'workers.formIcon': 'Icon',
+  'workers.formIconHint': 'Defaults to a Registry icon matched by name; you can change it.',
+  'workers.iconNone': 'Default brand mark',
+  'workers.iconAutoMatched': 'auto-matched',
   'workers.formPrimary': 'Primary role',
   'workers.formRoles': 'Secondary roles',
   'workers.formSave': 'Save',
@@ -2100,6 +2180,8 @@ const en: Dict = {
   'workers.modelCatalogEmpty': 'No catalog',
   'workers.modelCatalogStale': 'Catalog stale',
   'workers.modelComboHint': 'Pick a model; choose “Load/Refresh” to fetch via ACP',
+  'workers.modelNoAcpList':
+    'This agent does not advertise models via ACP. Keep the default, or type a model id and press Enter.',
   'workers.modelDefault': 'Default (CLI)',
   'workers.modelFetch': '↻ Load models from ACP…',
   'workers.modelLoading': 'Loading from ACP…',
@@ -2160,9 +2242,16 @@ const en: Dict = {
   'workers.registryPrepareFailed': 'Preparation failed',
   'workers.registryDuplicate': 'This registry agent is already registered',
   'workers.duplicateName': 'A worker with this name already exists',
+  'workers.registryPrepareLogTitle': 'Preparation log',
   'workers.registryPrepareQueued': 'Waiting to prepare…',
   'workers.registryPrepareRetry': 'Retry',
   'workers.registryPrepareRunning': 'Preparing agent…',
+  'workers.registryPrepareStageResolving': 'Resolving install plan…',
+  'workers.registryPrepareStageFetchingIcon': 'Fetching icon…',
+  'workers.registryPrepareStageDownloading': 'Downloading package…',
+  'workers.registryPrepareStageInstalling': 'Installing dependencies…',
+  'workers.registryPrepareStageFinalizing': 'Writing installation record…',
+  'workers.registryPrepareStageAuthenticating': 'Authenticating…',
   'workers.registryRegistering': 'Registering worker…',
   'workers.registryRunnerBinary': 'Trusted binary installation directory (no system runner)',
   'workers.registryRunnerNpx': 'Requires Node.js and npx',
@@ -2206,7 +2295,19 @@ const en: Dict = {
   'workers.roles': 'Roles',
 }
 
-export const catalogs: Record<Locale, Dict> = { zh, en }
+const zhTW = zhTWRaw as Dict
+// Keep npm placeholder in sync after OpenCC generation (generator copies simplified zh).
+zhTW['settings.runtime.npmRegistryPh'] = '留空使用系統預設'
+zhTW['settings.runtime.npmRegistryUpdated'] = 'npm 鏡像已更新。'
+zhTW['workers.registryPrepareLogTitle'] = '準備日誌'
+zhTW['workers.registryPrepareStageResolving'] = '正在解析安裝計畫…'
+zhTW['workers.registryPrepareStageFetchingIcon'] = '正在取得圖示…'
+zhTW['workers.registryPrepareStageDownloading'] = '正在下載安裝包…'
+zhTW['workers.registryPrepareStageInstalling'] = '正在安裝依賴…'
+zhTW['workers.registryPrepareStageFinalizing'] = '正在寫入安裝記錄…'
+zhTW['workers.registryPrepareStageAuthenticating'] = '正在認證…'
+
+export const catalogs: Record<Locale, Dict> = { zh, 'zh-TW': zhTW, en }
 
 export function roleMessageKey(role: WorkerRole): MessageKey {
   return `role.${role}` as MessageKey
@@ -2219,5 +2320,10 @@ export function formatMessage(template: string, vars?: Record<string, string | n
 
 export function detectLocale(): Locale {
   if (typeof navigator === 'undefined') return 'zh'
-  return navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+  const lang = navigator.language.toLowerCase()
+  if (lang === 'zh-tw' || lang === 'zh-hk' || lang === 'zh-mo' || lang.startsWith('zh-hant')) {
+    return 'zh-TW'
+  }
+  if (lang.startsWith('zh')) return 'zh'
+  return 'en'
 }

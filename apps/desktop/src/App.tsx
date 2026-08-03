@@ -14,7 +14,6 @@ import {
 } from '@swarmdesk-agent/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
-import { RightPanel } from './components/RightPanel'
 import { SettingsLayer, openSettings } from './components/SettingsLayer'
 import { useAppState } from './hooks/useAppState'
 import { I18nProvider, useI18n } from './i18n/I18nProvider'
@@ -24,14 +23,7 @@ import { MotionPreferenceProvider } from './motion/MotionPreferenceProvider'
 import { ToastProvider, useToast } from './components/Toast'
 import { pickProjectDirectory } from './lib/native-dialogs'
 import { ConfirmDialog, type ConfirmDialogConfig } from './components/ui/ConfirmDialog'
-import {
-  clampDrawerWidth,
-  clampSidebarWidth,
-  loadDrawerWidth,
-  loadSidebarWidth,
-  saveDrawerWidth,
-  saveSidebarWidth,
-} from './lib/panel-widths'
+import { clampSidebarWidth, loadSidebarWidth, saveSidebarWidth } from './lib/panel-widths'
 
 const EMPTY_JOBS: WorkerJob[] = []
 
@@ -68,16 +60,10 @@ function AppShell({
 }: ReturnType<typeof useAppState>) {
   const { t } = useI18n()
   const { error: toastError, info: toastInfo } = useToast()
-  const [inspectorOpen, setInspectorOpen] = useState(false)
-  /** Keep inspector drawer mounted after first open to avoid remount jank. */
-  const [inspectorMounted, setInspectorMounted] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth())
-  const [drawerWidth, setDrawerWidth] = useState(() => loadDrawerWidth())
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
   const sidebarWidthRef = useRef(sidebarWidth)
-  const drawerWidthRef = useRef(drawerWidth)
   sidebarWidthRef.current = sidebarWidth
-  drawerWidthRef.current = drawerWidth
   /**
    * First-message composer on the empty Chat state: store the text and
    * preset, then deselect active session so the empty-state composer shows.
@@ -158,38 +144,6 @@ function AppShell({
     }
   }, [])
 
-  // Home empty-composer view has no room for the crew inspector; close it on entry.
-  useEffect(() => {
-    if (pendingNewSession || !activeSession) {
-      setInspectorOpen(false)
-    }
-  }, [pendingNewSession, activeSession])
-
-  useEffect(() => {
-    if (inspectorOpen) setInspectorMounted(true)
-  }, [inspectorOpen])
-
-  // Warm-mount inspector during idle so first open isn't a cold RightPanel render.
-  useEffect(() => {
-    if (!activeSession) return
-    let cancelled = false
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
-    let idleId: number | undefined
-    const warm = () => {
-      if (!cancelled) setInspectorMounted(true)
-    }
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(warm, { timeout: 2000 })
-    } else {
-      timeoutId = setTimeout(warm, 800)
-    }
-    return () => {
-      cancelled = true
-      if (idleId != null && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId)
-      if (timeoutId != null) clearTimeout(timeoutId)
-    }
-  }, [activeSession?.id])
-
   const beginSidebarResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     const startX = event.clientX
@@ -207,30 +161,6 @@ function AppShell({
       target.removeEventListener('pointerup', onUp)
       target.removeEventListener('pointercancel', onUp)
       setSidebarWidth((current) => saveSidebarWidth(current))
-    }
-    target.addEventListener('pointermove', onMove)
-    target.addEventListener('pointerup', onUp)
-    target.addEventListener('pointercancel', onUp)
-  }, [])
-
-  const beginDrawerResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    const startX = event.clientX
-    const startW = drawerWidthRef.current
-    const target = event.currentTarget
-    target.setPointerCapture(event.pointerId)
-    document.body.classList.add('is-resizing-panels')
-
-    const onMove = (ev: PointerEvent) => {
-      // Dragging the left edge of the drawer: move left → wider.
-      setDrawerWidth(clampDrawerWidth(startW - (ev.clientX - startX)))
-    }
-    const onUp = () => {
-      document.body.classList.remove('is-resizing-panels')
-      target.removeEventListener('pointermove', onMove)
-      target.removeEventListener('pointerup', onUp)
-      target.removeEventListener('pointercancel', onUp)
-      setDrawerWidth((current) => saveDrawerWidth(current))
     }
     target.addEventListener('pointermove', onMove)
     target.addEventListener('pointerup', onUp)
@@ -349,21 +279,16 @@ function AppShell({
     deleteSession(session.id).catch((e) => toastError(String(e)))
   }
 
-  const onSettingsOpen = useCallback(() => {
-    setInspectorOpen(false)
-  }, [])
-
   return (
     <div className="app-root">
       <div className="window app-window">
         {/* Workspace never unmounts for settings — SettingsLayer is an isolated overlay. */}
         <div className="view-layer">
           <div
-            className={`shell${inspectorOpen ? ' with-inspector' : ''}`}
+            className="shell"
             style={
               {
                 '--sidebar-w': `${sidebarWidth}px`,
-                '--drawer-w': `${drawerWidth}px`,
               } as CSSProperties
             }
           >
@@ -429,6 +354,7 @@ function AppShell({
                 snapshotApprovals={snapshot.approvals}
                 snapshotJobs={snapshot.jobs ?? EMPTY_JOBS}
                 snapshotWorkers={snapshot.workers}
+                snapshotTeamMembers={snapshot.teamMembers}
                 snapshotTeamTemplates={snapshot.teamTemplates}
                 onResolveApproval={(id, optionId, decision, surface) =>
                   void resolveApproval(id, decision, optionId, surface).catch((e) =>
@@ -438,8 +364,18 @@ function AppShell({
                 onResetContext={(jobId) =>
                   void resetAcpContext(jobId).catch((e) => toastError(String(e)))
                 }
-                inspectorOpen={inspectorOpen}
-                onToggleInspector={() => setInspectorOpen((v) => !v)}
+                onCreateTeamMember={async (sessionId, body) => {
+                  await createTeamMember(sessionId, body)
+                }}
+                onUpdateTeamMember={async (sessionId, id, body) => {
+                  await updateTeamMember(sessionId, id, body)
+                }}
+                onArchiveTeamMember={async (sessionId, id, expectedRevision) => {
+                  await archiveTeamMember(sessionId, id, expectedRevision)
+                }}
+                onResetTeamMemberSession={async (sessionId, id) => {
+                  await resetTeamMemberSession(sessionId, id)
+                }}
                 onRefreshGit={() => void refresh()}
                 onComposeFirstMessage={onComposeFirstMessage}
                 onPickFolder={onOpenProject}
@@ -451,59 +387,6 @@ function AppShell({
                 createSession={createSession}
               />
             </div>
-
-            {/* Keep drawer mounted after first open; CSS show/hide (no remount / no exit jank). */}
-            {inspectorMounted && (
-              <div
-                className={`inspector-host drawer${inspectorOpen ? ' is-open' : ' is-closed'}`}
-                aria-hidden={!inspectorOpen}
-              >
-                <div
-                  className="panel-resizer panel-resizer-right"
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label={t('layout.resizeInspector')}
-                  aria-valuenow={drawerWidth}
-                  aria-valuemin={260}
-                  aria-valuemax={480}
-                  onPointerDown={beginDrawerResize}
-                />
-                <div className="drawer-panel">
-                  <RightPanel
-                    workers={snapshot.workers}
-                    teamMembers={snapshot.teamMembers.filter(
-                      (role) => role.chatSessionId === activeSession?.id && !role.archivedAt,
-                    )}
-                    approvals={snapshot.approvals ?? []}
-                    projectId={activeProject?.id ?? null}
-                    sessionId={activeSession?.id ?? null}
-                    onCreateTeamMember={async (body) => {
-                      if (!activeSession) throw new Error('Chat session is required')
-                      await createTeamMember(activeSession.id, body)
-                    }}
-                    onUpdateTeamMember={async (id, body) => {
-                      if (!activeSession) throw new Error('Chat session is required')
-                      await updateTeamMember(activeSession.id, id, body)
-                    }}
-                    onArchiveTeamMember={async (id, expectedRevision) => {
-                      if (!activeSession) throw new Error('Chat session is required')
-                      await archiveTeamMember(activeSession.id, id, expectedRevision)
-                    }}
-                    onResetTeamMemberSession={async (id) => {
-                      if (!activeSession) throw new Error('Chat session is required')
-                      await resetTeamMemberSession(activeSession.id, id)
-                    }}
-                    onResolveApproval={(id, optionId, decision, surface) =>
-                      void resolveApproval(id, decision, optionId, surface).catch((e) =>
-                        toastError(String(e)),
-                      )
-                    }
-                    resolving={resolvingState}
-                    onRefreshSnapshot={() => void refresh()}
-                  />
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -515,7 +398,6 @@ function AppShell({
           onHealthAllWorkers={() => healthAllWorkers()}
           onRegisterCustomAcpWorker={(body) => registerCustomAcpWorker(body)}
           onRefreshSnapshot={() => void refresh()}
-          onOpen={onSettingsOpen}
         />
 
         <ConfirmDialog
