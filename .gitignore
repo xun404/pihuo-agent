@@ -39,3 +39,6 @@ design/
 
 # Foreign tooling / build metadata that must not enter this repo
 build-meta.json
+
+# Stray Vite build output (root-dir bare builds)
+index-*.js
