@@ -6,6 +6,7 @@ import {
   validateModelPin,
   resolveEligibilityCandidates,
   projectPinIntoAvailableModels,
+  buildCurrentEligibilityEvidence,
   type ProviderEvidence,
   type EligibilityInput,
 } from './model-eligibility.js'
@@ -226,6 +227,45 @@ describe('buildShortlistAndSearchIndex', () => {
       pinnedModel: 'openrouter/meta/llama',
     })
     assert.equal(shortlist[0]?.modelId, 'openrouter/meta/llama')
+  })
+})
+
+describe('buildCurrentEligibilityEvidence', () => {
+  it('does not let live "unknown" clobber catalog "authenticated" (generic ACP workers)', () => {
+    const merged = buildCurrentEligibilityEvidence({
+      modelIds: ['default', 'sonnet', 'opus[1m]'],
+      env: {},
+      zenFreeAllowlist: [],
+      catalogProviders: {
+        default: 'authenticated',
+        sonnet: 'authenticated',
+        'opus[1m]': 'authenticated',
+      },
+    })
+    assert.equal(merged['default'], 'authenticated')
+    assert.equal(merged['sonnet'], 'authenticated')
+    assert.equal(merged['opus[1m]'], 'authenticated')
+  })
+
+  it('keeps live "disabled" authoritative over catalog', () => {
+    const merged = buildCurrentEligibilityEvidence({
+      modelIds: ['default'],
+      env: {},
+      zenFreeAllowlist: [],
+      catalogProviders: { default: 'authenticated' },
+      disabledProviders: ['default'],
+    })
+    assert.equal(merged['default'], 'disabled')
+  })
+
+  it('elevates live "authenticated" (env key) over catalog "unknown"', () => {
+    const merged = buildCurrentEligibilityEvidence({
+      modelIds: ['openai/gpt-4o'],
+      env: { OPENAI_API_KEY: 'sk-test' },
+      zenFreeAllowlist: [],
+      catalogProviders: { openai: 'unknown' },
+    })
+    assert.equal(merged['openai'], 'authenticated')
   })
 })
 

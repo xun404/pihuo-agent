@@ -26,6 +26,7 @@ import {
 import { resolveDesktopRuntimeLayout } from './runtime-layout.js'
 import { pickProjectDirectory } from './pick-directory.js'
 import { settingsMutationRequiresApiRestart } from './settings-restart.js'
+import { loadCustomThemeFiles } from './theme-loader.js'
 import {
   isSafeExternalUrl,
   isTrustedRendererUrl,
@@ -612,6 +613,11 @@ function registerIpc(): void {
     requireTrustedRenderer(event)
     // Never return a token from a stale or different checkout's runtime file.
     return await verifiedDesktopApiToken()
+  })
+
+  ipcMain.handle('themes:reload', (event) => {
+    requireTrustedRenderer(event)
+    return loadCustomThemeFiles()
   })
 
   ipcMain.handle('settings:get', (event) => {

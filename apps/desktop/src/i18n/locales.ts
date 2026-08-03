@@ -342,12 +342,21 @@ export type MessageKey =
   | 'settings.addModelInline'
   | 'settings.addToList'
   | 'settings.apiRestartFailed'
-  | 'settings.appearance'
-  | 'settings.appearanceDesc'
+  | 'settings.colorMode'
+  | 'settings.colorModeDesc'
+  | 'settings.lightTheme'
+  | 'settings.lightThemeDesc'
+  | 'settings.darkTheme'
+  | 'settings.darkThemeDesc'
+  | 'settings.reloadThemes'
+  | 'settings.reloadThemesDesc'
+  | 'settings.reloadThemesButton'
+  | 'settings.reloadThemesLoading'
+  | 'settings.reloadThemesSuccess'
+  | 'settings.reloadThemesFailed'
   | 'appearance.system'
-  | 'appearance.classic'
+  | 'appearance.light'
   | 'appearance.dark'
-  | 'appearance.warm'
   | 'settings.back'
   | 'settings.cancelEdit'
   | 'settings.clear'
@@ -1084,12 +1093,21 @@ const zh: Dict = {
   'settings.addModelInline': '添加新模型',
   'settings.addToList': '加入列表',
   'settings.apiRestartFailed': '设置已写入，但本地 API 未能重启；当前进程尚未应用新设置。',
-  'settings.appearance': '外观',
-  'settings.appearanceDesc': '跟随系统时浅色为经典，深色随系统',
+  'settings.colorMode': '颜色模式',
+  'settings.colorModeDesc': '系统模式跟随操作系统的浅色或深色偏好',
+  'settings.lightTheme': '浅色主题',
+  'settings.lightThemeDesc': 'Mono Plus、其他内置主题或用户主题',
+  'settings.darkTheme': '深色主题',
+  'settings.darkThemeDesc': '选择深色模式使用的颜色主题',
+  'settings.reloadThemes': '重新加载主题',
+  'settings.reloadThemesDesc': '从主题目录重新读取 JSON 主题文件',
+  'settings.reloadThemesButton': '重新加载',
+  'settings.reloadThemesLoading': '加载中…',
+  'settings.reloadThemesSuccess': '已加载 {count} 个用户主题',
+  'settings.reloadThemesFailed': '主题加载失败，已保留当前主题',
   'appearance.system': '跟随系统',
-  'appearance.classic': '经典',
+  'appearance.light': '浅色',
   'appearance.dark': '深色',
-  'appearance.warm': '暖色',
   'settings.back': '返回工作区',
   'settings.descGeneral': '主题、语言与基础行为。',
   'settings.descModel': '管理模型供应商与 API Key，配置后可在聊天时选择使用。',
@@ -1851,12 +1869,21 @@ const en: Dict = {
   'settings.addToList': 'Add to list',
   'settings.apiRestartFailed':
     'Settings were written, but the local API could not restart and has not applied them yet.',
-  'settings.appearance': 'Appearance',
-  'settings.appearanceDesc': 'System uses classic for light; dark follows OS when System',
+  'settings.colorMode': 'Color mode',
+  'settings.colorModeDesc': 'System follows your operating system light/dark preference',
+  'settings.lightTheme': 'Light theme',
+  'settings.lightThemeDesc': 'Mono Plus, other built-in themes, or a user theme',
+  'settings.darkTheme': 'Dark theme',
+  'settings.darkThemeDesc': 'Color theme used in dark mode',
+  'settings.reloadThemes': 'Reload themes',
+  'settings.reloadThemesDesc': 'Read JSON themes from the theme directory again',
+  'settings.reloadThemesButton': 'Reload',
+  'settings.reloadThemesLoading': 'Loading…',
+  'settings.reloadThemesSuccess': 'Loaded {count} user themes',
+  'settings.reloadThemesFailed': 'Theme reload failed; current themes were kept',
   'appearance.system': 'System',
-  'appearance.classic': 'Classic',
+  'appearance.light': 'Light',
   'appearance.dark': 'Dark',
-  'appearance.warm': 'Warm',
   'settings.back': 'Back to workspace',
   'settings.descGeneral': 'Theme, language, and basic behavior.',
   'settings.descModel': 'Manage model providers and API keys for chat.',

@@ -37,7 +37,8 @@ import {
   slugProviderId,
 } from '../lib/custom-provider-form'
 import { ProviderLogo, getProviderIconMeta } from '../lib/provider-icons'
-import { useTheme, type ColorPalette, type ThemeMode } from '../theme/ThemeProvider'
+import { useTheme } from '../theme/ThemeProvider'
+import { sortThemesForDisplay } from '../theme/theme.config'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import type { SendShortcut } from '../lib/send-shortcut'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
@@ -49,45 +50,6 @@ import { Expandable } from './ui/Expandable'
 
 const SETTINGS_TAB_EASE = [0.4, 0, 0.2, 1] as const
 
-/**
- * 外观四选一：
- * - 跟随系统 → 浅色=经典冷灰，深色=暗色
- * - 经典 → 固定浅色冷灰
- * - 深色 → 固定暗色
- * - 暖色 → 固定浅色暖橙
- */
-type AppearanceChoice = 'system' | 'classic' | 'dark' | 'warm'
-
-function appearanceChoice(mode: ThemeMode, palette: ColorPalette): AppearanceChoice {
-  if (mode === 'dark') return 'dark'
-  if (mode === 'system') return 'system'
-  // mode === 'light'
-  return palette === 'warm' ? 'warm' : 'classic'
-}
-
-function applyAppearanceChoice(
-  choice: AppearanceChoice,
-  setMode: (m: ThemeMode) => void,
-  setPalette: (p: ColorPalette) => void,
-) {
-  switch (choice) {
-    case 'system':
-      setMode('system')
-      setPalette('classic') // 系统浅色走经典
-      break
-    case 'classic':
-      setMode('light')
-      setPalette('classic')
-      break
-    case 'warm':
-      setMode('light')
-      setPalette('warm')
-      break
-    case 'dark':
-      setMode('dark')
-      break
-  }
-}
 import {
   IconChevronLeft,
   IconCpu,
@@ -220,7 +182,19 @@ export function SettingsPanel({
   onRefreshSnapshot,
 }: Props) {
   const { t, locale, setLocale } = useI18n()
-  const { mode: themeMode, setMode: setThemeMode, palette, setPalette } = useTheme()
+  const {
+    mode: themeMode,
+    setMode: setThemeMode,
+    lightThemeId,
+    darkThemeId,
+    lightThemes,
+    darkThemes,
+    setLightThemeId,
+    setDarkThemeId,
+    reloadThemes,
+    themesDirectory,
+    themesLoading,
+  } = useTheme()
   const { sendShortcut, setSendShortcut } = useSendShortcut()
   const {
     preference: motionPreference,
@@ -232,6 +206,26 @@ export function SettingsPanel({
     ease: SETTINGS_TAB_EASE,
   }
   const { success: toastSuccess, error: toastError } = useToast()
+  const [reloadThemesUiBusy, setReloadThemesUiBusy] = useState(false)
+  const displayLightThemes = useMemo(() => sortThemesForDisplay(lightThemes), [lightThemes])
+  const displayDarkThemes = useMemo(() => sortThemesForDisplay(darkThemes), [darkThemes])
+
+  const reloadColorThemes = useCallback(async () => {
+    setReloadThemesUiBusy(true)
+    const startedAt = Date.now()
+    try {
+      const result = await reloadThemes()
+      const remaining = Math.max(0, 500 - (Date.now() - startedAt))
+      if (remaining > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, remaining))
+      if (!result.ok) {
+        toastError(t('settings.reloadThemesFailed'))
+        return
+      }
+      toastSuccess(t('settings.reloadThemesSuccess', { count: result.loaded }))
+    } finally {
+      setReloadThemesUiBusy(false)
+    }
+  }, [reloadThemes, t, toastError, toastSuccess])
   const [tab, setTab] = useState<TabId>(initialTab ?? 'general')
   // Sync external tab changes (e.g. "管理模型" entry pinning 'model') even
   // when the panel is already open — useState initial value only fires on mount.
@@ -377,10 +371,13 @@ export function SettingsPanel({
     if (!raw) return t('workers.registryBundledAtRelease')
     const date = new Date(raw)
     if (!Number.isFinite(date.getTime())) return t('workers.registryBundledAtRelease')
-    return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : locale === 'zh-TW' ? 'zh-TW' : 'en-US', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(date)
+    return new Intl.DateTimeFormat(
+      locale === 'zh' ? 'zh-CN' : locale === 'zh-TW' ? 'zh-TW' : 'en-US',
+      {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      },
+    ).format(date)
   }, [locale, t, workerRegistryCatalog?.fetchedAt])
 
   const checkRegistryUpdates = async () => {
@@ -1108,8 +1105,7 @@ export function SettingsPanel({
     { id: 'about', label: t('settings.navAbout') },
   ]
 
-  const tagText = (tag: string) =>
-    locale === 'en' ? (TAG_EN[tag] ?? tag) : (TAG_ZH[tag] ?? tag)
+  const tagText = (tag: string) => (locale === 'en' ? (TAG_EN[tag] ?? tag) : (TAG_ZH[tag] ?? tag))
 
   const selectedRegistryOption = useMemo(
     () => workerRegistry.find((o) => o.id === regSelectedId) ?? null,
@@ -1480,23 +1476,69 @@ export function SettingsPanel({
           <div className="settings-form-card">
             <div className="settings-row card-row">
               <div className="lbl-block">
-                <div className="lbl">{t('settings.appearance')}</div>
-                <div className="sub">{t('settings.appearanceDesc')}</div>
+                <div className="lbl">{t('settings.colorMode')}</div>
+                <div className="sub">{t('settings.colorModeDesc')}</div>
               </div>
               <SettingsSelect
-                minWidth={140}
-                value={appearanceChoice(themeMode, palette)}
-                onChange={(v) =>
-                  applyAppearanceChoice(v as AppearanceChoice, setThemeMode, setPalette)
-                }
-                aria-label={t('settings.appearance')}
+                value={themeMode}
+                onChange={(v) => setThemeMode(v as 'system' | 'light' | 'dark')}
+                aria-label={t('settings.colorMode')}
                 options={[
                   { value: 'system', label: t('appearance.system') },
-                  { value: 'classic', label: t('appearance.classic') },
+                  { value: 'light', label: t('appearance.light') },
                   { value: 'dark', label: t('appearance.dark') },
-                  { value: 'warm', label: t('appearance.warm') },
                 ]}
               />
+            </div>
+            <div className="settings-row card-row">
+              <div className="lbl-block">
+                <div className="lbl">{t('settings.lightTheme')}</div>
+                <div className="sub">{t('settings.lightThemeDesc')}</div>
+              </div>
+              <SettingsSelect
+                value={lightThemeId}
+                onChange={setLightThemeId}
+                aria-label={t('settings.lightTheme')}
+                options={displayLightThemes.map((theme) => ({
+                  value: theme.id,
+                  label: theme.name,
+                }))}
+              />
+            </div>
+            <div className="settings-row card-row">
+              <div className="lbl-block">
+                <div className="lbl">{t('settings.darkTheme')}</div>
+                <div className="sub">{t('settings.darkThemeDesc')}</div>
+              </div>
+              <SettingsSelect
+                value={darkThemeId}
+                onChange={setDarkThemeId}
+                aria-label={t('settings.darkTheme')}
+                options={displayDarkThemes.map((theme) => ({
+                  value: theme.id,
+                  label: theme.name,
+                }))}
+              />
+            </div>
+            <div className="settings-row card-row">
+              <div className="lbl-block">
+                <div className="lbl">{t('settings.reloadThemes')}</div>
+                <div className="sub">
+                  {themesDirectory
+                    ? `${t('settings.reloadThemesDesc')} · ${themesDirectory}`
+                    : t('settings.reloadThemesDesc')}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="settings-btn-soft"
+                onClick={() => void reloadColorThemes()}
+                disabled={themesLoading || reloadThemesUiBusy}
+              >
+                {themesLoading || reloadThemesUiBusy
+                  ? t('settings.reloadThemesLoading')
+                  : t('settings.reloadThemesButton')}
+              </button>
             </div>
             <div className="settings-row card-row">
               <div className="lbl-block">
@@ -1504,7 +1546,6 @@ export function SettingsPanel({
                 <div className="sub">{t('settings.languageDesc')}</div>
               </div>
               <SettingsSelect
-                minWidth={160}
                 value={locale}
                 onChange={(v) => setLocale(v as Locale)}
                 aria-label={t('settings.language')}
@@ -1521,7 +1562,6 @@ export function SettingsPanel({
                 <div className="sub">{t('settings.sendShortcutDesc')}</div>
               </div>
               <SettingsSelect
-                minWidth={140}
                 value={sendShortcut}
                 onChange={(v) => setSendShortcut(v as SendShortcut)}
                 aria-label={t('settings.sendShortcut')}
@@ -1537,7 +1577,6 @@ export function SettingsPanel({
                 <div className="sub">{t('settings.motionDesc')}</div>
               </div>
               <SettingsSelect
-                minWidth={140}
                 value={motionPreference}
                 onChange={(v) => setMotionPreference(v as MotionPreference)}
                 aria-label={t('settings.motion')}

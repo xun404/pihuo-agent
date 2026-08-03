@@ -11,6 +11,9 @@ export type SettingsSelectOption = {
   label: string
 }
 
+/** Shared width contract for the short settings controls. */
+export const SETTINGS_SELECT_MIN_WIDTH = 148
+
 type Props = {
   value: string
   options: SettingsSelectOption[]
@@ -32,7 +35,7 @@ export function SettingsSelect({
   'aria-label': ariaLabel,
   className,
   disabled,
-  minWidth = 140,
+  minWidth = SETTINGS_SELECT_MIN_WIDTH,
 }: Props) {
   const listId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -49,7 +52,11 @@ export function SettingsSelect({
     const el = rootRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
-    setCoords({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 140) })
+    setCoords({
+      top: r.bottom + 4,
+      left: r.left,
+      width: Math.max(r.width, SETTINGS_SELECT_MIN_WIDTH),
+    })
   }
 
   useEffect(() => {

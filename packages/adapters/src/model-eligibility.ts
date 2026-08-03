@@ -349,11 +349,14 @@ export function buildCurrentEligibilityEvidence(params: {
   })
   const out: Record<string, ProviderEvidence> = {
     ...(params.catalogProviders ?? {}),
-    ...live,
   }
-  // Live disabled always wins
+  // Live evidence only upgrades/overrides with concrete signals. `unknown` is
+  // "no env key / no auth store match" — for generic ACP workers (claude/codex
+  // etc.) it must NOT clobber discovery evidence, or dispatch degrades
+  // authenticated → MODEL_SELECTION_UNVERIFIED.
   for (const [k, v] of Object.entries(live)) {
-    if (v === 'disabled') out[k] = 'disabled'
+    if (v !== 'unknown') out[k] = v
+    else if (!(k in out)) out[k] = v
   }
   return out
 }

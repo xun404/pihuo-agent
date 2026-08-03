@@ -367,7 +367,7 @@
   line-height: var(--lh-snug);
   text-align: left;
 }
-/* Warning hint — use --warn (not --accent; classic palette maps accent to blue) */
+/* Warning hint — use --warn (not --accent; themes may map accent to blue) */
 .settings-field-hint.is-warn {
   color: var(--warn);
   font-weight: var(--fw-medium);

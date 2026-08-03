@@ -77,7 +77,7 @@
 }
 /* Inline rename input — replaces the title span when editing.
    Mirrors .settings-input focus treatment so it adapts to every palette
-   (classic / warm / dark) via the same --blue / --blue-soft tokens. */
+   via the same --blue / --blue-soft tokens. */
 .chat-head .title-input {
   font-size: var(--fs-base);
   font-weight: var(--fw-semibold);
@@ -690,23 +690,6 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   background: var(--bg-input);
   overflow: hidden;
   max-width: 100%;
-  /* syntax tokens (shared .syn-*) — Mono Plus 风低饱和灰彩 */
-  --diff-syn-keyword: #8a7a9a;
-  --diff-syn-type: #6a8a9a;
-  --diff-syn-string: #7a8e6a;
-  --diff-syn-number: #9a8068;
-  --diff-syn-comment: var(--text-3);
-  --diff-syn-fn: #6a7e9e;
-  --diff-syn-punct: var(--text-2);
-}
-html[data-theme='dark'] .md-code-block-wrap {
-  --diff-syn-keyword: #bda2e8;
-  --diff-syn-type: #8ab8cc;
-  --diff-syn-string: #9cb88c;
-  --diff-syn-number: #d4b69a;
-  --diff-syn-comment: color-mix(in srgb, var(--text-3) 90%, #b0a8a0);
-  --diff-syn-fn: #a2bee8;
-  --diff-syn-punct: var(--text-3);
 }
 .md-code-block-head {
   display: flex;
@@ -1522,7 +1505,7 @@ html[data-theme='dark'] .md-code-block-wrap {
 .worker-logo:has(.worker-brand-icon) {
   background: transparent;
 }
-/* 品牌色：Worker logo 圆角方块的底色/前景（经典/暖色/深色 三主题 token 已覆盖） */
+/* 品牌色：Worker logo 圆角方块的底色/前景（主题 token 已覆盖） */
 .worker-logo.claude {
   background: var(--claude-bg);
   color: var(--claude-fg);

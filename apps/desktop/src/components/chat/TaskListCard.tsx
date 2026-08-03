@@ -9,7 +9,7 @@
  *   - 折叠：中性 ListTodo 图标 + “任务 role”纯文本标题 + activeForm 预览
  *   - 展开：箭头 + “任务 role”标题；完整 content 放在下方导轨内
  *
- * 全用 CSS 变量，三套主题（warm/classic/dark）自动适配。
+ * 全用 CSS 变量，内置及用户主题自动适配。
  */
 import { memo, useCallback, useState } from 'react'
 import { ChevronRight, ListTodo } from 'lucide-react'

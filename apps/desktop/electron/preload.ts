@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PromptSettings, WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
 
 type SettingsTab = 'general' | 'model' | 'prompts' | 'workers' | 'about'
+type ThemeReloadResult = {
+  directory: string
+  themes: Array<{ filename: string; raw: unknown }>
+  skipped: number
+  errors: Array<{ filename: string; reason: string }>
+}
 
 contextBridge.exposeInMainWorld('routerAgents', {
   platform: process.platform,
@@ -9,6 +15,9 @@ contextBridge.exposeInMainWorld('routerAgents', {
   isDesktop: true,
   apiBase: process.env.SWARMDESK_AGENT_DESKTOP_API_URL ?? 'http://127.0.0.1:4111',
   getDesktopToken: () => ipcRenderer.invoke('desktop:getApiToken') as Promise<string | null>,
+  themes: {
+    reload: () => ipcRenderer.invoke('themes:reload') as Promise<ThemeReloadResult>,
+  },
   /**
    * Main-process menu (About / Settings…) → open settings panel on a tab.
    * Returns an unsubscribe function.
