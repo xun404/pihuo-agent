@@ -10,12 +10,11 @@ import {
 
 const defaults = {
   jobTimeoutMs: 600_000,
-  approvalTimeoutMs: 120_000,
   queueTimeoutMs: 600_000,
 }
 
 describe('WorkerTimeoutSettingsEditor', () => {
-  it('renders leader max steps and three timeout values in minutes', () => {
+  it('renders leader max steps and the two Worker timeout values in minutes', () => {
     const html = renderToStaticMarkup(
       <I18nProvider serverLocale="en">
         <WorkerTimeoutSettingsEditor
@@ -34,7 +33,7 @@ describe('WorkerTimeoutSettingsEditor', () => {
     assert.match(html, /timeout-duration-field/u)
     assert.match(html, />steps</u)
     assert.match(html, /aria-label="Worker task timeout"[^>]*value="10"/u)
-    assert.match(html, /aria-label="Approval timeout"[^>]*value="2"/u)
+    assert.doesNotMatch(html, /Approval timeout/u)
     assert.match(html, /aria-label="Worker queue timeout"[^>]*value="10"/u)
     assert.match(html, /timeout-duration-unit/u)
     assert.match(html, />min</u)
@@ -43,26 +42,21 @@ describe('WorkerTimeoutSettingsEditor', () => {
   })
 
   it('converts valid minutes to milliseconds', () => {
-    assert.deepEqual(parseWorkerTimeoutMinutes({ job: '10', approval: '2', queue: '20' }), {
+    assert.deepEqual(parseWorkerTimeoutMinutes({ job: '10', queue: '20' }), {
       ok: true,
       value: {
         jobTimeoutMs: 600_000,
-        approvalTimeoutMs: 120_000,
         queueTimeoutMs: 1_200_000,
       },
     })
   })
 
   it('reports the first invalid or out-of-range field', () => {
-    assert.deepEqual(parseWorkerTimeoutMinutes({ job: '0', approval: '2', queue: '10' }), {
+    assert.deepEqual(parseWorkerTimeoutMinutes({ job: '0', queue: '10' }), {
       ok: false,
       field: 'job',
     })
-    assert.deepEqual(parseWorkerTimeoutMinutes({ job: '10', approval: '2.5', queue: '10' }), {
-      ok: false,
-      field: 'approval',
-    })
-    assert.deepEqual(parseWorkerTimeoutMinutes({ job: '10', approval: '2', queue: '121' }), {
+    assert.deepEqual(parseWorkerTimeoutMinutes({ job: '10', queue: '121' }), {
       ok: false,
       field: 'queue',
     })

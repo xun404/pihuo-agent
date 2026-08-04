@@ -5,7 +5,7 @@ import { ApprovalWaitRegistry, waitForApprovalDecision } from './approval-wait.j
 describe('ApprovalWaitRegistry', () => {
   it('resolves when settle(allow) is called', async () => {
     const reg = new ApprovalWaitRegistry()
-    const p = reg.wait('appr_1', { timeoutMs: 5000 })
+    const p = reg.wait('appr_1')
     setTimeout(() => {
       const ok = reg.settle('appr_1', 'allow', 'allow')
       assert.equal(ok, true)
@@ -20,7 +20,7 @@ describe('ApprovalWaitRegistry', () => {
 
   it('resolves selected on deny', async () => {
     const reg = new ApprovalWaitRegistry()
-    const p = reg.wait('appr_2', { timeoutMs: 5000 })
+    const p = reg.wait('appr_2')
     setTimeout(() => reg.settle('appr_2', 'deny', 'reject_once'), 10)
     const result = await p
     assert.equal(result.outcome, 'selected')
@@ -28,24 +28,17 @@ describe('ApprovalWaitRegistry', () => {
     assert.equal(result.optionId, 'reject_once')
   })
 
-  it('times out with non-success outcome', async () => {
+  it('keeps a waiter pending until an explicit resolution', async () => {
     const reg = new ApprovalWaitRegistry()
-    const result = await reg.wait('appr_3', { timeoutMs: 40 })
-    assert.equal(result.outcome, 'timeout')
-    assert.equal(reg.has('appr_3'), false)
-  })
-
-  it('normalizes invalid and overflowing timer values', async () => {
-    const reg = new ApprovalWaitRegistry()
-    const invalid = reg.wait('invalid-timeout', { timeoutMs: Number.POSITIVE_INFINITY })
-    const overflow = reg.wait('overflow-timeout', { timeoutMs: 999_999_999_999 })
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    assert.equal(reg.has('invalid-timeout'), true)
-    assert.equal(reg.has('overflow-timeout'), true)
-    reg.settle('invalid-timeout', 'allow', 'allow')
-    reg.settle('overflow-timeout', 'allow', 'allow')
-    assert.equal((await invalid).outcome, 'selected')
-    assert.equal((await overflow).outcome, 'selected')
+    const pending = reg.wait('no-timeout')
+    const early = await Promise.race([
+      pending.then(() => 'resolved' as const),
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 40)),
+    ])
+    assert.equal(early, 'pending')
+    assert.equal(reg.has('no-timeout'), true)
+    reg.settle('no-timeout', 'allow', 'allow')
+    assert.equal((await pending).outcome, 'selected')
   })
 
   it('register resolves when settle(allow) is called', async () => {
@@ -135,7 +128,7 @@ describe('ApprovalWaitRegistry', () => {
 describe('waitForApprovalDecision helper', () => {
   it('uses injected registry', async () => {
     const reg = new ApprovalWaitRegistry()
-    const p = waitForApprovalDecision('x', { registry: reg, timeoutMs: 2000 })
+    const p = waitForApprovalDecision('x', { registry: reg })
     setTimeout(() => reg.settle('x', 'allow'), 15)
     const r = await p
     assert.equal(r.outcome, 'selected')

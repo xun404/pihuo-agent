@@ -50,7 +50,7 @@ describe('mergeProvidersWithCustom', () => {
 
   it('keeps a curated builtin set (not a marketplace catalog)', () => {
     const ids = MASTRA_PROVIDERS.map((p) => p.id)
-    assert.deepEqual(ids, ['openai', 'anthropic', 'google', 'xai', 'deepseek'])
+    assert.deepEqual(ids, ['openai', 'anthropic', 'google', 'xai', 'deepseek', 'opencode-go'])
   })
 })
 

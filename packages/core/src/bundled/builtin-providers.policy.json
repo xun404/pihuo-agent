@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Policy for curating Settings → Models built-in list from @mastra/core provider-registry. Concrete models are generated into builtin-providers.json by sync:model-registry (runs on package).",
+  "description": "Policy for curating Settings → Models built-in list from models.dev (https://models.dev/api.json). Concrete models are generated into builtin-providers.json by sync:model-registry (runs on package).",
   "providers": [
     {
       "id": "openai",
@@ -123,6 +123,43 @@
       "contextWindowByMatch": [
         { "match": "chat", "contextWindow": 64000 },
         { "match": "reasoner", "contextWindow": 64000 }
+      ]
+    },
+    {
+      "id": "opencode-go",
+      "name": "OpenCode Go",
+      "apiKeyEnv": "OPENCODE_API_KEY",
+      "docsUrl": "https://opencode.ai/docs/zen",
+      "apiStyle": "openai",
+      "baseURL": "https://opencode.ai/zen/go/v1",
+      "maxModels": 10,
+      "includePrefixes": [
+        "qwen3.",
+        "glm-",
+        "kimi-",
+        "minimax-",
+        "mimo-",
+        "hy3",
+        "deepseek-v4",
+        "gpt-5.6-luna",
+        "grok-4.5"
+      ],
+      "excludeSubstrings": ["omni"],
+      "tagRules": [
+        { "match": "code", "tag": "coding" },
+        { "match": "flash", "tag": "fast" },
+        { "match": "reasoner", "tag": "reasoning" },
+        { "match": "max", "tag": "flagship" },
+        { "match": "plus", "tag": "flagship" },
+        { "match": "pro", "tag": "flagship" },
+        { "match": "", "tag": "flagship" }
+      ],
+      "contextWindowDefault": 200000,
+      "contextWindowByMatch": [
+        { "match": "qwen3.", "contextWindow": 1048576 },
+        { "match": "glm-5", "contextWindow": 1000000 },
+        { "match": "kimi-", "contextWindow": 1000000 },
+        { "match": "minimax-", "contextWindow": 1000000 }
       ]
     }
   ],

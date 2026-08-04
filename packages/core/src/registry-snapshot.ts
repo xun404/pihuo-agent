@@ -13,12 +13,20 @@ import {
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { resolveRouterDataPaths } from './router-data-paths.js'
+import type { ThinkingIntensity } from './thinking-intensity.js'
 
 export const REGISTRY_SNAPSHOT_FILENAME = 'mastra-model-registry.json'
 
 export interface RegistryModel {
   id: string
   label: string
+  /** Supported thinking levels from the source registry (models.dev reasoning_options). */
+  thinkingIntensities?: ThinkingIntensity[]
+  contextWindow?: number
+  /** Supports tool calling (models.dev tool_call). */
+  toolCall?: boolean
+  /** Supports non-text input/output (models.dev modalities). */
+  multimodal?: boolean
 }
 
 export interface RegistryProvider {

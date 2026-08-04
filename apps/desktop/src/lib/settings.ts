@@ -18,12 +18,41 @@ export const THINKING_INTENSITY_OPTIONS: ThinkingIntensity[] = [
 /** Default checkboxes when adding a custom gateway / model */
 export const DEFAULT_CUSTOM_THINKING_SUPPORT: ThinkingIntensity[] = ['off', 'medium']
 
+/**
+ * Linked default thinking level for a model (no per-model default config):
+ * - 默认取「中」(medium)；不支持则取「中上」=「高」(high);
+ * - 只有两档 关+X（关+开 / 关+最高）时不选「关」，取另一档;
+ * - 兜底取最强支持档，仅当只有「关」一档时才返回「关」。
+ */
+export function defaultThinkingFor(supported: ThinkingIntensity[]): ThinkingIntensity {
+  const list =
+    supported.length > 0 ? supported : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
+  if (list.includes('medium')) return 'medium'
+  if (list.includes('high')) return 'high'
+  // 两档 关+X：不要选关，取另一档
+  if (list.length === 2 && list.includes('off')) {
+    return list.find((lv) => lv !== 'off') ?? 'off'
+  }
+  let best: ThinkingIntensity = 'off'
+  let bestRank = -1
+  for (const lv of list) {
+    const rank = THINKING_INTENSITY_OPTIONS.indexOf(lv)
+    if (rank > bestRank) {
+      bestRank = rank
+      best = lv
+    }
+  }
+  return best
+}
+
 export type CustomModelEntry = {
   id: string
   label: string
   contextWindow?: number
   /** Per-model supported thinking levels (design §7.3) */
   thinkingIntensities?: ThinkingIntensity[]
+  toolCall?: boolean
+  multimodal?: boolean
 }
 
 export interface CustomProvider {
@@ -45,6 +74,10 @@ export interface CustomProvider {
    */
   thinkingIntensities?: ThinkingIntensity[]
   models: CustomModelEntry[]
+  /** models.dev import vs hand-built custom gateway */
+  source?: 'custom' | 'models.dev'
+  modelsDevSyncedAt?: string
+  npm?: string
 }
 
 export interface SettingsProvider {
@@ -58,16 +91,40 @@ export interface SettingsProvider {
     tag?: string
     contextWindow?: number
     thinkingIntensities?: ThinkingIntensity[]
+    toolCall?: boolean
+    multimodal?: boolean
   }[]
   configured: boolean
   custom?: boolean
   baseURL?: string
   apiStyle?: string
   contextWindow?: number
-  /** Custom providers only; default true */
+  /** Whether the provider is enabled in model pickers (default true) */
   enabled?: boolean
   /** Resolved supported levels (builtins = full preset; custom falls back) */
   thinkingIntensities?: ThinkingIntensity[]
+  source?: 'custom' | 'models.dev'
+  modelsDevSyncedAt?: string
+  npm?: string
+}
+
+export type ModelsDevProviderSummary = {
+  id: string
+  name: string
+  modelCount: number
+  npm?: string
+  api?: string
+  docsUrl?: string
+  apiStyle: ApiStyle
+  needsBaseURL: boolean
+}
+
+export type ModelsDevMeta = {
+  fetchedAt: string
+  sourceUrl: string
+  providerCount: number
+  bytes: number
+  etag?: string
 }
 
 export interface SettingsPayload {
@@ -81,6 +138,8 @@ export interface SettingsPayload {
     workerTimeouts: WorkerTimeoutSettings
     /** Optional NPM registry for Worker npx; empty = system default */
     npmRegistry?: string
+    /** Built-in catalog provider ids turned off by the user */
+    disabledProviderIds?: string[]
     updatedAt?: string
     customProviders?: CustomProvider[]
   }
@@ -100,6 +159,7 @@ export type SaveSettingsPayload = {
   npmRegistry?: string | null
   secrets?: Record<string, string | null>
   customProviders?: CustomProvider[]
+  disabledProviderIds?: string[]
 }
 
 export async function performDangerZoneAction(action: DangerZoneAction): Promise<{

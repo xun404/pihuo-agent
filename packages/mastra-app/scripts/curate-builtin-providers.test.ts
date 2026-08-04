@@ -60,7 +60,13 @@ describe('curate-builtin-providers', () => {
     }
     const catalog = buildBuiltinCatalog(
       policy,
-      { openai: ['gpt-5.5-pro', 'gpt-5.6', 'gpt-5.4'] },
+      {
+        openai: [
+          { id: 'gpt-5.5-pro', label: 'GPT-5.5 Pro' },
+          { id: 'gpt-5.6', label: 'GPT-5.6' },
+          { id: 'gpt-5.4', label: 'GPT-5.4' },
+        ],
+      },
       '1.0.0',
       '2026-01-01T00:00:00.000Z',
     )
@@ -92,11 +98,54 @@ describe('curate-builtin-providers', () => {
 
     const catalog = buildBuiltinCatalog(
       policy,
-      { openai: ['gpt-5.6'] },
+      { openai: [{ id: 'gpt-5.6', label: 'GPT-5.6' }] },
       '1.0.0',
       '2026-01-01T00:00:00.000Z',
     )
 
     assert.equal(catalog.providers[0]?.baseURL, 'https://api.openai.com/v1')
+  })
+
+  it('carries thinking intensities + models.dev display names from registry info', () => {
+    const policy: BuiltinProvidersPolicy = {
+      version: 1,
+      providers: [
+        {
+          id: 'opencode-go',
+          name: 'OpenCode Go',
+          apiKeyEnv: 'OPENCODE_API_KEY',
+          docsUrl: 'https://example.com',
+          maxModels: 3,
+          includePrefixes: ['deepseek-v4'],
+          excludeSubstrings: [],
+          tagRules: [{ match: '', tag: 'flagship' }],
+          contextWindowDefault: 200000,
+        },
+      ],
+      defaultLeaderPreferPrefixes: ['opencode-go/deepseek-v4'],
+      recommended: [],
+    }
+
+    const catalog = buildBuiltinCatalog(
+      policy,
+      {
+        'opencode-go': [
+          {
+            id: 'deepseek-v4-flash',
+            label: 'DeepSeek V4 Flash (New)',
+            contextWindow: 1000000,
+            thinkingIntensities: ['high', 'max'],
+          },
+        ],
+      },
+      'models.dev',
+      '2026-01-01T00:00:00.000Z',
+    )
+
+    const m = catalog.providers[0]?.models[0]
+    assert.equal(m?.id, 'opencode-go/deepseek-v4-flash')
+    assert.equal(m?.label, 'DeepSeek V4 Flash (New)')
+    assert.equal(m?.contextWindow, 1000000)
+    assert.deepEqual(m?.thinkingIntensities, ['high', 'max'])
   })
 })

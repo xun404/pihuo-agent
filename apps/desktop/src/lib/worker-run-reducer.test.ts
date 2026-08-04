@@ -538,19 +538,19 @@ describe('workerRunReducer', () => {
           }) as any,
         }),
       )
-      assert.strictEqual(
-        workerRunReducer(
-          pending,
-          makeApprovalResolved({
-            approval: makeApprovalItem({
-              id: 'a2',
-              status: 'allowed',
-              createdAt: '2026-07-14T01:00:00.000Z',
-            }) as any,
-          }),
-        ),
+      const unmatchedResolved = workerRunReducer(
         pending,
+        makeApprovalResolved({
+          approval: makeApprovalItem({
+            id: 'a2',
+            status: 'allowed',
+            createdAt: '2026-07-14T01:00:00.000Z',
+          }) as any,
+        }),
       )
+      assert.notStrictEqual(unmatchedResolved, pending)
+      assert.deepEqual(get(unmatchedResolved, 'job-1').pendingApprovals.map((item) => item.id), ['a1'])
+      assert.equal(get(unmatchedResolved, 'job-1').approvalCursors?.['a2']?.resolved, true)
 
       pending = workerRunReducer(withDelta, makeApprovalRequested())
       assert.strictEqual(workerRunReducer(pending, makeDelta({ sequence: 1, delta: 'B' })), pending)
@@ -590,7 +590,159 @@ describe('workerRunReducer', () => {
       assert.equal(entry.pendingApproval, undefined)
     })
 
-    it('unmatched approval_resolved is no-op (same Map reference)', () => {
+    it('keeps every pending approval for a job and only resumes after the last one resolves', () => {
+      let s = workerRunReducer(new Map(), makeStarted())
+      s = workerRunReducer(
+        s,
+        makeApprovalRequested({
+          approval: makeApprovalItem({
+            id: 'a1',
+            createdAt: '2026-07-14T02:00:00.000Z',
+          }),
+        }),
+      )
+      s = workerRunReducer(
+        s,
+        makeApprovalRequested({
+          approval: makeApprovalItem({
+            id: 'a2',
+            createdAt: '2026-07-14T01:00:00.000Z',
+          }),
+        }),
+      )
+
+      const pending = get(s, 'job-1')
+      assert.equal(pending.status, 'pending_approval')
+      assert.deepEqual(pending.pendingApprovals.map((approval) => approval.id), ['a2', 'a1'])
+      assert.equal(pending.pendingApproval?.id, 'a2')
+
+      s = workerRunReducer(
+        s,
+        makeApprovalResolved({
+          approval: makeApprovalItem({ id: 'a2', status: 'allowed', decision: 'allow' }),
+        }),
+      )
+      assert.equal(get(s, 'job-1').status, 'pending_approval')
+      assert.deepEqual(get(s, 'job-1').pendingApprovals.map((approval) => approval.id), ['a1'])
+
+      s = workerRunReducer(
+        s,
+        makeApprovalResolved({
+          approval: makeApprovalItem({ id: 'a1', status: 'allowed', decision: 'allow' }),
+        }),
+      )
+      assert.equal(get(s, 'job-1').status, 'running')
+      assert.deepEqual(get(s, 'job-1').pendingApprovals, [])
+      assert.equal(get(s, 'job-1').pendingApproval, undefined)
+    })
+
+    it('upserts same-id requests and ignores stale requests after a resolution', () => {
+      let s = workerRunReducer(new Map(), makeStarted())
+      const first = makeApprovalItem({ id: 'a1', createdAt: '2026-07-14T01:00:00.000Z' })
+      s = workerRunReducer(s, makeApprovalRequested({ approval: first }))
+      const duplicate = workerRunReducer(s, makeApprovalRequested({ approval: first }))
+      assert.strictEqual(duplicate, s)
+      const upserted = workerRunReducer(
+        s,
+        makeApprovalRequested({ approval: makeApprovalItem({ ...first, detail: 'same request' }) }),
+      )
+      assert.notStrictEqual(upserted, s)
+      assert.equal(upserted.get('job-1')?.pendingApprovals[0]?.detail, 'same request')
+
+      s = workerRunReducer(
+        upserted,
+        makeApprovalResolved({
+          approval: makeApprovalItem({ id: 'a1', status: 'allowed', decision: 'allow' }),
+        }),
+      )
+      const stale = workerRunReducer(s, makeApprovalRequested({ approval: first }))
+      assert.strictEqual(stale, s)
+      assert.deepEqual(get(stale, 'job-1').pendingApprovals, [])
+    })
+
+    it('keeps a resolved tombstone when resolution arrives before its request', () => {
+      let s = workerRunReducer(new Map(), makeStarted())
+      s = workerRunReducer(
+        s,
+        makeApprovalResolved({
+          approval: makeApprovalItem({
+            id: 'out-of-order',
+            status: 'allowed',
+            decision: 'allow',
+            createdAt: '2026-07-14T01:00:00.000Z',
+          }),
+        }),
+      )
+
+      const afterResolved = get(s, 'job-1')
+      assert.equal(afterResolved.status, 'running')
+      assert.deepEqual(afterResolved.pendingApprovals, [])
+      assert.equal(afterResolved.approvalCursors?.['out-of-order']?.resolved, true)
+
+      const staleRequest = workerRunReducer(
+        s,
+        makeApprovalRequested({
+          approval: makeApprovalItem({
+            id: 'out-of-order',
+            status: 'pending',
+            createdAt: '2026-07-14T01:00:00.000Z',
+          }),
+        }),
+      )
+      assert.strictEqual(staleRequest, s)
+      assert.deepEqual(get(staleRequest, 'job-1').pendingApprovals, [])
+    })
+
+    it('keeps an out-of-order resolved tombstone while another approval is pending', () => {
+      let s = workerRunReducer(new Map(), makeStarted())
+      s = workerRunReducer(
+        s,
+        makeApprovalRequested({
+          approval: makeApprovalItem({
+            id: 'already-pending',
+            createdAt: '2026-07-14T02:00:00.000Z',
+          }),
+        }),
+      )
+
+      s = workerRunReducer(
+        s,
+        makeApprovalResolved({
+          approval: makeApprovalItem({
+            id: 'resolved-before-request',
+            status: 'allowed',
+            decision: 'allow',
+            createdAt: '2026-07-14T01:00:00.000Z',
+          }),
+        }),
+      )
+
+      const afterResolved = get(s, 'job-1')
+      assert.equal(afterResolved.status, 'pending_approval')
+      assert.deepEqual(
+        afterResolved.pendingApprovals.map((approval) => approval.id),
+        ['already-pending'],
+      )
+      assert.equal(afterResolved.approvalCursors?.['resolved-before-request']?.resolved, true)
+
+      const staleRequest = workerRunReducer(
+        s,
+        makeApprovalRequested({
+          approval: makeApprovalItem({
+            id: 'resolved-before-request',
+            status: 'pending',
+            createdAt: '2026-07-14T01:00:00.000Z',
+          }),
+        }),
+      )
+      assert.strictEqual(staleRequest, s)
+      assert.deepEqual(
+        get(staleRequest, 'job-1').pendingApprovals.map((approval) => approval.id),
+        ['already-pending'],
+      )
+    })
+
+    it('records an unmatched approval_resolved tombstone without changing pending items', () => {
       let s = workerRunReducer(new Map(), makeStarted())
       s = workerRunReducer(
         s,
@@ -606,11 +758,14 @@ describe('workerRunReducer', () => {
         makeApprovalResolved({
           approval: makeApprovalItem({
             id: 'a2',
+            status: 'allowed',
             createdAt: '2026-07-14T01:00:00.000Z',
           }) as any,
         }),
       )
-      assert.strictEqual(s2, s)
+      assert.notStrictEqual(s2, s)
+      assert.deepEqual(get(s2, 'job-1').pendingApprovals.map((approval) => approval.id), ['a1'])
+      assert.equal(get(s2, 'job-1').approvalCursors?.['a2']?.resolved, true)
     })
 
     it('terminal event clears pending_approval', () => {
@@ -620,6 +775,7 @@ describe('workerRunReducer', () => {
       const entry = get(s, 'job-1')
       assert.equal(entry.status, 'completed')
       assert.equal(entry.pendingApproval, undefined)
+      assert.deepEqual(entry.pendingApprovals, [])
     })
 
     it('terminal failed event clears pending_approval', () => {
@@ -629,6 +785,7 @@ describe('workerRunReducer', () => {
       const entry = get(s, 'job-1')
       assert.equal(entry.status, 'failed')
       assert.equal(entry.pendingApproval, undefined)
+      assert.deepEqual(entry.pendingApprovals, [])
     })
 
     it('repeated approval_requested is idempotent', () => {
@@ -1008,6 +1165,82 @@ describe('workerRunReducer', () => {
       assert.equal(j2.pendingApproval, undefined)
     })
 
+    it('treats all pending rows for the same job as authoritative over resolved cursors', () => {
+      let s = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
+      s = workerRunReducer(
+        s,
+        makeApprovalRequested({
+          jobId: 'j1',
+          approval: makeApprovalItem({
+            id: 'a1',
+            jobId: 'j1',
+            createdAt: '2026-07-14T01:00:00.000Z',
+          }),
+        }),
+      )
+      s = workerRunReducer(
+        s,
+        makeApprovalResolved({
+          jobId: 'j1',
+          approval: makeApprovalItem({
+            id: 'a1',
+            jobId: 'j1',
+            status: 'allowed',
+            decision: 'allow',
+          }),
+        }),
+      )
+
+      const result = seedApprovalsFromSnapshot(s, [
+        makeApprovalItem({
+          id: 'a2',
+          jobId: 'j1',
+          status: 'pending',
+          createdAt: '2026-07-14T03:00:00.000Z',
+        }),
+        makeApprovalItem({
+          id: 'a3',
+          jobId: 'j1',
+          status: 'pending',
+          createdAt: '2026-07-14T02:00:00.000Z',
+        }),
+        makeApprovalItem({
+          id: 'a1',
+          jobId: 'j1',
+          status: 'allowed',
+          decision: 'allow',
+        }),
+      ])
+
+      assert.equal(get(result, 'j1').status, 'pending_approval')
+      assert.deepEqual(get(result, 'j1').pendingApprovals.map((approval) => approval.id), [
+        'a3',
+        'a2',
+      ])
+      assert.equal(get(result, 'j1').pendingApproval?.id, 'a3')
+    })
+
+    it('clears all live pending rows when a complete snapshot has only resolved rows', () => {
+      let s = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
+      s = workerRunReducer(
+        s,
+        makeApprovalRequested({
+          jobId: 'j1',
+          approval: makeApprovalItem({ id: 'a1', jobId: 'j1' }),
+        }),
+      )
+      const result = seedApprovalsFromSnapshot(s, [
+        makeApprovalItem({
+          id: 'a1',
+          jobId: 'j1',
+          status: 'cancelled',
+          decision: 'cancel',
+        }),
+      ])
+      assert.equal(get(result, 'j1').status, 'running')
+      assert.deepEqual(get(result, 'j1').pendingApprovals, [])
+    })
+
     it('skips non-actionable snapshot rows (not pending, no jobId, unknown/terminal jobs)', () => {
       const running = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
       const nonPending = seedApprovalsFromSnapshot(running, [
@@ -1041,7 +1274,7 @@ describe('workerRunReducer', () => {
       )
     })
 
-    it('skips workers that are already pending_approval', () => {
+    it('treats the complete snapshot as authoritative for an already pending worker', () => {
       let s = workerRunReducer(new Map(), makeStarted({ jobId: 'j1' }))
       // Live event sets approval-1; pin createdAt so snapshot re-seed cannot race by 1ms.
       const liveAt = '2026-07-14T12:00:00.000Z'
@@ -1058,7 +1291,8 @@ describe('workerRunReducer', () => {
         }),
       )
       assert.equal(s.get('j1')!.status, 'pending_approval')
-      // Same-or-older snapshot row must not thrash the live pending card.
+      // Snapshot rows are authoritative for the whole Job, even when the live
+      // stream currently carries a different pending id.
       const approvals: ApprovalItem[] = [
         makeApprovalItem({
           id: 'a1',
@@ -1068,8 +1302,8 @@ describe('workerRunReducer', () => {
         }),
       ]
       const result = seedApprovalsFromSnapshot(s, approvals)
-      assert.strictEqual(result, s)
-      assert.equal(result.get('j1')!.pendingApproval!.id, 'approval-1')
+      assert.notStrictEqual(result, s)
+      assert.equal(result.get('j1')!.pendingApproval!.id, 'a1')
     })
 
     it('returns a new Map on change', () => {
@@ -1191,8 +1425,9 @@ describe('workerRunReducer', () => {
           }),
         }),
       )
-      assert.strictEqual(result, s)
+      assert.notStrictEqual(result, s)
       assert.equal(get(result, 'j1').pendingApproval?.id, 'new-pending')
+      assert.equal(get(result, 'j1').approvalCursors?.['old-resolved']?.resolved, true)
     })
 
     it('pending snapshot on already-resolved job is no-op when snapshot includes resolution', () => {

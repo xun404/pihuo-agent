@@ -87,9 +87,9 @@ describe('Settings Danger Zone', () => {
   })
 
   it('uses the requested Danger Zone title in every locale', () => {
-    assert.equal(catalogs.zh['settings.danger.title'], '危险区域')
-    assert.equal(catalogs['zh-TW']['settings.danger.title'], '危險區域')
-    assert.equal(catalogs.en['settings.danger.title'], 'Danger Zone')
+    assert.equal(catalogs.zh['settings.danger.title'], '危险操作')
+    assert.equal(catalogs['zh-TW']['settings.danger.title'], '危險操作')
+    assert.equal(catalogs.en['settings.danger.title'], 'Dangerous actions')
     assert.doesNotMatch(catalogs.en['settings.danger.title'], /Advanced/u)
   })
 

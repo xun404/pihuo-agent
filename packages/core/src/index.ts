@@ -36,6 +36,7 @@ export {
   resolveApprovalInQueue,
   listPendingApprovals,
   mapAcpPermissionToEnqueue,
+  type CreateJobApprovalInput,
   type EnqueueApprovalInput,
   type ResolveApprovalInput,
 } from './approvals.js'
@@ -83,7 +84,6 @@ export {
   globalApprovalWaiters,
   waitForApprovalDecision,
   type ApprovalWaitOutcome,
-  type WaitForApprovalOptions,
 } from './approval-wait.js'
 export {
   ActivityLog,
@@ -136,6 +136,30 @@ export {
   type RegistrySnapshot,
   type LoadRegistryResult,
 } from './registry-snapshot.js'
+export {
+  MODELS_DEV_API_URL_DEFAULT,
+  MODELS_DEV_LOGO_URL,
+  modelsDevCatalogPaths,
+  loadModelsDevMeta,
+  loadModelsDevRegistry,
+  refreshModelsDevCatalog,
+  listModelsDevProviders,
+  buildCustomProviderFromModelsDev,
+  deriveTransportFromModelsDev,
+  mapModelsDevModel,
+  modelThinkingIntensitiesFromModelsDev,
+  providerSummary,
+  providerLogoCachePath,
+  readCachedProviderLogo,
+  ensureProviderLogoCached,
+  type ModelsDevMeta,
+  type ModelsDevProviderRaw,
+  type ModelsDevModelRaw,
+  type ModelsDevProviderSummary,
+  type ModelsDevCatalogPaths,
+  type RefreshModelsDevResult,
+  type ImportModelsDevErrorCode,
+} from './models-dev-catalog.js'
 export {
   applyFeaturedPolicy,
   type FeaturedPolicyEntry,
@@ -191,6 +215,7 @@ export {
   type CustomProviderSettings,
   type CustomProviderModel,
   type CustomApiStyle,
+  normalizeDisabledProviderIds,
 } from './secure-secrets.js'
 export {
   listWorkerSecretKeyNames,

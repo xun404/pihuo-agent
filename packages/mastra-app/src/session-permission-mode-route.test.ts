@@ -20,6 +20,36 @@ describe('Session permission mode route contract', () => {
     }
   })
 
+  it('returns the complete mutation result from Owner and Studio routes', () => {
+    for (const source of [owner, studio]) {
+      for (const route of ['approval-policy', 'permission-mode']) {
+        const start = source.indexOf(`/api/sessions/:id/${route}`)
+        assert.notEqual(start, -1)
+        const block = source.slice(start, start + 2_400)
+        assert.match(block, /\{\s*session,\s*approvals,\s*failures\s*\}/u)
+        assert.match(block, /\{\s*session,\s*approvals,\s*failures,\s*snapshot:/u)
+      }
+    }
+  })
+
+  it('keeps modern source validation strict and legacy route provenance explicit', () => {
+    for (const source of [owner, studio]) {
+      assert.match(source, /manual_chat/u)
+      assert.match(source, /manual_panel/u)
+      const start = source.indexOf('/api/sessions/:id/approval-policy')
+      const block = source.slice(start, start + 2_000)
+      assert.match(block, /source:\s*['"]migration['"]/u)
+    }
+  })
+
+  it('redacts unexpected legacy mutation failures at both HTTP surfaces', () => {
+    for (const source of [owner, studio]) {
+      const start = source.indexOf('/api/sessions/:id/approval-policy')
+      const block = source.slice(start, start + 2_400)
+      assert.match(block, /Internal server error/u)
+    }
+  })
+
   it('maps the legacy approval-policy route through the live permission service', () => {
     for (const source of [owner, studio]) {
       const start = source.indexOf('/api/sessions/:id/approval-policy')

@@ -1734,6 +1734,10 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .worker-action-error .worker-card-auth-hint {
   margin-top: 4px;
 }
+.worker-card-runtime-hint {
+  display: block;
+  margin-top: 4px;
+}
 .worker-action-approval-controls.approval-row {
   margin-top: 6px;
   padding: 6px 0 0;

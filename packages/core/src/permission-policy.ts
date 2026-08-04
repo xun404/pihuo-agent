@@ -59,9 +59,6 @@ const KNOWN_TOOL_KINDS = new Set<AcpToolKind>([
   'other',
 ])
 
-const READ_ONLY_KINDS = new Set<AcpToolKind>(['read', 'search', 'think', 'fetch'])
-const SCOPED_MUTATION_KINDS = new Set<AcpToolKind>(['edit', 'move', 'delete', 'execute'])
-
 function preferredAllowOption(options: PermissionOption[]): PermissionOption | undefined {
   return (
     options.find((option) => option.kind === 'allow_once') ??
@@ -71,12 +68,14 @@ function preferredAllowOption(options: PermissionOption[]): PermissionOption | u
 
 export function decidePermission(input: DecidePermissionInput): PermissionDecision {
   const kind = KNOWN_TOOL_KINDS.has(input.toolKind) ? input.toolKind : 'other'
-  const allow = preferredAllowOption(input.options)
-  if (!allow) {
-    return { mode: 'cancelled', reason: `no allow option available for ${kind}` }
-  }
-
   if (input.permissionMode === 'auto') {
+    const allow = preferredAllowOption(input.options)
+    if (!allow) {
+      return {
+        mode: 'manual',
+        reason: `auto permission mode cannot select an allow option for ${kind}; durable approval must fail closed`,
+      }
+    }
     return {
       mode: 'automatic',
       option: allow,
@@ -85,26 +84,11 @@ export function decidePermission(input: DecidePermissionInput): PermissionDecisi
     }
   }
 
-  if (READ_ONLY_KINDS.has(kind)) {
-    return {
-      mode: 'automatic',
-      option: allow,
-      decision: 'allow',
-      reason: `default permission mode allows non-changing ${kind} with ${allow.kind}`,
-    }
-  }
-
-  if (SCOPED_MUTATION_KINDS.has(kind) && input.targetScope === 'inside_project') {
-    return {
-      mode: 'automatic',
-      option: allow,
-      decision: 'allow',
-      reason: `default permission mode allows project-local ${kind} with ${allow.kind}`,
-    }
-  }
-
   return {
     mode: 'manual',
-    reason: `default permission mode requires approval for ${kind} scope ${input.targetScope}`,
+    // This function runs only after the Agent has decided to emit an ACP
+    // requestPermission call. Safe operations that the Agent handles itself
+    // never enter this policy function and must not be reclassified here.
+    reason: `the Agent requested manual approval (${kind}, scope ${input.targetScope})`,
   }
 }

@@ -113,6 +113,7 @@ describe('ACP registry shared types', () => {
       errorCode: 'WORKER_AUTH_REQUIRED',
       startedAt: Date.now(),
       lastDeltaAt: Date.now(),
+      pendingApprovals: [],
     }
     assert.equal(state.errorCode, 'WORKER_AUTH_REQUIRED')
   })

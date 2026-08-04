@@ -27,6 +27,15 @@ export interface EnqueueApprovalInput {
 }
 
 /**
+ * Input for the job-bound approval transaction.  `jobId` is required here
+ * because creating a permission request for a Worker job must update the
+ * Approval queue and the Job lifecycle together.
+ */
+export interface CreateJobApprovalInput extends EnqueueApprovalInput {
+  jobId: string
+}
+
+/**
  * Pure: build a pending approval item (does not mutate store).
  */
 export function createApprovalItem(input: EnqueueApprovalInput): ApprovalItem {

@@ -154,7 +154,6 @@ describe('secure-secrets', () => {
     const prev = loadSettings()
     const workerTimeouts = {
       jobTimeoutMs: 1_200_000,
-      approvalTimeoutMs: 180_000,
       queueTimeoutMs: 900_000,
     }
     try {
@@ -183,6 +182,20 @@ describe('secure-secrets', () => {
       })
       assert.equal(next.customProviders?.[0]?.enabled, false)
       assert.equal(loadSettings().customProviders?.[0]?.enabled, false)
+    } finally {
+      saveSettings(prev)
+    }
+  })
+
+  it('persists disabledProviderIds for built-in catalog toggles', () => {
+    const prev = loadSettings()
+    try {
+      const next = saveSettings({
+        ...prev,
+        disabledProviderIds: ['opencode-go', 'opencode-go', ''],
+      })
+      assert.deepEqual(next.disabledProviderIds, ['opencode-go'])
+      assert.deepEqual(loadSettings().disabledProviderIds, ['opencode-go'])
     } finally {
       saveSettings(prev)
     }

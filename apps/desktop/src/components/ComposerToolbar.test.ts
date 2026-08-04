@@ -3,8 +3,8 @@
  *
  * The toolbar component itself depends on the i18n context + framer-motion, so
  * a full DOM render test is deferred to the live React harness. What we can
- * unit-test here is its pure `clampThink` helper — the policy that picks the
- * default thinking intensity for a model.
+ * unit-test here is its pure `defaultThinkingFor` helper — the policy that
+ * picks the linked default thinking intensity for a model.
  *
  * Live interaction coverage (menu open/close, preset passthrough into a new
  * session, regression vs ChatPanel) is verified via CDP against the running
@@ -14,53 +14,48 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { clampThink } from './ComposerToolbar.js'
+import { defaultThinkingFor } from '../lib/settings.js'
 
 const toolbarSource = readFileSync(new URL('./ComposerToolbar.tsx', import.meta.url), 'utf8')
 const chatPanelSource = readFileSync(new URL('./ChatPanel.tsx', import.meta.url), 'utf8')
 
-describe('clampThink', () => {
+describe('defaultThinkingFor', () => {
   it('returns "off" when supported is empty AND THINKING_INTENSITY_OPTIONS has no levels', () => {
     // THINKING_INTENSITY_OPTIONS is non-empty in practice, but the "no levels"
     // branch still defaults to 'off'. Here we just assert the empty-supported
-    // fallback uses the global ladder's highest.
-    const r = clampThink(undefined, [])
-    // fallback ladder = THINKING_INTENSITY_OPTIONS = [off, low, medium, high, xhigh, max]
-    // highest index wins → 'max'
-    assert.equal(r, 'max')
+    // fallback uses the global ladder's lowest level ≥ medium → 'medium'.
+    const r = defaultThinkingFor([])
+    assert.equal(r, 'medium')
   })
 
-  it('picks the highest-ranked level from the supported list', () => {
-    // supported has low + high → high wins (index 3 > index 1)
-    assert.equal(clampThink(undefined, ['low', 'high']), 'high')
+  it('picks 中 (medium) as the linked default when supported', () => {
+    assert.equal(defaultThinkingFor(['low', 'medium', 'high']), 'medium')
+    assert.equal(defaultThinkingFor(['off', 'medium', 'max']), 'medium')
   })
 
-  it('picks xhigh over high when both supported', () => {
-    assert.equal(clampThink(undefined, ['high', 'xhigh']), 'xhigh')
+  it('picks 高 (high) when 中 is unsupported (中上)', () => {
+    assert.equal(defaultThinkingFor(['low', 'high']), 'high')
+    assert.equal(defaultThinkingFor(['off', 'high', 'max']), 'high')
   })
 
-  it('picks max when supported contains max', () => {
-    assert.equal(clampThink(undefined, ['off', 'low', 'medium', 'high', 'xhigh', 'max']), 'max')
+  it('picks the strongest level for sparse support without 中/高', () => {
+    assert.equal(defaultThinkingFor(['off', 'max']), 'max')
+    assert.equal(defaultThinkingFor(['xhigh', 'max']), 'max')
+    assert.equal(defaultThinkingFor(['off', 'xhigh']), 'xhigh')
   })
 
-  it('returns the only supported level when a single-item list is given', () => {
-    assert.equal(clampThink(undefined, ['low']), 'low')
-  })
-
-  it('ignores the preferred argument — always uses highest of supported (matches ChatPanel behavior)', () => {
-    // The signature accepts _preferred for parity but does NOT honor it; this
-    // is the intentional "always default to the strongest supported" policy.
-    assert.equal(clampThink('off', ['low', 'high']), 'high')
-    assert.equal(clampThink('max', ['low']), 'low')
+  it('never picks 关 for two-level models (关+开 / 关+最高)', () => {
+    assert.equal(defaultThinkingFor(['off', 'max']), 'max')
+    assert.equal(defaultThinkingFor(['off', 'low']), 'low')
   })
 
   it('handles a single "off" entry', () => {
-    assert.equal(clampThink(undefined, ['off']), 'off')
+    assert.equal(defaultThinkingFor(['off']), 'off')
   })
 
   it('ignores unsupported levels not in THINKING_INTENSITY_OPTIONS', () => {
     // Unknown levels get indexOf = -1, never win over real ones.
-    assert.equal(clampThink(undefined, ['bogus', 'low', 'high']), 'high')
+    assert.equal(defaultThinkingFor(['bogus', 'low', 'high']), 'high')
   })
 })
 

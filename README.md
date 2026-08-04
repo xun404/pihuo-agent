@@ -59,7 +59,9 @@ Watch each job stream in place — tool calls, terminal output, and final status
 
 ### Approvals you control
 
-ACP permission requests surface in chat and the side panel. Each Session has a two-state shield: **Default** permits reads everywhere and project-local changes, while changes outside the project or with unknown scope require approval; **Auto-accept** selects an allow option for every request that provides one. Changes apply immediately to running and pending work.
+ACP permission requests surface in chat and the side panel. The called Agent remains responsible for its own direct operations, such as reads or project-local edits it already considers safe. Each Session has a two-state shield: **Default** leaves permission requests emitted by the Agent for manual approval; **Auto-accept** sends those requests through the same durable approval path and immediately selects an allow option. Changes apply immediately to running and pending work.
+
+Auto-accept applies only to the current Session and prefers the Agent's `allow_once` option. Enabling the warning-colored shield immediately accepts every currently pending permission in that Session and affects future ACP requests in real time; the mutation response also reports which items were resolved and which failed, and the shield/approval panel shows the current Session's remaining pending and failed counts, so a partial failure cannot look like a clean success. Disabling it affects the next request immediately. Permissions have no approval timeout and remain pending until the user responds, enables auto-accept, cancels them, or terminates the Job; the active Job timer pauses while approval is pending, while pending Jobs still consume ACP capacity. If an Agent offers `allow_always`, that Agent—not SwarmDesk—controls its scope and lifetime, and turning the shield off cannot generically revoke an Agent-side grant. If the runtime restarts, the pending approval is cancelled and the task is marked `RUNTIME_RESTARTED`; run the task again manually.
 
 This policy is an application-level ACP approval boundary, not an OS sandbox. It does not intercept direct system calls made by an Agent process.
 

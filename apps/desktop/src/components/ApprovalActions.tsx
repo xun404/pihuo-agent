@@ -33,6 +33,8 @@ export function ApprovalActions({
     (o) => o.kind === 'reject_once' || o.kind === 'reject_always',
   )
   const hasNoOptions = allowOptions.length === 0 && rejectOptions.length === 0
+  const hasUnknownScope = !approval.locations || approval.locations.length === 0
+  const hasAgentAlways = allowOptions.some((option) => option.kind === 'allow_always')
 
   const handleResolve = (optionId: string | undefined, decision: 'allow' | 'deny' | 'cancel') => {
     if (isResolving) return
@@ -42,6 +44,12 @@ export function ApprovalActions({
   if (variant === 'wireframe') {
     return (
       <>
+        {hasUnknownScope && (
+          <div className="approval-scope-hint">{t('approvals.unknownScope')}</div>
+        )}
+        {hasAgentAlways && (
+          <div className="approval-agent-hint">{t('approvals.agentAlwaysHint')}</div>
+        )}
         {hasNoOptions ? (
           <span className="approval-no-options">{t('approvals.noOptions')}</span>
         ) : (
@@ -70,12 +78,24 @@ export function ApprovalActions({
             ))}
           </>
         )}
+        <button
+          type="button"
+          className="btn"
+          disabled={isResolving}
+          onClick={() => handleResolve(undefined, 'cancel')}
+        >
+          {t('approvals.cancel')}
+        </button>
       </>
     )
   }
 
   return (
     <div className="approval-actions">
+      {hasUnknownScope && <div className="approval-scope-hint">{t('approvals.unknownScope')}</div>}
+      {hasAgentAlways && (
+        <div className="approval-agent-hint">{t('approvals.agentAlwaysHint')}</div>
+      )}
       {hasNoOptions ? (
         <div className="approval-no-options">{t('approvals.noOptions')}</div>
       ) : (
@@ -112,6 +132,16 @@ export function ApprovalActions({
           )}
         </>
       )}
+      <div className="approval-actions-group">
+        <button
+          type="button"
+          className="approval-actions-btn approval-actions-btn-cancel"
+          disabled={isResolving}
+          onClick={() => handleResolve(undefined, 'cancel')}
+        >
+          {t('approvals.cancel')}
+        </button>
+      </div>
     </div>
   )
 }

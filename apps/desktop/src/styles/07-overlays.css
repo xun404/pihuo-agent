@@ -103,6 +103,28 @@
 .toast-msg {
   display: block;
 }
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.toast-action {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+  color: var(--text-1);
+  background: var(--bg-hover);
+  font: inherit;
+  cursor: pointer;
+}
+.toast-action:hover {
+  background: var(--bg-active);
+}
+.toast-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .toast-success {
   border-color: color-mix(in srgb, var(--green) 28%, var(--border-soft));
   background: color-mix(in srgb, var(--green) 8%, var(--bg-surface));
@@ -456,6 +478,9 @@
   justify-content: center;
   flex-shrink: 0;
   overflow: hidden;
+  /* Neutral chip — models.dev logos are monochrome currentColor, not multi-color brand art */
+  background: var(--bg-input);
+  color: var(--text-1);
 }
 .settings-rail-text {
   flex: 1;

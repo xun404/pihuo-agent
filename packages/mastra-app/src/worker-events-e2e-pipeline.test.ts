@@ -27,6 +27,7 @@ import type {
   WorkerKind,
   ApprovalItem,
 } from '@swarmdesk-agent/shared'
+import { sortPendingApprovals } from '@swarmdesk-agent/shared'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -144,6 +145,7 @@ function makeInitialState(event: WorkerRunEvent & { type: 'started' }): WorkerRu
     truncated: false,
     startedAt: Date.now(),
     lastDeltaAt: Date.now(),
+    pendingApprovals: [],
   }
 }
 
@@ -163,20 +165,41 @@ function applyEventToState(state: WorkerRunState, event: WorkerRunEvent): Worker
     }
     case 'approval_requested': {
       const e = event as WorkerRunEvent & { type: 'approval_requested' }
+      const pendingApprovals = Array.isArray(state.pendingApprovals)
+        ? state.pendingApprovals
+        : state.pendingApproval
+          ? [state.pendingApproval]
+          : []
+      const existing = pendingApprovals.findIndex((approval) => approval.id === e.approval.id)
+      const nextPending = sortPendingApprovals(
+        existing >= 0
+          ? pendingApprovals.map((approval, index) => (index === existing ? e.approval : approval))
+          : [...pendingApprovals, e.approval],
+      )
       return {
         ...state,
         status: 'pending_approval',
-        pendingApproval: e.approval,
+        pendingApprovals: nextPending,
+        pendingApproval: nextPending[0],
         lastDeltaAt: Date.now(),
       }
     }
     case 'approval_resolved': {
       const e = event as WorkerRunEvent & { type: 'approval_resolved' }
-      if (state.pendingApproval?.id === e.approval.id) {
-        const { pendingApproval: _pa, ...rest } = state
-        return { ...rest, status: 'running', lastDeltaAt: Date.now() }
+      const pendingApprovals = Array.isArray(state.pendingApprovals)
+        ? state.pendingApprovals
+        : state.pendingApproval
+          ? [state.pendingApproval]
+          : []
+      if (!pendingApprovals.some((approval) => approval.id === e.approval.id)) return state
+      const nextPending = pendingApprovals.filter((approval) => approval.id !== e.approval.id)
+      return {
+        ...state,
+        status: nextPending.length > 0 ? 'pending_approval' : 'running',
+        pendingApprovals: nextPending,
+        pendingApproval: nextPending[0],
+        lastDeltaAt: Date.now(),
       }
-      return state
     }
     case 'completed':
       return {
@@ -185,6 +208,7 @@ function applyEventToState(state: WorkerRunState, event: WorkerRunEvent): Worker
         status: 'completed',
         truncated: event.truncated,
         lastDeltaAt: Date.now(),
+        pendingApprovals: [],
         pendingApproval: undefined,
       }
     case 'failed':
@@ -197,6 +221,7 @@ function applyEventToState(state: WorkerRunState, event: WorkerRunEvent): Worker
         truncated: event.truncated,
         error: event.error,
         lastDeltaAt: Date.now(),
+        pendingApprovals: [],
         pendingApproval: undefined,
       }
     default:
@@ -352,6 +377,27 @@ async function runFullPipeline(
   const workerStates = new Map<string, WorkerRunState>()
   simulateOnData(writtenParts, workerStates)
 
+  return { rawEvents, writtenParts, workerStates }
+}
+
+/** Collect a deliberately non-terminal stream for assertions about in-flight state. */
+function runPartialPipeline(
+  emitter: WorkerEventEmitter,
+  jobId: string,
+  events: WorkerRunEvent[],
+): {
+  rawEvents: WorkerRunEvent[]
+  writtenParts: WrittenPart[]
+  workerStates: Map<string, WorkerRunState>
+} {
+  const collector = new EventCollector(jobId, emitter)
+  collector.start()
+  for (const event of events) emitWorkerEvent(jobId, event)
+  const rawEvents = collector.getEvents()
+  collector.stop()
+  const writtenParts = runBridgeSync(jobId, rawEvents)
+  const workerStates = new Map<string, WorkerRunState>()
+  simulateOnData(writtenParts, workerStates)
   return { rawEvents, writtenParts, workerStates }
 }
 
@@ -755,6 +801,35 @@ describe('E2E Pipeline — emitter → bridge → writer → onData → WorkerRu
       assert.equal(state!.output, 'resumed work')
       // pendingApproval should have been cleared by terminal
       assert.equal(state!.pendingApproval, undefined)
+    })
+
+    it('keeps a second pending approval visible when the first resolves', () => {
+      const { workerStates } = runPartialPipeline(emitter, 'job_parallel_approval', [
+        makeStarted({ jobId: 'job_parallel_approval' }),
+        makeApprovalRequestedE2e(
+          { approval: makeApprovalItem({ id: 'a1', jobId: 'job_parallel_approval' }) } as any,
+          'job_parallel_approval',
+        ),
+        makeApprovalRequestedE2e(
+          { approval: makeApprovalItem({ id: 'a2', jobId: 'job_parallel_approval' }) } as any,
+          'job_parallel_approval',
+        ),
+        makeApprovalResolvedE2e(
+          {
+            approval: makeApprovalItem({
+              id: 'a1',
+              status: 'allowed',
+              jobId: 'job_parallel_approval',
+            }),
+          } as any,
+          'job_parallel_approval',
+        ),
+      ])
+
+      const state = workerStates.get('job_parallel_approval')
+      assert.ok(state)
+      assert.equal(state!.status, 'pending_approval')
+      assert.deepEqual(state!.pendingApprovals.map((approval) => approval.id), ['a2'])
     })
 
     it('multiple approval rounds in pipeline', async () => {

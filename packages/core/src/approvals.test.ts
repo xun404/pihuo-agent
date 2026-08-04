@@ -278,7 +278,7 @@ describe('LocalStore approvals', () => {
     })
     const timeout = store.tryResolveApproval(item.id, 'cancel', undefined, {
       resolutionSource: 'system',
-      resolutionReason: 'Approval timed out',
+      resolutionReason: 'Approval cancelled by system',
     })
 
     assert.equal(manual.resolved, true)
@@ -327,5 +327,81 @@ describe('LocalStore approvals', () => {
     const resolved = store.resolveApproval(pending.id, 'allow', 'allow_once')
     assert.equal(resolved.status, 'allowed')
     assert.equal(store.listPendingApprovals().length, 0)
+  })
+
+  it('creates and resolves multiple Job approvals atomically in either order', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ra-store-'))
+    const store = new LocalStore(join(dir, 'state.json'))
+    const project = store.upsertProject({ name: 'multi-approval', rootPath: dir })
+    const session = store.createSession({ projectId: project.id, title: 'multi-approval' })
+    const job = store.createJob({
+      sessionId: session.id,
+      projectId: project.id,
+      workerId: 'worker-1',
+      workerName: 'Worker',
+      task: 'two approvals',
+      cwd: dir,
+      source: 'api',
+      status: 'running',
+    })
+
+    const first = store.createJobApproval({
+      id: 'approval-first',
+      jobId: job.id,
+      sessionId: session.id,
+      title: 'First request',
+      options: approvalOptions(),
+    })
+    const second = store.createJobApproval({
+      id: 'approval-second',
+      jobId: job.id,
+      sessionId: session.id,
+      title: 'Second request',
+      options: approvalOptions(),
+    })
+
+    const pendingJob = store.getJob(job.id)
+    assert.equal(pendingJob?.status, 'pending_approval')
+    assert.deepEqual(pendingJob?.approvalIds, [first.id, second.id])
+
+    const secondResult = store.tryResolveJobApproval(second.id, 'allow', 'allow_once')
+    assert.equal(secondResult.resolved, true)
+    assert.equal(store.getJob(job.id)?.status, 'pending_approval')
+
+    const firstResult = store.tryResolveJobApproval(first.id, 'deny', 'reject_once')
+    assert.equal(firstResult.resolved, true)
+    assert.equal(store.getJob(job.id)?.status, 'running')
+    assert.equal(store.listPendingApprovals().length, 0)
+  })
+
+  it('does not leave an orphan Approval when the owning Job is terminal', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ra-store-'))
+    const store = new LocalStore(join(dir, 'state.json'))
+    const project = store.upsertProject({ name: 'closed-job', rootPath: dir })
+    const session = store.createSession({ projectId: project.id, title: 'closed-job' })
+    const job = store.createJob({
+      sessionId: session.id,
+      projectId: project.id,
+      workerId: 'worker-1',
+      workerName: 'Worker',
+      task: 'already done',
+      cwd: dir,
+      source: 'api',
+      status: 'succeeded',
+    })
+
+    assert.throws(
+      () =>
+        store.createJobApproval({
+          id: 'orphan-attempt',
+          jobId: job.id,
+          sessionId: session.id,
+          title: 'Should not persist',
+          options: approvalOptions(),
+        }),
+      /already succeeded/,
+    )
+    assert.equal(store.snapshot().approvals.length, 0)
+    assert.equal(store.getJob(job.id)?.status, 'succeeded')
   })
 })

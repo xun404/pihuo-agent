@@ -22,7 +22,7 @@ import type { PendingNewSession } from '../hooks/useAppState'
 import { api, abortChatRun, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
 import { ThrottledChat } from '../lib/throttled-chat'
 import { useI18n } from '../i18n/I18nProvider'
-import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
+import { THINKING_INTENSITY_OPTIONS, defaultThinkingFor, type ThinkingIntensity } from '../lib/settings'
 import { formatChatError, serializeChatErrorForSticky } from '../lib/chat-errors'
 import { enrichLastUserMessageForWire, parseRouterUserMessage } from '../lib/user-message-display'
 import { MarkdownContent } from './MarkdownContent'
@@ -55,6 +55,7 @@ import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-s
 import { findLatestTaskList } from '../lib/find-latest-task-list'
 import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
+import { approvalsForSession } from '../lib/session-approvals'
 import {
   findCurrentTurnAssistant,
   formatClockTime,
@@ -101,25 +102,6 @@ type ModelOption = {
  * option order are ignored — we always default to the strongest level the
  * model actually supports. Empty supported → 'off'.
  */
-function clampThink(
-  _preferred: ThinkingIntensity | undefined,
-  supported: ThinkingIntensity[],
-): ThinkingIntensity {
-  const list =
-    supported.length > 0 ? supported : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
-  // THINKING_INTENSITY_OPTIONS is ordered low→high; pick the highest supported.
-  let best: ThinkingIntensity = 'off'
-  let bestRank = -1
-  for (const lv of list) {
-    const rank = THINKING_INTENSITY_OPTIONS.indexOf(lv)
-    if (rank > bestRank) {
-      bestRank = rank
-      best = lv
-    }
-  }
-  return best
-}
-
 interface Props {
   project: Project | null
   session: Session
@@ -140,6 +122,7 @@ interface Props {
   onBusyChange?: (busy: boolean) => void
   /** Approval policy and resolution */
   permissionMode: SessionPermissionMode
+  permissionFailureCount?: number
   onSetPermissionMode?: (mode: SessionPermissionMode) => void | Promise<void>
   resolving?: Record<string, boolean>
   onResolveApproval?: (
@@ -164,6 +147,10 @@ interface Props {
   initialInput?: string
   /** When true, also auto-send initialInput after pre-filling (new-session flow). */
   autoSendInitialInput?: boolean
+  /** Model chosen on the empty-state composer for the new session's first message. */
+  initialModel?: string
+  /** Thinking intensity chosen on the empty-state composer (new-session flow). */
+  initialThinking?: ThinkingIntensity
   /** Fired when initialInput has been applied so the parent can clear it. */
   onInitialInputConsumed?: () => void
   /** Persist session status + sticky chat error for sidebar / reload */
@@ -212,6 +199,7 @@ export function ChatPanel({
   settingsOpen,
   onBusyChange,
   permissionMode,
+  permissionFailureCount = 0,
   onSetPermissionMode,
   resolving = {},
   onResolveApproval,
@@ -227,6 +215,8 @@ export function ChatPanel({
   onRefreshGit,
   initialInput,
   autoSendInitialInput,
+  initialModel,
+  initialThinking,
   onInitialInputConsumed,
   onSessionStatusChange,
   pendingNewSession,
@@ -316,9 +306,13 @@ export function ChatPanel({
     }
   }, [inspectorTab])
 
+  const sessionApprovals = useMemo(() => {
+    return approvalsForSession(snapshotApprovals, snapshotJobs, session.id)
+  }, [session.id, snapshotApprovals, snapshotJobs])
+
   const pendingApprovalCount = useMemo(
-    () => snapshotApprovals.filter((item) => item.status === 'pending').length,
-    [snapshotApprovals],
+    () => sessionApprovals.filter((item) => item.status === 'pending').length,
+    [sessionApprovals],
   )
 
   const toggleInspectorTab = useCallback((tab: InspectorTab) => {
@@ -431,14 +425,16 @@ export function ChatPanel({
       for (const p of s.providers) {
         if (!p.configured) continue
         // Custom providers can be toggled off in 模型设置
-        if (p.custom && (p as { enabled?: boolean }).enabled === false) continue
+        if ((p as { enabled?: boolean }).enabled === false) continue
         for (const m of p.models) {
-          // Strictly read the model's own thinkingIntensities (set per-model
-          // in 模型设置). No fallback to provider-level or defaults — if a
-          // model has none configured, it only supports 'off'.
+          // Model-level thinkingIntensities win; fall back to the provider's
+          // declared list (mirrors the Settings built-in list) so models that
+          // don't set their own levels aren't forced to 'off'-only.
           const modelThink = (m as { thinkingIntensities?: ThinkingIntensity[] })
             .thinkingIntensities
-          const supported = (modelThink ?? []).filter((x) =>
+          const providerThink = (p as { thinkingIntensities?: ThinkingIntensity[] })
+            .thinkingIntensities
+          const supported = (modelThink ?? providerThink ?? []).filter((x) =>
             THINKING_INTENSITY_OPTIONS.includes(x),
           ) as ThinkingIntensity[]
           list.push({
@@ -457,19 +453,19 @@ export function ChatPanel({
       const current = s.settings.leaderModel
       const previous = selectedModelRef.current
       const nextModel =
-        previous && list.some((m) => m.id === previous)
-          ? previous
-          : current && list.some((m) => m.id === current)
-            ? current
-            : (list[0]?.id ?? current ?? '')
+        initialModel && list.some((m) => m.id === initialModel)
+          ? initialModel
+          : previous && list.some((m) => m.id === previous)
+            ? previous
+            : current && list.some((m) => m.id === current)
+              ? current
+              : (list[0]?.id ?? current ?? '')
       setSelectedModel(nextModel)
       selectedModelRef.current = nextModel
-      const preferred = s.settings.thinkingIntensity
       const meta = list.find((m) => m.id === nextModel) ?? list[0]
-      const nextThink = clampThink(
-        preferred && THINKING_INTENSITY_OPTIONS.includes(preferred) ? preferred : undefined,
-        meta?.thinkingIntensities ?? [],
-      )
+      // Linked default: 中 → 高 → strongest; never 关 when another level exists.
+      const nextThink =
+        initialThinking ?? defaultThinkingFor(meta?.thinkingIntensities ?? [])
       setThinkingIntensity(nextThink)
       thinkingIntensityRef.current = nextThink
     } catch (e) {
@@ -477,7 +473,7 @@ export function ChatPanel({
     } finally {
       setModelsLoading(false)
     }
-  }, [])
+  }, [initialModel, initialThinking])
 
   useEffect(() => {
     void loadModels()
@@ -1088,13 +1084,13 @@ export function ChatPanel({
     }
   }, [hasMessages, session.id])
 
-  // When model changes, clamp thinking to what that provider supports.
-  // NOTE: intentionally does NOT depend on `thinkingIntensity` — otherwise
-  // picking a different level would re-clamp and override the user's choice.
-
+  // When the model changes, refresh thinking to the linked default (中 → 高 →
+  // strongest; never 关 when another level exists). NOT dependent on
+  // `thinkingIntensity` — a manual level pick is only overridden by a model
+  // switch, never by re-renders.
   useEffect(() => {
     if (!selectedMeta) return
-    const next = clampThink(thinkingIntensityRef.current, selectedMeta.thinkingIntensities)
+    const next = defaultThinkingFor(selectedMeta.thinkingIntensities)
     if (next !== thinkingIntensityRef.current) {
       setThinkingIntensity(next)
       thinkingIntensityRef.current = next
@@ -1697,6 +1693,8 @@ export function ChatPanel({
         <div className="composer-tools">
           <ComposerToolbar
             permissionMode={permissionMode}
+            permissionPendingCount={pendingApprovalCount}
+            permissionFailureCount={permissionFailureCount}
             selectedModel={selectedModel}
             thinkingIntensity={thinkingIntensity}
             models={models}
@@ -1858,7 +1856,7 @@ export function ChatPanel({
                         tab={inspectorTab}
                         workers={snapshotWorkers}
                         teamMembers={teamMembers}
-                        approvals={snapshotApprovals}
+                        approvals={sessionApprovals}
                         projectId={project?.id ?? null}
                         sessionId={session.id}
                         onCreateTeamMember={onCreateTeamMember}

@@ -12,7 +12,6 @@ describe('settingsMutationRequiresApiRestart', () => {
       settingsMutationRequiresApiRestart({
         workerTimeouts: {
           jobTimeoutMs: 600_000,
-          approvalTimeoutMs: 120_000,
           queueTimeoutMs: 600_000,
         },
       }),
@@ -24,5 +23,12 @@ describe('settingsMutationRequiresApiRestart', () => {
     assert.equal(settingsMutationRequiresApiRestart({ leaderModel: 'openai/gpt-5.6' }), true)
     assert.equal(settingsMutationRequiresApiRestart({ customProviders: [] }), true)
     assert.equal(settingsMutationRequiresApiRestart({ secrets: {} }), true)
+  })
+
+  it('does not restart the API for provider enable/disable only', () => {
+    assert.equal(
+      settingsMutationRequiresApiRestart({ disabledProviderIds: ['opencode-go'] }),
+      false,
+    )
   })
 })

@@ -31,6 +31,7 @@ import type {
   JobStatus,
   SessionApprovalPolicy,
   SessionPermissionMode,
+  PermissionModeChangeSource,
   WorkerSource,
   WorkerRuntimeProfile,
   TeamMember,
@@ -55,6 +56,7 @@ import {
   WORKER_ROLES,
   isValidSessionApprovalPolicy,
   isValidSessionPermissionMode,
+  isValidPermissionModeChangeSource,
   permissionModeFromLegacyPolicy,
 } from '@swarmdesk-agent/shared'
 import { createId } from './id.js'
@@ -62,6 +64,7 @@ import {
   enqueueApproval,
   listPendingApprovals,
   resolveApprovalInQueue,
+  type CreateJobApprovalInput,
   type EnqueueApprovalInput,
 } from './approvals.js'
 import { globalApprovalWaiters } from './approval-wait.js'
@@ -210,10 +213,14 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
   })
 
   const projects = dedupeProjectsByRoot(
-    (raw.projects ?? []).map((p) => ({
-      ...p,
-      rootPath: normalizeProjectRoot(p.rootPath),
-    })),
+    (raw.projects ?? []).map((p) => {
+      // Project-scoped permission defaults were briefly persisted by a
+      // development build. Drop that legacy field: permission is Session-only.
+      const { defaultPermissionMode: _legacyPermissionDefault, ...project } = p as Project & {
+        defaultPermissionMode?: unknown
+      }
+      return { ...project, rootPath: normalizeProjectRoot(project.rootPath) }
+    }),
   )
   const projectIds = new Set(projects.map((p) => p.id))
   const sessions = (raw.sessions ?? [])
@@ -956,35 +963,98 @@ export class LocalStore {
     return structuredClone(session)
   }
 
-  updateSessionApprovalPolicy(sessionId: string, policy: SessionApprovalPolicy): Session {
+  updateSessionApprovalPolicy(
+    sessionId: string,
+    policy: SessionApprovalPolicy,
+    opts?: { source?: PermissionModeChangeSource },
+  ): Session {
     if (!isValidSessionApprovalPolicy(policy)) {
       throw new Error(`Invalid approval policy: ${String(policy)}`)
     }
+    const source = opts?.source ?? 'manual_panel'
+    if (!isValidPermissionModeChangeSource(source)) {
+      throw new Error(`Invalid permission mode change source: ${String(source)}`)
+    }
+    const nextPermissionMode = permissionModeFromLegacyPolicy(policy)
+    const current = this.data.sessions.find((candidate) => candidate.id === sessionId)
+    if (!current) throw new Error(`Session not found: ${sessionId}`)
+    const previousPermissionMode = isValidSessionPermissionMode(current.permissionMode)
+      ? current.permissionMode
+      : 'default'
     let session!: Session
     this.commit((d) => {
       const s = d.sessions.find((x) => x.id === sessionId)
       if (!s) throw new Error(`Session not found: ${sessionId}`)
       s.approvalPolicy = policy
-      s.permissionMode = permissionModeFromLegacyPolicy(policy)
+      s.permissionMode = nextPermissionMode
       s.updatedAt = now()
       session = s
     })
+    if (previousPermissionMode !== nextPermissionMode) {
+      globalActivityLog.append(
+        'session',
+        `Session permission mode: ${previousPermissionMode} → ${nextPermissionMode}`,
+        {
+          sessionId: session.id,
+          projectId: session.projectId,
+          previous: previousPermissionMode,
+          next: nextPermissionMode,
+          previousPermissionMode,
+          nextPermissionMode,
+          source,
+        },
+      )
+    }
     return structuredClone(session)
   }
 
-  updateSessionPermissionMode(sessionId: string, permissionMode: SessionPermissionMode): Session {
+  updateSessionPermissionMode(
+    sessionId: string,
+    permissionMode: SessionPermissionMode,
+    opts?: { source?: PermissionModeChangeSource },
+  ): Session {
     if (!isValidSessionPermissionMode(permissionMode)) {
       throw new Error(`Invalid permission mode: ${String(permissionMode)}`)
     }
+    const source = opts?.source ?? 'manual_panel'
+    if (!isValidPermissionModeChangeSource(source)) {
+      throw new Error(`Invalid permission mode change source: ${String(source)}`)
+    }
+    const current = this.data.sessions.find((candidate) => candidate.id === sessionId)
+    if (!current) throw new Error(`Session not found: ${sessionId}`)
+    const previousPermissionMode = isValidSessionPermissionMode(current.permissionMode)
+      ? current.permissionMode
+      : 'default'
+    // A same-value mode update is a strict no-op. In particular, do not touch
+    // legacy approvalPolicy or emit a duplicate audit event.
+    if (previousPermissionMode === permissionMode) {
+      return structuredClone(current)
+    }
+    const nextApprovalPolicy = permissionMode === 'auto' ? 'allow_always' : 'manual'
     let session!: Session
     this.commit((d) => {
       const s = d.sessions.find((x) => x.id === sessionId)
       if (!s) throw new Error(`Session not found: ${sessionId}`)
       s.permissionMode = permissionMode
-      s.approvalPolicy = permissionMode === 'auto' ? 'allow_always' : 'manual'
+      s.approvalPolicy = nextApprovalPolicy
       s.updatedAt = now()
       session = s
     })
+    if (previousPermissionMode !== permissionMode) {
+      globalActivityLog.append(
+        'session',
+        `Session permission mode: ${previousPermissionMode} → ${permissionMode}`,
+        {
+          sessionId: session.id,
+          projectId: session.projectId,
+          previous: previousPermissionMode,
+          next: permissionMode,
+          previousPermissionMode,
+          nextPermissionMode: permissionMode,
+          source,
+        },
+      )
+    }
     return structuredClone(session)
   }
 
@@ -1124,10 +1194,16 @@ export class LocalStore {
     rolePrompts?: Readonly<PromptSettings['roles']>
     initialTeamMembers?: Array<Omit<CreateTeamMemberInput, 'chatSessionId'>>
   }): Session {
+    if (input.permissionMode !== undefined && !isValidSessionPermissionMode(input.permissionMode)) {
+      throw new Error(`Invalid permission mode: ${String(input.permissionMode)}`)
+    }
     let session!: Session
     this.commit((d) => {
       const project = d.projects.find((p) => p.id === input.projectId)
       if (!project) throw new Error(`Project not found: ${input.projectId}`)
+      // Permission is Session-only. A draft may explicitly opt this new
+      // Session into auto; otherwise every Session starts fail-closed.
+      const permissionMode = input.permissionMode ?? 'default'
       const providedTitle = input.title?.trim()
       const timestamp = now()
       session = {
@@ -1142,8 +1218,8 @@ export class LocalStore {
         mode: 'build',
         activeWorkerIds: [...project.workerIds],
         memoryThreadId: input.memoryThreadId || createId('thread'),
-        approvalPolicy: input.permissionMode === 'auto' ? 'allow_always' : 'manual',
-        permissionMode: input.permissionMode ?? 'default',
+        approvalPolicy: permissionMode === 'auto' ? 'allow_always' : 'manual',
+        permissionMode,
         teamRevision: 1,
         roleReviewState: 'pending',
         createdAt: timestamp,
@@ -1544,6 +1620,48 @@ export class LocalStore {
   }
 
   /**
+   * Create a pending Approval and put its owning Job into pending_approval in
+   * one durable commit.  The Job must still be open at commit time; if it has
+   * already terminalized, neither side of the transaction is persisted.
+   */
+  createJobApproval(input: CreateJobApprovalInput): ApprovalItem {
+    if (!input.jobId?.trim()) throw new Error('jobId required')
+    let item!: ApprovalItem
+    this.commit((d) => {
+      const jobs = d.jobs ?? []
+      const job = jobs.find((candidate) => candidate.id === input.jobId)
+      if (!job) throw new Error(`Job not found: ${input.jobId}`)
+      if (!isJobOpen(job.status)) {
+        throw new Error(`Job ${input.jobId} is already ${job.status}`)
+      }
+      if ((d.approvals ?? []).some((approval) => approval.id === input.id)) {
+        throw new Error(`Approval already exists: ${input.id}`)
+      }
+
+      const { queue, item: created } = enqueueApproval(d.approvals ?? [], {
+        ...input,
+        jobId: input.jobId,
+      })
+      d.approvals = queue
+      item = created
+
+      // Keep approvalIds as a durable set.  Legacy snapshots may contain
+      // duplicates, so do not append the same id twice.
+      const approvalIds = job.approvalIds ?? []
+      job.approvalIds = [...new Set([...approvalIds, created.id])]
+      job.status = 'pending_approval'
+      job.message = `Waiting for approval: ${created.title}`
+      this.recomputeSessionStatusOn(d, job.sessionId)
+    })
+    globalActivityLog.append('approval', `Pending: ${item.title}`, {
+      approvalId: item.id,
+      workerName: item.workerName,
+      jobId: item.jobId,
+    })
+    return structuredClone(item)
+  }
+
+  /**
    * Create an approval atomically in resolved state (no pending intermediate).
    * Used by auto-approval path.
    */
@@ -1627,6 +1745,25 @@ export class LocalStore {
       resolutionReason?: string
     },
   ): { resolved: boolean; item: ApprovalItem } {
+    return this.tryResolveJobApproval(id, decision, optionId, metadata)
+  }
+
+  /**
+   * Compare-and-set an Approval and derive its owning Job status in the same
+   * durable commit.  A Job returns to running only after its final pending
+   * Approval is resolved; resolving one of several requests leaves it in
+   * pending_approval.  The in-process waiter is settled only after the commit
+   * succeeds, so a failed persist cannot leave an observable orphan state.
+   */
+  tryResolveJobApproval(
+    id: string,
+    decision: ApprovalDecision,
+    optionId?: string,
+    metadata?: {
+      resolutionSource?: ApprovalItem['resolutionSource']
+      resolutionReason?: string
+    },
+  ): { resolved: boolean; item: ApprovalItem } {
     const prev = (this.data.approvals ?? []).find((a) => a.id === id)
     if (!prev) throw new Error(`Approval not found: ${id}`)
     if (prev.status !== 'pending') {
@@ -1645,10 +1782,27 @@ export class LocalStore {
       )
       d.approvals = queue
       item = resolved
-      if (item.sessionId) {
+
+      if (item.jobId) {
+        const job = (d.jobs ?? []).find((candidate) => candidate.id === item.jobId)
+        if (job && job.status === 'pending_approval') {
+          const hasPending = (d.approvals ?? []).some(
+            (approval) => approval.status === 'pending' && approval.jobId === item.jobId,
+          )
+          if (!hasPending) {
+            job.status = 'running'
+            job.message = `Running on ${job.workerName}`
+          }
+        }
+        const sessionId = job?.sessionId ?? item.sessionId
+        if (sessionId) this.recomputeSessionStatusOn(d, sessionId)
+      } else if (item.sessionId) {
         this.recomputeSessionStatusOn(d, item.sessionId)
       }
     })
+    // Settlement is deliberately after commit(): if persistence throws, the
+    // waiter remains registered for the caller's failure cleanup and no
+    // pending Approval is visible in the durable snapshot.
     globalApprovalWaiters.settle(id, decision, optionId ?? item.selectedOptionId)
     globalActivityLog.append('approval', `Resolved ${decision}: ${item.title}`, {
       approvalId: item.id,

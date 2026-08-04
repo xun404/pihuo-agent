@@ -4,13 +4,11 @@ export type { WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
 
 export const DEFAULT_WORKER_TIMEOUT_SETTINGS: WorkerTimeoutSettings = Object.freeze({
   jobTimeoutMs: 600_000,
-  approvalTimeoutMs: 120_000,
   queueTimeoutMs: 600_000,
 })
 
 const WORKER_TIMEOUT_BOUNDS = {
   jobTimeoutMs: { min: 60_000, max: 7_200_000, env: 'WORKER_JOB_TIMEOUT_MS' },
-  approvalTimeoutMs: { min: 60_000, max: 3_600_000, env: 'APPROVAL_TIMEOUT_MS' },
   queueTimeoutMs: { min: 60_000, max: 7_200_000, env: 'WORKER_QUEUE_TIMEOUT_MS' },
 } as const
 
@@ -47,7 +45,6 @@ export function resolveWorkerTimeoutSettings(
 
   return {
     jobTimeoutMs: resolveField('jobTimeoutMs'),
-    approvalTimeoutMs: resolveField('approvalTimeoutMs'),
     queueTimeoutMs: resolveField('queueTimeoutMs'),
   }
 }
@@ -65,7 +62,6 @@ export function parseWorkerTimeoutSettings(input: unknown): WorkerTimeoutSetting
   }
   return {
     jobTimeoutMs: record.jobTimeoutMs as number,
-    approvalTimeoutMs: record.approvalTimeoutMs as number,
     queueTimeoutMs: record.queueTimeoutMs as number,
   }
 }

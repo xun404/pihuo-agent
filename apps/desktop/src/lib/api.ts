@@ -155,6 +155,19 @@ export interface WorkerReasoningOptionsResponse {
   error?: string
 }
 
+export interface SessionPermissionModeFailure {
+  approvalId: string
+  error: string
+}
+
+/** Server feedback for a Session permission mutation. The snapshot is authoritative. */
+export interface SessionPermissionModeMutationResponse {
+  session: Session
+  approvals: ApprovalItem[]
+  failures: SessionPermissionModeFailure[]
+  snapshot: AppSnapshot
+}
+
 export type RegistryOperationStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 export interface ThreadMessagesResult {
@@ -385,12 +398,16 @@ export const api = {
       `/api/sessions/${encodePathSegment(id)}/read`,
       { method: 'POST', body: JSON.stringify(upTo ? { upTo } : {}) },
     ),
-  setSessionPermissionMode: (id: string, permissionMode: SessionPermissionMode) =>
-    request<{ session: Session; snapshot: AppSnapshot }>(
+  setSessionPermissionMode: (
+    id: string,
+    permissionMode: SessionPermissionMode,
+    source: 'manual_chat' | 'manual_panel' = 'manual_chat',
+  ) =>
+    request<SessionPermissionModeMutationResponse>(
       `/api/sessions/${encodePathSegment(id)}/permission-mode`,
       {
         method: 'POST',
-        body: JSON.stringify({ permissionMode }),
+        body: JSON.stringify({ permissionMode, source }),
       },
     ),
   /**
@@ -591,6 +608,65 @@ export const api = {
     requestText(`/api/workers/${encodePathSegment(id)}/icon`, signal),
   registryAgentIcon: (agentId: string, signal?: AbortSignal) =>
     requestText(`/api/registry/agents/${encodePathSegment(agentId)}/icon`, signal),
+  /** models.dev logo (cached server-side). 404 → use fallback SVG. */
+  providerLogo: (providerId: string, signal?: AbortSignal) =>
+    requestText(`/api/provider-logos/${encodePathSegment(providerId)}`, signal),
+  listModelsDevProviders: (q?: string, signal?: AbortSignal) =>
+    request<{
+      providers: Array<{
+        id: string
+        name: string
+        modelCount: number
+        npm?: string
+        api?: string
+        docsUrl?: string
+        apiStyle: string
+        needsBaseURL: boolean
+      }>
+      meta: {
+        fetchedAt: string
+        sourceUrl: string
+        providerCount: number
+        bytes: number
+        etag?: string
+      } | null
+      catalogAvailable: boolean
+    }>(
+      `/api/models-dev/providers${q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`,
+      { signal },
+    ),
+  refreshModelsDevCatalog: (signal?: AbortSignal) =>
+    request<{
+      ok: boolean
+      meta: {
+        fetchedAt: string
+        sourceUrl: string
+        providerCount: number
+        bytes: number
+        etag?: string
+      }
+      providerCount: number
+      fromCache: boolean
+    }>('/api/models-dev/refresh', { method: 'POST', signal }, false, 90_000),
+  importModelsDevProvider: (providerId: string, signal?: AbortSignal) =>
+    request<{
+      ok: boolean
+      provider: {
+        id: string
+        name: string
+        apiKeyEnv: string
+        baseURL?: string
+        apiStyle?: string
+        models: Array<{ id: string; label: string; contextWindow?: number }>
+        source?: string
+      }
+      providers: unknown[]
+      customProviders: unknown[]
+    }>('/api/models-dev/import', {
+      method: 'POST',
+      body: JSON.stringify({ providerId }),
+      signal,
+    }),
   setWorkerSecret: (id: string, envName: string, value: string, signal?: AbortSignal) =>
     request<{
       workerId: string
@@ -771,14 +847,22 @@ export const api = {
     decision: ApprovalDecision,
     optionId?: string,
     surface?: 'chat' | 'panel',
-  ) =>
-    request<{ approval: ApprovalItem; snapshot: AppSnapshot }>(
+  ) => {
+    const body: { decision: ApprovalDecision; surface?: 'chat' | 'panel'; optionId?: string } = {
+      decision,
+      surface,
+    }
+    // A manual cancel is a permission-level action, not an option selection;
+    // omit optionId entirely so stale/forged ids cannot influence the server.
+    if (decision !== 'cancel' && optionId) body.optionId = optionId
+    return request<{ approval: ApprovalItem; snapshot: AppSnapshot }>(
       `/api/approvals/${encodePathSegment(id)}/resolve`,
       {
         method: 'POST',
-        body: JSON.stringify({ decision, optionId, surface }),
+        body: JSON.stringify(body),
       },
-    ),
+    )
+  },
   resetAcpContext: (jobId: string) =>
     request<{ ok: boolean; snapshot: AppSnapshot; deleted?: boolean }>(
       `/api/jobs/${encodePathSegment(jobId)}/acp-context/reset`,

@@ -8,7 +8,11 @@ import type {
   WorkerRegistration,
   WorkerRole,
 } from '@swarmdesk-agent/shared'
-import { normalizePromptSettings, WORKER_ROLES } from '@swarmdesk-agent/shared'
+import {
+  normalizePromptSettings,
+  sortPendingApprovals,
+  WORKER_ROLES,
+} from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
 import { api } from '../lib/api'
@@ -205,6 +209,7 @@ export function RightPanel({
     Boolean(roleDraft.name.trim()) &&
     Boolean(roleDraft.workerId) &&
     Boolean(roleDraft.instructions.trim())
+  const pendingApprovals = sortPendingApprovals(approvals)
 
   return (
     <aside className="chat-inspector-panel">
@@ -551,41 +556,39 @@ export function RightPanel({
           <div className="inspector-panel-head">
             <div className="inspector-panel-title">
               {t('approvals.pending')} (
-              {approvals.filter((item) => item.status === 'pending').length})
+              {pendingApprovals.length})
             </div>
             <button className="settings-btn-soft" type="button" onClick={onRefreshSnapshot}>
               {t('common.refresh')}
             </button>
           </div>
-          {approvals.filter((item) => item.status === 'pending').length === 0 && (
+          {pendingApprovals.length === 0 && (
             <p className="section-hint">{t('approvals.empty')}</p>
           )}
-          {approvals
-            .filter((item) => item.status === 'pending')
-            .map((approval) => (
-              <div className="inspector-approval-card" key={approval.id}>
-                <div className="inspector-approval-title">{approval.title}</div>
-                {approval.workerName && (
-                  <div className="inspector-approval-meta">
-                    {t('approvals.worker')}: {approval.workerName}
-                  </div>
-                )}
-                {approval.pathOrTarget && (
-                  <div className="inspector-approval-meta mono">
-                    {t('approvals.target')}: {approval.pathOrTarget}
-                  </div>
-                )}
-                <div className="approval-row inspector-approval-actions">
-                  <ApprovalActions
-                    approval={approval}
-                    surface="panel"
-                    resolving={resolving}
-                    onResolve={onResolveApproval}
-                    variant="wireframe"
-                  />
+          {pendingApprovals.map((approval) => (
+            <div className="inspector-approval-card" key={approval.id}>
+              <div className="inspector-approval-title">{approval.title}</div>
+              {approval.workerName && (
+                <div className="inspector-approval-meta">
+                  {t('approvals.worker')}: {approval.workerName}
                 </div>
+              )}
+              {approval.pathOrTarget && (
+                <div className="inspector-approval-meta mono">
+                  {t('approvals.target')}: {approval.pathOrTarget}
+                </div>
+              )}
+              <div className="approval-row inspector-approval-actions">
+                <ApprovalActions
+                  approval={approval}
+                  surface="panel"
+                  resolving={resolving}
+                  onResolve={onResolveApproval}
+                  variant="wireframe"
+                />
               </div>
-            ))}
+            </div>
+          ))}
         </div>
       )}
       <ConfirmDialog

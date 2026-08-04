@@ -23,7 +23,7 @@ import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar, type ModelOption, type TeamTemplateOption } from './ComposerToolbar'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
-import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
+import { THINKING_INTENSITY_OPTIONS, defaultThinkingFor, type ThinkingIntensity } from '../lib/settings'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
@@ -61,6 +61,7 @@ interface Props {
     sessionId: string,
     permissionMode: SessionPermissionMode,
   ) => void | Promise<void>
+  permissionFailureCounts?: Record<string, number>
   onSessionStatusChange?: (
     sessionId: string,
     status: Session['status'],
@@ -83,32 +84,32 @@ interface Props {
     sessionId: string,
     body: Omit<CreateTeamMemberInput, 'chatSessionId'>,
   ) => Promise<void>
-  onUpdateTeamMember?: (
-    sessionId: string,
-    id: string,
-    body: UpdateTeamMemberInput,
-  ) => Promise<void>
-  onArchiveTeamMember?: (
-    sessionId: string,
-    id: string,
-    expectedRevision: number,
-  ) => Promise<void>
+  onUpdateTeamMember?: (sessionId: string, id: string, body: UpdateTeamMemberInput) => Promise<void>
+  onArchiveTeamMember?: (sessionId: string, id: string, expectedRevision: number) => Promise<void>
   onResetTeamMemberSession?: (sessionId: string, id: string) => Promise<void>
   /** Fired after a git branch switch so parents can refresh git panels. */
   onRefreshGit?: () => void
   /** Empty-state composer: fired with the user's first message text + the
-   *  preselected permission mode from the toolbar. */
+   *  preselected permission mode / model / thinking from the toolbar. */
   onComposeFirstMessage?: (
     text: string,
     preset: {
       permissionMode: SessionPermissionMode
       teamTemplateId?: string
+      model?: string
+      thinking?: ThinkingIntensity
     },
   ) => Promise<boolean>
   /** Click handler for the "open folder" chip on the empty-state composer (scene 1, no project). */
   onPickFolder?: () => void
   /** Pre-fill text to inject into a specific session's composer (once). */
-  pendingComposerForSession?: { sessionId: string; text: string; autoSend: boolean } | null
+  pendingComposerForSession?: {
+    sessionId: string
+    text: string
+    autoSend: boolean
+    model?: string
+    thinking?: ThinkingIntensity
+  } | null
   /** Fired when the matching ChatPanel has consumed pendingComposerForSession. */
   onInitialInputConsumed?: () => void
   /** True while the empty-state composer is creating a session (disables the input). */
@@ -142,6 +143,7 @@ export function ChatWorkspace({
   settingsOpen,
   onBusySessionsChange,
   onSetPermissionMode,
+  permissionFailureCounts = {},
   onSessionStatusChange,
   snapshotApprovals,
   snapshotJobs,
@@ -182,6 +184,10 @@ export function ChatWorkspace({
   const [presetThinking, setPresetThinking] = useState<ThinkingIntensity>('medium')
   const [presetModels, setPresetModels] = useState<ModelOption[]>([])
   const [presetModelsLoading, setPresetModelsLoading] = useState(false)
+  /** Current preset model + last seen leader (for default-model 联动). */
+  const presetModelRef = useRef(presetModel)
+  presetModelRef.current = presetModel
+  const lastLeaderRef = useRef<string | null>(null)
 
   const loadPresetModels = useCallback(async () => {
     setPresetModelsLoading(true)
@@ -190,11 +196,16 @@ export function ChatWorkspace({
       const list: ModelOption[] = []
       for (const p of s.providers) {
         if (!p.configured) continue
-        if (p.custom && (p as { enabled?: boolean }).enabled === false) continue
+        // Built-in disabled via disabledProviderIds; custom/models.dev via enabled flag
+        if ((p as { enabled?: boolean }).enabled === false) continue
         for (const m of p.models) {
+          // Model-level thinkingIntensities win; fall back to the provider's
+          // declared list so models without their own levels aren't 'off'-only.
           const modelThink = (m as { thinkingIntensities?: ThinkingIntensity[] })
             .thinkingIntensities
-          const supported = (modelThink ?? []).filter((x) =>
+          const providerThink = (p as { thinkingIntensities?: ThinkingIntensity[] })
+            .thinkingIntensities
+          const supported = (modelThink ?? providerThink ?? []).filter((x) =>
             THINKING_INTENSITY_OPTIONS.includes(x),
           ) as ThinkingIntensity[]
           list.push({
@@ -211,15 +222,26 @@ export function ChatWorkspace({
       }
       setPresetModels(list)
       const current = s.settings.leaderModel
-      setPresetModel((prev) => {
-        if (prev && list.some((m) => m.id === prev)) return prev
-        if (current && list.some((m) => m.id === current)) return current
-        return list[0]?.id ?? current ?? ''
-      })
-      const preferred = s.settings.thinkingIntensity
-      setPresetThinking(
-        preferred && THINKING_INTENSITY_OPTIONS.includes(preferred) ? preferred : 'medium',
-      )
+      const prev = presetModelRef.current
+      // Follow the configured default model for new sessions: sync the preset
+      // whenever the leader changed (e.g. after settings), but keep the user's
+      // own pick for the same leader.
+      const leaderChanged = lastLeaderRef.current !== null && lastLeaderRef.current !== current
+      lastLeaderRef.current = current
+      const nextModel =
+        prev && list.some((m) => m.id === prev)
+          ? leaderChanged && current && list.some((m) => m.id === current)
+            ? current
+            : prev
+          : current && list.some((m) => m.id === current)
+            ? current
+            : (list[0]?.id ?? current ?? '')
+      setPresetModel(nextModel)
+      presetModelRef.current = nextModel
+      // Linked default for new sessions: 中 → 高 → strongest; never 关 unless
+      // it's the only supported level.
+      const meta = list.find((m) => m.id === nextModel) ?? list[0]
+      setPresetThinking(defaultThinkingFor(meta?.thinkingIntensities ?? []))
     } catch (e) {
       console.warn('[ChatWorkspace] load preset models failed', e)
     } finally {
@@ -365,12 +387,21 @@ export function ChatWorkspace({
     }
     return project
   }, [pendingNewSession?.projectId, project, projects])
+
+  // Permission is Session-only. Every new draft starts fail-closed, while a
+  // one-off draft toggle survives unrelated refreshes until the project changes.
+  useEffect(() => {
+    setPresetPermissionMode('default')
+  }, [homeProject?.id])
+
   const submitFirstMessage = async () => {
     const text = firstMessage.trim()
     if (!text || creatingFromComposer || !serverUp || !onComposeFirstMessage) return
     const sent = await onComposeFirstMessage(text, {
       permissionMode: presetPermissionMode,
       teamTemplateId: selectedTeamTemplateId || undefined,
+      model: presetModel || undefined,
+      thinking: presetThinking,
     })
     if (sent) setFirstMessage('')
   }
@@ -472,6 +503,7 @@ export function ChatWorkspace({
                     <div className="composer-tools">
                       <ComposerToolbar
                         permissionMode={presetPermissionMode}
+                        permissionScope="draft"
                         selectedModel={presetModel}
                         thinkingIntensity={presetThinking}
                         models={presetModels}
@@ -537,6 +569,16 @@ export function ChatWorkspace({
                   ? pendingComposerForSession.autoSend
                   : false
               }
+              initialModel={
+                pendingComposerForSession?.sessionId === s.id
+                  ? pendingComposerForSession.model
+                  : undefined
+              }
+              initialThinking={
+                pendingComposerForSession?.sessionId === s.id
+                  ? pendingComposerForSession.thinking
+                  : undefined
+              }
               onInitialInputConsumed={
                 pendingComposerForSession?.sessionId === s.id ? onInitialInputConsumed : undefined
               }
@@ -550,6 +592,7 @@ export function ChatWorkspace({
                 setBusyMap((prev) => (prev[s.id] === busy ? prev : { ...prev, [s.id]: busy }))
               }
               permissionMode={s.permissionMode}
+              permissionFailureCount={permissionFailureCounts[s.id] ?? 0}
               onSetPermissionMode={
                 onSetPermissionMode ? (mode) => onSetPermissionMode(s.id, mode) : undefined
               }
@@ -574,14 +617,10 @@ export function ChatWorkspace({
                 onUpdateTeamMember ? (id, body) => onUpdateTeamMember(s.id, id, body) : undefined
               }
               onArchiveTeamMember={
-                onArchiveTeamMember
-                  ? (id, rev) => onArchiveTeamMember(s.id, id, rev)
-                  : undefined
+                onArchiveTeamMember ? (id, rev) => onArchiveTeamMember(s.id, id, rev) : undefined
               }
               onResetTeamMemberSession={
-                onResetTeamMemberSession
-                  ? (id) => onResetTeamMemberSession(s.id, id)
-                  : undefined
+                onResetTeamMemberSession ? (id) => onResetTeamMemberSession(s.id, id) : undefined
               }
               onRefreshGit={onRefreshGit}
               pendingNewSession={pendingNewSession}

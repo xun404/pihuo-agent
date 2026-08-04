@@ -17,6 +17,10 @@ export type ToastInput = {
   kind?: ToastKind
   /** ms; default 3200 */
   duration?: number
+  action?: {
+    label: string
+    onClick: () => void | Promise<void>
+  }
 }
 
 type ToastItem = {
@@ -24,6 +28,7 @@ type ToastItem = {
   message: string
   kind: ToastKind
   duration: number
+  action?: ToastInput['action']
 }
 
 type ToastContextValue = {
@@ -57,10 +62,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const kind = typeof input === 'string' ? 'info' : (input.kind ?? 'info')
       const duration =
         typeof input === 'string' ? 3200 : (input.duration ?? (kind === 'error' ? 4500 : 3200))
+      const action = typeof input === 'string' ? undefined : input.action
       const id = toastIdSeq++
       setItems((prev) => {
         // cap stack to avoid flooding
-        const next = [...prev, { id, message: message.trim(), kind, duration }]
+        const next = [...prev, { id, message: message.trim(), kind, duration, action }]
         return next.slice(-4)
       })
       const timer = setTimeout(() => dismiss(id), duration)
@@ -109,7 +115,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               transition={{ duration: 0.22, ease: [0.175, 0.885, 0.32, 1] }}
               layout
             >
-              <span className="toast-msg">{item.message}</span>
+              <div className="toast-content">
+                <span className="toast-msg">{item.message}</span>
+                {item.action && (
+                  <button
+                    type="button"
+                    className="toast-action"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      dismiss(item.id)
+                      void Promise.resolve(item.action?.onClick()).catch(() => {})
+                    }}
+                  >
+                    {item.action.label}
+                  </button>
+                )}
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>

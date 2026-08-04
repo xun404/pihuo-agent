@@ -29,9 +29,23 @@ export type MessageKey =
   | 'permissions.defaultDescription'
   | 'permissions.autoTitle'
   | 'permissions.autoDescription'
+  | 'permissions.sessionDefaultTitle'
+  | 'permissions.sessionDefaultDescription'
+  | 'permissions.sessionAutoTitle'
+  | 'permissions.sessionAutoDescription'
+  | 'permissions.draftDefaultTitle'
+  | 'permissions.draftDefaultDescription'
+  | 'permissions.draftAutoTitle'
+  | 'permissions.draftAutoDescription'
+  | 'permissions.autoResolved'
+  | 'permissions.autoResolvePartial'
+  | 'permissions.autoResolveFailed'
+  | 'permissions.pendingCount'
+  | 'permissions.failureCount'
   | 'common.cancel'
   | 'common.confirmDelete'
   | 'common.confirm'
+  | 'common.retry'
   | 'app.bannerCmd'
   | 'app.bannerOffline'
   | 'app.loading'
@@ -42,6 +56,8 @@ export type MessageKey =
   | 'approvals.pending'
   | 'approvals.target'
   | 'approvals.worker'
+  | 'approvals.agentAlwaysHint'
+  | 'approvals.unknownScope'
   | 'chat.budgetExhausted'
   | 'chat.continueTask'
   | 'chat.compactDone'
@@ -337,6 +353,21 @@ export type MessageKey =
   | 'settings.ossIntro'
   | 'settings.ossCount'
   | 'settings.addProvider'
+  | 'settings.deletingProvider'
+  | 'settings.addFromModelsDev'
+  | 'settings.addCustomGateway'
+  | 'settings.modelsDevHint'
+  | 'settings.modelsDevSearchPh'
+  | 'settings.modelsDevSearch'
+  | 'settings.modelsDevRefresh'
+  | 'settings.modelsDevMeta'
+  | 'settings.modelsDevModelCount'
+  | 'settings.modelsDevAdd'
+  | 'settings.modelsDevEmpty'
+  | 'settings.modelsDevImported'
+  | 'settings.modelsDevRefreshFailed'
+  | 'settings.modelsDevRefreshFailedKeepLkg'
+  | 'settings.apiStyle'
   | 'settings.addModel'
   | 'settings.addModelBtn'
   | 'settings.addModelInline'
@@ -391,7 +422,12 @@ export type MessageKey =
   | 'settings.customNamePh'
   | 'settings.customRequired'
   | 'settings.customSaveHint'
+  | 'settings.defaultModel'
+  | 'settings.defaultModelSet'
+  | 'settings.deleteProvider'
+  | 'settings.deleteProviderConfirm'
   | 'settings.editCustom'
+  | 'settings.setDefaultModel'
   | 'settings.enterKey'
   | 'settings.hide'
   | 'settings.hideCustom'
@@ -429,10 +465,13 @@ export type MessageKey =
   | 'settings.pickModel'
   | 'settings.firstModelHint'
   | 'settings.modelList'
+  | 'settings.modelTagMultimodal'
+  | 'settings.modelTagTools'
   | 'settings.removeModel'
   | 'settings.provider'
   | 'settings.providerBuiltin'
   | 'settings.providerCustom'
+  | 'settings.providerDeleted'
   | 'settings.providerKey'
   | 'settings.descGeneral'
   | 'settings.descModel'
@@ -503,9 +542,6 @@ export type MessageKey =
   | 'settings.runtime.workerJobTimeout'
   | 'settings.runtime.workerJobTimeoutDesc'
   | 'settings.runtime.workerJobTimeoutError'
-  | 'settings.runtime.workerApprovalTimeout'
-  | 'settings.runtime.workerApprovalTimeoutDesc'
-  | 'settings.runtime.workerApprovalTimeoutError'
   | 'settings.runtime.workerQueueTimeout'
   | 'settings.runtime.workerQueueTimeoutDesc'
   | 'settings.runtime.workerQueueTimeoutError'
@@ -781,6 +817,7 @@ export type MessageKey =
   | 'workers.runApproval'
   | 'workers.runAuthHint'
   | 'workers.runError'
+  | 'workers.runRuntimeRestarted'
   | 'workers.runInput'
   | 'workers.runNoOutput'
   | 'workers.runOutput'
@@ -803,12 +840,32 @@ const zh: Dict = {
   'common.cancel': '取消',
   'common.confirmDelete': '删除',
   'common.confirm': '确认',
+  'common.retry': '重试',
   'permissions.autoOff': '权限自动接受：关',
   'permissions.autoOn': '权限自动接受：开',
   'permissions.defaultTitle': '默认权限',
-  'permissions.defaultDescription': '项目内操作直接执行，项目外变更需要审批',
+  'permissions.defaultDescription': 'Agent 自行处理直通操作；其余权限请求需要人工审批',
   'permissions.autoTitle': '自动授权',
   'permissions.autoDescription': '所有权限请求自动接受',
+  'permissions.sessionDefaultTitle': '当前 Session：默认权限',
+  'permissions.sessionDefaultDescription':
+    '仅修改当前 Session；Agent 自行处理直通操作，其发出的权限请求需要人工审批。',
+  'permissions.sessionAutoTitle': '当前 Session：自动授权',
+  'permissions.sessionAutoDescription':
+    '仅修改当前 Session；立即放行当前待审批请求，并实时自动接受后续由 Agent 发出的 ACP 权限请求。Agent 直通操作仍由 Agent 自身策略处理。',
+  'permissions.draftDefaultTitle': '本次新建 Session：默认权限',
+  'permissions.draftDefaultDescription':
+    '仅用于本次新建 Session；Agent 自行处理直通操作，其发出的权限请求需要人工审批。',
+  'permissions.draftAutoTitle': '本次新建 Session：自动授权',
+  'permissions.draftAutoDescription':
+    '仅用于本次新建 Session；Agent 发出的 ACP 权限请求将立即自动通过。Agent 直通操作仍由 Agent 自身策略处理。',
+  'permissions.autoResolved': '当前 Session 已自动处理 {count} 个待审批请求。',
+  'permissions.autoResolvePartial':
+    '当前 Session 已自动处理 {resolved} 个待审批请求；{failed} 个请求解析失败，仍有 {pending} 个待审批。',
+  'permissions.autoResolveFailed':
+    '当前 Session 有 {count} 个待审批请求自动处理失败，剩余 {pending} 个待审批；可重试或在审批面板中手动处理。',
+  'permissions.pendingCount': '仍有 {count} 个待审批请求',
+  'permissions.failureCount': '{count} 个审批解析失败，可重试',
   'app.bannerCmd': 'npm run dev',
   'app.bannerOffline': '无法连接服务（{error}）。另开终端运行：',
   'app.loading': '加载中…',
@@ -819,6 +876,9 @@ const zh: Dict = {
   'approvals.pending': '待审批',
   'approvals.target': '目标',
   'approvals.worker': 'Worker',
+  'approvals.agentAlwaysHint':
+    'Always 的有效期由 Agent 决定，不等同于 App Session 自动授权或永久授权；Agent 直通操作仍由 Agent 自身策略处理。',
+  'approvals.unknownScope': 'Agent 未提供可验证路径',
   'chat.budgetExhausted': '已消耗 {used}/{max} 步骤预算，任务可能尚未完成。',
   'chat.continueTask': '继续',
   'chat.compactDone': '上下文已压缩',
@@ -889,7 +949,7 @@ const zh: Dict = {
   'chat.serviceOnlineHint': '后端服务在线',
   'chat.stop': '停止',
   'chat.think.high': '高',
-  'chat.think.label': '思考强度',
+  'chat.think.label': '思考',
   'chat.think.low': '低',
   'chat.think.max': '最高',
   'chat.think.medium': '中',
@@ -1125,6 +1185,23 @@ const zh: Dict = {
   'settings.ossIntro': '本产品直接依赖的主要开源项目（非完整传递依赖清单）。',
   'settings.ossCount': '{count} 项',
   'settings.addProvider': '添加供应商',
+  'settings.addFromModelsDev': '从 models.dev 添加',
+  'settings.addCustomGateway': '自定义网关',
+  'settings.modelsDevHint':
+    '从 models.dev 选用已注册供应商，将写入完整模型列表（目录缓存在本机配置目录，不进安装包）。内置供应商不会出现在此列表。',
+  'settings.modelsDevSearchPh': '搜索供应商名称或 id…',
+  'settings.modelsDevSearch': '搜索',
+  'settings.modelsDevRefresh': '刷新目录',
+  'settings.modelsDevMeta': '目录共 {count} 家 · 更新于 {at}',
+  'settings.modelsDevModelCount': '{n} 个模型',
+  'settings.modelsDevAdd': '添加',
+  'settings.modelsDevEmpty': '没有可添加的供应商。可尝试刷新目录或换个关键词。',
+  'settings.modelsDevImported': '已添加「{name}」',
+  'settings.modelsDevRefreshFailed':
+    '无法从 models.dev 下载目录（{error}）。请检查网络后重试，或稍后再刷新。',
+  'settings.modelsDevRefreshFailedKeepLkg':
+    '在线刷新失败（{error}），已继续使用本机缓存目录。',
+  'settings.apiStyle': '接口类型',
   'settings.addModel': '添加模型',
   'settings.addModelBtn': '+ 添加',
   'settings.addModelInline': '添加新模型',
@@ -1152,11 +1229,11 @@ const zh: Dict = {
   'settings.descWorkers': '注册与管理 CLI Worker（Claude Code / Codex / OpenCode 等）。',
   'settings.descTeams': '查看、重命名与删除已保存的协作编组；新建与应用到会话在 Chat Team 中完成。',
   'settings.descAbout': '产品信息、版本与开源致谢。',
-  'settings.danger.title': '危险区域',
+  'settings.danger.title': '危险操作',
   'settings.danger.collapsedDesc': '清理设置、Worker、聊天会话或缓存',
   'settings.danger.warning':
     '这些操作不可恢复，会永久删除本机数据。若有运行中的 Worker 任务，请先停止；不会删除主题文件、Worker 安装文件或应用本身。',
-  'settings.danger.warningTitle': '进入危险区域',
+  'settings.danger.warningTitle': '进入危险操作',
   'settings.danger.warningConfirm': '我已了解，继续',
   'settings.danger.impactLabel': '本操作影响',
   'settings.danger.impactSettingsBasic': '基础设置、外观与语言',
@@ -1232,7 +1309,14 @@ const zh: Dict = {
   'settings.customNamePh': '例如：公司网关、硅基流动',
   'settings.customRequired': '请填写服务商名称。',
   'settings.customSaveHint': '加入列表后，记得点「保存」。',
+  'settings.defaultModel': '默认',
+  'settings.defaultModelSet': '默认模型已设置为：{model}',
+  'settings.deleteProvider': '删除供应商',
+  'settings.deletingProvider': '删除中',
+  'settings.deleteProviderConfirm':
+    '删除后将移除该供应商及其已保存的 API Key，其模型不再可用。确定删除「{name}」吗？',
   'settings.editCustom': '编辑网关',
+  'settings.setDefaultModel': '设为默认',
   'settings.enterKey': '粘贴 API Key',
   'settings.hide': '隐藏',
   'settings.hideCustom': '收起手动输入',
@@ -1260,7 +1344,7 @@ const zh: Dict = {
   'settings.modelRegistryUnknown': '未登记',
   'settings.navAbout': '关于',
   'settings.navGeneral': '常规',
-  'settings.navModel': '模型设置',
+  'settings.navModel': '供应商',
   'settings.navPrompts': '提示词',
   'settings.navWorkers': 'Agent Worker',
   'settings.navTeams': '编组',
@@ -1269,11 +1353,14 @@ const zh: Dict = {
   'settings.perModelThinkingHint': '仅本模型：勾选可选档位；聊天栏选中该模型时只显示已勾选档位。',
   'settings.pickModel': '模型',
   'settings.modelList': '模型列表',
+  'settings.modelTagMultimodal': '多模态',
+  'settings.modelTagTools': '工具',
   'settings.removeModel': '删除模型',
   'settings.firstModelHint': '至少添加一个模型才能创建服务商。保存后可在浏览态继续添加更多。',
   'settings.provider': '提供方',
-  'settings.providerBuiltin': '内置',
-  'settings.providerCustom': '自定义供应商',
+  'settings.providerBuiltin': '目录供应商',
+  'settings.providerCustom': '自定义网关',
+  'settings.providerDeleted': '供应商已删除。',
   'settings.providerKey': '{provider} API Key',
   'settings.runtime.leaderMaxSteps': 'Leader 步数预算',
   'settings.runtime.leaderMaxStepsDesc': '单次任务可执行的最大步数，默认 500',
@@ -1302,9 +1389,6 @@ const zh: Dict = {
   'settings.runtime.workerJobTimeout': 'Worker 任务超时',
   'settings.runtime.workerJobTimeoutDesc': '进入运行状态后的总执行时间，默认 10 分钟。',
   'settings.runtime.workerJobTimeoutError': '请输入 1 到 120 之间的整数',
-  'settings.runtime.workerApprovalTimeout': '人工审批超时',
-  'settings.runtime.workerApprovalTimeoutDesc': '等待用户处理 ACP 权限请求的时间，默认 2 分钟。',
-  'settings.runtime.workerApprovalTimeoutError': '请输入 1 到 60 之间的整数',
   'settings.runtime.workerQueueTimeout': 'Worker 排队超时',
   'settings.runtime.workerQueueTimeoutDesc': '等待并发槽或 ACP Session 容量的时间，默认 10 分钟。',
   'settings.runtime.workerQueueTimeoutError': '请输入 1 到 120 之间的整数',
@@ -1593,6 +1677,7 @@ const zh: Dict = {
   'workers.runApproval': '审批',
   'workers.runAuthHint': '{name}（{identity}）需要完成认证后才能派发。',
   'workers.runError': '错误',
+  'workers.runRuntimeRestarted': '运行时已重启，当前任务未完成；请手动重新运行。',
   'workers.runInput': '输入',
   'workers.runNoOutput': '已完成（无输出）',
   'workers.runOutput': '输出',
@@ -1614,13 +1699,33 @@ const en: Dict = {
   'common.cancel': 'Cancel',
   'common.confirmDelete': 'Delete',
   'common.confirm': 'Confirm',
+  'common.retry': 'Retry',
   'permissions.autoOff': 'Auto-accept permissions: Off',
   'permissions.autoOn': 'Auto-accept permissions: On',
   'permissions.defaultTitle': 'Default permissions',
   'permissions.defaultDescription':
-    'Operations inside the project run directly; changes outside it require approval.',
+    'The Agent handles direct operations; permission requests require manual approval.',
   'permissions.autoTitle': 'Auto-approve',
   'permissions.autoDescription': 'All permission requests are accepted automatically.',
+  'permissions.sessionDefaultTitle': 'Current Session: Default permissions',
+  'permissions.sessionDefaultDescription':
+    'Changes only this Session; the Agent handles direct operations and its permission requests require manual approval.',
+  'permissions.sessionAutoTitle': 'Current Session: Auto-approve',
+  'permissions.sessionAutoDescription':
+    'Changes only this Session; immediately accepts pending ACP requests and auto-accepts future ACP requests emitted by the Agent. Direct Agent operations remain governed by the Agent.',
+  'permissions.draftDefaultTitle': 'New Session draft: Default permissions',
+  'permissions.draftDefaultDescription':
+    'Applies only to this new Session; the Agent handles direct operations and its permission requests require manual approval.',
+  'permissions.draftAutoTitle': 'New Session draft: Auto-approve',
+  'permissions.draftAutoDescription':
+    'Applies only to this new Session; ACP permission requests emitted by the Agent are approved immediately. Direct Agent operations remain governed by the Agent.',
+  'permissions.autoResolved': 'This Session automatically handled {count} pending request(s).',
+  'permissions.autoResolvePartial':
+    'This Session handled {resolved} pending request(s); {failed} failed to resolve and {pending} remain pending.',
+  'permissions.autoResolveFailed':
+    'This Session could not automatically handle {count} pending request(s); {pending} remain pending. Retry or handle them in the approvals panel.',
+  'permissions.pendingCount': '{count} pending request(s) remain',
+  'permissions.failureCount': '{count} approval(s) failed to resolve; retry available',
   'app.bannerCmd': 'npm run dev',
   'app.bannerOffline': 'Cannot reach service ({error}). In another terminal run:',
   'app.loading': 'loading…',
@@ -1631,6 +1736,9 @@ const en: Dict = {
   'approvals.pending': 'Pending',
   'approvals.target': 'Target',
   'approvals.worker': 'Worker',
+  'approvals.agentAlwaysHint':
+    'The Agent decides how long Always lasts; it is not App Session auto-approve or a permanent grant. Direct Agent operations remain governed by the Agent.',
+  'approvals.unknownScope': 'Agent did not provide a verifiable path',
   'chat.budgetExhausted': '{used}/{max} step budget exhausted. Task may be incomplete.',
   'chat.continueTask': 'Continue',
   'chat.compactDone': 'Context compressed',
@@ -1703,7 +1811,7 @@ const en: Dict = {
   'chat.serviceOnlineHint': 'Backend service is online',
   'chat.stop': 'Stop',
   'chat.think.high': 'High',
-  'chat.think.label': 'Thinking intensity',
+  'chat.think.label': 'Thinking',
   'chat.think.low': 'Low',
   'chat.think.max': 'Max',
   'chat.think.medium': 'Medium',
@@ -1947,6 +2055,23 @@ const en: Dict = {
     'Major open-source projects this app depends on directly (not a full transitive list).',
   'settings.ossCount': '{count}',
   'settings.addProvider': 'Add provider',
+  'settings.addFromModelsDev': 'Add from models.dev',
+  'settings.addCustomGateway': 'Custom gateway',
+  'settings.modelsDevHint':
+    'Pick a registered provider from models.dev to import its full model list (catalog is cached under your local config dir, not the install package). Built-in providers are excluded.',
+  'settings.modelsDevSearchPh': 'Search by name or id…',
+  'settings.modelsDevSearch': 'Search',
+  'settings.modelsDevRefresh': 'Refresh catalog',
+  'settings.modelsDevMeta': '{count} providers · updated {at}',
+  'settings.modelsDevModelCount': '{n} models',
+  'settings.modelsDevAdd': 'Add',
+  'settings.modelsDevEmpty': 'No providers to add. Try refreshing the catalog or another query.',
+  'settings.modelsDevImported': 'Added “{name}”',
+  'settings.modelsDevRefreshFailed':
+    'Could not download the models.dev catalog ({error}). Check your network and try again.',
+  'settings.modelsDevRefreshFailedKeepLkg':
+    'Online refresh failed ({error}); still using the local cached catalog.',
+  'settings.apiStyle': 'API style',
   'settings.addModel': 'Add model',
   'settings.addModelBtn': '+ Add',
   'settings.addModelInline': 'Add new model',
@@ -1976,11 +2101,11 @@ const en: Dict = {
   'settings.descTeams':
     'Browse, rename, and delete saved collaborative crews. Create and apply crews from Chat Team.',
   'settings.descAbout': 'Product info, version, and open-source credits.',
-  'settings.danger.title': 'Danger Zone',
+  'settings.danger.title': 'Dangerous actions',
   'settings.danger.collapsedDesc': 'Clear settings, Workers, chat sessions, or caches',
   'settings.danger.warning':
     'These actions are irreversible and permanently delete local data. Stop any running Worker jobs first. Theme files, Worker installations, and the app itself are not removed.',
-  'settings.danger.warningTitle': 'Enter Danger Zone',
+  'settings.danger.warningTitle': 'Enter dangerous actions',
   'settings.danger.warningConfirm': 'I understand — continue',
   'settings.danger.impactLabel': 'This action affects',
   'settings.danger.impactSettingsBasic': 'Basic settings, appearance, and language',
@@ -2059,7 +2184,14 @@ const en: Dict = {
   'settings.customNamePh': 'e.g. Company gateway, SiliconFlow',
   'settings.customRequired': 'Provider name is required.',
   'settings.customSaveHint': 'After adding to the list, click Save.',
+  'settings.defaultModel': 'Default',
+  'settings.defaultModelSet': 'Default model set to: {model}',
+  'settings.deleteProvider': 'Delete provider',
+  'settings.deletingProvider': 'Deleting…',
+  'settings.deleteProviderConfirm':
+    'This removes the provider and its saved API key; its models will no longer be available. Delete "{name}"?',
   'settings.editCustom': 'Edit gateway',
+  'settings.setDefaultModel': 'Set as default',
   'settings.enterKey': 'Paste API key',
   'settings.hide': 'Hide',
   'settings.hideCustom': 'Hide manual id',
@@ -2087,7 +2219,7 @@ const en: Dict = {
   'settings.modelRegistryUnknown': 'Unknown',
   'settings.navAbout': 'About',
   'settings.navGeneral': 'General',
-  'settings.navModel': 'Models',
+  'settings.navModel': 'Providers',
   'settings.navPrompts': 'Prompts',
   'settings.navWorkers': 'Agent Worker',
   'settings.navTeams': 'Crews',
@@ -2097,12 +2229,15 @@ const en: Dict = {
     'Per model: checked levels appear in the chat bar when this model is selected.',
   'settings.pickModel': 'Model',
   'settings.modelList': 'Models',
+  'settings.modelTagMultimodal': 'Multimodal',
+  'settings.modelTagTools': 'Tools',
   'settings.removeModel': 'Remove model',
   'settings.firstModelHint':
     'Add at least one model to create the provider. You can add more later.',
   'settings.provider': 'Provider',
-  'settings.providerBuiltin': 'Built-in',
-  'settings.providerCustom': 'Custom providers',
+  'settings.providerBuiltin': 'Catalog',
+  'settings.providerCustom': 'Custom gateways',
+  'settings.providerDeleted': 'Provider deleted.',
   'settings.providerKey': '{provider} API key',
   'settings.runtime.leaderMaxSteps': 'Leader step budget',
   'settings.runtime.leaderMaxStepsDesc': 'Max steps per task, default 500',
@@ -2133,10 +2268,6 @@ const en: Dict = {
   'settings.runtime.workerJobTimeoutDesc':
     'Total time after entering running state; default 10 minutes.',
   'settings.runtime.workerJobTimeoutError': 'Enter an integer from 1 to 120',
-  'settings.runtime.workerApprovalTimeout': 'Approval timeout',
-  'settings.runtime.workerApprovalTimeoutDesc':
-    'Time to handle an ACP permission request; default 2 minutes.',
-  'settings.runtime.workerApprovalTimeoutError': 'Enter an integer from 1 to 60',
   'settings.runtime.workerQueueTimeout': 'Worker queue timeout',
   'settings.runtime.workerQueueTimeoutDesc':
     'Time waiting for concurrency or ACP Session capacity; default 10 minutes.',
@@ -2437,6 +2568,7 @@ const en: Dict = {
   'workers.runApproval': 'Approval',
   'workers.runAuthHint': '{name} ({identity}) must be authenticated before dispatch.',
   'workers.runError': 'Error',
+  'workers.runRuntimeRestarted': 'The worker runtime restarted before completion; manually rerun this task.',
   'workers.runInput': 'Input',
   'workers.runNoOutput': 'Completed (no output)',
   'workers.runOutput': 'Output',

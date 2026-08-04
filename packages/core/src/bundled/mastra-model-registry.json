@@ -1,8 +1,8 @@
 {
   "version": 1,
   "source": "bundled",
-  "mastraPackageVersion": "1.51.0",
-  "generatedAt": "2026-08-01T13:32:00.268Z",
+  "mastraPackageVersion": "models.dev",
+  "generatedAt": "2026-08-03T11:55:59.685Z",
   "providers": [
     {
       "id": "openai",
@@ -10,228 +10,547 @@
       "apiKeyEnvVar": "OPENAI_API_KEY",
       "models": [
         {
-          "id": "openai/chatgpt-image-latest",
-          "label": "chatgpt-image-latest"
-        },
-        {
-          "id": "openai/gpt-3.5-turbo",
-          "label": "gpt-3.5-turbo"
-        },
-        {
-          "id": "openai/gpt-4",
-          "label": "gpt-4"
-        },
-        {
-          "id": "openai/gpt-4-turbo",
-          "label": "gpt-4-turbo"
-        },
-        {
-          "id": "openai/gpt-4.1",
-          "label": "gpt-4.1"
-        },
-        {
-          "id": "openai/gpt-4.1-mini",
-          "label": "gpt-4.1-mini"
-        },
-        {
-          "id": "openai/gpt-4.1-nano",
-          "label": "gpt-4.1-nano"
-        },
-        {
-          "id": "openai/gpt-4o",
-          "label": "gpt-4o"
-        },
-        {
-          "id": "openai/gpt-4o-2024-05-13",
-          "label": "gpt-4o-2024-05-13"
-        },
-        {
-          "id": "openai/gpt-4o-2024-08-06",
-          "label": "gpt-4o-2024-08-06"
-        },
-        {
-          "id": "openai/gpt-4o-2024-11-20",
-          "label": "gpt-4o-2024-11-20"
-        },
-        {
-          "id": "openai/gpt-4o-mini",
-          "label": "gpt-4o-mini"
-        },
-        {
-          "id": "openai/gpt-5",
-          "label": "gpt-5"
-        },
-        {
-          "id": "openai/gpt-5-chat-latest",
-          "label": "gpt-5-chat-latest"
-        },
-        {
-          "id": "openai/gpt-5-codex",
-          "label": "gpt-5-codex"
-        },
-        {
-          "id": "openai/gpt-5-mini",
-          "label": "gpt-5-mini"
-        },
-        {
-          "id": "openai/gpt-5-nano",
-          "label": "gpt-5-nano"
-        },
-        {
-          "id": "openai/gpt-5-pro",
-          "label": "gpt-5-pro"
-        },
-        {
-          "id": "openai/gpt-5.1",
-          "label": "gpt-5.1"
-        },
-        {
-          "id": "openai/gpt-5.1-chat-latest",
-          "label": "gpt-5.1-chat-latest"
-        },
-        {
-          "id": "openai/gpt-5.1-codex",
-          "label": "gpt-5.1-codex"
-        },
-        {
-          "id": "openai/gpt-5.1-codex-max",
-          "label": "gpt-5.1-codex-max"
-        },
-        {
-          "id": "openai/gpt-5.1-codex-mini",
-          "label": "gpt-5.1-codex-mini"
-        },
-        {
-          "id": "openai/gpt-5.2",
-          "label": "gpt-5.2"
-        },
-        {
-          "id": "openai/gpt-5.2-chat-latest",
-          "label": "gpt-5.2-chat-latest"
-        },
-        {
-          "id": "openai/gpt-5.2-codex",
-          "label": "gpt-5.2-codex"
+          "id": "openai/gpt-image-2",
+          "label": "gpt-image-2",
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
         },
         {
           "id": "openai/gpt-5.2-pro",
-          "label": "gpt-5.2-pro"
-        },
-        {
-          "id": "openai/gpt-5.3-chat-latest",
-          "label": "gpt-5.3-chat-latest"
-        },
-        {
-          "id": "openai/gpt-5.3-codex",
-          "label": "gpt-5.3-codex"
-        },
-        {
-          "id": "openai/gpt-5.3-codex-spark",
-          "label": "gpt-5.3-codex-spark"
-        },
-        {
-          "id": "openai/gpt-5.4",
-          "label": "gpt-5.4"
-        },
-        {
-          "id": "openai/gpt-5.4-mini",
-          "label": "gpt-5.4-mini"
-        },
-        {
-          "id": "openai/gpt-5.4-nano",
-          "label": "gpt-5.4-nano"
-        },
-        {
-          "id": "openai/gpt-5.4-pro",
-          "label": "gpt-5.4-pro"
-        },
-        {
-          "id": "openai/gpt-5.5",
-          "label": "gpt-5.5"
+          "label": "GPT-5.2 Pro",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "xhigh"
+          ]
         },
         {
           "id": "openai/gpt-5.5-pro",
-          "label": "gpt-5.5-pro"
+          "label": "GPT-5.5 Pro",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "xhigh"
+          ]
         },
         {
-          "id": "openai/gpt-5.6",
-          "label": "gpt-5.6"
+          "id": "openai/gpt-4.1-mini",
+          "label": "GPT-4.1 mini",
+          "contextWindow": 1047576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
         },
         {
-          "id": "openai/gpt-5.6-luna",
-          "label": "gpt-5.6-luna"
+          "id": "openai/gpt-4o",
+          "label": "GPT-4o",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.3-codex-spark",
+          "label": "GPT-5.3 Codex Spark",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.4-pro",
+          "label": "GPT-5.4 Pro",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "xhigh"
+          ]
         },
         {
           "id": "openai/gpt-5.6-sol",
-          "label": "gpt-5.6-sol"
-        },
-        {
-          "id": "openai/gpt-5.6-terra",
-          "label": "gpt-5.6-terra"
-        },
-        {
-          "id": "openai/gpt-image-1",
-          "label": "gpt-image-1"
-        },
-        {
-          "id": "openai/gpt-image-1-mini",
-          "label": "gpt-image-1-mini"
-        },
-        {
-          "id": "openai/gpt-image-1.5",
-          "label": "gpt-image-1.5"
-        },
-        {
-          "id": "openai/gpt-image-2",
-          "label": "gpt-image-2"
-        },
-        {
-          "id": "openai/gpt-realtime-2.1",
-          "label": "gpt-realtime-2.1"
-        },
-        {
-          "id": "openai/o1",
-          "label": "o1"
-        },
-        {
-          "id": "openai/o1-pro",
-          "label": "o1-pro"
-        },
-        {
-          "id": "openai/o3",
-          "label": "o3"
-        },
-        {
-          "id": "openai/o3-deep-research",
-          "label": "o3-deep-research"
-        },
-        {
-          "id": "openai/o3-mini",
-          "label": "o3-mini"
-        },
-        {
-          "id": "openai/o3-pro",
-          "label": "o3-pro"
-        },
-        {
-          "id": "openai/o4-mini",
-          "label": "o4-mini"
-        },
-        {
-          "id": "openai/o4-mini-deep-research",
-          "label": "o4-mini-deep-research"
-        },
-        {
-          "id": "openai/text-embedding-3-large",
-          "label": "text-embedding-3-large"
-        },
-        {
-          "id": "openai/text-embedding-3-small",
-          "label": "text-embedding-3-small"
+          "label": "GPT-5.6 Sol",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
         },
         {
           "id": "openai/text-embedding-ada-002",
-          "label": "text-embedding-ada-002"
+          "label": "text-embedding-ada-002",
+          "contextWindow": 8192,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-4.1-nano",
+          "label": "GPT-4.1 nano",
+          "contextWindow": 1047576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.2-chat-latest",
+          "label": "GPT-5.2 Chat",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium"
+          ]
+        },
+        {
+          "id": "openai/o3-mini",
+          "label": "o3-mini",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-image-1-mini",
+          "label": "gpt-image-1-mini",
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.5",
+          "label": "GPT-5.5",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "id": "openai/o3-pro",
+          "label": "o3-pro",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-4o-mini",
+          "label": "GPT-4o mini",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/chatgpt-image-latest",
+          "label": "chatgpt-image-latest",
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-5",
+          "label": "GPT-5",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-realtime-2.1",
+          "label": "GPT-Realtime-2.1",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "id": "openai/gpt-3.5-turbo",
+          "label": "GPT-3.5-turbo",
+          "contextWindow": 16385,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-4o-2024-05-13",
+          "label": "GPT-4o (2024-05-13)",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-4o-2024-11-20",
+          "label": "GPT-4o (2024-11-20)",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.4",
+          "label": "GPT-5.4",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.3-chat-latest",
+          "label": "GPT-5.3 Chat (latest)",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-image-1.5",
+          "label": "gpt-image-1.5",
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.4-nano",
+          "label": "GPT-5.4 nano",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "id": "openai/gpt-5-pro",
+          "label": "GPT-5 Pro",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.4-mini",
+          "label": "GPT-5.4 mini",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "id": "openai/o1",
+          "label": "o1",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.6-luna",
+          "label": "GPT-5.6 Luna",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.2",
+          "label": "GPT-5.2",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.3-codex",
+          "label": "GPT-5.3 Codex",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
+        {
+          "id": "openai/gpt-5-mini",
+          "label": "GPT-5 Mini",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/o1-pro",
+          "label": "o1-pro",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.6",
+          "label": "GPT-5.6",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.1",
+          "label": "GPT-5.1",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-4-turbo",
+          "label": "GPT-4 Turbo",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-4o-2024-08-06",
+          "label": "GPT-4o (2024-08-06)",
+          "contextWindow": 128000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-5-nano",
+          "label": "GPT-5 Nano",
+          "contextWindow": 400000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/o3",
+          "label": "o3",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-5.6-terra",
+          "label": "GPT-5.6 Terra",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "id": "openai/gpt-image-1",
+          "label": "gpt-image-1",
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/gpt-4.1",
+          "label": "GPT-4.1",
+          "contextWindow": 1047576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/o4-mini",
+          "label": "o4-mini",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "openai/gpt-4",
+          "label": "GPT-4",
+          "contextWindow": 8192,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/text-embedding-3-large",
+          "label": "text-embedding-3-large",
+          "contextWindow": 8191,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "openai/text-embedding-3-small",
+          "label": "text-embedding-3-small",
+          "contextWindow": 8191,
+          "thinkingIntensities": [
+            "off"
+          ]
         }
       ]
     },
@@ -241,138 +560,692 @@
       "apiKeyEnvVar": "ANTHROPIC_API_KEY",
       "models": [
         {
-          "id": "anthropic/claude-fable-5",
-          "label": "claude-fable-5"
+          "id": "anthropic/claude-sonnet-4-6",
+          "label": "Claude Sonnet 4.6",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
           "id": "anthropic/claude-haiku-4-5",
-          "label": "claude-haiku-4-5"
-        },
-        {
-          "id": "anthropic/claude-haiku-4-5-20251001",
-          "label": "claude-haiku-4-5-20251001"
-        },
-        {
-          "id": "anthropic/claude-opus-4-5",
-          "label": "claude-opus-4-5"
-        },
-        {
-          "id": "anthropic/claude-opus-4-5-20251101",
-          "label": "claude-opus-4-5-20251101"
+          "label": "Claude Haiku 4.5 (latest)",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
           "id": "anthropic/claude-opus-4-6",
-          "label": "claude-opus-4-6"
+          "label": "Claude Opus 4.6",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
-          "id": "anthropic/claude-opus-4-7",
-          "label": "claude-opus-4-7"
+          "id": "anthropic/claude-fable-5",
+          "label": "Claude Fable 5",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
         },
         {
           "id": "anthropic/claude-opus-4-8",
-          "label": "claude-opus-4-8"
+          "label": "Claude Opus 4.8",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "id": "anthropic/claude-opus-4-1",
+          "label": "Claude Opus 4.1 (latest)",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
           "id": "anthropic/claude-sonnet-4-5",
-          "label": "claude-sonnet-4-5"
+          "label": "Claude Sonnet 4.5 (latest)",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
           "id": "anthropic/claude-sonnet-4-5-20250929",
-          "label": "claude-sonnet-4-5-20250929"
+          "label": "Claude Sonnet 4.5",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
-          "id": "anthropic/claude-sonnet-4-6",
-          "label": "claude-sonnet-4-6"
+          "id": "anthropic/claude-opus-4-5-20251101",
+          "label": "Claude Opus 4.5",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "anthropic/claude-haiku-4-5-20251001",
+          "label": "Claude Haiku 4.5",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "anthropic/claude-opus-4-7",
+          "label": "Claude Opus 4.7",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "id": "anthropic/claude-opus-4-5",
+          "label": "Claude Opus 4.5 (latest)",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
         },
         {
           "id": "anthropic/claude-sonnet-5",
-          "label": "claude-sonnet-5"
+          "label": "Claude Sonnet 5",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "id": "anthropic/claude-opus-5",
+          "label": "Claude Opus 5",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "id": "anthropic/claude-opus-4-1-20250805",
+          "label": "Claude Opus 4.1",
+          "contextWindow": 200000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         }
       ]
     },
     {
       "id": "google",
       "name": "Google",
-      "apiKeyEnvVar": [
-        "GOOGLE_API_KEY",
-        "GOOGLE_GENERATIVE_AI_API_KEY"
-      ],
+      "apiKeyEnvVar": "GOOGLE_API_KEY",
       "models": [
         {
-          "id": "google/gemini-2.5-flash",
-          "label": "gemini-2.5-flash"
+          "id": "google/gemini-2.5-computer-use-preview-10-2025",
+          "label": "Gemini 2.5 Computer Use Preview 10-2025",
+          "contextWindow": 131072,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
-          "id": "google/gemini-2.5-flash-image",
-          "label": "gemini-2.5-flash-image"
+          "id": "google/deep-research-preview-04-2026",
+          "label": "Deep Research Preview (Apr-21-2026)",
+          "contextWindow": 131072,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
-          "id": "google/gemini-2.5-flash-lite",
-          "label": "gemini-2.5-flash-lite"
-        },
-        {
-          "id": "google/gemini-2.5-flash-preview-tts",
-          "label": "gemini-2.5-flash-preview-tts"
-        },
-        {
-          "id": "google/gemini-2.5-pro",
-          "label": "gemini-2.5-pro"
-        },
-        {
-          "id": "google/gemini-2.5-pro-preview-tts",
-          "label": "gemini-2.5-pro-preview-tts"
-        },
-        {
-          "id": "google/gemini-3-flash-preview",
-          "label": "gemini-3-flash-preview"
-        },
-        {
-          "id": "google/gemini-3-pro-image-preview",
-          "label": "gemini-3-pro-image-preview"
-        },
-        {
-          "id": "google/gemini-3.1-flash-image-preview",
-          "label": "gemini-3.1-flash-image-preview"
-        },
-        {
-          "id": "google/gemini-3.1-flash-lite",
-          "label": "gemini-3.1-flash-lite"
-        },
-        {
-          "id": "google/gemini-3.1-pro-preview",
-          "label": "gemini-3.1-pro-preview"
-        },
-        {
-          "id": "google/gemini-3.1-pro-preview-customtools",
-          "label": "gemini-3.1-pro-preview-customtools"
-        },
-        {
-          "id": "google/gemini-3.5-flash",
-          "label": "gemini-3.5-flash"
-        },
-        {
-          "id": "google/gemini-embedding-001",
-          "label": "gemini-embedding-001"
+          "id": "google/gemini-3.1-flash-tts-preview",
+          "label": "Gemini 3.1 Flash TTS Preview",
+          "contextWindow": 8192,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
           "id": "google/gemini-flash-latest",
-          "label": "gemini-flash-latest"
+          "label": "Gemini Flash Latest",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
         },
         {
-          "id": "google/gemini-flash-lite-latest",
-          "label": "gemini-flash-lite-latest"
+          "id": "google/gemini-embedding-2",
+          "label": "Gemini Embedding 2",
+          "contextWindow": 8192,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/lyria-3-pro-preview",
+          "label": "Lyria 3 Pro Preview",
+          "contextWindow": 1048576,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/gemini-3.5-flash",
+          "label": "Gemini 3.5 Flash",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-2.5-flash",
+          "label": "Gemini 2.5 Flash",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/gemini-3.5-flash-lite",
+          "label": "Gemini 3.5 Flash Lite",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "google/lyria-3-clip-preview",
+          "label": "Lyria 3 Clip Preview",
+          "contextWindow": 1048576,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
         },
         {
           "id": "google/gemini-omni-flash-preview",
-          "label": "gemini-omni-flash-preview"
+          "label": "Gemini Omni Flash Preview",
+          "contextWindow": 131072,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/veo-3.1-generate-preview",
+          "label": "Veo 3.1",
+          "contextWindow": 480,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/deep-research-max-preview-04-2026",
+          "label": "Deep Research Max Preview (Apr-21-2026)",
+          "contextWindow": 131072,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/gemini-3-pro-image-preview",
+          "label": "Nano Banana Pro",
+          "contextWindow": 131072,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/gemini-3.1-flash-lite-preview",
+          "label": "Gemini 3.1 Flash Lite Preview",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-3.5-live-translate-preview",
+          "label": "Gemini 3.5 Live Translate Preview",
+          "contextWindow": 16384,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/gemini-3-flash-preview",
+          "label": "Gemini 3 Flash Preview",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-3.1-pro-preview-customtools",
+          "label": "Gemini 3.1 Pro Preview Custom Tools",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-3.1-flash-lite-image",
+          "label": "Nano Banana 2 Lite",
+          "contextWindow": 65536,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-3.1-flash-image-preview",
+          "label": "Nano Banana 2",
+          "contextWindow": 65536,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-robotics-er-1.6-preview",
+          "label": "Gemini Robotics-ER 1.6 Preview",
+          "contextWindow": 131072,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         },
         {
           "id": "google/gemma-4-26b-a4b-it",
-          "label": "gemma-4-26b-a4b-it"
+          "label": "Gemma 4 26B A4B IT",
+          "contextWindow": 262144,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/gemini-embedding-001",
+          "label": "Gemini Embedding 001",
+          "contextWindow": 2048,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/veo-3.1-lite-generate-preview",
+          "label": "Veo 3.1 lite",
+          "contextWindow": 480,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/gemini-2.0-flash",
+          "label": "Gemini 2.0 Flash",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/gemini-3.6-flash",
+          "label": "Gemini 3.6 Flash",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "google/veo-3.1-fast-generate-preview",
+          "label": "Veo 3.1 fast",
+          "contextWindow": 480,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/gemini-3.1-flash-lite",
+          "label": "Gemini 3.1 Flash Lite",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
         },
         {
           "id": "google/gemma-4-31b-it",
-          "label": "gemma-4-31b-it"
+          "label": "Gemma 4 31B IT",
+          "contextWindow": 262144,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/gemini-3.1-flash-image",
+          "label": "Nano Banana 2",
+          "contextWindow": 65536,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-2.5-flash-image",
+          "label": "Nano Banana",
+          "contextWindow": 32768,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/gemini-2.5-flash-preview-tts",
+          "label": "Gemini 2.5 Flash Preview TTS",
+          "contextWindow": 8192,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/gemini-3-pro-image",
+          "label": "Nano Banana Pro",
+          "contextWindow": 131072,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-3.1-pro-preview",
+          "label": "Gemini 3.1 Pro Preview",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-flash-lite-latest",
+          "label": "Gemini Flash-Lite Latest",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-2.5-pro",
+          "label": "Gemini 2.5 Pro",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/gemini-3-pro-preview",
+          "label": "Gemini 3 Pro Preview",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "high"
+          ]
+        },
+        {
+          "id": "google/gemini-2.5-flash-lite",
+          "label": "Gemini 2.5 Flash-Lite",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "google/gemini-2.5-pro-preview-tts",
+          "label": "Gemini 2.5 Pro Preview TTS",
+          "contextWindow": 8192,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/gemini-2.0-flash-lite",
+          "label": "Gemini 2.0 Flash-Lite",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "google/gemini-3.1-flash-live-preview",
+          "label": "Gemini 3.1 Flash Live Preview",
+          "contextWindow": 131072,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
         }
       ]
     },
@@ -382,40 +1255,115 @@
       "apiKeyEnvVar": "XAI_API_KEY",
       "models": [
         {
-          "id": "xai/grok-4.20-0309-non-reasoning",
-          "label": "grok-4.20-0309-non-reasoning"
-        },
-        {
-          "id": "xai/grok-4.20-0309-reasoning",
-          "label": "grok-4.20-0309-reasoning"
-        },
-        {
-          "id": "xai/grok-4.20-multi-agent-0309",
-          "label": "grok-4.20-multi-agent-0309"
+          "id": "xai/grok-imagine-video",
+          "label": "Grok Imagine Video",
+          "contextWindow": 1024,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
         },
         {
           "id": "xai/grok-4.3",
-          "label": "grok-4.3"
+          "label": "Grok 4.3",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
         },
         {
-          "id": "xai/grok-4.5",
-          "label": "grok-4.5"
+          "id": "xai/grok-4.20-0309-non-reasoning",
+          "label": "Grok 4.20 (Non-Reasoning)",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
         },
         {
-          "id": "xai/grok-build-0.1",
-          "label": "grok-build-0.1"
+          "id": "xai/grok-imagine-video-1.5",
+          "label": "Grok Imagine Video 1.5",
+          "contextWindow": 1024,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
         },
         {
-          "id": "xai/grok-imagine-image",
-          "label": "grok-imagine-image"
+          "id": "xai/grok-4.20-multi-agent-0309",
+          "label": "Grok 4.20 Multi-Agent",
+          "contextWindow": 1000000,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
         },
         {
           "id": "xai/grok-imagine-image-quality",
-          "label": "grok-imagine-image-quality"
+          "label": "Grok Imagine Image Quality",
+          "contextWindow": 8000,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
         },
         {
-          "id": "xai/grok-imagine-video",
-          "label": "grok-imagine-video"
+          "id": "xai/grok-4.5",
+          "label": "Grok 4.5",
+          "contextWindow": 500000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "xai/grok-build-0.1",
+          "label": "Grok Build 0.1",
+          "contextWindow": 256000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "xai/grok-4.20-0309-reasoning",
+          "label": "Grok 4.20 (Reasoning)",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "xai/grok-imagine-image",
+          "label": "Grok Imagine Image",
+          "contextWindow": 8000,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off"
+          ]
         }
       ]
     },
@@ -425,20 +1373,351 @@
       "apiKeyEnvVar": "DEEPSEEK_API_KEY",
       "models": [
         {
-          "id": "deepseek/deepseek-chat",
-          "label": "deepseek-chat"
-        },
-        {
-          "id": "deepseek/deepseek-reasoner",
-          "label": "deepseek-reasoner"
-        },
-        {
           "id": "deepseek/deepseek-v4-flash",
-          "label": "deepseek-v4-flash"
+          "label": "DeepSeek V4 Flash",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "high",
+            "max"
+          ]
         },
         {
           "id": "deepseek/deepseek-v4-pro",
-          "label": "deepseek-v4-pro"
+          "label": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "deepseek/deepseek-chat",
+          "label": "DeepSeek Chat",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off"
+          ]
+        },
+        {
+          "id": "deepseek/deepseek-reasoner",
+          "label": "DeepSeek Reasoner",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "opencode-go",
+      "name": "OpenCode Go",
+      "apiKeyEnvVar": "OPENCODE_API_KEY",
+      "models": [
+        {
+          "id": "opencode-go/qwen3.7-plus",
+          "label": "Qwen3.7 Plus",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/glm-5",
+          "label": "GLM-5",
+          "contextWindow": 202752,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/qwen3.5-plus",
+          "label": "Qwen3.5 Plus",
+          "contextWindow": 262144,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/glm-5.1",
+          "label": "GLM-5.1",
+          "contextWindow": 202752,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/mimo-v2-omni",
+          "label": "MiMo V2 Omni",
+          "contextWindow": 262144,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/deepseek-v4-flash",
+          "label": "DeepSeek V4 Flash (New)",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/kimi-k2.5",
+          "label": "Kimi K2.5",
+          "contextWindow": 262144,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/minimax-m2.7",
+          "label": "MiniMax-M2.7",
+          "contextWindow": 204800,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/glm-5.2",
+          "label": "GLM-5.2",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/qwen3.7-max",
+          "label": "Qwen3.7 Max",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/kimi-k2.6",
+          "label": "Kimi K2.6",
+          "contextWindow": 262144,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/mimo-v2-pro",
+          "label": "MiMo V2 Pro",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/minimax-m3",
+          "label": "MiniMax-M3",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/hy3",
+          "label": "Hy3",
+          "contextWindow": 256000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "high"
+          ]
+        },
+        {
+          "id": "opencode-go/deepseek-v4-pro",
+          "label": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/qwen3.8-max",
+          "label": "Qwen3.8 Max",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/mimo-v2.5",
+          "label": "MiMo V2.5",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/minimax-m2.5",
+          "label": "MiniMax-M2.5",
+          "contextWindow": 204800,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/gpt-5.6-luna",
+          "label": "GPT-5.6 Luna (2x usage)",
+          "contextWindow": 1050000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/grok-4.5",
+          "label": "Grok 4.5",
+          "contextWindow": 500000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "id": "opencode-go/kimi-k2.7-code",
+          "label": "Kimi K2.7 Code",
+          "contextWindow": 262144,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/kimi-k3",
+          "label": "Kimi K3",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/mimo-v2.5-pro",
+          "label": "MiMo V2.5 Pro",
+          "contextWindow": 1048576,
+          "toolCall": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "id": "opencode-go/qwen3.6-plus",
+          "label": "Qwen3.6 Plus",
+          "contextWindow": 1000000,
+          "toolCall": true,
+          "multimodal": true,
+          "thinkingIntensities": [
+            "off",
+            "medium",
+            "high",
+            "max"
+          ]
         }
       ]
     }

@@ -33,38 +33,28 @@ function decide(
 }
 
 describe('default permission decisions', () => {
-  for (const toolKind of ['read', 'search', 'think', 'fetch'] as AcpToolKind[]) {
-    it(`${toolKind} allows once regardless of target scope`, () => {
-      const result = decide(toolKind, 'default', 'outside_project')
-      assert.equal(result.mode, 'automatic')
-      if (result.mode === 'automatic') assert.equal(result.option.kind, 'allow_once')
-    })
+  for (const toolKind of [
+    'read',
+    'search',
+    'think',
+    'fetch',
+    'edit',
+    'move',
+    'delete',
+    'execute',
+    'switch_mode',
+    'other',
+  ] as AcpToolKind[]) {
+    for (const targetScope of ['inside_project', 'outside_project', 'unknown'] as const) {
+      it(`${toolKind} requires approval for ${targetScope}`, () => {
+        assert.equal(decide(toolKind, 'default', targetScope).mode, 'manual')
+      })
+    }
   }
 
-  for (const toolKind of ['edit', 'move', 'delete', 'execute'] as AcpToolKind[]) {
-    it(`${toolKind} automatically allows a proven project-local target`, () => {
-      const result = decide(toolKind, 'default', 'inside_project')
-      assert.equal(result.mode, 'automatic')
-      if (result.mode === 'automatic') {
-        assert.equal(result.option.kind, 'allow_once')
-        assert.equal(result.decision, 'allow')
-      }
-    })
-
-    it(`${toolKind} requires approval outside the project`, () => {
-      assert.equal(decide(toolKind, 'default', 'outside_project').mode, 'manual')
-    })
-
-    it(`${toolKind} requires approval when scope evidence is missing`, () => {
-      assert.equal(decide(toolKind, 'default', 'unknown').mode, 'manual')
-    })
-  }
-
-  for (const toolKind of ['switch_mode', 'other'] as AcpToolKind[]) {
-    it(`${toolKind} remains manual without reliable range semantics`, () => {
-      assert.equal(decide(toolKind, 'default', 'inside_project').mode, 'manual')
-    })
-  }
+  it('still creates a manual decision when the Agent exposes only reject options', () => {
+    assert.equal(decide('read', 'default', 'inside_project', [rejectOnce]).mode, 'manual')
+  })
 })
 
 describe('automatic permission decisions', () => {
@@ -95,12 +85,10 @@ describe('automatic permission decisions', () => {
 })
 
 describe('fail-closed option handling', () => {
-  for (const permissionMode of ['default', 'auto'] as const) {
-    it(`${permissionMode} cancels when the Agent offers no allow option`, () => {
-      const result = decide('read', permissionMode, 'inside_project', [rejectOnce])
-      assert.equal(result.mode, 'cancelled')
-    })
-  }
+  it('auto still enters the durable approval path when the Agent offers no allow option', () => {
+    const result = decide('read', 'auto', 'inside_project', [rejectOnce])
+    assert.equal(result.mode, 'manual')
+  })
 
   it('never infers allow semantics from option names or ids', () => {
     const deceptive: PermissionOption = {
@@ -108,7 +96,7 @@ describe('fail-closed option handling', () => {
       name: 'Allow always',
       kind: 'reject_once' as PermissionOptionKind,
     }
-    assert.equal(decide('edit', 'auto', 'inside_project', [deceptive]).mode, 'cancelled')
+    assert.equal(decide('edit', 'auto', 'inside_project', [deceptive]).mode, 'manual')
   })
 
   it('treats unknown tool kinds as other', () => {

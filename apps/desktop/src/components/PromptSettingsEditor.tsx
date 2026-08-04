@@ -183,7 +183,7 @@ export function PromptSettingsEditor({ prompts, saving, onChange, onSave }: Prop
                   {roleDirty && <span className="prompt-role-dirty" aria-hidden />}
                   <span className="prompt-role-chevron" aria-hidden />
                 </button>
-                <Expandable open={open} keepMounted>
+                <Expandable open={open}>
                   <div className="prompt-role-body">
                     <div className="prompt-field">
                       <textarea

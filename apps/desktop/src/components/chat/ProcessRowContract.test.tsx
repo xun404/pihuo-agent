@@ -90,6 +90,7 @@ describe('collapsible process-row visual contract', () => {
       truncated: false,
       startedAt: 1_000,
       lastDeltaAt: 2_000,
+      pendingApprovals: [],
     }
     const html = renderToStaticMarkup(
       <I18nProvider serverLocale="en">

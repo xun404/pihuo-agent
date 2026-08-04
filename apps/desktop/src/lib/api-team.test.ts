@@ -137,6 +137,42 @@ test('Session permission mode uses POST and encodes an opaque Session id', async
   assert.deepEqual(request, {
     pathname: `/api/sessions/${encodePathSegment('session/one?x=1')}/permission-mode`,
     method: 'POST',
-    body: { permissionMode: 'default' },
+    body: { permissionMode: 'default', source: 'manual_chat' },
   })
+})
+
+test('Session permission mode can identify a panel-originated mutation', async () => {
+  let request: { pathname: string; method: string; body?: unknown } | undefined
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input))
+    request = {
+      pathname: url.pathname,
+      method: String(init?.method ?? 'GET'),
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    }
+    return Response.json({ session: {}, snapshot: {} })
+  }
+
+  await api.setSessionPermissionMode('session-1', 'auto', 'manual_panel')
+
+  assert.deepEqual(request, {
+    pathname: '/api/sessions/session-1/permission-mode',
+    method: 'POST',
+    body: { permissionMode: 'auto', source: 'manual_panel' },
+  })
+})
+
+test('Session permission mode preserves server approval feedback', async () => {
+  globalThis.fetch = async () =>
+    Response.json({
+      session: { id: 'session-1' },
+      approvals: [{ id: 'approval-1' }],
+      failures: [{ approvalId: 'approval-2', error: 'durable failure' }],
+      snapshot: {},
+    })
+
+  const result = await api.setSessionPermissionMode('session-1', 'auto')
+
+  assert.equal(result.approvals?.length, 1)
+  assert.deepEqual(result.failures, [{ approvalId: 'approval-2', error: 'durable failure' }])
 })

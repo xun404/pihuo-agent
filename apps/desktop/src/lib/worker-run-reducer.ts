@@ -1,5 +1,7 @@
 import {
   isTerminalWorkerEvent,
+  compareApprovalOrder,
+  sortPendingApprovals,
   type ApprovalCursor,
   type ApprovalItem,
   type WorkerJob,
@@ -28,6 +30,27 @@ function cursorForApproval(approval: ApprovalItem): ApprovalCursor {
   }
 }
 
+function pendingApprovalsForState(state: WorkerRunState): ApprovalItem[] {
+  if (Array.isArray(state.pendingApprovals)) return state.pendingApprovals
+  return state.pendingApproval ? [state.pendingApproval] : []
+}
+
+function approvalCursorsForState(
+  state: WorkerRunState,
+  pendingApprovals: ApprovalItem[],
+): Record<string, ApprovalCursor> {
+  const cursors = state.approvalCursors ? { ...state.approvalCursors } : {}
+  for (const approval of pendingApprovals) {
+    if (!cursors[approval.id]) cursors[approval.id] = cursorForApproval(approval)
+  }
+  return cursors
+}
+
+function sameApproval(a: ApprovalItem | undefined, b: ApprovalItem | undefined): boolean {
+  if (!a || !b) return a === b
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 /** Positive means incoming is newer; same-id resolution is monotonic. */
 export function compareApprovalCursor(
   incoming: ApprovalCursor,
@@ -46,25 +69,68 @@ export function compareApprovalCursor(
 function mergeApprovalIntoWorkerState(
   state: WorkerRunState,
   approval: ApprovalItem,
+  eventKind?: 'requested' | 'resolved',
 ): WorkerRunState {
   if (!isActiveWorkerStatus(state.status)) return state
+  const pendingApprovals = pendingApprovalsForState(state)
   const cursor = cursorForApproval(approval)
-  if (compareApprovalCursor(cursor, state.approvalCursor) <= 0) return state
+  const current = pendingApprovals.find((item) => item.id === approval.id)
+  const currentCursor =
+    state.approvalCursors?.[approval.id] ?? (current ? cursorForApproval(current) : undefined)
+  const cursorComparison = compareApprovalCursor(cursor, currentCursor)
+  const isPending = eventKind === 'requested' || (eventKind !== 'resolved' && approval.status === 'pending')
+  // Same-id pending requests are true upserts: keep the reference for an
+  // identical duplicate, but accept changed metadata (title/detail/options).
+  if (
+    cursorComparison < 0 ||
+    (cursorComparison === 0 && !(isPending && current && !sameApproval(current, approval)))
+  )
+    return state
 
-  if (approval.status === 'pending') {
+  if (isPending) {
+    const nextPending = sortPendingApprovals(
+      current
+        ? pendingApprovals.map((item) => (item.id === approval.id ? approval : item))
+        : [...pendingApprovals, approval],
+    )
+    const approvalCursors = approvalCursorsForState(state, pendingApprovals)
+    approvalCursors[approval.id] = cursor
     return {
       ...state,
       status: 'pending_approval',
-      pendingApproval: approval,
+      pendingApprovals: nextPending,
+      pendingApproval: nextPending[0],
+      approvalCursors,
       approvalCursor: cursor,
       lastDeltaAt: Date.now(),
     }
   }
 
-  const { pendingApproval: _pendingApproval, ...rest } = state
+  // A resolution only removes its own id. In particular, resolving one of
+  // several requests must not make the Job look runnable while another is
+  // still pending. Record a tombstone even when other requests are pending:
+  // transient events can be delivered out of order, and a later stale
+  // approval_requested for this id must not resurrect the resolved request.
+  if (!current) {
+    if (currentCursor) return state
+    const approvalCursors = approvalCursorsForState(state, pendingApprovals)
+    approvalCursors[approval.id] = cursor
+    return {
+      ...state,
+      approvalCursors,
+      approvalCursor: cursor,
+      lastDeltaAt: Date.now(),
+    }
+  }
+  const nextPending = pendingApprovals.filter((item) => item.id !== approval.id)
+  const approvalCursors = approvalCursorsForState(state, pendingApprovals)
+  approvalCursors[approval.id] = cursor
   return {
-    ...rest,
-    status: 'running',
+    ...state,
+    status: nextPending.length > 0 ? 'pending_approval' : 'running',
+    pendingApprovals: nextPending,
+    pendingApproval: nextPending[0],
+    approvalCursors,
     approvalCursor: cursor,
     lastDeltaAt: Date.now(),
   }
@@ -155,7 +221,7 @@ export function workerRunReducer(
       const prev = state.get(event.jobId)
       if (prev && isActiveWorkerStatus(prev.status)) {
         const approval = (event as WorkerRunEvent & { type: 'approval_requested' }).approval
-        changed = mergeApprovalIntoWorkerState(prev, approval) !== prev
+        changed = mergeApprovalIntoWorkerState(prev, approval, 'requested') !== prev
       }
       break
     }
@@ -163,7 +229,7 @@ export function workerRunReducer(
       const prev = state.get(event.jobId)
       if (prev && isActiveWorkerStatus(prev.status)) {
         const resolvedApproval = (event as WorkerRunEvent & { type: 'approval_resolved' }).approval
-        changed = mergeApprovalIntoWorkerState(prev, resolvedApproval) !== prev
+        changed = mergeApprovalIntoWorkerState(prev, resolvedApproval, 'resolved') !== prev
       }
       break
     }
@@ -229,6 +295,7 @@ export function workerRunReducer(
         truncated: false,
         startedAt: now,
         lastDeltaAt: now,
+        pendingApprovals: [],
       })
       break
     }
@@ -248,7 +315,7 @@ export function workerRunReducer(
       const prev = state.get(event.jobId)
       if (prev && isActiveWorkerStatus(prev.status)) {
         const newApproval = (event as WorkerRunEvent & { type: 'approval_requested' }).approval
-        next.set(event.jobId, mergeApprovalIntoWorkerState(prev, newApproval))
+        next.set(event.jobId, mergeApprovalIntoWorkerState(prev, newApproval, 'requested'))
       }
       break
     }
@@ -256,7 +323,7 @@ export function workerRunReducer(
       const prev = state.get(event.jobId)
       if (prev && isActiveWorkerStatus(prev.status)) {
         const resolvedApproval = (event as WorkerRunEvent & { type: 'approval_resolved' }).approval
-        next.set(event.jobId, mergeApprovalIntoWorkerState(prev, resolvedApproval))
+        next.set(event.jobId, mergeApprovalIntoWorkerState(prev, resolvedApproval, 'resolved'))
       }
       break
     }
@@ -290,6 +357,7 @@ export function workerRunReducer(
           reasoning: (event as { reasoning?: string }).reasoning ?? prev.reasoning,
           startedAt: times?.startedAt ?? prev.startedAt,
           lastDeltaAt: Math.max(end, times?.startedAt ?? prev.startedAt),
+          pendingApprovals: [],
           pendingApproval: undefined,
         })
       } else if (event.workerName) {
@@ -320,6 +388,7 @@ export function workerRunReducer(
           truncated: event.truncated,
           startedAt: t.startedAt,
           lastDeltaAt: t.lastDeltaAt,
+          pendingApprovals: [],
         })
       }
       break
@@ -344,6 +413,7 @@ export function workerRunReducer(
           canResetAcpContext: event.canResetAcpContext,
           startedAt: times?.startedAt ?? prev.startedAt,
           lastDeltaAt: Math.max(end, times?.startedAt ?? prev.startedAt),
+          pendingApprovals: [],
           pendingApproval: undefined,
         })
       } else if (event.workerName) {
@@ -377,6 +447,7 @@ export function workerRunReducer(
           canResetAcpContext: event.canResetAcpContext,
           startedAt: t.startedAt,
           lastDeltaAt: t.lastDeltaAt,
+          pendingApprovals: [],
         })
       }
       break
@@ -439,16 +510,77 @@ export function seedApprovalsFromSnapshot(
   state: Map<string, WorkerRunState>,
   approvals: ApprovalItem[],
 ): Map<string, WorkerRunState> {
-  let next = state
+  // A snapshot is a complete durable view for each Job represented in it.
+  // Group first so an older resolved row/cursor cannot hide another pending
+  // row for the same Job, regardless of transport order.
+  const rowsByJob = new Map<string, ApprovalItem[]>()
   for (const approval of approvals) {
     if (!approval.jobId) continue
-    const existing = next.get(approval.jobId)
-    if (!existing) continue
-    const merged = mergeApprovalIntoWorkerState(existing, approval)
-    if (merged !== existing) {
-      if (next === state) next = new Map(state)
-      next.set(approval.jobId, merged)
+    const rows = rowsByJob.get(approval.jobId)
+    if (rows) rows.push(approval)
+    else rowsByJob.set(approval.jobId, [approval])
+  }
+
+  let next = state
+  for (const [jobId, rows] of rowsByJob) {
+    const existing = next.get(jobId)
+    if (!existing || !isActiveWorkerStatus(existing.status)) continue
+
+    // Durable stores should contain one row per id, but tolerate an old or
+    // concurrently merged snapshot carrying both pending and resolved copies.
+    // For the same id, a resolved row wins; pending rows for *other* ids still
+    // remain authoritative and visible.
+    const latestById = new Map<string, ApprovalItem>()
+    for (const row of [...rows].sort(compareApprovalOrder)) {
+      const current = latestById.get(row.id)
+      if (!current || compareApprovalCursor(cursorForApproval(row), cursorForApproval(current)) > 0) {
+        latestById.set(row.id, row)
+      }
     }
+    const canonicalRows = [...latestById.values()]
+    const pending = sortPendingApprovals(canonicalRows)
+    const currentPending = pendingApprovalsForState(existing)
+    const rowsInOrder = canonicalRows.sort(compareApprovalOrder)
+    const approvalCursors = approvalCursorsForState(existing, currentPending)
+    for (const row of rowsInOrder) {
+      const cursor = cursorForApproval(row)
+      const previous = approvalCursors[row.id]
+      // Keep an already-resolved tombstone stable across snapshots whose
+      // deserialized createdAt differs by a few milliseconds. Pending rows may
+      // still replace a resolved cursor because the pending set is authoritative.
+      if (!previous || previous.resolved !== cursor.resolved) approvalCursors[row.id] = cursor
+    }
+    // If a row appears in both forms, the snapshot's pending representation is
+    // authoritative and must win over a stale resolved cursor.
+    for (const row of pending) {
+      const previous = approvalCursors[row.id]
+      if (!previous || previous.resolved) approvalCursors[row.id] = cursorForApproval(row)
+    }
+
+    const samePending =
+      currentPending.length === pending.length &&
+      currentPending.every((item, index) => sameApproval(item, pending[index]))
+    const nextStatus = pending.length > 0 ? 'pending_approval' : 'running'
+    const needsChange =
+      !samePending ||
+      existing.status !== nextStatus ||
+      !Array.isArray(existing.pendingApprovals) ||
+      existing.pendingApproval !== pending[0] ||
+      JSON.stringify(existing.approvalCursors ?? {}) !== JSON.stringify(approvalCursors)
+
+    if (!needsChange) continue
+    if (next === state) next = new Map(state)
+    next.set(jobId, {
+      ...existing,
+      status: nextStatus,
+      pendingApprovals: pending,
+      pendingApproval: pending[0],
+      approvalCursors,
+      approvalCursor: rowsInOrder.length
+        ? cursorForApproval(rowsInOrder[rowsInOrder.length - 1]!)
+        : existing.approvalCursor,
+      lastDeltaAt: Date.now(),
+    })
   }
 
   return next
@@ -590,6 +722,7 @@ export function seedWorkerStatesFromSnapshot(
           output,
           error,
           errorCode,
+          pendingApprovals: [],
           pendingApproval: undefined,
           snapshotHydrated: true,
           startedAt,
@@ -632,6 +765,7 @@ export function seedWorkerStatesFromSnapshot(
       truncated: false,
       startedAt,
       lastDeltaAt: startedAt,
+      pendingApprovals: [],
       snapshotHydrated: true,
     })
   }

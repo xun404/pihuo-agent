@@ -1,10 +1,17 @@
 import { classifyAcpLocations, type AcpPermissionRequest } from '@swarmdesk-agent/adapters'
-import { decidePermission, type LocalStore, type PermissionDecision } from '@swarmdesk-agent/core'
+import {
+  decidePermission,
+  globalActivityLog,
+  type LocalStore,
+  type PermissionDecision,
+} from '@swarmdesk-agent/core'
 import type {
   AcpToolKind,
   ApprovalItem,
   PermissionTargetScope,
+  PermissionModeChangeSource,
   Session,
+  SessionApprovalPolicy,
   SessionPermissionMode,
 } from '@swarmdesk-agent/shared'
 
@@ -98,62 +105,97 @@ export interface SetSessionPermissionModeResult {
   failures: Array<{ approvalId: string; error: string }>
 }
 
-export function setSessionPermissionModeInStore(input: {
+export interface ReconcileSessionPendingApprovalsResult {
+  approvals: ApprovalItem[]
+  failures: Array<{ approvalId: string; error: string }>
+}
+
+const PUBLIC_RECONCILIATION_FAILURE = 'Approval resolution failed; retry this Session.'
+
+/**
+ * Resolve every pending Approval that belongs to a Session whose live mode is
+ * auto. Calling this after a manual Approval is persisted closes the race where
+ * the shield changes between the permission decision and the durable insert.
+ */
+export function reconcileSessionPendingApprovalsInStore(input: {
   store: LocalStore
   sessionId: string
-  permissionMode: SessionPermissionMode
   onApprovalResolved?: (approval: ApprovalItem) => void
-}): SetSessionPermissionModeResult {
-  const session = input.store.updateSessionPermissionMode(input.sessionId, input.permissionMode)
+}): ReconcileSessionPendingApprovalsResult {
+  const session = input.store.listSessions().find((candidate) => candidate.id === input.sessionId)
   const approvals: ApprovalItem[] = []
   const failures: Array<{ approvalId: string; error: string }> = []
-  if (input.permissionMode !== 'auto') return { session, approvals, failures }
+  if (session?.permissionMode !== 'auto') return { approvals, failures }
 
   const pending = input.store
     .listPendingApprovals()
     .filter((approval) => approval.sessionId === input.sessionId)
-  const affectedJobIds = new Set(
-    pending.map((approval) => approval.jobId).filter((jobId): jobId is string => Boolean(jobId)),
-  )
-
   for (const approval of pending) {
     const allow =
       approval.options.find((option) => option.kind === 'allow_once') ??
       approval.options.find((option) => option.kind === 'allow_always')
     try {
       const result = allow
-        ? input.store.tryResolveApproval(approval.id, 'allow', allow.optionId, {
+        ? input.store.tryResolveJobApproval(approval.id, 'allow', allow.optionId, {
             resolutionSource: 'policy',
             resolutionReason: `Auto permission mode selected ${allow.kind}`,
           })
-        : input.store.tryResolveApproval(approval.id, 'cancel', undefined, {
+        : input.store.tryResolveJobApproval(approval.id, 'cancel', undefined, {
             resolutionSource: 'system',
             resolutionReason: 'Auto permission mode found no allow option',
           })
       if (!result.resolved) continue
+      // The durable CAS has already won. A notification/timer side effect must
+      // not turn that committed resolution into a retryable approval failure.
       approvals.push(result.item)
-      input.onApprovalResolved?.(result.item)
+      try {
+        input.onApprovalResolved?.(result.item)
+      } catch (error) {
+        globalActivityLog.append('approval', 'Session approval resolution notification failed', {
+          sessionId: input.sessionId,
+          approvalId: approval.id,
+          errorType: error instanceof Error ? error.name : typeof error,
+        })
+      }
     } catch (error) {
+      // Keep the HTTP/Desktop contract stable and fail-closed. Store/CAS errors
+      // can contain paths or implementation details; retain only a type marker
+      // in the local activity stream and never return the raw message.
+      globalActivityLog.append('approval', 'Session approval reconciliation failed', {
+        sessionId: input.sessionId,
+        approvalId: approval.id,
+        errorType: error instanceof Error ? error.name : typeof error,
+      })
       failures.push({
         approvalId: approval.id,
-        error: error instanceof Error ? error.message : 'Approval resolution failed',
+        error: PUBLIC_RECONCILIATION_FAILURE,
       })
     }
   }
 
-  for (const jobId of affectedJobIds) {
-    const job = input.store.getJob(jobId)
-    if (!job || job.status !== 'pending_approval') continue
-    const stillPending = input.store
-      .listPendingApprovals()
-      .some((approval) => approval.jobId === jobId)
-    if (!stillPending) {
-      input.store.updateJob(jobId, {
-        status: 'running',
-        message: `Running on ${job.workerName}`,
-      })
-    }
-  }
+  return { approvals, failures }
+}
 
-  return { session, approvals, failures }
+export function setSessionPermissionModeInStore(input: {
+  store: LocalStore
+  sessionId: string
+  permissionMode: SessionPermissionMode
+  source?: PermissionModeChangeSource
+  /** Legacy five-state route needs to preserve the exact policy value. */
+  approvalPolicy?: SessionApprovalPolicy
+  onApprovalResolved?: (approval: ApprovalItem) => void
+}): SetSessionPermissionModeResult {
+  const session = input.approvalPolicy
+    ? input.store.updateSessionApprovalPolicy(input.sessionId, input.approvalPolicy, {
+        source: input.source,
+      })
+    : input.store.updateSessionPermissionMode(input.sessionId, input.permissionMode, {
+        source: input.source,
+      })
+  const reconciled = reconcileSessionPendingApprovalsInStore({
+    store: input.store,
+    sessionId: input.sessionId,
+    onApprovalResolved: input.onApprovalResolved,
+  })
+  return { session, ...reconciled }
 }

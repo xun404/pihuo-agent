@@ -1,6 +1,7 @@
 import { describe, it, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { LocalStore } from './store.js'
+import { globalActivityLog } from './activity.js'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -90,13 +91,70 @@ describe('Session approval policy', () => {
     assert.equal(auto.mode, 'build')
   })
 
+  it('drops legacy Project permission defaults and never inherits them into new Sessions', () => {
+    const project = store.upsertProject({
+      name: 'Legacy project default',
+      rootPath: join(dir, 'legacy-project-default'),
+    })
+    const createdAt = new Date().toISOString()
+    const raw = {
+      projects: [{ ...project, defaultPermissionMode: 'invalid-mode' }],
+      sessions: [
+        {
+          id: 'legacy-auto-session',
+          projectId: project.id,
+          title: 'Legacy auto',
+          status: 'idle',
+          mode: 'build',
+          activeWorkerIds: [],
+          memoryThreadId: 'legacy-auto-thread',
+          approvalPolicy: 'allow_always',
+          permissionMode: 'auto',
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ],
+      workers: [],
+      approvals: [],
+      jobs: [],
+      activeProjectId: project.id,
+      activeSessionId: 'legacy-auto-session',
+    }
+    writeFileSync(path, JSON.stringify(raw), 'utf8')
+    const migrated = new LocalStore(path).snapshot()
+    assert.equal('defaultPermissionMode' in (migrated.projects[0] ?? {}), false)
+    const next = new LocalStore(path).createSession({ projectId: project.id, title: 'Next' })
+    assert.equal(next.permissionMode, 'default')
+  })
+
   it('updates permission mode atomically and rejects invalid values', () => {
+    globalActivityLog.clear()
     const project = store.upsertProject({ name: 'Permission Mode', rootPath: join(dir, 'mode') })
     const session = store.createSession({ projectId: project.id })
 
-    const updated = store.updateSessionPermissionMode(session.id, 'auto')
+    const updated = store.updateSessionPermissionMode(session.id, 'auto', {
+      source: 'manual_chat',
+    })
     assert.equal(updated.permissionMode, 'auto')
     assert.equal(store.snapshot().sessions.find((s) => s.id === session.id)?.permissionMode, 'auto')
+    const audit = globalActivityLog
+      .list(20)
+      .find((event) => event.meta?.sessionId === session.id && event.meta?.source === 'manual_chat')
+    assert.ok(audit)
+    assert.equal(audit?.meta?.previous, 'default')
+    assert.equal(audit?.meta?.next, 'auto')
+
+    const revisionBeforeNoop = store.snapshot().revision
+    store.updateSessionPermissionMode(session.id, 'auto', { source: 'manual_chat' })
+    assert.equal(store.snapshot().revision, revisionBeforeNoop)
+    assert.equal(
+      globalActivityLog
+        .list(20)
+        .filter(
+          (event) => event.meta?.sessionId === session.id && event.meta?.source === 'manual_chat',
+        ).length,
+      1,
+    )
 
     assert.throws(
       () => store.updateSessionPermissionMode(session.id, 'manual' as SessionPermissionMode),

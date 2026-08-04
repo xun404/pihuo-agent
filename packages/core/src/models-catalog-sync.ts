@@ -162,7 +162,16 @@ function snapshotToCatalog(snapshot: RegistrySnapshot): ModelProviderDef[] {
       ...(apiKeyEnvAliases?.length ? { apiKeyEnvAliases } : {}),
       docsUrl: '',
       ...(p.baseURL ? { baseURL: p.baseURL } : {}),
-      models: p.models.map((m) => ({ id: m.id, label: m.label })),
+      models: p.models.map((m) => ({
+        id: m.id,
+        label: m.label,
+        ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+        ...(m.toolCall ? { toolCall: m.toolCall } : {}),
+        ...(m.multimodal ? { multimodal: m.multimodal } : {}),
+        ...(m.thinkingIntensities?.length
+          ? { thinkingIntensities: m.thinkingIntensities }
+          : {}),
+      })),
     } satisfies ModelProviderDef
   })
 }
@@ -182,7 +191,16 @@ function catalogToSnapshot(
       name: p.name,
       apiKeyEnvVar: p.apiKeyEnvAliases?.length ? [p.apiKeyEnv, ...p.apiKeyEnvAliases] : p.apiKeyEnv,
       ...(p.baseURL ? { baseURL: p.baseURL } : {}),
-      models: p.models.map((m) => ({ id: m.id, label: m.label })),
+      models: p.models.map((m) => ({
+        id: m.id,
+        label: m.label,
+        ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+        ...(m.toolCall ? { toolCall: m.toolCall } : {}),
+        ...(m.multimodal ? { multimodal: m.multimodal } : {}),
+        ...(m.thinkingIntensities?.length
+          ? { thinkingIntensities: m.thinkingIntensities }
+          : {}),
+      })),
     })),
   }
 }

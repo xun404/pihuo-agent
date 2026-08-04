@@ -38,7 +38,7 @@ import {
   shortModelName,
   slugProviderId,
 } from '../lib/custom-provider-form'
-import { ProviderLogo, getProviderIconMeta } from '../lib/provider-icons'
+import { ProviderLogo } from '../lib/provider-icons'
 import { useTheme } from '../theme/ThemeProvider'
 import { sortThemesForDisplay } from '../theme/theme.config'
 import { useSendShortcut } from '../hooks/useSendShortcut'
@@ -287,6 +287,8 @@ export function SettingsPanel({
   } | null>(null)
   // Generic confirmation dialog state (delete/destroy actions), replacing native OS confirms.
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
+  /** True while a provider delete is in flight (header + confirm button). */
+  const [deletingProvider, setDeletingProvider] = useState(false)
   const [dangerOpen, setDangerOpen] = useState(false)
   const [dangerBusy, setDangerBusy] = useState<DangerZoneAction | null>(null)
   useEffect(() => {
@@ -342,7 +344,6 @@ export function SettingsPanel({
   )
   const [workerTimeouts, setWorkerTimeouts] = useState<WorkerTimeoutSettings>({
     jobTimeoutMs: 600_000,
-    approvalTimeoutMs: 120_000,
     queueTimeoutMs: 600_000,
   })
   const [npmRegistryDraft, setNpmRegistryDraft] = useState('')
@@ -363,6 +364,26 @@ export function SettingsPanel({
   const [editModelForm, setEditModelForm] = useState<AddModelForm>(emptyAddModelForm())
   /** Explicit provider selection (sidebar); falls back from leaderModel */
   const [focusProviderId, setFocusProviderId] = useState<string | null>(null)
+  /** Add-provider wizard: models.dev catalog vs hand-built custom */
+  const [addProviderMode, setAddProviderMode] = useState<'models-dev' | 'custom'>('models-dev')
+  const [modelsDevQuery, setModelsDevQuery] = useState('')
+  const [modelsDevList, setModelsDevList] = useState<
+    Array<{
+      id: string
+      name: string
+      modelCount: number
+      npm?: string
+      api?: string
+      needsBaseURL: boolean
+    }>
+  >([])
+  const [modelsDevMeta, setModelsDevMeta] = useState<{
+    fetchedAt: string
+    providerCount: number
+  } | null>(null)
+  const [modelsDevLoading, setModelsDevLoading] = useState(false)
+  const [modelsDevError, setModelsDevError] = useState<string | null>(null)
+  const [modelsDevImportingId, setModelsDevImportingId] = useState<string | null>(null)
   const [leaderMaxSteps, setLeaderMaxSteps] = useState<number | null>(null)
   const [leaderMaxStepsDraft, setLeaderMaxStepsDraft] = useState<string>('')
   const [leaderMaxStepsError, setLeaderMaxStepsError] = useState<string | null>(null)
@@ -475,6 +496,90 @@ export function SettingsPanel({
     void load()
   }, [load])
 
+  const loadModelsDevList = useCallback(
+    async (opts?: { forceRefresh?: boolean; q?: string }) => {
+      setModelsDevLoading(true)
+      setModelsDevError(null)
+      const q = opts?.q ?? modelsDevQuery
+      try {
+        if (opts?.forceRefresh) {
+          try {
+            await api.refreshModelsDevCatalog()
+          } catch (e) {
+            // Keep serving local LKG if refresh fails (e.g. models.dev unreachable)
+            const msg = e instanceof Error ? e.message : String(e)
+            const existing = await api.listModelsDevProviders(q).catch(() => null)
+            if (existing?.catalogAvailable) {
+              setModelsDevList(existing.providers)
+              setModelsDevMeta(
+                existing.meta
+                  ? {
+                      fetchedAt: existing.meta.fetchedAt,
+                      providerCount: existing.meta.providerCount,
+                    }
+                  : null,
+              )
+              setModelsDevError(t('settings.modelsDevRefreshFailedKeepLkg', { error: msg }))
+              return
+            }
+            setModelsDevList([])
+            setModelsDevMeta(null)
+            setModelsDevError(t('settings.modelsDevRefreshFailed', { error: msg }))
+            return
+          }
+        }
+
+        let res = await api.listModelsDevProviders(q)
+        if (!res.catalogAvailable && !opts?.forceRefresh) {
+          // First open with no LKG: try one network refresh
+          try {
+            await api.refreshModelsDevCatalog()
+            res = await api.listModelsDevProviders(q)
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e)
+            setModelsDevList([])
+            setModelsDevMeta(null)
+            setModelsDevError(t('settings.modelsDevRefreshFailed', { error: msg }))
+            return
+          }
+        }
+        setModelsDevList(res.providers)
+        setModelsDevMeta(
+          res.meta ? { fetchedAt: res.meta.fetchedAt, providerCount: res.meta.providerCount } : null,
+        )
+      } catch (e) {
+        setModelsDevError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setModelsDevLoading(false)
+      }
+    },
+    [modelsDevQuery, t],
+  )
+
+  useEffect(() => {
+    if (focusProviderId !== '__new__' || addProviderMode !== 'models-dev') return
+    void loadModelsDevList()
+  }, [focusProviderId, addProviderMode, loadModelsDevList])
+
+  const importModelsDevProvider = async (providerId: string) => {
+    setModelsDevImportingId(providerId)
+    setModelsDevError(null)
+    try {
+      const res = await api.importModelsDevProvider(providerId)
+      toastSuccess(t('settings.modelsDevImported', { name: res.provider.name }))
+      await load()
+      setFocusProviderId(res.provider.id)
+      setEditingId(res.provider.id)
+      setAddProviderMode('models-dev')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setModelsDevError(msg)
+      toastError(msg)
+    } finally {
+      setModelsDevImportingId(null)
+    }
+  }
+
   useEffect(
     () => () => {
       agentAuthControllerRef.current?.abort()
@@ -497,9 +602,27 @@ export function SettingsPanel({
     )
   }, [leaderModel, data, focusProviderId])
 
-  // When a custom provider is focused, keep the detail form hydrated (wireframe fields).
+  /** Hand-built custom only — models.dev imports use built-in-style readonly UI. */
+  const isHandCustomProvider = (p: SettingsProvider | undefined) => {
+    if (!p?.custom) return false
+    // Prefer payload source; fall back to customProviders list (IPC may omit on providers[])
+    const source =
+      p.source ?? customProviders.find((c) => c.id === p.id)?.source
+    return source !== 'models.dev'
+  }
+
+  const isModelsDevProvider = (p: SettingsProvider | undefined) => {
+    if (!p) return false
+    const source =
+      p.source ?? customProviders.find((c) => c.id === p.id)?.source
+    return source === 'models.dev'
+  }
+
+  // When a hand-built custom provider is focused, keep the detail form hydrated.
+  // models.dev imports use built-in-style readonly UI — do not open the edit form.
   useEffect(() => {
-    if (!selectedProvider?.custom || focusProviderId === '__new__') return
+    if (!selectedProvider || focusProviderId === '__new__') return
+    if (!isHandCustomProvider(selectedProvider)) return
     if (editingId === selectedProvider.id && form.name) return
     const cp = customProviders.find((c) => c.id === selectedProvider.id)
     if (cp) {
@@ -507,16 +630,20 @@ export function SettingsPanel({
       return
     }
     setEditingId(selectedProvider.id)
-    // Provider-level fields only — models are managed via the model list
     setForm({
       ...emptySimpleForm(),
       name: selectedProvider.name,
       baseURL: (selectedProvider as { baseURL?: string }).baseURL ?? '',
       apiStyle: (selectedProvider as { apiStyle?: ApiStyle }).apiStyle ?? 'openai',
     })
-    // startEdit is stable enough for this hydration path
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProvider?.id, selectedProvider?.custom, customProviders, focusProviderId])
+  }, [
+    selectedProvider?.id,
+    selectedProvider?.custom,
+    selectedProvider?.source,
+    customProviders,
+    focusProviderId,
+  ])
 
   const needsKey = selectedProvider && !selectedProvider.configured
   const keyDraft = selectedProvider ? (draftKeys[selectedProvider.apiKeyEnv] ?? '') : ''
@@ -576,8 +703,8 @@ export function SettingsPanel({
       const next = p.models[0]?.id ?? `${p.id}/`
       setLeaderModel(next)
     }
-    // Wireframe: custom provider detail shows 名称 / 接口类型 / Base URL
-    if (p.custom) {
+    // Hand-built custom: editable form. Built-in + models.dev: readonly panel.
+    if (isHandCustomProvider(p)) {
       const cp = customProviders.find((c) => c.id === p.id)
       if (cp) startEdit(cp)
       else {
@@ -605,6 +732,7 @@ export function SettingsPanel({
   const pickModel = (id: string) => {
     setLeaderModel(id)
     setCustomModel(false)
+    toastSuccess(t('settings.defaultModelSet', { model: id }))
     void api
       .getModelsCatalog({ featured: true, current: id })
       .then((feat) => setSelectionStatus(feat.currentSelection?.status ?? null))
@@ -871,7 +999,10 @@ export function SettingsPanel({
       setDraftKeys((d) => ({ ...d, [next.apiKeyEnv]: form.apiKey.trim() }))
     }
 
-    setLeaderModel(next.models[0]!.id)
+    // Keep an existing leader that belongs to this provider; first model
+    // only wins when the provider is new or its previous leader is gone.
+    const ownsLeader = next.models.some((m) => m.id === leaderModel)
+    if (!ownsLeader) setLeaderModel(next.models[0]!.id)
     setFocusProviderId(next.id)
     setEditingId(next.id)
     toastSuccess(t('settings.customDrafted'))
@@ -906,12 +1037,18 @@ export function SettingsPanel({
     setSaving(true)
     try {
       setCustomProviders(nextList)
-      setLeaderModel(next.models[0]!.id)
+      // Keep an existing leader that belongs to this provider; only fall back
+      // to the first model when the previous leader is gone.
+      const ownsLeader = nextList.some(
+        (c) => c.id === next.id && c.models.some((m) => m.id === leaderModel),
+      )
+      const leaderToSave = ownsLeader ? leaderModel : next.models[0]!.id
+      setLeaderModel(leaderToSave)
       setFocusProviderId(next.id)
       setEditingId(next.id)
       const secretsPayload = Object.keys(cleanSecrets).length ? cleanSecrets : undefined
       const saved = await saveSettings({
-        leaderModel: next.models[0]!.id,
+        leaderModel: leaderToSave,
         leaderMaxSteps: leaderMaxSteps ?? undefined,
         secrets: secretsPayload,
         customProviders: nextList,
@@ -936,6 +1073,97 @@ export function SettingsPanel({
     setCustomProviders((list) => list.filter((p) => p.id !== id))
     if (editingId === id) resetForm()
     if (focusProviderId === id) setFocusProviderId(null)
+  }
+
+  /**
+   * Enable/disable any provider via settings.disabledProviderIds only.
+   * Does not send leaderModel/customProviders → no forced API restart.
+   */
+  const toggleProviderEnabled = async (
+    provider: SettingsProvider,
+    nextEnabled: boolean,
+    opts?: { hasKeyDraft?: boolean },
+  ) => {
+    if (saving || deletingProvider) return
+    // Cannot turn on without a configured API key (draft key on custom form also counts).
+    if (nextEnabled && !provider.configured && !opts?.hasKeyDraft) {
+      toastError(t('settings.needKey'))
+      return
+    }
+    setSaving(true)
+    try {
+      const prevDisabled = data?.settings.disabledProviderIds ?? []
+      const disabled = new Set(prevDisabled)
+      if (nextEnabled) disabled.delete(provider.id)
+      else disabled.add(provider.id)
+      const disabledProviderIds = [...disabled]
+      if (editingId === provider.id) {
+        setForm((f) => ({ ...f, enabled: nextEnabled }))
+      }
+      const saved = await saveSettings({ disabledProviderIds })
+      if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+      await load()
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Delete a disabled custom / models.dev provider: confirm → remove from list + persist. */
+  const deleteCustomProvider = () => {
+    if (deletingProvider) return
+    const target = editingId ?? selectedProvider?.id
+    if (!target || !customProviders.some((p) => p.id === target)) return
+    const removed = customProviders.find((p) => p.id === target)!
+    setPendingConfirm({
+      title: t('settings.deleteProvider'),
+      message: t('settings.deleteProviderConfirm', {
+        name: form.name || selectedProvider?.name || target,
+      }),
+      confirmLabel: t('common.confirmDelete'),
+      busyLabel: t('settings.deletingProvider'),
+      cancelLabel: t('common.cancel'),
+      danger: true,
+      onConfirm: async () => {
+        setDeletingProvider(true)
+        setSaving(true)
+        try {
+          const nextList = customProviders.filter((p) => p.id !== target)
+          // If it owned the active leader model, fall back to another provider
+          const leaderWasDeleted = leaderModel.startsWith(`${target}/`)
+          const nextLeader = leaderWasDeleted
+            ? (data?.providers.find((p) => p.id !== target)?.models[0]?.id ?? leaderModel)
+            : leaderModel
+          // Drop the stored API key only when no other provider uses that env
+          const stillUsed = (data?.providers ?? [])
+            .filter((p) => p.id !== target)
+            .some((p) =>
+              Array.isArray(p.apiKeyEnv)
+                ? p.apiKeyEnv.includes(removed.apiKeyEnv)
+                : p.apiKeyEnv === removed.apiKeyEnv,
+            )
+          const secrets = stillUsed ? undefined : { [removed.apiKeyEnv]: null as string | null }
+          removeCustom(target)
+          if (leaderWasDeleted) setLeaderModel(nextLeader)
+          const saved = await saveSettings({
+            leaderModel: nextLeader,
+            leaderMaxSteps: leaderMaxSteps ?? undefined,
+            ...(secrets ? { secrets } : {}),
+            customProviders: nextList,
+          })
+          if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+          setDraftKeys({})
+          toastSuccess(t('settings.providerDeleted'))
+          await load()
+        } catch (e) {
+          toastError(e instanceof Error ? e.message : String(e))
+        } finally {
+          setSaving(false)
+          setDeletingProvider(false)
+        }
+      },
+    })
   }
 
   const validateSteps = (raw: string): number | null => {
@@ -1842,9 +2070,9 @@ export function SettingsPanel({
                 <strong>{t('settings.danger.title')}</strong>
                 <small>{t('settings.danger.collapsedDesc')}</small>
               </span>
-              <span aria-hidden>{dangerOpen ? '−' : '+'}</span>
+              <span className="settings-danger-zone-chevron" aria-hidden />
             </button>
-            {dangerOpen && (
+            <Expandable open={dangerOpen}>
               <div className="settings-danger-zone-body">
                 <p className="settings-danger-zone-warning">{t('settings.danger.warning')}</p>
                 <div className="settings-danger-overview" aria-live="polite">
@@ -1900,7 +2128,7 @@ export function SettingsPanel({
                   ))}
                 </div>
               </div>
-            )}
+            </Expandable>
           </section>
         </div>
       )}
@@ -1913,10 +2141,10 @@ export function SettingsPanel({
             <aside className="settings-provider-rail" aria-label={t('settings.provider')}>
               <div className="settings-rail-label">{t('settings.providerBuiltin')}</div>
               {data.providers
-                .filter((p) => !p.custom)
+                // Built-in policy + models.dev imports (catalog installs live under 内置)
+                .filter((p) => !p.custom || isModelsDevProvider(p))
                 .map((p) => {
                   const active = selectedProvider?.id === p.id && focusProviderId !== '__new__'
-                  const meta = getProviderIconMeta(p.id)
                   return (
                     <button
                       key={p.id}
@@ -1924,11 +2152,7 @@ export function SettingsPanel({
                       className={`settings-rail-item${active ? ' active' : ''}`}
                       onClick={() => pickProvider(p)}
                     >
-                      <span
-                        className="settings-rail-icon"
-                        style={{ background: `${meta.color}22` }}
-                        aria-hidden
-                      >
+                      <span className="settings-rail-icon" aria-hidden>
                         <ProviderLogo providerId={p.id} size={16} />
                       </span>
                       <span className="settings-rail-text">
@@ -1945,12 +2169,11 @@ export function SettingsPanel({
                 {t('settings.providerCustom')}
               </div>
               {data.providers
-                .filter((p) => p.custom)
+                .filter((p) => isHandCustomProvider(p))
                 .map((p) => {
                   const active =
                     (selectedProvider?.id === p.id || editingId === p.id) &&
                     focusProviderId !== '__new__'
-                  const meta = getProviderIconMeta(p.id)
                   return (
                     <button
                       key={p.id}
@@ -1958,11 +2181,7 @@ export function SettingsPanel({
                       className={`settings-rail-item${active ? ' active' : ''}`}
                       onClick={() => pickProvider(p)}
                     >
-                      <span
-                        className="settings-rail-icon"
-                        style={{ background: `${meta.color}22` }}
-                        aria-hidden
-                      >
+                      <span className="settings-rail-icon" aria-hidden>
                         <ProviderLogo providerId={p.id} size={16} />
                       </span>
                       <span className="settings-rail-text">
@@ -1981,6 +2200,9 @@ export function SettingsPanel({
                 onClick={() => {
                   setEditingId(null)
                   setForm(emptySimpleForm())
+                  setAddProviderMode('models-dev')
+                  setModelsDevQuery('')
+                  setModelsDevError(null)
                   setFocusProviderId('__new__')
                 }}
               >
@@ -1989,36 +2211,233 @@ export function SettingsPanel({
             </aside>
 
             <div className="settings-model-main">
-              {focusProviderId === '__new__' || selectedProvider?.custom || editingId ? (
+              {focusProviderId === '__new__' ? (
+                <>
+                  <div className="settings-provider-head">
+                    <div className="pname">{t('settings.addProvider')}</div>
+                  </div>
+                  <div className="add-provider-mode-tabs" role="tablist">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={addProviderMode === 'models-dev'}
+                      className={addProviderMode === 'models-dev' ? 'active' : ''}
+                      onClick={() => setAddProviderMode('models-dev')}
+                    >
+                      {t('settings.addFromModelsDev')}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={addProviderMode === 'custom'}
+                      className={addProviderMode === 'custom' ? 'active' : ''}
+                      onClick={() => setAddProviderMode('custom')}
+                    >
+                      {t('settings.addCustomGateway')}
+                    </button>
+                  </div>
+
+                  {addProviderMode === 'models-dev' ? (
+                    <div className="models-dev-import">
+                      <p className="settings-field-hint">{t('settings.modelsDevHint')}</p>
+                      <div className="models-dev-toolbar">
+                        <input
+                          className="settings-input"
+                          value={modelsDevQuery}
+                          onChange={(e) => setModelsDevQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              void loadModelsDevList({ q: modelsDevQuery })
+                            }
+                          }}
+                          placeholder={t('settings.modelsDevSearchPh')}
+                          aria-label={t('settings.modelsDevSearchPh')}
+                        />
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={modelsDevLoading}
+                          onClick={() => void loadModelsDevList({ q: modelsDevQuery })}
+                        >
+                          {t('settings.modelsDevSearch')}
+                        </button>
+                        <button
+                          type="button"
+                          className="settings-save-btn"
+                          disabled={modelsDevLoading}
+                          onClick={() => void loadModelsDevList({ forceRefresh: true, q: modelsDevQuery })}
+                        >
+                          {modelsDevLoading ? t('app.loading') : t('settings.modelsDevRefresh')}
+                        </button>
+                      </div>
+                      {modelsDevMeta && (
+                        <p className="settings-muted models-dev-meta">
+                          {t('settings.modelsDevMeta', {
+                            count: String(modelsDevMeta.providerCount),
+                            at: new Date(modelsDevMeta.fetchedAt).toLocaleString(),
+                          })}
+                        </p>
+                      )}
+                      {modelsDevError && (
+                        <p className="settings-error" role="alert">
+                          {modelsDevError}
+                        </p>
+                      )}
+                      <div className="models-dev-list" role="listbox" aria-label={t('settings.addFromModelsDev')}>
+                        {modelsDevList.map((p) => (
+                          <div key={p.id} className="models-dev-row" role="option">
+                            <span className="logo models-dev-row-logo" aria-hidden>
+                              <ProviderLogo providerId={p.id} size={16} />
+                            </span>
+                            <span className="models-dev-row-text">
+                              <span className="models-dev-row-name">{p.name}</span>
+                              <span className="models-dev-row-meta">
+                                {p.id} · {t('settings.modelsDevModelCount', { n: String(p.modelCount) })}
+                                {p.needsBaseURL && p.api ? ` · ${p.api}` : ''}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className="settings-save-btn btn-sm"
+                              disabled={saving || modelsDevImportingId === p.id}
+                              onClick={() => void importModelsDevProvider(p.id)}
+                            >
+                              {modelsDevImportingId === p.id
+                                ? t('app.loading')
+                                : t('settings.modelsDevAdd')}
+                            </button>
+                          </div>
+                        ))}
+                        {!modelsDevLoading && modelsDevList.length === 0 && !modelsDevError && (
+                          <p className="settings-muted">{t('settings.modelsDevEmpty')}</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="settings-field">
+                        <label>{t('settings.customName')}</label>
+                        <input
+                          className="settings-input"
+                          value={form.name}
+                          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                          placeholder={t('settings.customNamePh')}
+                        />
+                      </div>
+                      <div className="settings-field">
+                        <label>{t('settings.customBaseUrl')}</label>
+                        <div className="settings-input-combo">
+                          <input
+                            className="settings-input mono settings-input-combo-main"
+                            value={form.baseURL}
+                            onChange={(e) => setForm((f) => ({ ...f, baseURL: e.target.value }))}
+                            placeholder="https://api.example.com/v1"
+                            aria-label={t('settings.customBaseUrl')}
+                          />
+                          <select
+                            className="settings-input-combo-select"
+                            value={form.apiStyle}
+                            onChange={(e) =>
+                              setForm((f) => ({
+                                ...f,
+                                apiStyle: e.target.value as ApiStyle,
+                              }))
+                            }
+                            aria-label={t('settings.apiStyle')}
+                          >
+                            <option value="openai">OpenAI</option>
+                            <option value="anthropic">Anthropic</option>
+                            <option value="google">Google</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="settings-field">
+                        <label>{t('settings.customApiKey')}</label>
+                        <input
+                          type="password"
+                          className="settings-input"
+                          autoComplete="off"
+                          value={form.apiKey}
+                          onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
+                          placeholder={t('settings.enterKey')}
+                        />
+                      </div>
+                      <div className="model-edit-actions">
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => {
+                            resetForm()
+                            setFocusProviderId(null)
+                          }}
+                        >
+                          {t('settings.cancelEdit')}
+                        </button>
+                        <button type="button" className="settings-save-btn" onClick={saveCustomForm}>
+                          {t('settings.addToList')}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : isHandCustomProvider(selectedProvider) ||
+                (editingId &&
+                  customProviders.some(
+                    (c) => c.id === editingId && c.source !== 'models.dev',
+                  )) ? (
                 <>
                   <div className="settings-provider-head">
                     <div className="pname">
-                      {focusProviderId === '__new__'
-                        ? t('settings.addProvider')
-                        : form.name || selectedProvider?.name || t('settings.editCustom')}
+                      {form.name || selectedProvider?.name || t('settings.editCustom')}
                     </div>
-                    {focusProviderId !== '__new__' && (
+                    {focusProviderId !== '__new__' && selectedProvider && (
                       <button
                         type="button"
-                        className={`enable-switch${form.enabled ? ' is-on' : ''}`}
+                        className={`enable-switch${
+                          form.enabled &&
+                          (selectedProvider.configured || Boolean(form.apiKey.trim()))
+                            ? ' is-on'
+                            : ''
+                        }`}
                         role="switch"
-                        aria-checked={form.enabled}
-                        title={t('settings.enableProvider')}
+                        aria-checked={
+                          form.enabled &&
+                          (selectedProvider.configured || Boolean(form.apiKey.trim()))
+                        }
+                        title={
+                          !selectedProvider.configured && !form.apiKey.trim()
+                            ? t('settings.needKey')
+                            : t('settings.enableProvider')
+                        }
                         aria-label={t('settings.enableProvider')}
+                        disabled={saving || deletingProvider}
                         onClick={() => {
-                          const next = !form.enabled
-                          setForm((f) => ({ ...f, enabled: next }))
-                          if (editingId) {
-                            setCustomProviders((list) =>
-                              list.map((p) => (p.id === editingId ? { ...p, enabled: next } : p)),
-                            )
-                          }
+                          const currentlyOn =
+                            form.enabled &&
+                            (selectedProvider.configured || Boolean(form.apiKey.trim()))
+                          void toggleProviderEnabled(selectedProvider, !currentlyOn, {
+                            hasKeyDraft: Boolean(form.apiKey.trim()),
+                          })
                         }}
                       >
                         <span className="enable-switch-knob" aria-hidden />
                       </button>
                     )}
                     <span className="spacer" />
+                    {focusProviderId !== '__new__' && !form.enabled && (
+                      <button
+                        type="button"
+                        className="settings-delete-link"
+                        disabled={saving || deletingProvider}
+                        onClick={deleteCustomProvider}
+                      >
+                        {deletingProvider
+                          ? t('settings.deletingProvider')
+                          : t('settings.deleteProvider')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="settings-save-btn"
@@ -2119,133 +2538,153 @@ export function SettingsPanel({
                           const ctx = formatCtx((m as { contextWindow?: number }).contextWindow)
                           const thinks =
                             (m as { thinkingIntensities?: ThinkingIntensity[] })
-                              .thinkingIntensities ?? []
+                              .thinkingIntensities ?? DEFAULT_CUSTOM_THINKING_SUPPORT
                           return (
-                            <div
-                              key={m.id}
-                              className={`model-card${active ? ' active' : ''}${isEditing ? ' editing' : ''}`}
-                            >
                               <div
-                                className="model-card-head"
-                                onClick={() => {
-                                  pickModel(m.id)
-                                  if (isEditing) cancelEditModel()
-                                  else beginEditModel(m)
-                                }}
+                                key={m.id}
+                                className={`model-card${active ? ' is-default' : ''}${isEditing ? ' editing' : ''}`}
                               >
-                                <span className="m-mid">
-                                  <span className="m-name">
-                                    {m.id.includes('/')
-                                      ? m.id.split('/').slice(1).join('/')
-                                      : m.label}
-                                  </span>
-                                  <span className="m-id">{m.id}</span>
-                                </span>
-                                <span className="meta">
-                                  {ctx && <span className="ctx">{ctx}</span>}
-                                  {thinks.length > 0 && (
-                                    <span className="think-tags">
-                                      {thinks.slice(0, 4).map((lv) => (
-                                        <span key={lv} className={lv === 'off' ? 'off' : ''}>
-                                          {lv}
-                                        </span>
-                                      ))}
+                                <div
+                                  className="model-card-head"
+                                  onClick={() => {
+                                    // 点击卡片只切换编辑态；设默认走独立按钮，避免与编辑选中混淆
+                                    if (isEditing) cancelEditModel()
+                                    else beginEditModel(m)
+                                  }}
+                                >
+                                  <span className="m-mid">
+                                    <span className="m-name">
+                                      {m.id.includes('/')
+                                        ? m.id.split('/').slice(1).join('/')
+                                        : m.label}
                                     </span>
+                                    <span className="m-id">{m.id}</span>
+                                  </span>
+                                  <span className="meta">
+                                    {(m as { toolCall?: boolean }).toolCall && (
+                                      <span className="model-tag">{t('settings.modelTagTools')}</span>
+                                    )}
+                                    {(m as { multimodal?: boolean }).multimodal && (
+                                      <span className="model-tag">
+                                        {t('settings.modelTagMultimodal')}
+                                      </span>
+                                    )}
+                                    {ctx && <span className="ctx">{ctx}</span>}
+                                    {thinks.length > 0 && (
+                                      <span className="think-tags">
+                                        {thinks.slice(0, 4).map((lv) => (
+                                          <span key={lv} className={lv === 'off' ? 'off' : ''}>
+                                            {lv}
+                                          </span>
+                                        ))}
+                                      </span>
+                                    )}
+                                  </span>
+                                  {isEditing ? (
+                                    <div
+                                      className="edit-actions"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="btn-ghost btn-sm"
+                                        disabled={saving}
+                                        onClick={cancelEditModel}
+                                      >
+                                        {t('settings.cancelEdit')}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="settings-save-btn btn-sm"
+                                        disabled={saving}
+                                        onClick={() => void updateModelInActiveProvider()}
+                                      >
+                                        {saving ? t('app.loading') : t('settings.save')}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="remove-btn"
+                                      title={t('settings.removeModel')}
+                                      aria-label={t('settings.removeModel')}
+                                      disabled={saving || models.length <= 1}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        void removeModelFromActiveProvider(m.id)
+                                      }}
+                                    >
+                                      ✕
+                                    </button>
                                   )}
-                                </span>
-                                {isEditing ? (
-                                  <div
-                                    className="edit-actions"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <button
-                                      type="button"
-                                      className="btn-ghost btn-sm"
-                                      disabled={saving}
-                                      onClick={cancelEditModel}
-                                    >
-                                      {t('settings.cancelEdit')}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="settings-save-btn btn-sm"
-                                      disabled={saving}
-                                      onClick={() => void updateModelInActiveProvider()}
-                                    >
-                                      {saving ? t('app.loading') : t('settings.save')}
-                                    </button>
-                                  </div>
-                                ) : (
+                                </div>
+                                {!active && !isEditing && (
                                   <button
                                     type="button"
-                                    className="remove-btn"
-                                    title={t('settings.removeModel')}
-                                    aria-label={t('settings.removeModel')}
-                                    disabled={saving || models.length <= 1}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      void removeModelFromActiveProvider(m.id)
-                                    }}
+                                    className="set-default-btn"
+                                    disabled={saving}
+                                    onClick={() => pickModel(m.id)}
                                   >
-                                    ✕
+                                    {t('settings.setDefaultModel')}
                                   </button>
                                 )}
+                                <Expandable open={isEditing} contentClassName="model-card-body">
+                                  <div>
+                                    <div className="field-label">{t('settings.ctxWindow')}</div>
+                                    <input
+                                      className="settings-input mono"
+                                      value={editModelForm.contextWindow}
+                                      onChange={(e) =>
+                                        setEditModelForm((f) => ({
+                                          ...f,
+                                          contextWindow: e.target.value,
+                                        }))
+                                      }
+                                      placeholder={t('settings.ctxWindowPh')}
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="field-label">
+                                      {t('settings.perModelThinking')}
+                                    </div>
+                                    <div className="think-support-grid" role="group">
+                                      {THINKING_INTENSITY_OPTIONS.map((level) => {
+                                        const checked =
+                                          editModelForm.thinkingIntensities.includes(level)
+                                        return (
+                                          <button
+                                            key={level}
+                                            type="button"
+                                            className={`think-support-chip${checked ? ' on' : ''}`}
+                                            aria-pressed={checked}
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setEditModelForm((f) => {
+                                                const set = new Set(f.thinkingIntensities)
+                                                if (set.has(level)) set.delete(level)
+                                                else set.add(level)
+                                                const next = THINKING_INTENSITY_OPTIONS.filter(
+                                                  (l) => set.has(l),
+                                                )
+                                                return {
+                                                  ...f,
+                                                  thinkingIntensities:
+                                                    next.length > 0
+                                                      ? next
+                                                      : (['off'] as ThinkingIntensity[]),
+                                                }
+                                              })
+                                            }}
+                                          >
+                                            <span className="box" aria-hidden />
+                                            {level}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                </Expandable>
                               </div>
-                              <Expandable open={isEditing} contentClassName="model-card-body">
-                                <div>
-                                  <div className="field-label">{t('settings.ctxWindow')}</div>
-                                  <input
-                                    className="settings-input mono"
-                                    value={editModelForm.contextWindow}
-                                    onChange={(e) =>
-                                      setEditModelForm((f) => ({
-                                        ...f,
-                                        contextWindow: e.target.value,
-                                      }))
-                                    }
-                                    placeholder={t('settings.ctxWindowPh')}
-                                  />
-                                </div>
-                                <div>
-                                  <div className="field-label">
-                                    {t('settings.perModelThinking')}
-                                  </div>
-                                  <div className="think-support-grid" role="group">
-                                    {THINKING_INTENSITY_OPTIONS.map((level) => {
-                                      const checked =
-                                        editModelForm.thinkingIntensities.includes(level)
-                                      return (
-                                        <button
-                                          key={level}
-                                          type="button"
-                                          className={`think-support-chip${checked ? ' on' : ''}`}
-                                          aria-pressed={checked}
-                                          onClick={() => {
-                                            setEditModelForm((f) => {
-                                              const set = new Set(f.thinkingIntensities)
-                                              if (set.has(level)) set.delete(level)
-                                              else set.add(level)
-                                              const next = THINKING_INTENSITY_OPTIONS.filter((l) =>
-                                                set.has(l),
-                                              )
-                                              return {
-                                                ...f,
-                                                thinkingIntensities:
-                                                  next.length > 0
-                                                    ? next
-                                                    : (['off'] as ThinkingIntensity[]),
-                                              }
-                                            })
-                                          }}
-                                        >
-                                          {level}
-                                        </button>
-                                      )
-                                    })}
-                                  </div>
-                                </div>
-                              </Expandable>
-                            </div>
                           )
                         })
                       })()}
@@ -2363,62 +2802,65 @@ export function SettingsPanel({
                         </button>
                       )}
                     </div>
-                    {focusProviderId === '__new__' && (
-                      <span className="settings-field-hint">{t('settings.firstModelHint')}</span>
-                    )}
                   </section>
-                  {focusProviderId === '__new__' && (
-                    <div className="model-edit-actions">
-                      <button
-                        type="button"
-                        className="btn-ghost"
-                        onClick={() => {
-                          resetForm()
-                          setFocusProviderId(null)
-                        }}
-                      >
-                        {t('settings.cancelEdit')}
-                      </button>
-                      <button type="button" className="settings-save-btn" onClick={saveCustomForm}>
-                        {t('settings.addToList')}
-                      </button>
-                    </div>
-                  )}
                 </>
               ) : (
                 <>
                   <div className="settings-provider-head">
                     <div className="pname">
                       {selectedProvider && (
-                        <span
-                          className="logo"
-                          style={{
-                            background: `${getProviderIconMeta(selectedProvider.id).color}22`,
-                          }}
-                          aria-hidden
-                        >
+                        <span className="logo settings-provider-head-logo" aria-hidden>
                           <ProviderLogo providerId={selectedProvider.id} size={14} />
                         </span>
                       )}
                       {selectedProvider?.name ?? '—'}
+                      {isModelsDevProvider(selectedProvider) && (
+                        <span className="provider-source-badge">models.dev</span>
+                      )}
                     </div>
-                    {/* 内置：以是否配置 Key 为态；滑块带文案，不可关停业务（仅展示） */}
+                    {/* 目录供应商：已配置 Key 且未手动关闭才显示开启；无 Key 不能开 */}
                     <button
                       type="button"
-                      className={`enable-switch${selectedProvider?.configured ? ' is-on' : ''}`}
+                      className={`enable-switch${
+                        selectedProvider?.enabled !== false && selectedProvider?.configured
+                          ? ' is-on'
+                          : ''
+                      }`}
                       role="switch"
-                      aria-checked={Boolean(selectedProvider?.configured)}
+                      aria-checked={
+                        selectedProvider?.enabled !== false &&
+                        Boolean(selectedProvider?.configured)
+                      }
                       title={
-                        selectedProvider?.configured
-                          ? t('settings.configured')
-                          : t('settings.needKey')
+                        selectedProvider && !selectedProvider.configured
+                          ? t('settings.needKey')
+                          : t('settings.enableProvider')
                       }
                       aria-label={t('settings.enableProvider')}
-                      disabled
+                      disabled={!selectedProvider || saving || deletingProvider}
+                      onClick={() => {
+                        if (!selectedProvider) return
+                        const currentlyOn =
+                          selectedProvider.enabled !== false && selectedProvider.configured
+                        // 开启且无 Key → toggle 内 toast needKey
+                        void toggleProviderEnabled(selectedProvider, !currentlyOn)
+                      }}
                     >
                       <span className="enable-switch-knob" aria-hidden />
                     </button>
                     <span className="spacer" />
+                    {isModelsDevProvider(selectedProvider) && (
+                      <button
+                        type="button"
+                        className="settings-delete-link"
+                        disabled={saving || deletingProvider}
+                        onClick={() => void deleteCustomProvider()}
+                      >
+                        {deletingProvider
+                          ? t('settings.deletingProvider')
+                          : t('settings.deleteProvider')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="settings-save-btn"
@@ -2484,21 +2926,28 @@ export function SettingsPanel({
                       {(selectedProvider?.models ?? []).map((m) => {
                         const active = leaderModel === m.id
                         const ctx = formatCtx((m as { contextWindow?: number }).contextWindow)
-                        const thinks =
-                          (m as { thinkingIntensities?: ThinkingIntensity[] })
-                            .thinkingIntensities ?? selectedProvider?.thinkingIntensities
+                        const meta = m as {
+                          thinkingIntensities?: ThinkingIntensity[]
+                          toolCall?: boolean
+                          multimodal?: boolean
+                        }
+                        const thinks = meta.thinkingIntensities ?? selectedProvider?.thinkingIntensities
                         return (
-                          <div key={m.id} className={`model-card${active ? ' active' : ''}`}>
-                            <div className="model-card-head" onClick={() => pickModel(m.id)}>
+                          <div key={m.id} className={`model-card${active ? ' is-default' : ''}`}>
+                            <div className="model-card-head">
                               <span className="m-mid">
-                                <span className="m-name">
-                                  {m.id.includes('/')
-                                    ? m.id.split('/').slice(1).join('/')
-                                    : m.label}
-                                </span>
+                                <span className="m-name">{m.label}</span>
                                 <span className="m-id">{m.id}</span>
                               </span>
                               <span className="meta">
+                                {meta.toolCall && (
+                                  <span className="model-tag">{t('settings.modelTagTools')}</span>
+                                )}
+                                {meta.multimodal && (
+                                  <span className="model-tag">
+                                    {t('settings.modelTagMultimodal')}
+                                  </span>
+                                )}
                                 {ctx && <span className="ctx">{ctx}</span>}
                                 {thinks && thinks.length > 0 && (
                                   <span className="think-tags">
@@ -2511,6 +2960,16 @@ export function SettingsPanel({
                                 )}
                               </span>
                             </div>
+                            {!active && (
+                              <button
+                                type="button"
+                                className="set-default-btn"
+                                disabled={saving}
+                                onClick={() => pickModel(m.id)}
+                              >
+                                {t('settings.setDefaultModel')}
+                              </button>
+                            )}
                           </div>
                         )
                       })}

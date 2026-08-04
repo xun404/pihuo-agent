@@ -185,15 +185,25 @@ export function useAppState() {
   const setSessionPermissionMode = async (
     sessionId: string,
     permissionMode: SessionPermissionMode,
+    source: 'manual_chat' | 'manual_panel' = 'manual_chat',
   ) => {
     const gen = ++applyGenRef.current
     abortRef.current?.abort()
-    const { session, snapshot: next } = await api.setSessionPermissionMode(
+    const result = await api.setSessionPermissionMode(
       sessionId,
       permissionMode,
+      source,
     )
-    applySnapshot(next, gen)
-    return session
+    applySnapshot(result.snapshot, gen)
+    // Older local API processes may omit feedback fields; normalize them so
+    // callers can safely render mutation outcomes without weakening snapshot
+    // authority or treating an absent field as a failure.
+    return {
+      session: result.session,
+      approvals: Array.isArray(result.approvals) ? result.approvals : [],
+      failures: Array.isArray(result.failures) ? result.failures : [],
+      snapshot: result.snapshot,
+    }
   }
 
   const setSessionStatus = async (

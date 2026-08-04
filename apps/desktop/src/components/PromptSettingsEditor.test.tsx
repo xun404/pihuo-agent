@@ -25,7 +25,9 @@ describe('PromptSettingsEditor', () => {
     for (const label of ['通用', '规划', '编码', '审查', '测试', '调研']) {
       assert.match(html, new RegExp(label, 'u'))
     }
-    assert.equal((html.match(/<textarea/gu) ?? []).length, 7)
+    assert.equal((html.match(/<textarea/gu) ?? []).length, 1)
+    // 角色折叠时仅渲染摘要行，正文在展开后才挂载
+    assert.equal((html.match(/prompt-role-body/gu) ?? []).length, 0)
     // 默认值与打包一致时不展示「恢复默认」；有改动才出现
     assert.equal((html.match(/恢复默认/gu) ?? []).length, 0)
     assert.match(html, /内置协议和工具约束/u)
@@ -69,8 +71,11 @@ describe('PromptSettingsEditor', () => {
         />
       </I18nProvider>,
     )
-    assert.equal((html.match(/恢复默认/gu) ?? []).length, 2)
+    // Leader 的「恢复默认」始终可见；角色折叠时其正文（含重置链接）在展开后才渲染
+    assert.equal((html.match(/恢复默认/gu) ?? []).length, 1)
     assert.match(html, /prompt-reset-link/u)
+    // 有改动的角色在摘要行显示小圆点
     assert.match(html, /prompt-role-dirty/u)
+    assert.equal((html.match(/prompt-role-dirty/gu) ?? []).length, 1)
   })
 })

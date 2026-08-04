@@ -1186,8 +1186,8 @@
   background: var(--bg-hover);
 }
 .permission-mode-action.is-auto {
-  color: var(--blue);
-  background: var(--blue-soft);
+  color: var(--warn);
+  background: var(--warn-soft);
 }
 .permission-mode-action:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent);
@@ -1232,6 +1232,12 @@
 .permission-mode-tooltip-title,
 .permission-mode-tooltip-description {
   display: block;
+}
+.permission-mode-tooltip-feedback {
+  display: block;
+  margin-top: 4px;
+  color: var(--warn);
+  font-size: var(--fs-xs);
 }
 .permission-mode-tooltip-title {
   font-size: var(--fs-sm);
@@ -1725,15 +1731,15 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
   left: 36px;
   bottom: calc(100% + 8px);
 }
-/* 级联侧栏：紧贴主菜单左侧，top 对齐。
-   gap 16px（CSS）+ framer-motion x 动画残留约 -3px → 实际视觉 gap ~13px */
+/* 级联侧栏：紧贴主菜单左侧，bottom 对齐（向上生长）。
+   从主菜单底部向上展开，避免长列表探出窗口底部；
+   max-height 由 ComposerToolbar 按剩余空间实测注入。 */
 .pop-side-cascade {
   position: absolute;
   right: calc(100% + 16px);
-  top: 0;
+  bottom: 0;
   min-width: 200px;
   max-width: 240px;
-  max-height: 360px;
   overflow-y: auto;
   padding: 6px;
   border-radius: var(--r-lg);

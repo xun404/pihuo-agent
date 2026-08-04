@@ -288,12 +288,19 @@ export type SessionApprovalPolicy = 'manual' | PermissionOptionKind
 
 export type SessionPermissionMode = 'default' | 'auto'
 
+/** Origin recorded when a Session permission mode changes. */
+export type PermissionModeChangeSource = 'manual_chat' | 'manual_panel' | 'migration'
+
 export type PermissionTargetScope = 'inside_project' | 'outside_project' | 'unknown'
 
 export const SESSION_PERMISSION_MODES: SessionPermissionMode[] = ['default', 'auto']
 
 export function isValidSessionPermissionMode(v: unknown): v is SessionPermissionMode {
   return typeof v === 'string' && (SESSION_PERMISSION_MODES as string[]).includes(v)
+}
+
+export function isValidPermissionModeChangeSource(v: unknown): v is PermissionModeChangeSource {
+  return v === 'manual_chat' || v === 'manual_panel' || v === 'migration'
 }
 
 export function permissionModeFromLegacyPolicy(value: unknown): SessionPermissionMode {
@@ -337,7 +344,6 @@ export interface PromptSettings {
 /** Non-secret user-facing deadlines for scheduled Worker jobs. */
 export interface WorkerTimeoutSettings {
   jobTimeoutMs: number
-  approvalTimeoutMs: number
   queueTimeoutMs: number
 }
 
@@ -1257,6 +1263,18 @@ export interface WorkerRunState {
   canResetAcpContext?: boolean
   startedAt: number
   lastDeltaAt: number
+  /**
+   * Every currently pending permission request for this Job, ordered by
+   * createdAt then id. This is the authoritative UI state; a Job may have
+   * more than one request in flight at once.
+   */
+  pendingApprovals: ApprovalItem[]
+  /** Per-approval cursors used to ignore stale/duplicated live events. */
+  approvalCursors?: Record<string, ApprovalCursor>
+  /**
+   * Deprecated compatibility projection of pendingApprovals[0]. New code
+   * must read pendingApprovals instead.
+   */
   pendingApproval?: ApprovalItem
   /** Monotonic approval cursor used to prevent stale snapshot resurrection. */
   approvalCursor?: ApprovalCursor
@@ -1310,6 +1328,18 @@ export interface ApprovalItem {
   resolutionReason?: string
   createdAt: string
   resolvedAt?: string
+}
+
+/** Stable pending-approval order shared by worker cards and the approvals panel. */
+export function compareApprovalOrder(a: ApprovalItem, b: ApprovalItem): number {
+  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1
+  if (a.id === b.id) return 0
+  return a.id < b.id ? -1 : 1
+}
+
+/** Return pending approvals in their deterministic createdAt + id order. */
+export function sortPendingApprovals(approvals: ApprovalItem[]): ApprovalItem[] {
+  return approvals.filter((approval) => approval.status === 'pending').sort(compareApprovalOrder)
 }
 
 export interface AppSnapshot {

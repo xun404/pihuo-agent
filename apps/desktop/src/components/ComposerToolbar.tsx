@@ -4,6 +4,7 @@ import type { SessionPermissionMode } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   THINKING_INTENSITY_OPTIONS,
+  defaultThinkingFor,
   saveThinkingIntensity,
   type ThinkingIntensity,
 } from '../lib/settings'
@@ -59,33 +60,14 @@ const THINK_LABEL_KEY: Record<
   max: 'chat.think.max',
 }
 
-/**
- * Pick the thinking intensity for a model: the HIGHEST supported level
- * (THINKING_INTENSITY_OPTIONS is ordered low→high). Empty supported → 'off'.
- * Pure; matches ChatPanel's original clampThink exactly.
- */
-export function clampThink(
-  _preferred: ThinkingIntensity | undefined,
-  supported: ThinkingIntensity[],
-): ThinkingIntensity {
-  const list =
-    supported.length > 0 ? supported : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
-  let best: ThinkingIntensity = 'off'
-  let bestRank = -1
-  for (const lv of list) {
-    const rank = THINKING_INTENSITY_OPTIONS.indexOf(lv)
-    if (rank > bestRank) {
-      bestRank = rank
-      best = lv
-    }
-  }
-  return best
-}
-
 export interface ComposerToolbarProps {
   /** Current Session permission mode (controlled). */
   permissionMode: SessionPermissionMode
+  /** Permission shield scope; Home uses a one-session draft override. */
+  permissionScope?: 'session' | 'draft'
   permissionSaving?: boolean
+  permissionPendingCount?: number
+  permissionFailureCount?: number
   /** Currently selected model id (controlled). */
   selectedModel: string
   /** Currently selected thinking intensity (controlled). */
@@ -130,7 +112,10 @@ export interface ComposerToolbarProps {
 
 export function ComposerToolbar({
   permissionMode,
+  permissionScope = 'session',
   permissionSaving = false,
+  permissionPendingCount = 0,
+  permissionFailureCount = 0,
   selectedModel,
   thinkingIntensity,
   models,
@@ -161,6 +146,19 @@ export function ComposerToolbar({
   const teamWrapRef = useRef<HTMLDivElement>(null)
   const modelWrapRef = useRef<HTMLDivElement>(null)
   const thinkWrapRef = useRef<HTMLDivElement>(null)
+  const modelMenuRef = useRef<HTMLDivElement>(null)
+  const [sideMaxHeight, setSideMaxHeight] = useState(360)
+
+  // Cascade side menus open upward from the main menu's bottom; clamp their
+  // height to the space actually available above it so long model lists stay
+  // fully reachable regardless of window size / composer height.
+  useEffect(() => {
+    if (!modelSideOpen && !thinkMenuOpen) return
+    const el = modelMenuRef.current
+    if (!el) return
+    const bottom = el.getBoundingClientRect().bottom
+    setSideMaxHeight(Math.max(120, Math.min(360, Math.round(bottom - 16))))
+  }, [modelSideOpen, thinkMenuOpen])
 
   const selectThinking = (level: ThinkingIntensity) => {
     onThinkingChange(level)
@@ -244,10 +242,11 @@ export function ComposerToolbar({
     ? selectedMeta.thinkingIntensities
     : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
 
-  // When model changes, clamp thinking to what that model supports.
+  // When model changes, refresh thinking to the linked default for that model
+  // (中 → 高 → strongest; never 关 when another level exists).
   useEffect(() => {
     if (!selectedMeta) return
-    const next = clampThink(thinkingIntensity, selectedMeta.thinkingIntensities)
+    const next = defaultThinkingFor(selectedMeta.thinkingIntensities)
     if (next !== thinkingIntensity) {
       onThinkingChange(next)
     }
@@ -316,6 +315,9 @@ export function ComposerToolbar({
       <PermissionModeAction
         mode={permissionMode}
         saving={permissionSaving}
+        pendingApprovalCount={permissionPendingCount}
+        failureCount={permissionFailureCount}
+        scope={permissionScope}
         onChange={onPermissionModeChange}
       />
 
@@ -495,6 +497,7 @@ export function ComposerToolbar({
         <AnimatePresence>
           {modelMenuOpen && models.length > 0 && (
             <motion.div
+              ref={modelMenuRef}
               className="pop-menu model-menu"
               role="menu"
               aria-label={t('chat.model')}
@@ -558,6 +561,7 @@ export function ComposerToolbar({
                   <motion.div
                     className="pop-side pop-side-cascade"
                     ref={thinkWrapRef}
+                    style={{ maxHeight: sideMaxHeight }}
                     role="menu"
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -588,6 +592,7 @@ export function ComposerToolbar({
                   <motion.div
                     className="pop-side pop-side-cascade pop-side-models"
                     ref={thinkWrapRef}
+                    style={{ maxHeight: sideMaxHeight }}
                     role="menu"
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -611,7 +616,7 @@ export function ComposerToolbar({
                             aria-checked={selectedModel === m.id}
                             onClick={() => {
                               onModelChange(m.id)
-                              const nextThink = clampThink(thinkingIntensity, m.thinkingIntensities)
+                              const nextThink = defaultThinkingFor(m.thinkingIntensities)
                               if (nextThink !== thinkingIntensity) onThinkingChange(nextThink)
                               setModelSideOpen(false)
                               setModelMenuOpen(false)

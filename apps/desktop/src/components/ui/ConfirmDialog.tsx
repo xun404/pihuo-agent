@@ -8,6 +8,8 @@ export interface ConfirmDialogConfig {
   message: ReactNode
   /** Confirm button label, e.g. "Delete". */
   confirmLabel: string
+  /** Shown on the confirm button while onConfirm is running (e.g. "Deleting…"). */
+  busyLabel?: string
   /** Cancel button label. Defaults handled by caller. */
   cancelLabel: string
   /** Red destructive styling for the confirm button (delete/archive actions). */
@@ -76,7 +78,7 @@ export function ConfirmDialog({ open, config, onClose }: Props) {
             disabled={busy}
             onClick={() => void handleConfirm()}
           >
-            {rendered.confirmLabel}
+            {busy ? (rendered.busyLabel ?? rendered.confirmLabel) : rendered.confirmLabel}
           </button>
         </div>
       </div>

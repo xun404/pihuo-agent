@@ -7,6 +7,7 @@ import { LocalStore } from '@swarmdesk-agent/core'
 import * as schedulerModule from './scheduler.js'
 import {
   decidePermissionForJobInStore,
+  reconcileSessionPendingApprovalsInStore,
   setSessionPermissionModeInStore,
 } from './session-permission-mode.js'
 
@@ -62,16 +63,22 @@ describe('Session permission mode service', () => {
       task: 'edit',
       cwd: project.rootPath,
       source: 'api',
-      status: 'pending_approval',
+      status: 'running',
     })
-    const allow = store.enqueueApproval({
+    const allow = store.createJobApproval({
+      jobId: job.id,
       title: 'Allow me',
       sessionId: session.id,
-      jobId: job.id,
       options: [
         { optionId: 'always', name: 'Allow always', kind: 'allow_always' },
         { optionId: 'once', name: 'Allow once', kind: 'allow_once' },
       ],
+    })
+    const secondAllow = store.createJobApproval({
+      jobId: job.id,
+      title: 'Allow me too',
+      sessionId: session.id,
+      options: [{ optionId: 'second-once', name: 'Allow once', kind: 'allow_once' }],
     })
     const cancel = store.enqueueApproval({
       title: 'No allow option',
@@ -93,16 +100,19 @@ describe('Session permission mode service', () => {
     })
 
     const allowed = store.listApprovals().find((item) => item.id === allow.id)!
+    const secondAllowed = store.listApprovals().find((item) => item.id === secondAllow.id)!
     const cancelled = store.listApprovals().find((item) => item.id === cancel.id)!
     assert.equal(result.session.permissionMode, 'auto')
     assert.equal(allowed.status, 'allowed')
     assert.equal(allowed.selectedOptionId, 'once')
     assert.equal(allowed.resolutionSource, 'policy')
+    assert.equal(secondAllowed.status, 'allowed')
+    assert.equal(secondAllowed.selectedOptionId, 'second-once')
     assert.equal(cancelled.status, 'cancelled')
     assert.equal(cancelled.resolutionSource, 'system')
     assert.equal(store.listApprovals().find((item) => item.id === untouched.id)?.status, 'pending')
     assert.equal(store.getJob(job.id)?.status, 'running')
-    assert.deepEqual(new Set(events), new Set([allow.id, cancel.id]))
+    assert.deepEqual(new Set(events), new Set([allow.id, secondAllow.id, cancel.id]))
     assert.equal(result.failures.length, 0)
   })
 
@@ -120,9 +130,9 @@ describe('Session permission mode service', () => {
       sessionId: session.id,
       options: [{ optionId: 'allow-2', name: 'Allow', kind: 'allow_once' }],
     })
-    const originalTryResolve = store.tryResolveApproval.bind(store)
+    const originalTryResolve = store.tryResolveJobApproval.bind(store)
     let injected = false
-    store.tryResolveApproval = ((id, decision, optionId, metadata) => {
+    store.tryResolveJobApproval = ((id, decision, optionId, metadata) => {
       if (!injected && id === first.id) {
         injected = true
         originalTryResolve(id, 'cancel', undefined, {
@@ -131,7 +141,7 @@ describe('Session permission mode service', () => {
         })
       }
       return originalTryResolve(id, decision, optionId, metadata)
-    }) as LocalStore['tryResolveApproval']
+    }) as LocalStore['tryResolveJobApproval']
 
     const result = setSessionPermissionModeInStore({
       store,
@@ -145,6 +155,122 @@ describe('Session permission mode service', () => {
       result.approvals.some((item) => item.id === second.id),
       true,
     )
+  })
+
+  it('reports a per-approval failure and continues reconciling the same Session', () => {
+    const store = createStore()
+    const project = store.upsertProject({ name: 'p', rootPath: tmpdir() })
+    const session = store.createSession({ projectId: project.id })
+    const other = store.createSession({ projectId: project.id })
+    const resolved = store.enqueueApproval({
+      title: 'Still resolves',
+      sessionId: session.id,
+      options: [{ optionId: 'allow-resolved', name: 'Allow', kind: 'allow_once' }],
+    })
+    // Approvals are newest-first, so persist the injected failure second to
+    // prove reconciliation continues to the older item after the exception.
+    const failed = store.enqueueApproval({
+      title: 'Injected failure',
+      sessionId: session.id,
+      options: [{ optionId: 'allow-failed', name: 'Allow', kind: 'allow_once' }],
+    })
+    const untouched = store.enqueueApproval({
+      title: 'Other Session',
+      sessionId: other.id,
+      options: [{ optionId: 'allow-other', name: 'Allow', kind: 'allow_once' }],
+    })
+    const originalTryResolve = store.tryResolveJobApproval.bind(store)
+    store.tryResolveJobApproval = ((id, decision, optionId, metadata) => {
+      if (id === failed.id) throw new Error('/private/workspace/state.json injected durable failure')
+      return originalTryResolve(id, decision, optionId, metadata)
+    }) as LocalStore['tryResolveJobApproval']
+
+    const result = setSessionPermissionModeInStore({
+      store,
+      sessionId: session.id,
+      permissionMode: 'auto',
+    })
+
+    assert.equal(result.session.permissionMode, 'auto')
+    assert.deepEqual(result.failures, [
+      {
+        approvalId: failed.id,
+        error: 'Approval resolution failed; retry this Session.',
+      },
+    ])
+    assert.doesNotMatch(result.failures[0]!.error, /private|state\.json|injected/u)
+    assert.deepEqual(
+      result.approvals.map((approval) => approval.id),
+      [resolved.id],
+    )
+    assert.equal(
+      store.listApprovals().find((approval) => approval.id === failed.id)?.status,
+      'pending',
+    )
+    assert.equal(
+      store.listApprovals().find((approval) => approval.id === resolved.id)?.status,
+      'allowed',
+    )
+    assert.equal(
+      store.listApprovals().find((approval) => approval.id === untouched.id)?.status,
+      'pending',
+    )
+  })
+
+  it('does not report a durable resolution as failed when notification delivery throws', () => {
+    const store = createStore()
+    const project = store.upsertProject({ name: 'p', rootPath: tmpdir() })
+    const session = store.createSession({ projectId: project.id })
+    const pending = store.enqueueApproval({
+      title: 'Permission',
+      sessionId: session.id,
+      options: [{ optionId: 'once', name: 'Allow once', kind: 'allow_once' }],
+    })
+    store.updateSessionPermissionMode(session.id, 'auto')
+
+    const result = reconcileSessionPendingApprovalsInStore({
+      store,
+      sessionId: session.id,
+      onApprovalResolved: () => {
+        throw new Error('/private/event-stream')
+      },
+    })
+
+    assert.deepEqual(result.failures, [])
+    assert.equal(result.approvals[0]?.id, pending.id)
+    assert.equal(store.listApprovals().find((item) => item.id === pending.id)?.status, 'allowed')
+  })
+
+  it('reconciles an approval persisted after the Session already switched to auto', () => {
+    const store = createStore()
+    const project = store.upsertProject({ name: 'p', rootPath: tmpdir() })
+    const session = store.createSession({ projectId: project.id })
+    store.updateSessionPermissionMode(session.id, 'auto')
+
+    // Models the race where the permission callback read default first, while
+    // the shield switched to auto just before this late Approval committed.
+    const late = store.enqueueApproval({
+      title: 'Late approval',
+      sessionId: session.id,
+      options: [{ optionId: 'late-once', name: 'Allow once', kind: 'allow_once' }],
+    })
+    const events: string[] = []
+
+    const result = reconcileSessionPendingApprovalsInStore({
+      store,
+      sessionId: session.id,
+      onApprovalResolved: (approval) => events.push(approval.id),
+    })
+
+    const resolved = store.listApprovals().find((approval) => approval.id === late.id)
+    assert.equal(resolved?.status, 'allowed')
+    assert.equal(resolved?.selectedOptionId, 'late-once')
+    assert.deepEqual(events, [late.id])
+    assert.deepEqual(
+      result.approvals.map((approval) => approval.id),
+      [late.id],
+    )
+    assert.deepEqual(result.failures, [])
   })
 
   it('reads the current Session mode instead of the Job legacy snapshot', () => {
@@ -186,7 +312,7 @@ describe('Session permission mode service', () => {
     assert.equal(autoDecision.decision.mode, 'automatic')
   })
 
-  it('fails closed for missing scope evidence, missing state, and missing allow options', () => {
+  it('requires approval for unknown evidence and routes missing auto allow options through durable resolution', () => {
     const store = createStore()
     const projectRoot = mkdtempSync(join(tmpdir(), 'permission-unknown-project-'))
     cleanup.push(projectRoot)
@@ -226,7 +352,20 @@ describe('Session permission mode service', () => {
         options: [{ optionId: 'reject', name: 'Reject', kind: 'reject_once' }],
       },
     })
-    assert.equal(noAllow.decision.mode, 'cancelled')
+    assert.equal(noAllow.decision.mode, 'manual')
+
+    store.updateSessionPermissionMode(session.id, 'auto')
+    const noAutoAllow = decidePermissionForJobInStore({
+      store,
+      jobId: job.id,
+      request: {
+        source: 'agent',
+        kind: 'read',
+        locations: [],
+        options: [{ optionId: 'reject', name: 'Reject', kind: 'reject_once' }],
+      },
+    })
+    assert.equal(noAutoAllow.decision.mode, 'manual')
 
     const missing = decidePermissionForJobInStore({
       store,

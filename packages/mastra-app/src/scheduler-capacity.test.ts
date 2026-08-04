@@ -59,7 +59,6 @@ describe('Worker queue timeout', () => {
   it('reads the immutable timeout snapshot from Job metadata', () => {
     const timeouts = {
       jobTimeoutMs: 1_200_000,
-      approvalTimeoutMs: 180_000,
       queueTimeoutMs: 900_000,
     }
     const snapshot = schedulerModule.workerTimeoutSnapshotFromJob({
@@ -89,7 +88,6 @@ describe('Worker queue timeout', () => {
         meta: {
           workerTimeouts: {
             jobTimeoutMs: 600_000,
-            approvalTimeoutMs: 120_000,
             queueTimeoutMs: 60_000,
           },
         },
@@ -121,5 +119,74 @@ describe('Worker queue timeout', () => {
       durableStateCheck < sessionCapacityBranch,
       'queue timeout/cancel must win before capacity_exhausted writes queued status',
     )
+  })
+
+  it('pauses active Job time in pending_approval and resumes the remaining time', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'scheduler-active-timeout-'))
+    const previousState = process.env.SWARMDESK_AGENT_AGENTS_STATE
+    process.env.SWARMDESK_AGENT_AGENTS_STATE = join(dir, 'state.json')
+    resetSharedStoreForTests()
+    try {
+      const store = getSharedStore({ mode: 'owner' })
+      const project = store.upsertProject({ name: 'P', rootPath: dir })
+      const session = store.createSession({ projectId: project.id, title: 'S' })
+      const job = store.createJob({
+        sessionId: session.id,
+        projectId: project.id,
+        workerId: 'worker-1',
+        workerName: 'Worker',
+        task: 'pause',
+        cwd: dir,
+        source: 'api',
+        status: 'running',
+      })
+      const scheduler = new schedulerModule.WorkerScheduler()
+      let fired = 0
+      const internals = scheduler as unknown as {
+        runtime: Map<
+          string,
+          { abort: AbortController; timeout?: ReturnType<typeof setTimeout>; timeoutPaused?: boolean }
+        >
+        startJobTimeout: (jobId: string, durationMs: number, handler: () => void) => void
+        pauseJobTimeout: (jobId: string) => void
+        pauseWhilePersistingApproval: <T>(jobId: string, persist: () => T) => T
+        resumeJobTimeout: (jobId: string) => void
+      }
+      internals.runtime.set(job.id, { abort: new AbortController() })
+      internals.startJobTimeout(job.id, 50, () => {
+        fired += 1
+      })
+      internals.pauseJobTimeout(job.id)
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      assert.equal(fired, 0, 'pending approval must not consume active Job time')
+      assert.equal(internals.runtime.get(job.id)?.timeout, undefined)
+      assert.equal(internals.runtime.get(job.id)?.timeoutPaused, true)
+
+      internals.resumeJobTimeout(job.id)
+      assert.equal(internals.runtime.get(job.id)?.timeoutPaused, false)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      assert.equal(fired, 1, 'remaining active time must continue after approval resolution')
+
+      // A failed waiter reservation / durable Approval create must restore the
+      // active timer because no pending_approval transition became durable.
+      let failed = false
+      internals.startJobTimeout(job.id, 40, () => {
+        failed = true
+      })
+      assert.throws(
+        () =>
+          internals.pauseWhilePersistingApproval(job.id, () => {
+            throw new Error('disk full')
+          }),
+        /disk full/,
+      )
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      assert.equal(failed, true, 'failed Approval persistence must not leave the Job timer paused')
+    } finally {
+      if (previousState === undefined) delete process.env.SWARMDESK_AGENT_AGENTS_STATE
+      else process.env.SWARMDESK_AGENT_AGENTS_STATE = previousState
+      resetSharedStoreForTests()
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

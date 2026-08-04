@@ -6,11 +6,11 @@ import { tmpdir } from 'node:os'
 import {
   ApprovalWaitRegistry,
   LocalStore,
+  globalApprovalWaiters,
   getSharedStore,
   resetSharedStoreForTests,
 } from '@swarmdesk-agent/core'
 import { AcpSessionRuntimeError } from '@swarmdesk-agent/adapters'
-import type { ApprovalItem } from '@swarmdesk-agent/shared'
 import * as schedulerModule from './scheduler.js'
 import { getWorkerEventEmitter } from './worker-events.js'
 
@@ -175,6 +175,121 @@ describe('store.resolveApproval — validation', () => {
     assert.equal(resolved.status, 'allowed')
     assert.notEqual(resolved.createdAt, '')
     assert.notEqual(resolved.resolvedAt, '')
+  })
+})
+
+describe('scheduler atomic Job approval transitions', () => {
+  it('keeps a Job pending until its final Approval and cleans orphan approvals atomically', async () => {
+    const previousDataDir = process.env.SWARMDESK_AGENT_DATA_DIR
+    const dataDir = mkdtempSync(join(tmpdir(), 'scheduler-atomic-'))
+    process.env.SWARMDESK_AGENT_DATA_DIR = dataDir
+    resetSharedStoreForTests()
+    globalApprovalWaiters.clear()
+    try {
+      const shared = getSharedStore()
+      const project = shared.upsertProject({ name: 'atomic', rootPath: dataDir })
+      const session = shared.createSession({ projectId: project.id, title: 'atomic' })
+      const job = shared.createJob({
+        sessionId: session.id,
+        projectId: project.id,
+        workerId: 'worker-atomic',
+        workerName: 'Atomic Worker',
+        task: 'two requests',
+        cwd: dataDir,
+        source: 'api',
+        status: 'running',
+      })
+      const scheduler = new schedulerModule.WorkerScheduler()
+      const first = shared.createJobApproval({
+        id: 'atomic-first',
+        jobId: job.id,
+        sessionId: session.id,
+        title: 'first',
+        options: [
+          { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+          { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+        ],
+      })
+      const second = shared.createJobApproval({
+        id: 'atomic-second',
+        jobId: job.id,
+        sessionId: session.id,
+        title: 'second',
+        options: [
+          { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+          { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+        ],
+      })
+
+      scheduler.resolveApproval(second.id, 'allow', { optionId: 'allow', surface: 'panel' })
+      assert.equal(shared.getJob(job.id)?.status, 'pending_approval')
+      scheduler.resolveApproval(first.id, 'deny', { optionId: 'reject', surface: 'chat' })
+      assert.equal(shared.getJob(job.id)?.status, 'running')
+
+      const cleanup = shared.createJobApproval({
+        id: 'atomic-cleanup',
+        jobId: job.id,
+        sessionId: session.id,
+        title: 'cleanup',
+        options: [{ optionId: 'cancel', name: 'Cancel', kind: 'reject_once' }],
+      })
+      scheduler.cleanupPendingApprovals(job.id, 'test cleanup')
+      assert.equal(shared.getJob(job.id)?.status, 'running')
+      assert.equal(shared.getJob(job.id)?.approvalIds?.includes(cleanup.id), true)
+      assert.equal(shared.listApprovals().find((item) => item.id === cleanup.id)?.status, 'cancelled')
+
+      const cancelledJob = shared.createJob({
+        sessionId: session.id,
+        projectId: project.id,
+        workerId: 'worker-cancel',
+        workerName: 'Cancel Worker',
+        task: 'cancel race',
+        cwd: dataDir,
+        source: 'api',
+        status: 'running',
+      })
+      const cancelledApproval = shared.createJobApproval({
+        id: 'atomic-job-cancel',
+        jobId: cancelledJob.id,
+        sessionId: session.id,
+        title: 'cancel race',
+        options: [{ optionId: 'cancel', name: 'Cancel', kind: 'reject_once' }],
+      })
+      await scheduler.cancel(cancelledJob.id)
+      assert.equal(shared.getJob(cancelledJob.id)?.status, 'cancelled')
+      assert.equal(
+        shared.listApprovals().find((item) => item.id === cancelledApproval.id)?.status,
+        'cancelled',
+      )
+
+      const orphanJob = shared.createJob({
+        sessionId: session.id,
+        projectId: project.id,
+        workerId: 'worker-orphan',
+        workerName: 'Orphan Worker',
+        task: 'restart',
+        cwd: dataDir,
+        source: 'api',
+        status: 'pending_approval',
+      })
+      const orphan = shared.createJobApproval({
+        id: 'atomic-reconcile',
+        jobId: orphanJob.id,
+        sessionId: session.id,
+        title: 'reconcile',
+        options: [{ optionId: 'cancel', name: 'Cancel', kind: 'reject_once' }],
+      })
+      const result = scheduler.reconcileOrphanJobs()
+      assert.equal(result.clearedApprovals, 1)
+      assert.equal(shared.listApprovals().find((item) => item.id === orphan.id)?.status, 'cancelled')
+      assert.equal(shared.getJob(orphanJob.id)?.status, 'failed')
+    } finally {
+      globalApprovalWaiters.clear()
+      resetSharedStoreForTests()
+      if (previousDataDir === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
+      else process.env.SWARMDESK_AGENT_DATA_DIR = previousDataDir
+      rmSync(dataDir, { recursive: true, force: true })
+    }
   })
 })
 
@@ -384,66 +499,5 @@ describe('scheduler ACP error boundary', () => {
       else process.env.SWARMDESK_AGENT_DATA_DIR = previousData
       rmSync(dataDir, { recursive: true, force: true })
     }
-  })
-})
-
-describe('approval timeout finalization', () => {
-  const approval = (overrides: Partial<ApprovalItem> = {}): ApprovalItem => ({
-    id: 'approval-timeout',
-    status: 'cancelled',
-    title: 'Permission',
-    options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
-    source: 'acp',
-    createdAt: '2026-07-14T01:00:00.000Z',
-    ...overrides,
-  })
-
-  it('persists, aborts, emits one terminal event, then finishes in order', () => {
-    const calls: string[] = []
-    const result = schedulerModule.finalizeApprovalTimeout({
-      tryResolve: () => {
-        calls.push('persist')
-        return { resolved: true, item: approval() }
-      },
-      abort: () => calls.push('abort'),
-      emitApprovalResolved: () => calls.push('approval_resolved'),
-      isJobOpen: () => true,
-      emitFailed: () => calls.push('failed'),
-      finishFailed: () => calls.push('finish'),
-    })
-
-    assert.deepEqual(calls, ['persist', 'abort', 'approval_resolved', 'finish', 'failed'])
-    assert.deepEqual(result, { outcome: 'cancelled' })
-  })
-
-  it('does nothing destructive when manual resolution wins the CAS race', () => {
-    const calls: string[] = []
-    const result = schedulerModule.finalizeApprovalTimeout({
-      tryResolve: () => {
-        calls.push('persist_attempt')
-        return {
-          resolved: false,
-          item: approval({ status: 'allowed', selectedOptionId: 'allow' }),
-        }
-      },
-      abort: () => calls.push('abort'),
-      emitApprovalResolved: () => calls.push('approval_resolved'),
-      isJobOpen: () => true,
-      emitFailed: () => calls.push('failed'),
-      finishFailed: () => calls.push('finish'),
-    })
-
-    assert.deepEqual(calls, ['persist_attempt'])
-    assert.deepEqual(result, { outcome: 'selected', optionId: 'allow' })
-  })
-
-  it('uses the fallback for invalid timeout configuration', () => {
-    assert.equal(schedulerModule.resolveApprovalTimeoutMs(undefined), 120_000)
-    assert.equal(schedulerModule.resolveApprovalTimeoutMs('not-a-number'), 120_000)
-    assert.equal(schedulerModule.resolveApprovalTimeoutMs('0'), 120_000)
-    assert.equal(schedulerModule.resolveApprovalTimeoutMs('-1'), 120_000)
-    assert.equal(schedulerModule.resolveApprovalTimeoutMs('2500'), 2_500)
-    assert.equal(schedulerModule.resolveApprovalTimeoutMs('2500.9'), 2_500)
-    assert.equal(schedulerModule.resolveApprovalTimeoutMs('999999999999'), 2_147_483_647)
   })
 })

@@ -47,6 +47,8 @@ import {
   type JobSource,
   type JobStatus,
   type SessionPermissionMode,
+  type PermissionModeChangeSource,
+  type SessionApprovalPolicy,
   type TeamMember,
   type WorkerJob,
   type WorkerRegistration,
@@ -57,7 +59,9 @@ import { emitWorkerEvent, getWorkerEventEmitter, MAX_TIMER_DELAY_MS } from './wo
 import { getWorkerCatalogForDispatch } from './worker-models.js'
 import {
   decidePermissionForJobInStore,
+  reconcileSessionPendingApprovalsInStore,
   setSessionPermissionModeInStore,
+  type SetSessionPermissionModeResult,
 } from './session-permission-mode.js'
 export { decidePermissionForJobInStore, setSessionPermissionModeInStore }
 
@@ -118,34 +122,6 @@ export function updateWorkerAcpHealthFromJob(
   } catch {
     /* ignore health update failures */
   }
-}
-
-export function finalizeApprovalTimeout(input: {
-  tryResolve: () => { resolved: boolean; item: ApprovalItem }
-  abort: () => void
-  emitApprovalResolved: (item: ApprovalItem) => void
-  isJobOpen: () => boolean
-  emitFailed: () => void
-  finishFailed: () => void
-}): { outcome: 'selected'; optionId: string } | { outcome: 'cancelled' } {
-  const resolution = input.tryResolve()
-  if (!resolution.resolved) {
-    if (
-      (resolution.item.status === 'allowed' || resolution.item.status === 'denied') &&
-      resolution.item.selectedOptionId
-    ) {
-      return { outcome: 'selected', optionId: resolution.item.selectedOptionId }
-    }
-    return { outcome: 'cancelled' }
-  }
-
-  input.abort()
-  input.emitApprovalResolved(resolution.item)
-  if (input.isJobOpen()) {
-    input.finishFailed()
-    input.emitFailed()
-  }
-  return { outcome: 'cancelled' }
 }
 
 export interface ScheduleRequest {
@@ -227,6 +203,16 @@ type RuntimeEntry = {
   abort: AbortController
   config?: AcpSpawnConfig
   timeout?: ReturnType<typeof setTimeout>
+  /** Monotonic token invalidating callbacks from a paused/replaced timer. */
+  timeoutGeneration?: number
+  /** Wall-clock deadline while the active Job timer is armed. */
+  timeoutDeadlineMs?: number
+  /** Remaining active Job time while the Job is pending_approval. */
+  timeoutRemainingMs?: number
+  /** Explicit in-memory pause marker; the timer handle may be absent while paused. */
+  timeoutPaused?: boolean
+  /** Closure that applies the Job timeout terminal transition. */
+  timeoutHandler?: () => void
 }
 
 export function workerTimeoutSnapshotFromJob(
@@ -235,7 +221,6 @@ export function workerTimeoutSnapshotFromJob(
 ): WorkerTimeoutSettings {
   return resolveWorkerTimeoutSettings(job.meta?.workerTimeouts, {
     WORKER_JOB_TIMEOUT_MS: String(fallback.jobTimeoutMs),
-    APPROVAL_TIMEOUT_MS: String(fallback.approvalTimeoutMs),
     WORKER_QUEUE_TIMEOUT_MS: String(fallback.queueTimeoutMs),
   })
 }
@@ -285,12 +270,6 @@ function attachWorkerSecretsForSpawn(
     writable: false,
   })
   return config
-}
-
-export function resolveApprovalTimeoutMs(raw = process.env.APPROVAL_TIMEOUT_MS): number {
-  const parsed = Number(raw)
-  if (!Number.isFinite(parsed) || parsed <= 0) return 120_000
-  return Math.min(Math.floor(parsed), MAX_TIMER_DELAY_MS)
 }
 
 interface ApprovalWaiterPort {
@@ -354,7 +333,56 @@ export class WorkerScheduler {
     if (this.reconciled) return { failed: 0, clearedApprovals: 0 }
     let failed = 0
     let clearedApprovals = 0
+    let cleanupFailed = false
     try {
+      // Resolve orphan approvals before terminalizing their Job so the normal
+      // event order remains approval_resolved -> failed. If a storage/CAS
+      // operation fails, keep reconciliation open and retry the residual row
+      // on the next invocation (including after the Job has become terminal).
+      try {
+        const pending = store().listApprovals('pending')
+        for (const approval of pending) {
+          if (!approval.jobId) continue
+          const job = store().getJob(approval.jobId)
+          // Queued Jobs are still eligible for admission and must not be
+          // treated as restart orphans. A live runtime owns all other Jobs.
+          if (job?.status === 'queued' || (job && this.runtime.has(job.id))) continue
+          try {
+            const result = store().tryResolveJobApproval(approval.id, 'cancel', undefined, {
+              resolutionSource: 'system',
+              resolutionReason: 'RUNTIME_RESTARTED',
+            })
+            if (!result.resolved) continue
+            clearedApprovals += 1
+            if (approval.jobId) {
+              try {
+                emitWorkerEvent(approval.jobId, {
+                  type: 'approval_resolved',
+                  jobId: approval.jobId,
+                  approval: result.item,
+                })
+              } catch {
+                /* Event delivery must not prevent orphan terminalization. */
+              }
+            }
+          } catch (error) {
+            cleanupFailed = true
+            // Keep the orphan pass fail-closed without exposing storage paths
+            // or internal error text to the event stream/API.
+            globalActivityLog.append('approval', 'Orphan approval cleanup failed', {
+              jobId: approval.jobId,
+              approvalId: approval.id,
+              errorType: error instanceof Error ? error.name : typeof error,
+            })
+          }
+        }
+      } catch (error) {
+        cleanupFailed = true
+        globalActivityLog.append('approval', 'Orphan approval listing failed', {
+          errorType: error instanceof Error ? error.name : typeof error,
+        })
+      }
+
       const open = store().listJobs({
         status: ['running', 'pending_approval'],
         limit: 500,
@@ -365,29 +393,16 @@ export class WorkerScheduler {
         const latest = store().getJob(job.id)
         if (!latest || !isJobOpen(latest.status)) continue
         const errMsg = 'RUNTIME_RESTARTED: worker runtime restarted before job completed'
-        try {
-          const pending = store()
-            .listApprovals('pending')
-            .filter((a) => a.jobId === job.id)
-          for (const a of pending) {
-            try {
-              // cancel must not pass optionId (core approvals invariant)
-              const result = store().tryResolveApproval(a.id, 'cancel', undefined, {
-                resolutionSource: 'system',
-                resolutionReason: 'RUNTIME_RESTARTED',
-              })
-              if (result.resolved) clearedApprovals += 1
-            } catch {
-              /* best-effort per approval */
-            }
-          }
-        } catch {
-          /* store may not expose approvals in tests */
-        }
+        // A concurrent cancel/reconcile may have terminalized the Job while
+        // approval CAS cleanup was running. Do not overwrite its winner or
+        // publish a duplicate restart failure in that case.
+        const afterCleanup = store().getJob(job.id)
+        if (!afterCleanup || !isJobOpen(afterCleanup.status)) continue
         store().updateJob(job.id, {
           status: 'failed',
           error: errMsg,
           message: errMsg,
+          errorCode: 'RUNTIME_RESTARTED',
           finishedAt: new Date().toISOString(),
         })
         failed += 1
@@ -397,6 +412,7 @@ export class WorkerScheduler {
             jobId: job.id,
             output: job.output ?? '',
             error: errMsg,
+            errorCode: 'RUNTIME_RESTARTED',
             truncated: false,
             workerName: job.workerName,
             role: job.role,
@@ -412,14 +428,17 @@ export class WorkerScheduler {
           { failed, clearedApprovals },
         )
       }
-      // Only mark reconciled after full pass so crash mid-loop can retry
-      this.reconciled = true
+      // Only mark reconciled after the approval pass succeeds. A failed CAS
+      // leaves the Job terminalized but the Approval durable; the next call
+      // enters the same pass and repairs that residual row.
+      this.reconciled = !cleanupFailed
       return { failed, clearedApprovals }
     } catch (e) {
       // Do not set reconciled — next call may retry
       globalActivityLog.append(
         'system',
-        `reconcileOrphanJobs failed: ${e instanceof Error ? e.message : String(e)}`,
+        'reconcileOrphanJobs failed',
+        { errorType: e instanceof Error ? e.name : typeof e },
       )
       throw e
     }
@@ -429,13 +448,23 @@ export class WorkerScheduler {
     return this.lifecycle
   }
 
-  setSessionPermissionMode(sessionId: string, permissionMode: SessionPermissionMode) {
+  setSessionPermissionMode(
+    sessionId: string,
+    permissionMode: SessionPermissionMode,
+    opts?: {
+      source?: PermissionModeChangeSource
+      approvalPolicy?: SessionApprovalPolicy
+    },
+  ): SetSessionPermissionModeResult {
     return setSessionPermissionModeInStore({
       store: store(),
       sessionId,
       permissionMode,
+      source: opts?.source,
+      approvalPolicy: opts?.approvalPolicy,
       onApprovalResolved: (approval) => {
         if (!approval.jobId) return
+        this.resumeJobTimeout(approval.jobId)
         emitWorkerEvent(approval.jobId, {
           type: 'approval_resolved',
           jobId: approval.jobId,
@@ -794,21 +823,6 @@ export class WorkerScheduler {
     const resolutionSource =
       options.surface === 'panel' ? ('manual_panel' as const) : ('manual_chat' as const)
 
-    const restoreJobAfterResolution = (item: ApprovalItem): void => {
-      if (!item.jobId) return
-      const job = store().getJob(item.jobId)
-      if (!job || job.status !== 'pending_approval') return
-      const stillPending = store()
-        .listPendingApprovals()
-        .some((approval) => approval.jobId === item.jobId)
-      if (!stillPending) {
-        store().updateJob(item.jobId, {
-          status: 'running',
-          message: `Running on ${job.workerName}`,
-        })
-      }
-    }
-
     if (decision === 'cancel') {
       if (options.optionId) {
         throw new Error('cancel must not specify optionId')
@@ -817,9 +831,9 @@ export class WorkerScheduler {
         resolutionSource,
         resolutionReason: 'Cancelled by user',
       })
-      restoreJobAfterResolution(item)
       const job = item.jobId ? store().getJob(item.jobId) : undefined
       if (job) {
+        this.resumeJobTimeout(job.id)
         emitWorkerEvent(job.id, { type: 'approval_resolved', jobId: job.id, approval: item })
       }
       return item
@@ -854,10 +868,10 @@ export class WorkerScheduler {
       resolutionSource,
       resolutionReason: `Resolved in ${options.surface}`,
     })
-    restoreJobAfterResolution(item)
 
     const job = item.jobId ? store().getJob(item.jobId) : undefined
     if (job) {
+      this.resumeJobTimeout(job.id)
       emitWorkerEvent(job.id, { type: 'approval_resolved', jobId: job.id, approval: item })
     }
 
@@ -897,6 +911,115 @@ export class WorkerScheduler {
     if (!timer) return
     clearTimeout(timer)
     this.queueTimeoutTimers.delete(jobId)
+  }
+
+  /**
+   * Arm the active Job timer for the supplied amount of active (non-approval)
+   * time. The generation check makes a callback that was already queued before
+   * pause/resume harmless; only the currently armed timer may terminalize.
+   */
+  private armJobTimeout(jobId: string, delayMs: number): void {
+    const runtime = this.runtime.get(jobId)
+    if (!runtime || !runtime.timeoutHandler) return
+    if (runtime.timeout) clearTimeout(runtime.timeout)
+
+    const duration = Math.min(
+      Math.max(1, Math.floor(Number.isFinite(delayMs) ? delayMs : 1)),
+      MAX_TIMER_DELAY_MS,
+    )
+    const generation = (runtime.timeoutGeneration ?? 0) + 1
+    runtime.timeoutGeneration = generation
+    let timer!: ReturnType<typeof setTimeout>
+    timer = setTimeout(() => {
+      const current = this.runtime.get(jobId)
+      if (
+        !current ||
+        current.timeoutGeneration !== generation ||
+        current.timeout !== timer
+      ) {
+        return
+      }
+      current.timeout = undefined
+      current.timeoutDeadlineMs = undefined
+      current.timeoutRemainingMs = 0
+      current.timeoutPaused = false
+      current.timeoutHandler?.()
+    }, duration)
+    timer.unref?.()
+    runtime.timeout = timer
+    runtime.timeoutDeadlineMs = Date.now() + duration
+    runtime.timeoutRemainingMs = duration
+    runtime.timeoutPaused = false
+  }
+
+  /** Start an active Job timer once the Job has durably entered running. */
+  private startJobTimeout(jobId: string, durationMs: number, handler: () => void): void {
+    const runtime = this.runtime.get(jobId)
+    if (!runtime) return
+    runtime.timeoutHandler = handler
+    runtime.timeoutPaused = false
+    runtime.timeoutRemainingMs = Math.min(
+      Math.max(0, Math.floor(Number.isFinite(durationMs) ? durationMs : 0)),
+      MAX_TIMER_DELAY_MS,
+    )
+    this.armJobTimeout(jobId, runtime.timeoutRemainingMs)
+  }
+
+  /**
+   * Pause only the active Job timer while ACP waits for a permission decision.
+   * Queue admission timeout is intentionally separate and is never touched.
+   */
+  private pauseJobTimeout(jobId: string): void {
+    const runtime = this.runtime.get(jobId)
+    if (!runtime) return
+    if (!runtime.timeout) {
+      if (runtime.timeoutRemainingMs !== undefined) runtime.timeoutPaused = true
+      return
+    }
+    const deadline = runtime.timeoutDeadlineMs ?? Date.now()
+    runtime.timeoutRemainingMs = Math.max(0, deadline - Date.now())
+    clearTimeout(runtime.timeout)
+    runtime.timeout = undefined
+    runtime.timeoutDeadlineMs = undefined
+    runtime.timeoutPaused = true
+    runtime.timeoutGeneration = (runtime.timeoutGeneration ?? 0) + 1
+  }
+
+  /** Pause before Approval persistence and restore on a failed create. */
+  private pauseWhilePersistingApproval<T>(jobId: string, persist: () => T): T {
+    this.pauseJobTimeout(jobId)
+    try {
+      return persist()
+    } catch (error) {
+      // No pending Approval was committed, so the Job remains running and its
+      // active timer must continue. If cancellation already won, resume is a
+      // no-op and terminal cleanup has (or will) discard the runtime.
+      this.resumeJobTimeout(jobId)
+      throw error
+    }
+  }
+
+  /** Resume the active Job timer after the final pending Approval resolves. */
+  private resumeJobTimeout(jobId: string): void {
+    const job = store().getJob(jobId)
+    if (!job || job.status !== 'running') return
+    const runtime = this.runtime.get(jobId)
+    if (!runtime || runtime.timeout || !runtime.timeoutHandler) return
+    if (runtime.timeoutRemainingMs === undefined) return
+    this.armJobTimeout(jobId, runtime.timeoutRemainingMs)
+  }
+
+  /** Clear an active Job timer and discard its pause/resume state. */
+  private clearJobTimeout(jobId: string): void {
+    const runtime = this.runtime.get(jobId)
+    if (!runtime) return
+    if (runtime.timeout) clearTimeout(runtime.timeout)
+    runtime.timeout = undefined
+    runtime.timeoutDeadlineMs = undefined
+    runtime.timeoutRemainingMs = undefined
+    runtime.timeoutPaused = false
+    runtime.timeoutHandler = undefined
+    runtime.timeoutGeneration = (runtime.timeoutGeneration ?? 0) + 1
   }
 
   private scheduleQueueTimeout(job: WorkerJob): void {
@@ -1410,9 +1533,13 @@ export class WorkerScheduler {
       workerId: job.workerId,
     })
 
-    const timeout = setTimeout(() => {
+    this.startJobTimeout(jobId, workerTimeouts.jobTimeoutMs, () => {
       const latest = store().getJob(jobId)
       if (!latest || !isJobOpen(latest.status)) return
+      // A stale callback can only arrive after a pause if it was already queued
+      // by the event loop. Keep the timer paused while waiting for approval;
+      // resumeJobTimeout will arm the remaining active duration once running.
+      if (latest.status === 'pending_approval') return
       this.terminalize(
         jobId,
         {
@@ -1434,9 +1561,7 @@ export class WorkerScheduler {
         { retainRuntime: true },
       )
       abort.abort()
-    }, workerTimeouts.jobTimeoutMs)
-    const currentRt = this.runtime.get(jobId)
-    if (currentRt) currentRt.timeout = timeout
+    })
 
     try {
       if (abort.signal.aborted) {
@@ -1490,141 +1615,80 @@ export class WorkerScheduler {
               return { outcome: 'cancelled' as const }
             }
 
-            if (decision.mode === 'automatic') {
-              const locs: ApprovalLocation[] = (request.locations ?? []).map((l) => ({
-                filePath: l.path,
-                line: l.line,
-              }))
-              const resolved = store().createResolvedApproval({
-                title: request.title ?? 'Permission required',
-                detail: request.locations?.map((l) => l.path).join(', '),
-                action: request.kind ?? 'other',
-                pathOrTarget: request.locations?.[0]?.path,
-                workerId: config.workerId,
-                workerName: config.workerName,
-                sessionId: job.sessionId,
-                option: decision.option,
-                decision: decision.decision,
-                reason: decision.reason,
-                jobId,
-                toolCallId: request.toolCallId,
-                toolKind: toolKind,
-                locations: locs.length > 0 ? locs : undefined,
-              })
-              emitWorkerEvent(jobId, {
-                type: 'approval_resolved',
-                jobId,
-                approval: resolved,
-              })
-              return {
-                outcome: 'selected' as const,
-                optionId: decision.option.optionId,
-              }
-            }
-
-            // Manual path
+            // Every requestPermission emitted by the Agent takes the same
+            // durable Approval path. The Agent remains responsible for deciding
+            // which safe operations need no request. Default leaves emitted
+            // requests pending; auto resolves them through Session policy.
             const locs: ApprovalLocation[] = (request.locations ?? []).map((l) => ({
               filePath: l.path,
               line: l.line,
             }))
             const approvalId = createId('appr')
-            const { item, waiterPromise } = persistApprovalWithReservedWaiter({
-              approvalId,
-              waiters: globalApprovalWaiters,
-              persist: () => {
-                const approval = store().enqueueApproval({
-                  ...mapAcpPermissionToEnqueue({
-                    title: request.title ?? 'Permission required',
-                    options: request.options,
-                    workerId: config.workerId,
-                    workerName: config.workerName,
-                    sessionId: job.sessionId,
-                    jobId,
-                    toolCallId: request.toolCallId,
-                    toolKind,
-                    locations: locs.length > 0 ? locs : undefined,
-                  }),
-                  id: approvalId,
-                })
-                store().updateJob(jobId, {
-                  status: 'pending_approval',
-                  message: `Waiting for approval: ${request.title}`,
-                  approvalIds: [...(cur.approvalIds ?? []), approval.id],
-                })
-                globalActivityLog.append('job', `Job pending approval: ${job.workerName}`, {
-                  jobId,
-                  approvalId: approval.id,
-                })
-                emitWorkerEvent(jobId, {
-                  type: 'approval_requested',
-                  jobId,
+            const { item, waiterPromise } = this.pauseWhilePersistingApproval(
+              jobId,
+              () =>
+                persistApprovalWithReservedWaiter({
+                  approvalId,
+                  waiters: globalApprovalWaiters,
+                  persist: () => {
+                    // createJobApproval persists the Approval and Job transition
+                    // together. The waiter was reserved above, so a resolver can
+                    // never observe an Approval that is missing its Job linkage.
+                    return store().createJobApproval({
+                      ...mapAcpPermissionToEnqueue({
+                        title: request.title ?? 'Permission required',
+                        options: request.options,
+                        workerId: config.workerId,
+                        workerName: config.workerName,
+                        sessionId: job.sessionId,
+                        jobId,
+                        toolCallId: request.toolCallId,
+                        toolKind,
+                        locations: locs.length > 0 ? locs : undefined,
+                      }),
+                      id: approvalId,
+                      jobId,
+                    })
+                  },
+                }),
+            )
+
+            // Publish the request before any policy reconciliation. This keeps
+            // the event contract requested -> resolved even when the Session is
+            // already in auto mode (the UI must see the Approval enter first).
+            globalActivityLog.append('job', `Job pending approval: ${job.workerName}`, {
+              jobId,
+              approvalId: item.id,
+            })
+            emitWorkerEvent(jobId, {
+              type: 'approval_requested',
+              jobId,
+              approval: item,
+            })
+
+            // The Session may have switched to auto after the first live-mode
+            // decision but before this Approval committed. Reconcile again only
+            // after persistence: either the shield's scan sees this item, or
+            // this post-commit scan sees the shield, so no request can fall
+            // through that boundary and remain pending.
+            reconcileSessionPendingApprovalsInStore({
+              store: store(),
+              sessionId: job.sessionId,
+              onApprovalResolved: (approval) => {
+                if (!approval.jobId) return
+                this.resumeJobTimeout(approval.jobId)
+                emitWorkerEvent(approval.jobId, {
+                  type: 'approval_resolved',
+                  jobId: approval.jobId,
                   approval,
                 })
-                return approval
               },
             })
 
-            const timeoutMs = workerTimeouts.approvalTimeoutMs
-            let timer: ReturnType<typeof setTimeout> | undefined
-            const outcome = await Promise.race([
-              waiterPromise.then((r) => {
-                if (timer) clearTimeout(timer)
-                return r
-              }),
-              new Promise<{ outcome: 'timeout' }>((resolve) => {
-                timer = setTimeout(() => {
-                  resolve({ outcome: 'timeout' })
-                }, timeoutMs)
-                timer.unref?.()
-              }),
-            ])
-
-            if (outcome.outcome === 'timeout') {
-              return finalizeApprovalTimeout({
-                tryResolve: () =>
-                  store().tryResolveApproval(item.id, 'cancel', undefined, {
-                    resolutionSource: 'system',
-                    resolutionReason: 'Approval timed out',
-                  }),
-                abort: () => abort.abort(),
-                emitApprovalResolved: (approval) =>
-                  emitWorkerEvent(jobId, {
-                    type: 'approval_resolved',
-                    jobId,
-                    approval,
-                  }),
-                isJobOpen: () => {
-                  const latest = store().getJob(jobId)
-                  return Boolean(latest && isJobOpen(latest.status))
-                },
-                emitFailed: () => {
-                  emitWorkerEvent(jobId, {
-                    type: 'failed',
-                    jobId,
-                    output: '',
-                    error: 'Approval timed out',
-                    truncated: false,
-                    workerName: worker.name,
-                    teamMemberName: job.teamMemberName,
-                    workerKind: worker.kind,
-                    role: job.role,
-                    model: job.effectiveModel,
-                  } as WorkerRunEvent)
-                },
-                finishFailed: () => {
-                  this.terminalize(
-                    jobId,
-                    {
-                      status: 'failed',
-                      error: 'Approval timed out',
-                      message: 'Approval timed out',
-                    },
-                    undefined,
-                    { retainRuntime: true },
-                  )
-                },
-              })
-            }
+            // Approval requests are user-driven and intentionally have no
+            // business timeout. They stay pending until manual resolution,
+            // Session auto-accept, explicit cancellation, or Job termination.
+            const outcome = await waiterPromise
 
             if (outcome.outcome === 'selected') {
               if (!outcome.optionId) return { outcome: 'cancelled' as const }
@@ -1647,7 +1711,7 @@ export class WorkerScheduler {
         signal: abort.signal,
       })
 
-      clearTimeout(timeout)
+      this.clearJobTimeout(jobId)
 
       const latest = store().getJob(jobId)
       if (!latest || !isJobOpen(latest.status)) {
@@ -1748,7 +1812,7 @@ export class WorkerScheduler {
         } as WorkerRunEvent,
       )
     } catch (e) {
-      clearTimeout(timeout)
+      this.clearJobTimeout(jobId)
       const latest = store().getJob(jobId)
       if (!latest || !isJobOpen(latest.status)) {
         this.runtime.delete(jobId)
@@ -1827,6 +1891,10 @@ export class WorkerScheduler {
       clearTimeout(retryTimer)
       this.capacityRetryTimers.delete(jobId)
     }
+    // Terminal transitions discard any paused or armed active Job timer before
+    // cleanup resolves the remaining approvals. This prevents cleanup's CAS
+    // from briefly re-arming a timer for a Job that is being closed.
+    this.clearJobTimeout(jobId)
     const existing = store().getJob(jobId)
     if (!existing) return undefined
     if (!isJobOpen(existing.status)) {
@@ -1844,8 +1912,6 @@ export class WorkerScheduler {
       ...patch,
       finishedAt: new Date().toISOString(),
     })
-    const rt = this.runtime.get(jobId)
-    if (rt?.timeout) clearTimeout(rt.timeout)
     if (event) emitWorkerEvent(jobId, event)
     if (!opts?.retainRuntime) this.runtime.delete(jobId)
     this.resolveWaiter(jobId, updated)

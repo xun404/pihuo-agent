@@ -1,23 +1,12 @@
 import type { ApprovalDecision } from '@swarmdesk-agent/shared'
 
-const MAX_TIMER_DELAY_MS = 2_147_483_647
-
 export type ApprovalWaitOutcome =
   | { outcome: 'selected'; decision: 'allow' | 'deny'; optionId?: string }
   | { outcome: 'cancelled'; decision: 'cancel'; optionId?: string }
-  | { outcome: 'timeout' }
-
-export interface WaitForApprovalOptions {
-  timeoutMs?: number
-  /** Injected clock for tests */
-  now?: () => number
-  sleep?: (ms: number) => Promise<void>
-}
 
 type Waiter = {
   resolve: (value: ApprovalWaitOutcome) => void
   reject: (reason: Error) => void
-  timer?: ReturnType<typeof setTimeout>
 }
 
 /**
@@ -41,33 +30,9 @@ export class ApprovalWaitRegistry {
     })
   }
 
-  /**
-   * Wait until settle() is called for this approval id, or timeout.
-   * On timeout returns { outcome: 'timeout' } and leaves the approval pending in the store
-   * (caller may separately cancel).
-   */
-  wait(approvalId: string, opts: WaitForApprovalOptions = {}): Promise<ApprovalWaitOutcome> {
-    const rawTimeoutMs = opts.timeoutMs ?? 120_000
-    const timeoutMs = Number.isFinite(rawTimeoutMs)
-      ? rawTimeoutMs <= 0
-        ? 0
-        : Math.min(Math.max(1, Math.floor(rawTimeoutMs)), MAX_TIMER_DELAY_MS)
-      : 120_000
-
-    if (this.waiters.has(approvalId)) {
-      throw new Error(`Approval waiter already registered: ${approvalId}`)
-    }
-
-    return new Promise<ApprovalWaitOutcome>((resolve, reject) => {
-      const waiter: Waiter = { resolve, reject }
-      if (timeoutMs > 0) {
-        waiter.timer = setTimeout(() => {
-          this.waiters.delete(approvalId)
-          resolve({ outcome: 'timeout' })
-        }, timeoutMs)
-      }
-      this.waiters.set(approvalId, waiter)
-    })
+  /** Backwards-compatible alias; approvals intentionally have no timeout. */
+  wait(approvalId: string): Promise<ApprovalWaitOutcome> {
+    return this.register(approvalId)
   }
 
   /**
@@ -77,7 +42,6 @@ export class ApprovalWaitRegistry {
   settle(approvalId: string, decision: ApprovalDecision, optionId?: string): boolean {
     const waiter = this.waiters.get(approvalId)
     if (!waiter) return false
-    if (waiter.timer) clearTimeout(waiter.timer)
     this.waiters.delete(approvalId)
 
     if (decision === 'cancel') {
@@ -94,7 +58,6 @@ export class ApprovalWaitRegistry {
   cancel(approvalId: string, reason?: string): boolean {
     const waiter = this.waiters.get(approvalId)
     if (!waiter) return false
-    if (waiter.timer) clearTimeout(waiter.timer)
     this.waiters.delete(approvalId)
     waiter.reject(new Error(reason ?? 'approval cancelled'))
     return true
@@ -117,9 +80,6 @@ export class ApprovalWaitRegistry {
 
   /** Test helper: clear all waiters. */
   clear(): void {
-    for (const w of this.waiters.values()) {
-      if (w.timer) clearTimeout(w.timer)
-    }
     this.waiters.clear()
   }
 
@@ -137,10 +97,8 @@ export const globalApprovalWaiters = new ApprovalWaitRegistry()
  */
 export async function waitForApprovalDecision(
   approvalId: string,
-  opts: WaitForApprovalOptions & {
-    registry?: ApprovalWaitRegistry
-  } = {},
+  opts: { registry?: ApprovalWaitRegistry } = {},
 ): Promise<ApprovalWaitOutcome> {
   const registry = opts.registry ?? globalApprovalWaiters
-  return registry.wait(approvalId, opts)
+  return registry.wait(approvalId)
 }

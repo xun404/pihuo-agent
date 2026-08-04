@@ -26,6 +26,7 @@ describe('WorkerRunCard Registry auth_required', () => {
       errorCode: 'WORKER_AUTH_REQUIRED',
       startedAt: 1,
       lastDeltaAt: 2,
+      pendingApprovals: [],
     }
     const html = renderToStaticMarkup(
       <I18nProvider serverLocale="en">
@@ -60,6 +61,7 @@ describe('WorkerRunCard Registry auth_required', () => {
             canResetAcpContext: true,
             startedAt: 1,
             lastDeltaAt: 2,
+            pendingApprovals: [],
           }}
           onResetContext={() => {}}
         />
@@ -70,6 +72,39 @@ describe('WorkerRunCard Registry auth_required', () => {
     assert.match(html, />Completed \(no output\)</u)
     assert.match(html, />Output truncated</u)
     assert.doesNotMatch(html, /重新开始|输出已截断/u)
+  })
+
+  it('explains restart failures and does not render an actionable stale approval', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider serverLocale="en">
+        <WorkerRunCard
+          state={{
+            jobId: 'job-restarted',
+            workerId: 'worker-fixture',
+            workerName: 'Fixture Agent',
+            workerKind: 'custom',
+            role: 'general',
+            reusedSession: false,
+            sequence: 0,
+            output: '',
+            status: 'failed',
+            truncated: false,
+            error: 'RUNTIME_RESTARTED: worker runtime restarted before job completed',
+            errorCode: 'RUNTIME_RESTARTED',
+            startedAt: 1,
+            lastDeltaAt: 2,
+            pendingApprovals: [],
+          }}
+          open
+          onToggle={() => undefined}
+          onResolveApproval={() => undefined}
+        />
+      </I18nProvider>,
+    )
+
+    assert.match(html, /RUNTIME_RESTARTED/u)
+    assert.match(html, /manually rerun this task/u)
+    assert.doesNotMatch(html, /approval-actions|approval-row/u)
   })
 
   it('shows the Team member name with a role tag and divides only real worker actions', () => {
@@ -108,5 +143,48 @@ describe('WorkerRunCard Registry auth_required', () => {
     assert.match(html, /worker-action-section worker-action-output/u)
     assert.match(html, /worker-action-label">Output</u)
     assert.doesNotMatch(html, /worker-action-(?:approval|error|thinking)/u)
+  })
+
+  it('renders every pending approval in stable order with an explicit cancel action', () => {
+    const approval = (id: string, createdAt: string, title: string) => ({
+      id,
+      status: 'pending' as const,
+      title,
+      options: [
+        { optionId: `${id}-allow`, name: 'Allow once', kind: 'allow_once' as const },
+      ],
+      source: 'acp' as const,
+      createdAt,
+      jobId: 'job-multi',
+    })
+    const html = renderToStaticMarkup(
+      <I18nProvider serverLocale="en">
+        <WorkerRunCard
+          state={{
+            jobId: 'job-multi',
+            workerName: 'Codex',
+            workerKind: 'codex',
+            reusedSession: false,
+            sequence: 0,
+            output: '',
+            status: 'pending_approval',
+            truncated: false,
+            startedAt: 1,
+            lastDeltaAt: 2,
+            pendingApprovals: [
+              approval('a2', '2026-07-14T02:00:00.000Z', 'Second approval'),
+              approval('a1', '2026-07-14T01:00:00.000Z', 'First approval'),
+            ],
+          }}
+          open
+          onToggle={() => undefined}
+          resolving={{}}
+          onResolveApproval={() => undefined}
+        />
+      </I18nProvider>,
+    )
+
+    assert.ok(html.indexOf('First approval') < html.indexOf('Second approval'))
+    assert.equal((html.match(/approval-actions-btn-cancel|>Cancel</gu) ?? []).length, 2)
   })
 })

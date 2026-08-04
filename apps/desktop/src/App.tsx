@@ -16,6 +16,7 @@ import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { SettingsLayer, openSettings } from './components/SettingsLayer'
 import { useAppState } from './hooks/useAppState'
+import type { ThinkingIntensity } from './lib/settings'
 import { I18nProvider, useI18n } from './i18n/I18nProvider'
 import type { Locale } from './i18n/locales'
 import { ThemeProvider } from './theme/ThemeProvider'
@@ -24,6 +25,7 @@ import { ToastProvider, useToast } from './components/Toast'
 import { pickProjectDirectory } from './lib/native-dialogs'
 import { ConfirmDialog, type ConfirmDialogConfig } from './components/ui/ConfirmDialog'
 import { clampSidebarWidth, loadSidebarWidth, saveSidebarWidth } from './lib/panel-widths'
+import { approvalsForSession } from './lib/session-approvals'
 
 const EMPTY_JOBS: WorkerJob[] = []
 
@@ -59,7 +61,7 @@ function AppShell({
   setSessionPermissionMode,
 }: ReturnType<typeof useAppState>) {
   const { t } = useI18n()
-  const { error: toastError, info: toastInfo } = useToast()
+  const { toast: pushToast, error: toastError, info: toastInfo } = useToast()
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth())
   const [busySessionIds, setBusySessionIds] = useState<Set<string>>(() => new Set())
   const sidebarWidthRef = useRef(sidebarWidth)
@@ -78,9 +80,37 @@ function AppShell({
     sessionId: string
     text: string
     autoSend: boolean
+    model?: string
+    thinking?: ThinkingIntensity
   } | null>(null)
   const [creatingFromComposer, setCreatingFromComposer] = useState(false)
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
+  const [permissionFailureCounts, setPermissionFailureCounts] = useState<Record<string, number>>(
+    {},
+  )
+
+  // Failure details are mutation feedback rather than durable Approval state.
+  // Drop them once the Session leaves auto mode or no pending item remains, so
+  // a manually resolved request cannot leave a stale warning on the shield.
+  useEffect(() => {
+    setPermissionFailureCounts((previous) => {
+      let changed = false
+      const next = { ...previous }
+      for (const sessionId of Object.keys(previous)) {
+        const session = snapshot.sessions.find((item) => item.id === sessionId)
+        const hasPending = approvalsForSession(
+          snapshot.approvals,
+          snapshot.jobs ?? EMPTY_JOBS,
+          sessionId,
+        ).some((approval) => approval.status === 'pending')
+        if (!session || session.permissionMode !== 'auto' || !hasPending) {
+          delete next[sessionId]
+          changed = true
+        }
+      }
+      return changed ? next : previous
+    })
+  }, [snapshot.approvals, snapshot.sessions])
 
   /**
    * Sidebar notification lamps (error/done) are read-watermark driven:
@@ -197,6 +227,8 @@ function AppShell({
     preset?: {
       permissionMode: SessionPermissionMode
       teamTemplateId?: string
+      model?: string
+      thinking?: ThinkingIntensity
     },
   ): Promise<boolean> => {
     const trimmed = text.trim()
@@ -227,7 +259,13 @@ function AppShell({
         )
         // Bind the text to the newly-created session id so ONLY its ChatPanel
         // consumes it — the previously-active panel must not race in first.
-        setPendingComposerForSession({ sessionId: session.id, text: trimmed, autoSend: true })
+        setPendingComposerForSession({
+          sessionId: session.id,
+          text: trimmed,
+          autoSend: true,
+          ...(preset?.model ? { model: preset.model } : {}),
+          ...(preset?.thinking ? { thinking: preset.thinking } : {}),
+        })
         return true
       } catch (e) {
         toastError(e instanceof Error ? e.message : String(e))
@@ -277,6 +315,68 @@ function AppShell({
 
   const onDeleteSession = (session: Session) => {
     deleteSession(session.id).catch((e) => toastError(String(e)))
+  }
+
+  /** Apply the authoritative Session mutation response and expose a retry for
+   * any Approval that remains pending after a partial auto-resolution. */
+  const handlePermissionModeChange = async (
+    sessionId: string,
+    permissionMode: SessionPermissionMode,
+  ): Promise<void> => {
+    try {
+      const result = await setSessionPermissionMode(sessionId, permissionMode)
+      const resolvedCount = result.approvals.length
+      const failureCount = result.failures.length
+      const pendingCount = approvalsForSession(
+        result.snapshot.approvals,
+        result.snapshot.jobs ?? EMPTY_JOBS,
+        sessionId,
+      ).filter((approval) => approval.status === 'pending').length
+      setPermissionFailureCounts((previous) => {
+        const next = { ...previous }
+        if (permissionMode === 'auto' && failureCount > 0) next[sessionId] = failureCount
+        else delete next[sessionId]
+        return next
+      })
+      if (failureCount > 0) {
+        pushToast({
+          message:
+            resolvedCount > 0
+              ? t('permissions.autoResolvePartial', {
+                  resolved: resolvedCount,
+                  failed: failureCount,
+                  pending: pendingCount,
+                })
+              : t('permissions.autoResolveFailed', {
+                  count: failureCount,
+                  pending: pendingCount,
+                }),
+          kind: 'error',
+          action:
+            permissionMode === 'auto'
+              ? {
+                  label: t('common.retry'),
+                  onClick: () => handlePermissionModeChange(sessionId, 'auto'),
+                }
+              : undefined,
+        })
+      } else if (resolvedCount > 0) {
+        toastInfo(t('permissions.autoResolved', { count: resolvedCount }))
+      }
+    } catch (e) {
+      pushToast({
+        message: String(e),
+        kind: 'error',
+        action:
+          permissionMode === 'auto'
+            ? {
+                label: t('common.retry'),
+                onClick: () => handlePermissionModeChange(sessionId, 'auto'),
+              }
+            : undefined,
+      })
+      throw e
+    }
   }
 
   return (
@@ -338,15 +438,8 @@ function AppShell({
                 onOpenSettings={(tab) => openSettings(tab)}
                 onRefreshSnapshot={() => void refresh()}
                 onBusySessionsChange={setBusySessionIds}
-                onSetPermissionMode={(sessionId, permissionMode) =>
-                  setSessionPermissionMode(sessionId, permissionMode).then(
-                    () => undefined,
-                    (e) => {
-                      toastError(String(e))
-                      throw e
-                    },
-                  )
-                }
+                onSetPermissionMode={handlePermissionModeChange}
+                permissionFailureCounts={permissionFailureCounts}
                 onSessionStatusChange={(sessionId, status, opts) =>
                   setSessionStatus(sessionId, status, opts)
                 }

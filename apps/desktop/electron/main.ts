@@ -602,6 +602,7 @@ function providersPayload() {
   const merged = mergeProvidersWithCustom(MASTRA_PROVIDERS, settings.customProviders)
   const secretKeys = [...new Set([...SECRET_ENV_KEYS, ...merged.map((p) => p.apiKeyEnv)])]
   const status = getSecretsStatus(secretKeys)
+  const disabled = new Set(settings.disabledProviderIds ?? [])
   return {
     status,
     customProviders: settings.customProviders ?? [],
@@ -609,6 +610,8 @@ function providersPayload() {
       const custom = settings.customProviders?.find((c) => c.id === p.id)
       const isCustom = Boolean(custom)
       const rawThinking = (p as { thinkingIntensities?: ThinkingIntensity[] }).thinkingIntensities
+      const enabled =
+        !disabled.has(p.id) && (isCustom ? custom?.enabled !== false : true)
       return {
         id: p.id,
         name: p.name,
@@ -623,7 +626,10 @@ function providersPayload() {
         custom: isCustom,
         baseURL: custom?.baseURL ?? (p as { baseURL?: string }).baseURL,
         apiStyle: custom?.apiStyle ?? (p as { apiStyle?: string }).apiStyle,
-        enabled: isCustom ? custom?.enabled !== false : true,
+        enabled,
+        source: custom?.source,
+        modelsDevSyncedAt: custom?.modelsDevSyncedAt,
+        npm: custom?.npm,
       }
     }),
   }
@@ -696,6 +702,7 @@ function registerIpc(): void {
         npmRegistry?: string | null
         secrets?: Record<string, string | null>
         customProviders?: CustomProviderSettings[]
+        disabledProviderIds?: string[]
       },
     ) => {
       requireTrustedRenderer(event)
@@ -753,6 +760,10 @@ function registerIpc(): void {
                     : c.thinkingIntensities,
               }))
             : prev.customProviders,
+        disabledProviderIds:
+          payload.disabledProviderIds !== undefined
+            ? payload.disabledProviderIds
+            : prev.disabledProviderIds,
       })
       process.env.LEADER_MODEL = next.leaderModel
       if (next.thinkingIntensity) {

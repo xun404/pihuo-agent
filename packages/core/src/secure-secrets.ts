@@ -56,6 +56,9 @@ export interface CustomProviderModel {
   contextWindow?: number
   /** Per-model supported thinking levels */
   thinkingIntensities?: ThinkingIntensity[]
+  /** Capability tags from models.dev (optional) */
+  toolCall?: boolean
+  multimodal?: boolean
 }
 
 export interface CustomProviderSettings {
@@ -80,6 +83,14 @@ export interface CustomProviderSettings {
    */
   thinkingIntensities?: ThinkingIntensity[]
   models: CustomProviderModel[]
+  /**
+   * Origin of this entry. `models.dev` = imported full catalog; omit/`custom` = hand-built.
+   */
+  source?: 'custom' | 'models.dev'
+  /** ISO time of last models.dev model-list sync (import or refresh). */
+  modelsDevSyncedAt?: string
+  /** models.dev provider.toml npm field (diagnostic / apiStyle hint only; not installed). */
+  npm?: string
 }
 
 export interface AppSettings {
@@ -91,6 +102,11 @@ export interface AppSettings {
   thinkingIntensity?: ThinkingIntensity
   /** User-defined providers (non-secret); keys stored in secrets map */
   customProviders?: CustomProviderSettings[]
+  /**
+   * Built-in / policy catalog provider ids the user has turned off.
+   * Custom providers use `customProviders[].enabled` instead.
+   */
+  disabledProviderIds?: string[]
   /** Maximum model steps per response (10–1000, default 500) */
   leaderMaxSteps?: number
   /** Editable Leader behavior prompt and role defaults. */
@@ -104,6 +120,21 @@ export interface AppSettings {
   npmRegistry?: string
   /** Non-secret prefs */
   updatedAt?: string
+}
+
+/** Normalize disabled built-in provider id list. */
+export function normalizeDisabledProviderIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const item of raw) {
+    if (typeof item !== 'string') continue
+    const id = item.trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out
 }
 
 export interface SecretsStatus {
@@ -350,6 +381,7 @@ function defaultAppSettings(opts?: { useEnvironment?: boolean }): AppSettings {
         : (process.env.LEADER_MODEL ?? DEFAULT_LEADER_MODEL),
     thinkingIntensity: DEFAULT_THINKING_INTENSITY,
     customProviders: [],
+    disabledProviderIds: [],
     leaderMaxSteps: 500,
     prompts: normalizePromptSettings(undefined),
     workerTimeouts: resolveWorkerTimeoutSettings(undefined),
@@ -384,6 +416,7 @@ function loadSettingsStrict(): AppSettings {
       raw.thinkingIntensity ?? process.env.THINKING_INTENSITY,
     ),
     customProviders,
+    disabledProviderIds: normalizeDisabledProviderIds(raw.disabledProviderIds),
     leaderMaxSteps: resolveLeaderMaxSteps(raw.leaderMaxSteps),
     prompts: normalizePromptSettings(raw.prompts),
     workerTimeouts: resolveWorkerTimeoutSettings(raw.workerTimeouts),
@@ -417,6 +450,10 @@ export function saveSettings(settings: Partial<AppSettings>): AppSettings {
         ? normalizeThinkingIntensity(settings.thinkingIntensity)
         : normalizeThinkingIntensity(prev.thinkingIntensity),
     customProviders,
+    disabledProviderIds:
+      settings.disabledProviderIds !== undefined
+        ? normalizeDisabledProviderIds(settings.disabledProviderIds)
+        : normalizeDisabledProviderIds(prev.disabledProviderIds),
     leaderMaxSteps:
       settings.leaderMaxSteps !== undefined
         ? parseLeaderMaxStepsInput(settings.leaderMaxSteps)
@@ -460,11 +497,16 @@ export function mergeProvidersWithCustom<
       label: string
       contextWindow?: number
       thinkingIntensities?: ThinkingIntensity[]
+      toolCall?: boolean
+      multimodal?: boolean
     }[]
     baseURL?: string
     apiStyle?: string
     contextWindow?: number
     thinkingIntensities?: ThinkingIntensity[]
+    source?: 'custom' | 'models.dev'
+    modelsDevSyncedAt?: string
+    npm?: string
   },
 >(builtIn: T[], custom: CustomProviderSettings[] | undefined): T[] {
   const extras = validCustomProviders(custom ?? []).map(
@@ -478,15 +520,20 @@ export function mergeProvidersWithCustom<
         apiStyle: c.apiStyle ?? 'openai',
         contextWindow: c.contextWindow,
         thinkingIntensities: c.thinkingIntensities,
+        source: c.source,
+        modelsDevSyncedAt: c.modelsDevSyncedAt,
+        npm: c.npm,
         models: (c.models?.length ? c.models : [{ id: `${c.id}/default`, label: 'Default' }]).map(
           (m) => ({
             id: m.id,
             label: m.label,
             contextWindow: m.contextWindow ?? c.contextWindow,
             thinkingIntensities: m.thinkingIntensities ?? c.thinkingIntensities,
+            ...(m.toolCall ? { toolCall: true } : {}),
+            ...(m.multimodal ? { multimodal: true } : {}),
           }),
         ),
-      }) as T,
+      }) as unknown as T,
   )
   const builtinIds = new Set(builtIn.map((p) => p.id))
   return [...builtIn, ...extras.filter((e) => !builtinIds.has(e.id))]

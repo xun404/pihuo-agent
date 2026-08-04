@@ -1,7 +1,9 @@
 /**
- * Curate Settings → Models built-in list from Mastra provider-registry models
+ * Curate Settings → Models built-in list from models.dev registry models
  * using packages/core/src/bundled/builtin-providers.policy.json.
  */
+import type { ThinkingIntensity } from '@swarmdesk-agent/core'
+
 export type ModelTag = 'flagship' | 'fast' | 'coding' | 'cheap' | 'reasoning'
 
 export type CuratedModel = {
@@ -9,6 +11,22 @@ export type CuratedModel = {
   label: string
   tag?: ModelTag
   contextWindow?: number
+  /** Supported thinking levels (models.dev reasoning_options). */
+  thinkingIntensities?: ThinkingIntensity[]
+  /** Supports tool calling (models.dev tool_call). */
+  toolCall?: boolean
+  /** Supports non-text input/output (models.dev modalities). */
+  multimodal?: boolean
+}
+
+/** Registry model info as written by sync:model-registry (models.dev data). */
+export type RegistryModelInfo = {
+  id: string
+  label: string
+  thinkingIntensities?: ThinkingIntensity[]
+  contextWindow?: number
+  toolCall?: boolean
+  multimodal?: boolean
 }
 
 export type CuratedProvider = {
@@ -26,7 +44,7 @@ export type BuiltinProvidersCatalog = {
   version: 1
   generatedAt: string
   mastraPackageVersion: string
-  source: 'synced-from-mastra'
+  source: 'synced-from-models-dev'
   defaultLeaderModel: string
   recommended: Array<{ id: string; label: string; reason: string }>
   providers: CuratedProvider[]
@@ -126,9 +144,13 @@ export function filterAndSortModels(registryModelIds: string[], policy: Provider
 
 export function curateProvider(
   policy: ProviderPolicy,
-  registryModelIds: string[],
+  registryModels: RegistryModelInfo[],
 ): CuratedProvider {
-  const picked = filterAndSortModels(registryModelIds, policy).slice(0, policy.maxModels)
+  const pickedIds = filterAndSortModels(
+    registryModels.map((m) => m.id),
+    policy,
+  ).slice(0, policy.maxModels)
+  const byId = new Map(registryModels.map((m) => [m.id, m]))
   return {
     id: policy.id,
     name: policy.name,
@@ -137,15 +159,21 @@ export function curateProvider(
     docsUrl: policy.docsUrl,
     apiStyle: policy.apiStyle,
     ...(policy.baseURL ? { baseURL: policy.baseURL } : {}),
-    models: picked.map((raw) => {
+    models: pickedIds.map((raw) => {
       const fullId = raw.includes('/') ? raw : `${policy.id}/${raw}`
       const bare = fullId.split('/').slice(1).join('/')
       const tag = assignTag(bare, policy.tagRules)
+      const info = byId.get(raw) ?? byId.get(fullId)
       return {
         id: fullId,
-        label: humanLabel(fullId),
+        label: info?.label && info.label !== raw ? info.label : humanLabel(fullId),
         ...(tag ? { tag } : {}),
-        contextWindow: assignContextWindow(bare, policy),
+        contextWindow: info?.contextWindow ?? assignContextWindow(bare, policy),
+        ...(info?.toolCall ? { toolCall: info.toolCall } : {}),
+        ...(info?.multimodal ? { multimodal: info.multimodal } : {}),
+        ...(info?.thinkingIntensities?.length
+          ? { thinkingIntensities: info.thinkingIntensities }
+          : {}),
       }
     }),
   }
@@ -181,7 +209,7 @@ export function pickDefaultLeader(providers: CuratedProvider[], preferPrefixes: 
 
 export function buildBuiltinCatalog(
   policy: BuiltinProvidersPolicy,
-  registryByProvider: Record<string, string[]>,
+  registryByProvider: Record<string, RegistryModelInfo[]>,
   mastraPackageVersion: string,
   generatedAt = new Date().toISOString(),
 ): BuiltinProvidersCatalog {
@@ -192,7 +220,7 @@ export function buildBuiltinCatalog(
     version: 1,
     generatedAt,
     mastraPackageVersion,
-    source: 'synced-from-mastra',
+    source: 'synced-from-models-dev',
     defaultLeaderModel,
     recommended,
     providers,

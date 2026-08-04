@@ -18,6 +18,7 @@ function makeState(overrides: Partial<WorkerRunState> & { jobId: string }): Work
     truncated: false,
     startedAt: 1000,
     lastDeltaAt: 1000,
+    pendingApprovals: [],
     ...overrides,
   }
 }

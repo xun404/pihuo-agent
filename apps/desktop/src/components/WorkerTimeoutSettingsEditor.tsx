@@ -4,7 +4,6 @@ import { useI18n } from '../i18n/I18nProvider'
 
 type TimeoutDraft = {
   job: string
-  approval: string
   queue: string
 }
 
@@ -28,15 +27,12 @@ function parseMinutes(value: string, min: number, max: number): number | null {
 export function parseWorkerTimeoutMinutes(draft: TimeoutDraft): WorkerTimeoutMinutesParseResult {
   const job = parseMinutes(draft.job, 1, 120)
   if (job === null) return { ok: false, field: 'job' }
-  const approval = parseMinutes(draft.approval, 1, 60)
-  if (approval === null) return { ok: false, field: 'approval' }
   const queue = parseMinutes(draft.queue, 1, 120)
   if (queue === null) return { ok: false, field: 'queue' }
   return {
     ok: true,
     value: {
       jobTimeoutMs: job * MINUTES_TO_MS,
-      approvalTimeoutMs: approval * MINUTES_TO_MS,
       queueTimeoutMs: queue * MINUTES_TO_MS,
     },
   }
@@ -45,17 +41,12 @@ export function parseWorkerTimeoutMinutes(draft: TimeoutDraft): WorkerTimeoutMin
 function draftFromSettings(value: WorkerTimeoutSettings): TimeoutDraft {
   return {
     job: String(value.jobTimeoutMs / MINUTES_TO_MS),
-    approval: String(value.approvalTimeoutMs / MINUTES_TO_MS),
     queue: String(value.queueTimeoutMs / MINUTES_TO_MS),
   }
 }
 
 function sameTimeouts(a: WorkerTimeoutSettings, b: WorkerTimeoutSettings): boolean {
-  return (
-    a.jobTimeoutMs === b.jobTimeoutMs &&
-    a.approvalTimeoutMs === b.approvalTimeoutMs &&
-    a.queueTimeoutMs === b.queueTimeoutMs
-  )
+  return a.jobTimeoutMs === b.jobTimeoutMs && a.queueTimeoutMs === b.queueTimeoutMs
 }
 
 function parseLeaderSteps(value: string): number | null {
@@ -172,13 +163,6 @@ export function WorkerTimeoutSettingsEditor({
       description: 'settings.runtime.workerJobTimeoutDesc',
       error: 'settings.runtime.workerJobTimeoutError',
       max: 120,
-    },
-    {
-      field: 'approval',
-      label: 'settings.runtime.workerApprovalTimeout',
-      description: 'settings.runtime.workerApprovalTimeoutDesc',
-      error: 'settings.runtime.workerApprovalTimeoutError',
-      max: 60,
     },
     {
       field: 'queue',

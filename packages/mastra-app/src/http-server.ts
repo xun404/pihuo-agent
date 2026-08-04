@@ -27,6 +27,7 @@ import {
   saveSettings,
   resolveLeaderMaxSteps,
   mergeProvidersWithCustom,
+  applyCustomProviderEnv,
   MASTRA_PROVIDERS,
   DEFAULT_LEADER_MODEL,
   SECRET_ENV_KEYS,
@@ -45,6 +46,11 @@ import {
   getLeaderModelCatalog,
   getLeaderFeaturedCatalog,
   resolveRouterDataPaths,
+  refreshModelsDevCatalog,
+  listModelsDevProviders,
+  buildCustomProviderFromModelsDev,
+  loadModelsDevMeta,
+  ensureProviderLogoCached,
   type CustomProviderSettings,
   type ThinkingIntensity,
   type WorkerTimeoutSettings,
@@ -107,6 +113,7 @@ import type {
   CustomAcpRegistrationInput,
   PromptSettings,
   SessionPermissionMode,
+  PermissionModeChangeSource,
 } from '@swarmdesk-agent/shared'
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
@@ -173,6 +180,14 @@ import {
 } from './custom-acp-registration.js'
 import { shouldMarkRoleReviewPrompted } from './role-review-prompt.js'
 import { getTeamTemplateService, TeamTemplateServiceError } from './team-template-service.js'
+
+function parseSessionPermissionSource(
+  value: unknown,
+): Extract<PermissionModeChangeSource, 'manual_chat' | 'manual_panel'> {
+  if (value === 'manual_chat' || value === 'manual_panel') return value
+  if (value === undefined) return 'manual_chat'
+  throw new Error('source must be manual_chat or manual_panel')
+}
 
 const port = resolveHttpPort()
 const runtimeWorkspaceRoot = pathResolve(
@@ -2494,7 +2509,11 @@ const server = createServer(async (req, res) => {
           const project = store.setActiveProject(activateProjectMatch.id!)
           send(res, 200, { project, snapshot: store.snapshot() })
         } catch (e) {
-          send(res, 404, { error: e instanceof Error ? e.message : String(e) })
+          const message = e instanceof Error ? e.message : String(e)
+          const notFound = message.includes('not found')
+          send(res, notFound ? 404 : 500, {
+            error: notFound ? message : 'Internal server error',
+          })
         }
         return
       }
@@ -2664,36 +2683,49 @@ const server = createServer(async (req, res) => {
           return
         }
         try {
-          store.updateSessionApprovalPolicy(
-            policyMatch.id!,
-            body.approvalPolicy as import('@swarmdesk-agent/shared').SessionApprovalPolicy,
-          )
-          const { session } = getWorkerScheduler().setSessionPermissionMode(
+          const { session, approvals, failures } = getWorkerScheduler().setSessionPermissionMode(
             policyMatch.id!,
             permissionModeFromLegacyPolicy(body.approvalPolicy),
+            {
+              // The old five-state endpoint is a compatibility migration
+              // boundary, so its audit provenance is explicit and stable.
+              source: 'migration',
+              approvalPolicy:
+                body.approvalPolicy as import('@swarmdesk-agent/shared').SessionApprovalPolicy,
+            },
           )
-          send(res, 200, { session, snapshot: store.snapshot() })
+          send(res, 200, { session, approvals, failures, snapshot: store.snapshot() })
         } catch (e) {
-          send(res, 404, { error: e instanceof Error ? e.message : String(e) })
+          const message = e instanceof Error ? e.message : String(e)
+          const notFound = message.includes('not found')
+          send(res, notFound ? 404 : 500, {
+            error: notFound ? message : 'Internal server error',
+          })
         }
         return
       }
 
       const permissionModeMatch = match(path, '/api/sessions/:id/permission-mode')
       if (method === 'POST' && permissionModeMatch) {
-        const body = (await readJson(req)) as { permissionMode?: string }
+        const body = (await readJson(req)) as { permissionMode?: string; source?: unknown }
         if (!isValidSessionPermissionMode(body.permissionMode)) {
           send(res, 400, { error: 'permissionMode must be default or auto' })
           return
         }
         try {
-          const { session } = getWorkerScheduler().setSessionPermissionMode(
+          const source = parseSessionPermissionSource(body.source)
+          const { session, approvals, failures } = getWorkerScheduler().setSessionPermissionMode(
             permissionModeMatch.id!,
             body.permissionMode,
+            { source },
           )
-          send(res, 200, { session, snapshot: store.snapshot() })
+          send(res, 200, { session, approvals, failures, snapshot: store.snapshot() })
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
+          if (message.startsWith('source must be')) {
+            send(res, 400, { error: message })
+            return
+          }
           if (message.includes('not found')) send(res, 404, { error: message })
           else sendUnexpectedFailure(res, e, 'update session permission mode')
         }
@@ -2995,10 +3027,16 @@ const server = createServer(async (req, res) => {
         const merged = mergeProvidersWithCustom(MASTRA_PROVIDERS, status.settings.customProviders)
         const secretKeys = [...SECRET_ENV_KEYS, ...merged.map((p) => p.apiKeyEnv)]
         const configured = getSecretsStatus([...new Set(secretKeys)]).configuredKeys
+        const disabled = new Set(status.settings.disabledProviderIds ?? [])
         return merged.map((p) => {
-          const isCustom = Boolean(status.settings.customProviders?.some((c) => c.id === p.id))
+          const customEntry = status.settings.customProviders?.find((c) => c.id === p.id)
+          const isCustom = Boolean(customEntry)
           const rawThinking = (p as { thinkingIntensities?: ThinkingIntensity[] })
             .thinkingIntensities
+          // Single source of truth for the enable switch: disabledProviderIds
+          // (customProviders.enabled still respected if explicitly false for legacy)
+          const enabled =
+            !disabled.has(p.id) && (isCustom ? customEntry?.enabled !== false : true)
           return {
             id: p.id,
             name: p.name,
@@ -3014,6 +3052,10 @@ const server = createServer(async (req, res) => {
             }),
             configured: configured.includes(p.apiKeyEnv),
             custom: isCustom,
+            enabled,
+            source: customEntry?.source,
+            modelsDevSyncedAt: customEntry?.modelsDevSyncedAt,
+            npm: customEntry?.npm,
           }
         })
       }
@@ -3087,8 +3129,115 @@ const server = createServer(async (req, res) => {
           providers: providersPayload(status),
           customProviders: status.settings.customProviders ?? [],
           storagePath: resolveRouterDataPaths().rootDir,
+          modelsDevMeta: loadModelsDevMeta(),
         })
         return
+      }
+
+      // —— models.dev catalog (config LKG; not bundled) ——
+      if (method === 'GET' && path === '/api/models-dev/providers') {
+        const q = typeof url.searchParams.get('q') === 'string' ? url.searchParams.get('q')! : ''
+        const status = getSecretsStatus(SECRET_ENV_KEYS)
+        const builtinIds = MASTRA_PROVIDERS.map((p) => p.id)
+        const customIds = (status.settings.customProviders ?? []).map((c) => c.id)
+        const { providers, meta } = listModelsDevProviders({
+          q,
+          excludeIds: [...builtinIds, ...customIds],
+        })
+        send(res, 200, {
+          providers,
+          meta,
+          catalogAvailable: Boolean(meta),
+        })
+        return
+      }
+
+      if (method === 'POST' && path === '/api/models-dev/refresh') {
+        // Public catalog only (config models-dev/ LKG). Safe in Desktop API child
+        // (SECRETS_PARENT_INJECTED) — does not touch secrets.enc.
+        try {
+          const result = await refreshModelsDevCatalog()
+          send(res, 200, { ok: true, ...result })
+        } catch (e) {
+          send(res, 502, {
+            error: e instanceof Error ? e.message : 'Failed to refresh models.dev catalog',
+            code: 'MODELS_DEV_REFRESH_FAILED',
+          })
+        }
+        return
+      }
+
+      if (method === 'POST' && path === '/api/models-dev/import') {
+        // Writes settings.json customProviders only; keys still via Desktop secret path.
+        // Allowed under SECRETS_PARENT_INJECTED (unlike bulk /api/settings which needs owner restart).
+        const body = (await readJson(req)) as { providerId?: string }
+        const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : ''
+        if (!providerId) {
+          send(res, 400, { error: 'providerId required', code: 'PROVIDER_ID_REQUIRED' })
+          return
+        }
+        const prev = loadSettings()
+        const built = buildCustomProviderFromModelsDev({
+          providerId,
+          builtinIds: MASTRA_PROVIDERS.map((p) => p.id),
+          existingCustomIds: (prev.customProviders ?? []).map((c) => c.id),
+        })
+        if (!built.ok) {
+          const status =
+            built.code === 'NOT_FOUND' || built.code === 'NO_CATALOG'
+              ? 404
+              : built.code === 'BUILTIN_CONFLICT' || built.code === 'ALREADY_ADDED'
+                ? 409
+                : 400
+          send(res, status, { error: built.message, code: built.code })
+          return
+        }
+        const nextList = [...(prev.customProviders ?? []), built.provider]
+        const nextSettings = saveSettings({
+          ...prev,
+          customProviders: nextList,
+        })
+        applyCustomProviderEnv(nextSettings.customProviders, process.env)
+        applySecretsToEnv(process.env)
+        const status = getSecretsStatus([
+          ...SECRET_ENV_KEYS,
+          ...(nextSettings.customProviders ?? []).map((c) => c.apiKeyEnv),
+        ])
+        globalActivityLog.append('system', 'models.dev provider imported', {
+          providerId: built.provider.id,
+          models: built.provider.models.length,
+        })
+        send(res, 200, {
+          ok: true,
+          provider: built.provider,
+          ...status,
+          providers: providersPayload(status),
+          customProviders: nextSettings.customProviders ?? [],
+        })
+        return
+      }
+
+      {
+        const logoMatch = path.match(/^\/api\/provider-logos\/([^/]+)$/)
+        if (method === 'GET' && logoMatch) {
+          const providerId = decodeURIComponent(logoMatch[1] ?? '')
+          if (!providerId) {
+            send(res, 400, { error: 'provider id required' })
+            return
+          }
+          const { svg } = await ensureProviderLogoCached({ providerId })
+          if (!svg) {
+            send(res, 404, { error: 'logo not available', code: 'LOGO_NOT_FOUND' })
+            return
+          }
+          res.writeHead(200, {
+            'Content-Type': 'image/svg+xml; charset=utf-8',
+            'Cache-Control': 'private, max-age=86400',
+            ...corsFor(req),
+          })
+          res.end(svg)
+          return
+        }
       }
 
       if (method === 'POST' && path === '/api/settings') {
@@ -3108,6 +3257,7 @@ const server = createServer(async (req, res) => {
           npmRegistry?: string | null
           secrets?: Record<string, string | null>
           customProviders?: CustomProviderSettings[]
+          disabledProviderIds?: string[]
         }
         if (body.leaderMaxSteps !== undefined && body.leaderMaxSteps !== null) {
           try {
@@ -3162,6 +3312,10 @@ const server = createServer(async (req, res) => {
                       : c.thinkingIntensities,
                 }))
               : prev.customProviders,
+          disabledProviderIds:
+            body.disabledProviderIds !== undefined
+              ? body.disabledProviderIds
+              : prev.disabledProviderIds,
         })
         configureWorkerEnvDefaults({ npmRegistry: nextSettings.npmRegistry ?? null })
         process.env.LEADER_MODEL = nextSettings.leaderModel

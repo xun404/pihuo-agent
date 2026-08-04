@@ -47,6 +47,7 @@ import type {
   UpdateTeamTemplateInput,
   ApplyTeamTemplateInput,
   SessionPermissionMode,
+  PermissionModeChangeSource,
 } from '@swarmdesk-agent/shared'
 import {
   isValidSessionPermissionMode,
@@ -74,6 +75,14 @@ const REGISTRY_OWNER_REQUIRED = {
 /** Lazy accessor for tests/helpers that previously imported a module-level store. */
 export function routeStore() {
   return store()
+}
+
+function parseSessionPermissionSource(
+  value: unknown,
+): Extract<PermissionModeChangeSource, 'manual_chat' | 'manual_panel'> {
+  if (value === 'manual_chat' || value === 'manual_panel') return value
+  if (value === undefined) return 'manual_chat'
+  throw new Error('source must be manual_chat or manual_panel')
 }
 
 export const apiRoutes = [
@@ -263,17 +272,22 @@ export const apiRoutes = [
         )
       }
       try {
-        store().updateSessionApprovalPolicy(
-          id,
-          body.approvalPolicy as import('@swarmdesk-agent/shared').SessionApprovalPolicy,
-        )
-        const { session } = getWorkerScheduler().setSessionPermissionMode(
+        const { session, approvals, failures } = getWorkerScheduler().setSessionPermissionMode(
           id,
           permissionModeFromLegacyPolicy(body.approvalPolicy),
+          {
+            // This route is retained solely for legacy compatibility; keep
+            // migration provenance explicit in the activity audit.
+            source: 'migration',
+            approvalPolicy:
+              body.approvalPolicy as import('@swarmdesk-agent/shared').SessionApprovalPolicy,
+          },
         )
-        return c.json({ session, snapshot: store().snapshot() })
+        return c.json({ session, approvals, failures, snapshot: store().snapshot() })
       } catch (e) {
-        return c.json({ error: e instanceof Error ? e.message : String(e) }, 404)
+        const message = e instanceof Error ? e.message : String(e)
+        const notFound = message.includes('not found')
+        return c.json({ error: notFound ? message : 'Internal server error' }, notFound ? 404 : 500)
       }
     },
   }),
@@ -282,15 +296,21 @@ export const apiRoutes = [
     method: 'POST',
     handler: async (c) => {
       const id = c.req.param('id')
-      const body = (await c.req.json()) as { permissionMode?: string }
+      const body = (await c.req.json()) as { permissionMode?: string; source?: unknown }
       if (!isValidSessionPermissionMode(body.permissionMode)) {
         return c.json({ error: 'permissionMode must be default or auto' }, 400)
       }
       try {
-        const { session } = getWorkerScheduler().setSessionPermissionMode(id, body.permissionMode)
-        return c.json({ session, snapshot: store().snapshot() })
+        const source = parseSessionPermissionSource(body.source)
+        const { session, approvals, failures } = getWorkerScheduler().setSessionPermissionMode(
+          id,
+          body.permissionMode,
+          { source },
+        )
+        return c.json({ session, approvals, failures, snapshot: store().snapshot() })
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
+        if (message.startsWith('source must be')) return c.json({ error: message }, 400)
         return c.json(
           { error: message.includes('not found') ? message : 'Internal server error' },
           message.includes('not found') ? 404 : 500,

@@ -6,6 +6,7 @@ import type {
   ApprovalItem,
   AcpToolKind,
 } from '@swarmdesk-agent/shared'
+import { sortPendingApprovals } from '@swarmdesk-agent/shared'
 import { MarkdownContent } from './MarkdownContent'
 import { ApprovalActions } from './ApprovalActions'
 import { resolveWorkerBrand, WorkerBrandLogo } from './Icons'
@@ -180,8 +181,15 @@ export const WorkerRunCard = memo(function WorkerRunCard({
       : (KIND_LABELS[state.workerKind] ?? state.workerName)
   const memberLabel = state.teamMemberName?.trim() || state.workerName || workerLabel
   const statusText = STATUS_LABELS[status]?.zh ?? status
-  const approval = state.pendingApproval ?? null
+  const pendingApprovals = sortPendingApprovals(
+    Array.isArray(state.pendingApprovals)
+      ? state.pendingApprovals
+      : state.pendingApproval
+        ? [state.pendingApproval]
+        : [],
+  )
   const publicError = state.recoveryError ?? state.error
+  const hasPublicError = Boolean(publicError || state.errorCode === 'RUNTIME_RESTARTED')
 
   const handleToggle = useCallback(() => {
     if (onToggle) {
@@ -203,11 +211,11 @@ export const WorkerRunCard = memo(function WorkerRunCard({
 
   const { shouldRender, contentRef } = useCollapsible({
     open: isOpen,
-    keepMounted: isRunning || !!publicError || isPendingApproval,
+    keepMounted: isRunning || hasPublicError || isPendingApproval,
   })
   const bodyScrollRef = useStickScrollBottom(
     isOpen && (isRunning || isPendingApproval),
-    `${state.output?.length ?? 0}:${state.task?.length ?? 0}:${publicError?.length ?? 0}`,
+    `${state.output?.length ?? 0}:${state.task?.length ?? 0}:${publicError?.length ?? 0}:${state.errorCode ?? ''}`,
   )
 
   const statusClass =
@@ -303,35 +311,52 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 {taskPrompt || state.task}
               </WorkerActionSection>
             )}
-            {isPendingApproval && approval && (
+            {isPendingApproval && pendingApprovals.length > 0 && (
               <WorkerActionSection kind="approval" label={t('workers.runApproval')} marker="!">
-                <div className="worker-action-approval-detail">
-                  {approval.toolKind
-                    ? `${TOOL_KIND_LABELS[approval.toolKind] ?? approval.toolKind} · `
-                    : ''}
-                  {approval.title}
-                  {approval.pathOrTarget ? ` · ${approval.pathOrTarget}` : ''}
-                  {approval.locations && approval.locations.length > 0
-                    ? ` · ${formatLocations(approval.locations)}`
-                    : ''}
-                </div>
-                {onResolveApproval && (
-                  <div className="approval-row worker-action-approval-controls">
-                    <ApprovalActions
-                      approval={approval}
-                      surface="chat"
-                      resolving={resolving}
-                      onResolve={onResolveApproval}
-                      variant="wireframe"
-                    />
+                {pendingApprovals.map((approval) => (
+                  <div className="worker-action-approval-item" key={approval.id}>
+                    <div className="worker-action-approval-detail">
+                      {approval.toolKind
+                        ? `${TOOL_KIND_LABELS[approval.toolKind] ?? approval.toolKind} · `
+                        : ''}
+                      {approval.title}
+                      {approval.pathOrTarget ? ` · ${approval.pathOrTarget}` : ''}
+                      {approval.locations && approval.locations.length > 0
+                        ? ` · ${formatLocations(approval.locations)}`
+                        : ''}
+                    </div>
+                    {!onResolveApproval &&
+                      (!approval.locations || approval.locations.length === 0) && (
+                        <div className="approval-scope-hint">{t('approvals.unknownScope')}</div>
+                      )}
+                    {onResolveApproval && (
+                      <div className="approval-row worker-action-approval-controls">
+                        <ApprovalActions
+                          approval={approval}
+                          surface="chat"
+                          resolving={resolving}
+                          onResolve={onResolveApproval}
+                          variant="wireframe"
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </WorkerActionSection>
             )}
-            {publicError && (
+            {hasPublicError && (
               <WorkerActionSection kind="error" label={t('workers.runError')} marker="✗">
                 <div>
-                  {publicError}
+                  {state.errorCode === 'RUNTIME_RESTARTED' ? (
+                    <>
+                      <code>RUNTIME_RESTARTED</code>
+                      <span className="worker-card-runtime-hint">
+                        {t('workers.runRuntimeRestarted')}
+                      </span>
+                    </>
+                  ) : (
+                    publicError
+                  )}
                   {state.errorCode === 'WORKER_AUTH_REQUIRED' && (
                     <>
                       <span className="worker-card-auth-hint">
