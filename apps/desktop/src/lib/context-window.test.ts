@@ -21,14 +21,13 @@ describe('parseContextWindow', () => {
 })
 
 describe('formatTokenCountDisplay', () => {
-  it('formats zh 万/亿', () => {
-    assert.equal(formatTokenCountDisplay(16_000, 'zh'), '1.6万')
-    assert.equal(formatTokenCountDisplay(1_000_000, 'zh'), '100万')
-    assert.equal(formatTokenCountDisplay(128_000, 'zh'), '12.8万')
-  })
-
-  it('formats en K/M', () => {
+  it('formats K/M for all locales', () => {
+    assert.equal(formatTokenCountDisplay(16_000, 'zh'), '16K')
+    assert.equal(formatTokenCountDisplay(1_000_000, 'zh'), '1M')
+    assert.equal(formatTokenCountDisplay(128_000, 'zh'), '128K')
+    assert.equal(formatTokenCountDisplay(14_000, 'zh'), '14K')
     assert.equal(formatTokenCountDisplay(16_000, 'en'), '16K')
     assert.equal(formatTokenCountDisplay(1_000_000, 'en'), '1M')
+    assert.equal(formatTokenCountDisplay(1_400_000, 'en'), '1.4M')
   })
 })

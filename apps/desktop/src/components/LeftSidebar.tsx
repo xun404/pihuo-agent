@@ -396,8 +396,8 @@ export function LeftSidebar({
                     return next
                   })
                 }
-                const isSessionsVisible =
-                  projectSessions.length > 0 && !sessionsCollapsed.has(project.id)
+                // Empty projects can still collapse (hide “no sessions”); body open by default.
+                const sessionsOpen = !sessionsCollapsed.has(project.id)
                 return (
                   <div className="proj" key={project.id}>
                     <div
@@ -405,19 +405,22 @@ export function LeftSidebar({
                       role="button"
                       tabIndex={0}
                       title={project.rootPath}
-                      onClick={
-                        projectSessions.length > 0 ? toggleSessions : () => onSelectProject(project)
-                      }
+                      aria-expanded={sessionsOpen}
+                      onClick={() => {
+                        toggleSessions()
+                        // Keep active project in sync when expanding/clicking an empty project.
+                        if (projectSessions.length === 0) onSelectProject(project)
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
-                          if (projectSessions.length > 0) toggleSessions()
-                          else onSelectProject(project)
+                          toggleSessions()
+                          if (projectSessions.length === 0) onSelectProject(project)
                         }
                       }}
                     >
                       <span className="ico" aria-hidden>
-                        {isSessionsVisible ? <FolderOpen size={15} /> : <Folder size={15} />}
+                        {sessionsOpen ? <FolderOpen size={15} /> : <Folder size={15} />}
                       </span>
                       <span className="proj-name">{project.name}</span>
                       <button
@@ -460,13 +463,11 @@ export function LeftSidebar({
                         )}
                       </button>
                     </div>
-                    {projectSessions.length === 0 ? (
-                      <div className="empty-sess">{t('sidebar.noSessions')}</div>
-                    ) : (
-                      <div
-                        className={`proj-sessions${sessionsCollapsed.has(project.id) ? '' : ' is-open'}`}
-                      >
-                        <div className="proj-sessions-inner">
+                    <div className={`proj-sessions${sessionsOpen ? ' is-open' : ''}`}>
+                      <div className="proj-sessions-inner">
+                        {projectSessions.length === 0 ? (
+                          <div className="empty-sess">{t('sidebar.noSessions')}</div>
+                        ) : (
                           <div className="sess-list">
                             {visibleSessions.map((session) => {
                               // busy = 乐观 UI：发消息瞬间即刻变绿，不等持久化状态落盘
@@ -557,9 +558,9 @@ export function LeftSidebar({
                               </button>
                             )}
                           </div>
-                        </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 )
               })}

@@ -41,6 +41,9 @@ test('maps Mono Plus source colors, syntax, and typography', () => {
     'ui-monospace, "SFMono-Regular", "Menlo", "Cascadia Mono", "Segoe UI Mono", monospace',
   )
   assert.equal(vars['--mono'], vars['--font'])
+  // Wireframe may set --font == mono, but --font-sans stays the readable UI/CJK stack.
+  assert.match(vars['--font-sans'] ?? '', /PingFang SC|system-ui|sans-serif/u)
+  assert.notEqual(vars['--font-sans'], vars['--mono'])
   assert.notEqual(
     vars['--bg-main'],
     createAppearanceVariables('light', openchamberLight)['--bg-main'],

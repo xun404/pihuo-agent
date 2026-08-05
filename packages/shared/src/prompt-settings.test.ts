@@ -52,6 +52,42 @@ describe('prompt settings', () => {
     assert.equal(custom.leader, '自定义 Leader 提示')
   })
 
+  it('gives every Worker role emoji restraint defaults and upgrades only old built-in role prompts', () => {
+    for (const role of WORKER_ROLES) {
+      const zh = defaultPromptSettings('zh').roles[role]
+      const en = defaultPromptSettings('en').roles[role]
+      assert.match(zh, /非必要不要使用 emoji/u, `zh:${role}`)
+      assert.match(zh, /不完全禁止/u, `zh:${role}`)
+      assert.match(en, /Avoid emoji unless they materially improve clarity/u, `en:${role}`)
+      assert.match(en, /do not prohibit them entirely/u, `en:${role}`)
+    }
+
+    const legacyZh = normalizePromptSettings({
+      roles: {
+        general: '作为通用执行角色，完成 Leader 委派的任务并返回清晰、可验证的结果。',
+        coder: '作为实现角色，根据任务修改代码，遵循现有架构，并运行相关验证后返回结果。',
+      },
+    })
+    const legacyEn = normalizePromptSettings(
+      {
+        roles: {
+          general:
+            'As a general execution role, complete tasks delegated by the Leader and return clear, verifiable results.',
+          coder:
+            'As an implementation role, modify code according to the task, follow the existing architecture, run relevant verification, and return results.',
+        },
+      },
+      'en',
+    )
+    const custom = normalizePromptSettings({ roles: { general: '自定义 general 提示' } })
+
+    assert.equal(legacyZh.roles.general, defaultPromptSettings('zh').roles.general)
+    assert.equal(legacyZh.roles.coder, defaultPromptSettings('zh').roles.coder)
+    assert.equal(legacyEn.roles.general, defaultPromptSettings('en').roles.general)
+    assert.equal(legacyEn.roles.coder, defaultPromptSettings('en').roles.coder)
+    assert.equal(custom.roles.general, '自定义 general 提示')
+  })
+
   it('constrains plan roles to produce a scoped, executable Markdown plan contract', () => {
     const zh = defaultPromptSettings('zh').roles.plan
     const en = defaultPromptSettings('en').roles.plan

@@ -5,6 +5,7 @@ import {
   formatClockTime,
   parseMessageTimestamp,
   resolveLeaderRunMeta,
+  providerIdFromModel,
   shortModelId,
 } from './leader-run-meta.js'
 import * as leaderRunMetaModule from './leader-run-meta.js'
@@ -29,6 +30,12 @@ describe('leader-run-meta', () => {
   it('shortModelId strips provider prefix', () => {
     assert.equal(shortModelId('opencode-go/deepseek-v4-flash'), 'deepseek-v4-flash')
     assert.equal(shortModelId('gpt-4o'), 'gpt-4o')
+  })
+
+  it('providerIdFromModel extracts provider segment', () => {
+    assert.equal(providerIdFromModel('opencode-go/deepseek-v4-flash'), 'opencode-go')
+    assert.equal(providerIdFromModel('gpt-4o'), '')
+    assert.equal(providerIdFromModel(''), '')
   })
 
   it('extractPrecedingUserMeta reads model/thinking from prior user context', () => {

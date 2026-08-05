@@ -24,22 +24,11 @@ export function formatContextWindow(n?: number): string | null {
 
 /**
  * Compact token count for chat context tip.
- * zh: 1.6万 / 100万；en: 16K / 1M
+ * Always K / M (no locale-specific 万/亿).
+ * `locale` kept for call-site compatibility; unused.
  */
-export function formatTokenCountDisplay(n: number, locale: string): string {
+export function formatTokenCountDisplay(n: number, _locale?: string): string {
   if (!Number.isFinite(n) || n < 0) return '0'
-  const zh = locale === 'zh' || locale.startsWith('zh')
-  if (zh) {
-    if (n >= 100_000_000) {
-      const v = n / 100_000_000
-      return `${trimTrailingZero(v.toFixed(v >= 10 ? 0 : 1))}亿`
-    }
-    if (n >= 10_000) {
-      const v = n / 10_000
-      return `${trimTrailingZero(v.toFixed(v >= 100 ? 0 : 1))}万`
-    }
-    return String(Math.round(n))
-  }
   if (n >= 1_000_000) {
     const v = n / 1_000_000
     return `${trimTrailingZero(v.toFixed(v >= 10 ? 0 : 1))}M`

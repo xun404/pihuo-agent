@@ -67,6 +67,14 @@ export function shortModelId(model?: string): string {
   return m.includes('/') ? m.slice(m.indexOf('/') + 1) : m
 }
 
+/** `provider/model` → provider segment; bare ids return empty. */
+export function providerIdFromModel(model?: string): string {
+  if (!model?.trim()) return ''
+  const m = model.trim()
+  const slash = m.indexOf('/')
+  return slash > 0 ? m.slice(0, slash) : ''
+}
+
 /** Best-effort timestamp from UI / memory message shape */
 export function parseMessageTimestamp(msg: unknown): number | null {
   if (!msg || typeof msg !== 'object') return null

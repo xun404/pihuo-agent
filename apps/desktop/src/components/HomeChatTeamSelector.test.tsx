@@ -44,7 +44,7 @@ test('HomeChat shows default and disabled saved Team options immediately after m
             id: 'template-broken',
             name: '审查团队',
             disabled: true,
-            reason: '需要先在协作组面板修复映射',
+            reason: '需要先在团队面板修复映射',
           },
         ]}
         onTeamTemplateChange={() => {}}

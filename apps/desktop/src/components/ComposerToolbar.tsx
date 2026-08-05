@@ -180,7 +180,7 @@ export function ComposerToolbar({
         : selectedModel
       : t('chat.model')
   const thinkShort = t(THINK_LABEL_KEY[thinkingIntensity] ?? 'chat.think.medium')
-  const modelChipLabel = `${modelShort} ${thinkShort}`
+  const modelChipTitle = [modelShort, thinkShort].filter(Boolean).join(' · ')
 
   // —— derived: context meter ——
   // The ring shows the prompt size the model saw on the MOST RECENT turn
@@ -481,15 +481,23 @@ export function ComposerToolbar({
         ) : (
           <button
             type="button"
-            className="chip menu"
-            title={selectedModel}
+            className="chip menu model-chip"
+            title={selectedModel ? `${selectedModel} · ${thinkShort}` : modelChipTitle}
             disabled={modelsLoading}
             onClick={() => {
               setModelMenuOpen((v) => !v)
               setCtxTipOpen(false)
             }}
           >
-            {modelsLoading ? t('app.loading') : modelChipLabel}
+            {modelsLoading ? (
+              <span className="chip-label">{t('app.loading')}</span>
+            ) : (
+              <span className="chip-label">
+                <span className="chip-model">{modelShort}</span>
+                {thinkShort ? <span className="chip-sep" aria-hidden> · </span> : null}
+                {thinkShort ? <span className="chip-think">{thinkShort}</span> : null}
+              </span>
+            )}
             <span className="caret">▾</span>
           </button>
         )}
@@ -576,7 +584,7 @@ export function ComposerToolbar({
                         role="menuitem"
                         onClick={() => selectThinking(level)}
                       >
-                        {t(THINK_LABEL_KEY[level])}
+                        <span className="pop-label">{t(THINK_LABEL_KEY[level])}</span>
                         {thinkingIntensity === level && (
                           <span className="check">
                             <IconCheck size={14} />
@@ -623,7 +631,7 @@ export function ComposerToolbar({
                               setThinkMenuOpen(false)
                             }}
                           >
-                            <span>{m.label}</span>
+                            <span className="pop-label">{m.label}</span>
                             {selectedModel === m.id && (
                               <span className="check">
                                 <IconCheck size={14} />

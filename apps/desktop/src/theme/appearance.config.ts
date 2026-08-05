@@ -264,6 +264,9 @@ export function createAppearanceVariables(
 
   addValues(vars, '', selected.colors)
   const fonts = { ...appearanceConfig.typography.fonts, ...(selected.fonts ?? {}) }
+  // Canonical UI/CJK sans — not overridden by wireframe themes that set --font == mono.
+  // Use for prose that must stay readable (e.g. Worker Markdown output) under mono chrome.
+  vars['--font-sans'] = appearanceConfig.typography.fonts.sans
   vars['--font'] = fonts.sans
   vars['--mono'] = fonts.mono
   addValues(vars, 'fs', appearanceConfig.typography.sizes)

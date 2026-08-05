@@ -22,7 +22,7 @@ describe('PromptSettingsEditor', () => {
     assert.match(html, /prompt-card/u)
     assert.match(html, /prompt-role-item/u)
     assert.match(html, /Leader/u)
-    for (const label of ['通用', '规划', '编码', '审查', '测试', '调研']) {
+    for (const label of ['通用', '规划者', '编码者', '审查者', '测试者', '调研者']) {
       assert.match(html, new RegExp(label, 'u'))
     }
     assert.equal((html.match(/<textarea/gu) ?? []).length, 1)

@@ -7,8 +7,8 @@ const chatPanel = readFileSync(new URL('./ChatPanel.tsx', import.meta.url), 'utf
 const locales = readFileSync(new URL('../i18n/locales.ts', import.meta.url), 'utf8')
 
 test('crew inspector is a header bubble without role-copy behavior', () => {
-  assert.match(locales, /'right\.roles': '协作组'/u)
-  assert.match(locales, /'right\.roles': 'Crew'/u)
+  assert.match(locales, /'right\.roles': '团队'/u)
+  assert.match(locales, /'right\.roles': 'Team'/u)
   assert.match(panel, /TeamTemplateManager/u)
   assert.match(panel, /onArchiveTeamMember/u)
   assert.match(panel, /roleDraftWithDefaultPrompt/u)

@@ -1149,12 +1149,13 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   min-height: var(--h-md);
   position: relative;
+  min-width: 0;
 }
 .composer-tools .spacer {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 8px;
 }
 
@@ -1295,11 +1296,30 @@
   padding-right: 8px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 220px;
+  min-width: 0;
 }
 .chip.menu:hover:not(:disabled) {
   background: var(--bg-hover);
+}
+/* 文案区域：模型名可省略，思考强度与 caret 不裁切 */
+.chip.menu .chip-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.chip.menu .chip-model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip.menu .chip-sep,
+.chip.menu .chip-think {
+  flex-shrink: 0;
 }
 .chip.menu .caret {
   font-size: 9px;
@@ -1633,6 +1653,8 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
 .pop-row .pop-label,
 .pop-row .pop-name,
 .pop-row .pop-text {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1650,7 +1672,9 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
   margin-left: auto;
   color: var(--text-1);
   display: inline-flex;
+  flex: 0 0 auto;
   flex-shrink: 0;
+  min-width: 14px;
 }
 .pop-row .val {
   margin-left: auto;
@@ -1712,13 +1736,22 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  /* Reserve chip width so loading → model id does not shift toolbar (CLS). */
+  /* 窄宽时优先收缩模型 chip，不与发送按钮重叠 */
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
 }
-.model-wrap > .chip.menu {
-  min-width: 9.5rem;
-  max-width: min(220px, 42vw);
-  justify-content: space-between;
+/* 模型 chip：放宽上限，尽量完整显示「模型 · 思考」；不够宽时只省略模型名 */
+.model-wrap > .chip.menu.model-chip {
+  min-width: 0;
+  max-width: min(360px, 52vw);
+  justify-content: flex-start;
+  gap: 2px;
+}
+.composer-tools > .send {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 /* 模型主菜单：靠右、偏窄（只 2 行）*/
 .model-wrap .pop-menu.model-menu {
@@ -1739,7 +1772,7 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
   right: calc(100% + 16px);
   bottom: 0;
   min-width: 200px;
-  max-width: 240px;
+  max-width: 280px;
   overflow-y: auto;
   padding: 6px;
   border-radius: var(--r-lg);
@@ -1756,6 +1789,7 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
 .pop-side-cascade .pop-row .check {
   margin-left: auto;
   color: var(--text-1);
+  flex: 0 0 auto;
 }
 /* 模型侧栏：服务商分组 header + 缩进模型行 + 管理入口 */
 .pop-prov-header {
@@ -1970,6 +2004,9 @@ html[data-theme='dark'] .branch-search {
     max-width: calc(100% - 76px);
   }
   .composer-tools .chip.menu {
-    max-width: min(180px, 42vw);
+    max-width: min(220px, 100%);
+  }
+  .composer-tools .model-wrap > .chip.menu.model-chip {
+    max-width: min(280px, 100%);
   }
 }

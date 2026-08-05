@@ -18,17 +18,19 @@ import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkedForSection } from './chat/WorkedForSection'
 import { WorkerRunCard } from './WorkerRunCard'
 import { TaskListCard, type TaskItem } from './chat/TaskListCard'
-import { IconClock, Origami, Zap, ZapOff, Calendar } from './Icons'
+import { IconClock, Zap, ZapOff, Calendar } from './Icons'
 import { setRecordKey } from '../lib/chat-state'
 import type { MessageKey } from '../i18n/locales'
 import { parseRouterUserMessage } from '../lib/user-message-display'
 import {
   formatClockTime,
+  providerIdFromModel,
   resolveLeaderActivity,
   resolveLeaderRunMeta,
   shortModelId,
   type ClientTurnMeta,
 } from '../lib/leader-run-meta'
+import { ProviderLogo } from '../lib/provider-icons'
 import { formatElapsedCompact, formatElapsedHms } from '../lib/format-elapsed'
 import {
   shouldRenderGenericToolShell,
@@ -167,6 +169,7 @@ function MessageItemImpl({
           (modelId && (models.find((m) => m.id === modelId)?.label || shortModelId(modelId))) ||
           (live ? modelShort : '') ||
           ''
+        const providerId = providerIdFromModel(modelId || (live ? selectedModel : '') || '')
         const thinkKey = (meta.thinking || '') as ThinkingIntensity | ''
         const thinkLabel =
           (thinkKey
@@ -191,6 +194,7 @@ function MessageItemImpl({
           : ''
         return {
           modelLabel,
+          providerId,
           thinking: thinkKey,
           thinkLabel,
           durationLabel,
@@ -503,7 +507,13 @@ function MessageItemImpl({
             <div className="lead-footer">
               {leaderMeta.modelLabel && (
                 <span className="lead-footer-meta">
-                  <Origami size={13} />
+                  {leaderMeta.providerId ? (
+                    <ProviderLogo
+                      providerId={leaderMeta.providerId}
+                      size={14}
+                      className="lead-footer-provider"
+                    />
+                  ) : null}
                   <span className="lead-footer-text">{leaderMeta.modelLabel}</span>
                 </span>
               )}

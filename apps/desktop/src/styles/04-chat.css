@@ -444,6 +444,18 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   flex-shrink: 0;
   color: var(--text-3);
 }
+/* 仅供应商 icon：不参与 footer 灰化/降透，并略大一号 */
+.lead-footer-provider {
+  color: var(--text-1) !important;
+  flex-shrink: 0;
+  /* 抵消父级 opacity: 0.6，视觉恢复满透 */
+  opacity: calc(1 / 0.6);
+}
+.lead-footer-provider svg {
+  width: 14px;
+  height: 14px;
+  color: inherit;
+}
 .lead-footer-text {
   min-width: 0;
 }
@@ -1672,12 +1684,23 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .worker-action-output .tool-row-block-marker {
   color: var(--green);
 }
+/*
+ * Worker 输出 Markdown：正文用 --font-sans（含 CJK，即使 wireframe 主题 --font==mono），
+ * 仅 code/pre 保持 mono。输入区仍走 tool-row 等宽日志风格。
+ */
+.worker-action-output .tool-row-block {
+  font-family: var(--font-sans, var(--font));
+  font-size: var(--fs-xs);
+}
 .worker-action-output .worker-action-content {
-  color: var(--text-3);
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
+  color: var(--text-2);
+  font-family: var(--font-sans, var(--font));
+  font-size: var(--fs-xs);
   line-height: 1.55;
   white-space: normal;
+  /* 覆盖 .tool-row-block-content 的 anywhere/break-word，避免中文硬切 */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .worker-action-markdown,
 .worker-action-markdown .md-content {
@@ -1689,8 +1712,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   font-size: inherit;
   line-height: inherit;
   overflow: hidden;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  /* CJK 正文：按词/标点折行，避免「（内」这种硬切 */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .msg.leader .worker-action-markdown .md-content {
   color: inherit;
@@ -1713,7 +1737,16 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .worker-action-markdown .md-content ul,
 .worker-action-markdown .md-content ol {
-  padding-left: 1.5em;
+  padding-left: 1.35em;
+  list-style-position: outside;
+}
+.worker-action-markdown .md-content li {
+  padding-left: 0.12em;
+}
+.worker-action-markdown .md-content li::marker {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-sans, var(--font));
+  color: var(--text-3);
 }
 .worker-action-markdown .md-content strong {
   color: inherit;
@@ -1726,10 +1759,30 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   box-sizing: border-box;
   overflow: auto;
 }
-.worker-action-markdown .md-content code {
+/* 行内/块代码：mono；长路径允许在 code 内断开，不影响中文正文 */
+.worker-action-markdown .md-content code,
+.worker-action-markdown .md-content .md-code-inline {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  font-weight: var(--fw-medium);
+  color: var(--text-1);
+  background: var(--bg-input);
+  padding: 0.08em 0.35em;
+  border-radius: var(--r-xs);
   white-space: break-spaces;
   overflow-wrap: anywhere;
-  word-break: break-word;
+  word-break: break-all;
+}
+/* 围栏块由 MdCodeBlock 自带 chrome，去掉 inline chip 底色 */
+.worker-action-markdown .md-content pre code,
+.worker-action-markdown .md-content .md-code-block,
+.worker-action-markdown .md-content .md-code-src {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  word-break: normal;
+  overflow-wrap: normal;
+  white-space: pre;
 }
 .worker-action-error .worker-card-auth-hint {
   margin-top: 4px;

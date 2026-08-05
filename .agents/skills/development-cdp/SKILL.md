@@ -162,6 +162,63 @@ node scripts/cdp-check.mjs eval "(async () => { \
 This is how you confirm — independent of the DOM — which session received
 the next message, and which sessions are `running` / `idle` / `error`.
 
+### Permission shield / approval smoke
+
+The permission shield has two intentionally different surfaces.  The shield
+inside `.home-composer` is a **draft** preset (`scope=draft`): it only changes
+the local preset used when a new Session is created and does not call the
+`permission-mode` mutation.  The shield inside the active Chat Session is the
+real Session mutation (`scope=session`).  A CDP check that clicks the first
+`.permission-mode-action` on the page can therefore report a false-positive
+UI change while the API snapshot remains `default`.
+
+Before any shield click, resolve the active pane from the API snapshot and
+scope the DOM query to the active Chat Session.  The `aria-hidden` guard is
+important because parallel ChatPanels remain mounted:
+
+```bash
+node scripts/cdp-check.mjs eval "(() => {
+  const panes = [...document.querySelectorAll('.chat-workspace-pane.active')]
+    .filter(p => p.getAttribute('aria-hidden') !== 'true');
+  const shields = panes.flatMap(p => [...p.querySelectorAll('.permission-mode-action')])
+    .filter(el => !el.closest('.home-composer'));
+  return {
+    activePaneCount: panes.length,
+    chatShieldCount: shields.length,
+    homeShieldCount: document.querySelectorAll('.home-composer .permission-mode-action').length,
+    pressed: shields[0]?.getAttribute('aria-pressed') ?? null,
+  };
+})()"
+```
+
+The expected contract is exactly one active Chat Session shield.  Click that
+element only (`!el.closest('.home-composer')`), then verify the authoritative
+`GET /api/snapshot` session mode and Approval status.  For a repeatable live
+fixture, use the guarded runner below with an already active Claude Agent
+Session and explicit temporary-file prompts:
+
+```bash
+node scripts/cdp-permission-smoke.mjs \
+  --first-prompt "Use Claude Write to create the agreed temporary file" \
+  --second-prompt "Use Claude Write to replace the agreed temporary file"
+```
+
+The runner refuses to start with an existing pending Approval, requires the
+new pending item to belong to the active Session and a Claude-named Worker,
+checks that auto mode selected the Agent's `allow_once` option, turns the
+Session shield back off, and cancels the second Approval with
+`{ decision: 'cancel', surface: 'chat' }` (no `optionId`).  It never resolves
+unrelated approvals and performs best-effort cleanup if a step fails.  Its
+polling budget only bounds this automation process; it does not impose or
+reintroduce a business timeout on an Approval.
+
+Owner and Studio expose the same permission mutation path:
+`POST /api/sessions/:id/permission-mode`.  Owner handles it in
+`packages/mastra-app/src/http-server.ts`; Studio registers the same path in
+`packages/mastra-app/src/routes/api.ts`.  Do not add a `/studio` prefix when
+probing the route; that URL is not registered and returns 404.  A successful
+mutation returns `session`, `approvals`, `failures`, and `snapshot`.
+
 ### Reading the visible pane reliably
 
 There can be multiple mounted ChatPanels (keep-alive for parallel sessions).
@@ -171,7 +228,9 @@ directly can hit a hidden pane and give stale data:
 ```bash
 node scripts/cdp-check.mjs eval "(() => { \
   const pane = [...document.querySelectorAll('.chat-workspace-pane')] \
-    .find(p => getComputedStyle(p).display !== 'none'); \
+    .find(p => p.classList.contains('active') && \
+      p.getAttribute('aria-hidden') !== 'true' && \
+      getComputedStyle(p).visibility !== 'hidden'); \
   return { \
     title: pane?.querySelector('.chat-head .title')?.textContent?.trim() ?? null, \
     composerValue: pane?.querySelector('textarea.composer-input')?.value ?? null, \
@@ -218,8 +277,9 @@ sidebar derives highlight from it).
 
 5. **Scope DOM reads to the visible pane.** Multiple ChatPanels can be
    mounted for parallel sessions; `document.querySelector('.chat-head')` may
-   hit a hidden one. Use the `getComputedStyle(...).display !== 'none'`
-   filter shown above.
+   hit a hidden one. Keep the `.chat-workspace-pane.active` plus
+   `aria-hidden !== 'true'` and `visibility !== 'hidden'` guards shown above;
+   these panes are keep-alive crossfades, not `display:none` nodes.
 
 6. **Don't use `msgCount` deltas as the "sent" signal.** On first send in a
    thread the renderer hydrates the whole history at once — `messages.length`

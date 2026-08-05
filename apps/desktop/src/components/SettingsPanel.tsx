@@ -289,6 +289,11 @@ export function SettingsPanel({
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmDialogConfig | null>(null)
   /** True while a provider delete is in flight (header + confirm button). */
   const [deletingProvider, setDeletingProvider] = useState(false)
+  /**
+   * In-flight enable-toggle guard (ref, not state):
+   * state + disabled opacity would dim the switch and re-render the panel mid-toggle.
+   */
+  const togglingProviderIdRef = useRef<string | null>(null)
   const [dangerOpen, setDangerOpen] = useState(false)
   const [dangerBusy, setDangerBusy] = useState<DangerZoneAction | null>(null)
   useEffect(() => {
@@ -1077,36 +1082,56 @@ export function SettingsPanel({
 
   /**
    * Enable/disable any provider via settings.disabledProviderIds only.
-   * Does not send leaderModel/customProviders → no forced API restart.
+   * Optimistic local flip only — no load(), no full providers merge, no switch disable
+   * (those caused CDP-visible layout/switch flicker on OpenCode Go etc.).
    */
   const toggleProviderEnabled = async (
     provider: SettingsProvider,
     nextEnabled: boolean,
     opts?: { hasKeyDraft?: boolean },
   ) => {
-    if (saving || deletingProvider) return
+    if (saving || deletingProvider || togglingProviderIdRef.current) return
     // Cannot turn on without a configured API key (draft key on custom form also counts).
     if (nextEnabled && !provider.configured && !opts?.hasKeyDraft) {
       toastError(t('settings.needKey'))
       return
     }
-    setSaving(true)
-    try {
-      const prevDisabled = data?.settings.disabledProviderIds ?? []
-      const disabled = new Set(prevDisabled)
-      if (nextEnabled) disabled.delete(provider.id)
-      else disabled.add(provider.id)
-      const disabledProviderIds = [...disabled]
-      if (editingId === provider.id) {
-        setForm((f) => ({ ...f, enabled: nextEnabled }))
+    const prevDisabled = data?.settings.disabledProviderIds ?? []
+    const disabled = new Set(prevDisabled)
+    if (nextEnabled) disabled.delete(provider.id)
+    else disabled.add(provider.id)
+    const disabledProviderIds = [...disabled]
+    const prevData = data
+
+    togglingProviderIdRef.current = provider.id
+    if (editingId === provider.id) {
+      setForm((f) => ({ ...f, enabled: nextEnabled }))
+    }
+    // Single optimistic patch: only this provider's enabled flag + disabled list.
+    setData((d) => {
+      if (!d) return d
+      return {
+        ...d,
+        settings: { ...d.settings, disabledProviderIds },
+        providers: d.providers.map((p) =>
+          p.id === provider.id ? { ...p, enabled: nextEnabled } : p,
+        ),
       }
+    })
+
+    try {
       const saved = await saveSettings({ disabledProviderIds })
       if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
-      await load()
+      // Trust optimistic state. Do not re-merge providers[] — that rebuilt the whole
+      // model rail/detail tree and looked like a layout reload under CDP.
     } catch (e) {
+      if (prevData) setData(prevData)
+      if (editingId === provider.id) {
+        setForm((f) => ({ ...f, enabled: provider.enabled !== false }))
+      }
       toastError(e instanceof Error ? e.message : String(e))
     } finally {
-      setSaving(false)
+      togglingProviderIdRef.current = null
     }
   }
 
@@ -2396,14 +2421,14 @@ export function SettingsPanel({
                       <button
                         type="button"
                         className={`enable-switch${
-                          form.enabled &&
+                          selectedProvider.enabled !== false &&
                           (selectedProvider.configured || Boolean(form.apiKey.trim()))
                             ? ' is-on'
                             : ''
                         }`}
                         role="switch"
                         aria-checked={
-                          form.enabled &&
+                          selectedProvider.enabled !== false &&
                           (selectedProvider.configured || Boolean(form.apiKey.trim()))
                         }
                         title={
@@ -2415,7 +2440,7 @@ export function SettingsPanel({
                         disabled={saving || deletingProvider}
                         onClick={() => {
                           const currentlyOn =
-                            form.enabled &&
+                            selectedProvider.enabled !== false &&
                             (selectedProvider.configured || Boolean(form.apiKey.trim()))
                           void toggleProviderEnabled(selectedProvider, !currentlyOn, {
                             hasKeyDraft: Boolean(form.apiKey.trim()),
