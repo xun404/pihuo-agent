@@ -219,7 +219,13 @@ function migrateSnapshot(raw: Partial<AppSnapshot>): AppSnapshot {
       const { defaultPermissionMode: _legacyPermissionDefault, ...project } = p as Project & {
         defaultPermissionMode?: unknown
       }
-      return { ...project, rootPath: normalizeProjectRoot(project.rootPath) }
+      return {
+        ...project,
+        rootPath: normalizeProjectRoot(project.rootPath),
+        // Existing projects already had working memory enabled. Preserve that
+        // behavior when upgrading a snapshot that has no memory field yet.
+        memoryEnabled: project.memoryEnabled !== false,
+      }
     }),
   )
   const projectIds = new Set(projects.map((p) => p.id))
@@ -899,6 +905,7 @@ export class LocalStore {
         name: input.name || rootPath.split(/[/\\]/).filter(Boolean).pop() || 'project',
         rootPath,
         defaultBranch: input.defaultBranch,
+        memoryEnabled: true,
         workerIds: d.workers.filter((w) => w.enabled).map((w) => w.id),
         createdAt: now(),
         updatedAt: now(),
@@ -913,6 +920,25 @@ export class LocalStore {
       rootPath: result.rootPath,
     })
     return structuredClone(result)
+  }
+
+  /**
+   * Persist the project-level working-memory switch.
+   *
+   * The field is intentionally project-scoped: Mastra working memory uses the
+   * project id as its resource id, so every session in the same project sees
+   * the same switch. Existing snapshots are normalized to `true` above.
+   */
+  setProjectMemoryEnabled(projectId: string, enabled: boolean): Project {
+    let project!: Project
+    this.commit((d) => {
+      const current = d.projects.find((candidate) => candidate.id === projectId)
+      if (!current) throw new Error(`Project not found: ${projectId}`)
+      current.memoryEnabled = enabled
+      current.updatedAt = now()
+      project = current
+    })
+    return structuredClone(project)
   }
 
   deleteProject(projectId: string): void {

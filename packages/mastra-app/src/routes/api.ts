@@ -61,6 +61,11 @@ import {
   deleteRouterSessionResource,
   reconcileWorkerRuntimeResources,
 } from '../acp-resource-lifecycle.js'
+import {
+  readProjectMemory,
+  resolveProjectMemoryContext,
+  updateProjectWorkingMemory,
+} from '../project-memory.js'
 
 /** Lazy — avoid constructing owner Store at module import (Studio client-only path). */
 function store() {
@@ -144,6 +149,118 @@ export const apiRoutes = [
         defaultBranch: body.defaultBranch,
       })
       return c.json({ project })
+    },
+  }),
+
+  registerApiRoute('/api/projects/:id/memory', {
+    method: 'GET',
+    handler: async (c) => {
+      const projectId = c.req.param('id')
+      const project = store()
+        .listProjects()
+        .find((candidate) => candidate.id === projectId)
+      if (!project) {
+        return c.json({ error: 'Project not found', code: 'PROJECT_NOT_FOUND', projectId }, 404)
+      }
+      const threadId = c.req.query('threadId')?.trim()
+      if (!threadId) {
+        return c.json({ error: 'threadId required', code: 'PROJECT_MEMORY_SESSION_REQUIRED' }, 400)
+      }
+      const context = resolveProjectMemoryContext(store(), projectId, threadId)
+      if (!context) {
+        return c.json(
+          { error: 'Project memory session not found', code: 'PROJECT_MEMORY_SESSION_NOT_FOUND' },
+          404,
+        )
+      }
+      try {
+        return c.json(await readProjectMemory(context))
+      } catch (error) {
+        console.error('[memory] studio project read failed', error)
+        return c.json(
+          { error: 'Project memory unavailable', code: 'PROJECT_MEMORY_UNAVAILABLE' },
+          500,
+        )
+      }
+    },
+  }),
+
+  registerApiRoute('/api/projects/:id/memory', {
+    method: 'PATCH',
+    handler: async (c) => {
+      const projectId = c.req.param('id')
+      const project = store()
+        .listProjects()
+        .find((candidate) => candidate.id === projectId)
+      if (!project) {
+        return c.json({ error: 'Project not found', code: 'PROJECT_NOT_FOUND', projectId }, 404)
+      }
+      const body = (await c.req.json()) as { enabled?: unknown }
+      if (typeof body.enabled !== 'boolean') {
+        return c.json(
+          { error: 'enabled must be a boolean', code: 'PROJECT_MEMORY_ENABLED_REQUIRED' },
+          400,
+        )
+      }
+      try {
+        const updatedProject = store().setProjectMemoryEnabled(projectId, body.enabled)
+        return c.json({ project: updatedProject, snapshot: store().snapshot() })
+      } catch (error) {
+        console.error('[memory] studio project switch failed', error)
+        return c.json(
+          { error: 'Project memory switch failed', code: 'PROJECT_MEMORY_UPDATE_FAILED' },
+          500,
+        )
+      }
+    },
+  }),
+
+  registerApiRoute('/api/projects/:id/memory/working', {
+    method: 'PUT',
+    handler: async (c) => {
+      const projectId = c.req.param('id')
+      const project = store()
+        .listProjects()
+        .find((candidate) => candidate.id === projectId)
+      if (!project) {
+        return c.json({ error: 'Project not found', code: 'PROJECT_NOT_FOUND', projectId }, 404)
+      }
+      const body = (await c.req.json()) as { threadId?: unknown; content?: unknown }
+      const threadId = typeof body.threadId === 'string' ? body.threadId.trim() : ''
+      if (!threadId) {
+        return c.json({ error: 'threadId required', code: 'PROJECT_MEMORY_SESSION_REQUIRED' }, 400)
+      }
+      if (typeof body.content !== 'string') {
+        return c.json(
+          { error: 'content must be a string', code: 'PROJECT_MEMORY_CONTENT_REQUIRED' },
+          400,
+        )
+      }
+      const context = resolveProjectMemoryContext(store(), projectId, threadId)
+      if (!context) {
+        return c.json(
+          { error: 'Project memory session not found', code: 'PROJECT_MEMORY_SESSION_NOT_FOUND' },
+          404,
+        )
+      }
+      try {
+        return c.json(await updateProjectWorkingMemory(context, body.content))
+      } catch (error) {
+        if (error instanceof Error && error.message === 'PROJECT_MEMORY_CONTENT_TOO_LARGE') {
+          return c.json(
+            {
+              error: 'Project memory content is too large',
+              code: 'PROJECT_MEMORY_CONTENT_TOO_LARGE',
+            },
+            413,
+          )
+        }
+        console.error('[memory] studio working-memory update failed', error)
+        return c.json(
+          { error: 'Project memory update failed', code: 'PROJECT_MEMORY_UPDATE_FAILED' },
+          500,
+        )
+      }
     },
   }),
 

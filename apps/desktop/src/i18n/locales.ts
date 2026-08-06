@@ -269,6 +269,29 @@ export type MessageKey =
   | 'right.jobs'
   | 'right.roles'
   | 'right.rolesHint'
+  | 'memory.title'
+  | 'memory.scopeHint'
+  | 'memory.enabled'
+  | 'memory.disabled'
+  | 'memory.openEnabled'
+  | 'memory.openDisabled'
+  | 'memory.toggleLabel'
+  | 'memory.contentLabel'
+  | 'memory.contentPlaceholder'
+  | 'memory.edit'
+  | 'memory.save'
+  | 'memory.saving'
+  | 'memory.saved'
+  | 'memory.loadFailed'
+  | 'memory.toggleFailed'
+  | 'memory.saveFailed'
+  | 'memory.empty'
+  | 'memory.statusLabel'
+  | 'memory.lastMessages'
+  | 'memory.workingMemory'
+  | 'memory.semanticRecall'
+  | 'memory.observationalMemory'
+  | 'memory.noProject'
   | 'roles.acpDefault'
   | 'roles.add'
   | 'roles.archive'
@@ -1112,6 +1135,29 @@ const zh: Dict = {
   'right.roles': '团队',
   'right.rolesHint':
     '团队属于当前会话。请主动添加成员并定义角色后，Worker 才会参与协作。同一 Worker 可绑定多个成员。',
+  'memory.title': '项目记忆',
+  'memory.scopeHint': '同一项目的会话共享',
+  'memory.enabled': '已开启',
+  'memory.disabled': '已关闭',
+  'memory.openEnabled': '打开项目记忆面板（当前已开启）',
+  'memory.openDisabled': '打开项目记忆面板（当前已关闭）',
+  'memory.toggleLabel': '切换项目记忆',
+  'memory.contentLabel': 'Working memory 内容',
+  'memory.contentPlaceholder': '记录希望 Leader 在项目后续对话中记住的信息…',
+  'memory.edit': '编辑',
+  'memory.save': '保存记忆',
+  'memory.saving': '保存中…',
+  'memory.saved': '项目记忆已保存。',
+  'memory.loadFailed': '项目记忆读取失败，请重试。',
+  'memory.toggleFailed': '项目记忆开关保存失败，请重试。',
+  'memory.saveFailed': '项目记忆保存失败，请重试。',
+  'memory.empty': '当前没有已保存的 working memory 内容。',
+  'memory.statusLabel': '项目记忆能力状态',
+  'memory.lastMessages': '最近消息数量',
+  'memory.workingMemory': 'Working memory',
+  'memory.semanticRecall': 'Semantic recall',
+  'memory.observationalMemory': 'Observational memory',
+  'memory.noProject': '当前项目',
   'roles.acpDefault': 'ACP 默认模型',
   'roles.add': '添加成员',
   'roles.archive': '归档',
@@ -1996,6 +2042,29 @@ const en: Dict = {
   'right.roles': 'Team',
   'right.rolesHint':
     'The team belongs to this session. Add members and define roles before Workers join. One Worker may back multiple members.',
+  'memory.title': 'Project memory',
+  'memory.scopeHint': 'Shared by sessions in this project',
+  'memory.enabled': 'Enabled',
+  'memory.disabled': 'Disabled',
+  'memory.openEnabled': 'Open project memory (currently enabled)',
+  'memory.openDisabled': 'Open project memory (currently disabled)',
+  'memory.toggleLabel': 'Toggle project memory',
+  'memory.contentLabel': 'Working memory content',
+  'memory.contentPlaceholder': 'Record information Leader should remember in later project chats…',
+  'memory.edit': 'Edit',
+  'memory.save': 'Save memory',
+  'memory.saving': 'Saving…',
+  'memory.saved': 'Project memory saved.',
+  'memory.loadFailed': 'Could not load project memory. Try again.',
+  'memory.toggleFailed': 'Could not save the project memory switch. Try again.',
+  'memory.saveFailed': 'Could not save project memory. Try again.',
+  'memory.empty': 'No working memory content is saved yet.',
+  'memory.statusLabel': 'Project memory capability status',
+  'memory.lastMessages': 'Recent messages',
+  'memory.workingMemory': 'Working memory',
+  'memory.semanticRecall': 'Semantic recall',
+  'memory.observationalMemory': 'Observational memory',
+  'memory.noProject': 'Current project',
   'roles.acpDefault': 'ACP default model',
   'roles.add': 'Add member',
   'roles.archive': 'Archive',

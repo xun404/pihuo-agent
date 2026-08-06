@@ -209,7 +209,7 @@ describe('models-dev-catalog', () => {
       providerId: 'openrouter',
       paths,
       timeoutMs: 9_000,
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: string | URL | Request) => {
         const url = String(input)
         tried.push(url)
         if (url.includes('models.dev/logos')) {

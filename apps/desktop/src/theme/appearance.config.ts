@@ -11,18 +11,23 @@ import {
   DEFAULT_LIGHT_THEME_ID,
   findBuiltinColorTheme,
   getBuiltinColorTheme,
+  type ChatTypographyToken,
+  type CssTokenValue,
   type ColorTheme,
   type ColorThemeId,
+  type ThemeTypographyOverrides,
 } from './theme.config'
 
 export type ResolvedTheme = 'light' | 'dark'
 export type AppearanceTheme = ColorTheme
 
-type CssValue = string | number
+type CssValue = CssTokenValue
 
 interface FontTokens {
   sans: string
   mono: string
+  heading: string
+  prose: string
 }
 
 interface TypographyTokens {
@@ -55,6 +60,7 @@ interface TypographyTokens {
     display: CssValue
     label: CssValue
   }
+  chat: Record<ChatTypographyToken, CssValue>
 }
 
 interface RadiusTokens {
@@ -134,6 +140,10 @@ export const appearanceConfig = {
     fonts: {
       sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'",
       mono: "ui-monospace, 'SF Mono', 'Menlo', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace",
+      heading:
+        "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'",
+      prose:
+        "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'",
     },
     sizes: {
       '2xs': '11px',
@@ -162,6 +172,31 @@ export const appearanceConfig = {
       tight: '-0.02em',
       display: '-0.03em',
       label: '0.02em',
+    },
+    chat: {
+      'body-size': '15px',
+      'body-line-height': 1.65,
+      'user-line-height': 1.55,
+      'heading-h1-size': '1.125em',
+      'heading-h2-size': '1.0625em',
+      'heading-line-height': 1.3,
+      'heading-tight': '-0.02em',
+      'heading-snug': '-0.015em',
+      'code-size': '12px',
+      'code-line-height': 1.55,
+      'process-size': '12.5px',
+      'process-line-height': 1.45,
+      'process-summary-line-height': 1.25,
+      'meta-size': '11px',
+      'micro-size': '10px',
+      'tiny-size': '9.5px',
+      'badge-size': '9px',
+      'preview-index-size': '10px',
+      'preview-index-spacing': '0.04em',
+      'preview-question-size': '13px',
+      'preview-answer-size': '12.5px',
+      'preview-running-size': '11px',
+      'preview-line-height': 1.45,
     },
   },
   radius: {
@@ -242,7 +277,8 @@ export const appearanceConfig = {
 } satisfies AppearanceConfig
 
 function addValues(target: Record<string, string>, prefix: string, values: object) {
-  for (const [name, value] of Object.entries(values as Record<string, CssValue>)) {
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value !== 'string' && typeof value !== 'number') continue
     target[`--${prefix ? `${prefix}-` : ''}${name}`] = String(value)
   }
 }
@@ -263,16 +299,42 @@ export function createAppearanceVariables(
   const vars: Record<string, string> = {}
 
   addValues(vars, '', selected.colors)
-  const fonts = { ...appearanceConfig.typography.fonts, ...(selected.fonts ?? {}) }
-  // Canonical UI/CJK sans — not overridden by wireframe themes that set --font == mono.
-  // Use for prose that must stay readable (e.g. Worker Markdown output) under mono chrome.
-  vars['--font-sans'] = appearanceConfig.typography.fonts.sans
+  const selectedFonts: NonNullable<AppearanceTheme['fonts']> = selected.fonts ?? {
+    sans: appearanceConfig.typography.fonts.sans,
+    mono: appearanceConfig.typography.fonts.mono,
+  }
+  const fonts = {
+    ...appearanceConfig.typography.fonts,
+    ...selectedFonts,
+    heading:
+      selectedFonts.heading ?? selectedFonts.sans ?? appearanceConfig.typography.fonts.heading,
+    prose: selectedFonts.prose ?? appearanceConfig.typography.fonts.prose,
+  }
+  const typography: ThemeTypographyOverrides = selected.typography ?? {}
+  const sizes = { ...appearanceConfig.typography.sizes, ...(typography.sizes ?? {}) }
+  const weights = { ...appearanceConfig.typography.weights, ...(typography.weights ?? {}) }
+  const lineHeights = {
+    ...appearanceConfig.typography.lineHeights,
+    ...(typography.lineHeights ?? {}),
+  }
+  const letterSpacing = {
+    ...appearanceConfig.typography.letterSpacing,
+    ...(typography.letterSpacing ?? {}),
+  }
+  const chatTypography = { ...appearanceConfig.typography.chat, ...(typography.chat ?? {}) }
+  vars['--font-sans'] = fonts.sans
   vars['--font'] = fonts.sans
   vars['--mono'] = fonts.mono
-  addValues(vars, 'fs', appearanceConfig.typography.sizes)
-  addValues(vars, 'fw', appearanceConfig.typography.weights)
-  addValues(vars, 'lh', appearanceConfig.typography.lineHeights)
-  addValues(vars, 'ls', appearanceConfig.typography.letterSpacing)
+  vars['--font-heading'] = fonts.heading
+  vars['--font-prose'] = fonts.prose
+  addValues(vars, 'fs', sizes)
+  addValues(vars, 'fw', weights)
+  addValues(vars, 'lh', lineHeights)
+  addValues(vars, 'ls', letterSpacing)
+  addValues(vars, 'chat', chatTypography)
+  addValues(vars, 'chat', selected.chatColors ?? {})
+  addValues(vars, 'markdown', selected.markdownColors ?? {})
+  addValues(vars, 'tools', selected.toolsColors ?? {})
   addValues(vars, 'r', appearanceConfig.radius)
   addValues(vars, 'sp', appearanceConfig.spacing)
   addValues(vars, '', appearanceConfig.controls)

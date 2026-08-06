@@ -165,6 +165,16 @@ describe('MessageItem Worked-for collapse', () => {
     assert.doesNotMatch(markup, /worked-for is-open/u)
   })
 
+  it('shows 已处理 for a completed text-only assistant turn', () => {
+    const markup = renderLeader({
+      live: false,
+      parts: [{ type: 'text', text: '只有最终正文' }],
+    })
+    assert.match(markup, /class="worked-for"/u)
+    assert.match(markup, /已处理 1m 13s/u)
+    assert.match(markup, /只有最终正文/u)
+  })
+
   it('keeps process rows visible in document order while the turn is live', () => {
     const markup = renderLeader({
       live: true,

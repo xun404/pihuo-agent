@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react'
+import React, { memo, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { MdCodeBlock } from './chat/MdCodeBlock'

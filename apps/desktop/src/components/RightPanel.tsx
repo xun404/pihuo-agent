@@ -16,6 +16,7 @@ import {
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'
 import { api } from '../lib/api'
+import type { ProjectMemorySnapshot } from '../lib/api'
 import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
 import { fetchSettings } from '../lib/settings'
 import {
@@ -30,8 +31,9 @@ import { WorkerReadinessBadge } from './WorkerReadinessBadge'
 import { WorkerReasoningSelect } from './WorkerReasoningSelect'
 import { useToast } from './Toast'
 import { TeamTemplateManager } from './TeamTemplateManager'
+import { MemoryPanel, type MemoryPanelError } from './MemoryPanel'
 
-export type InspectorTab = 'roles' | 'approvals'
+export type InspectorTab = 'roles' | 'approvals' | 'memory'
 
 interface Props {
   /** Which bubble panel content to show (tabs live in chat header icons). */
@@ -40,7 +42,15 @@ interface Props {
   teamMembers: TeamMember[]
   approvals: ApprovalItem[]
   projectId: string | null
+  projectName: string
   sessionId?: string | null
+  memoryEnabled: boolean
+  memory: ProjectMemorySnapshot | null
+  memoryLoading: boolean
+  memorySaving: boolean
+  memoryError: MemoryPanelError | null
+  onToggleMemory: (enabled: boolean) => void | Promise<void>
+  onSaveMemory: (content: string) => boolean | void | Promise<boolean | void>
   onCreateTeamMember: (body: Omit<CreateTeamMemberInput, 'chatSessionId'>) => Promise<void>
   onUpdateTeamMember: (id: string, body: UpdateTeamMemberInput) => Promise<void>
   onArchiveTeamMember: (id: string, expectedRevision: number) => Promise<void>
@@ -79,7 +89,15 @@ export function RightPanel({
   teamMembers,
   approvals,
   projectId,
+  projectName,
   sessionId,
+  memoryEnabled,
+  memory,
+  memoryLoading,
+  memorySaving,
+  memoryError,
+  onToggleMemory,
+  onSaveMemory,
   onCreateTeamMember,
   onUpdateTeamMember,
   onArchiveTeamMember,
@@ -213,6 +231,18 @@ export function RightPanel({
 
   return (
     <aside className="chat-inspector-panel">
+      {tab === 'memory' && (
+        <MemoryPanel
+          projectName={projectName}
+          enabled={memoryEnabled}
+          memory={memory}
+          loading={memoryLoading}
+          saving={memorySaving}
+          error={memoryError}
+          onToggle={onToggleMemory}
+          onSave={onSaveMemory}
+        />
+      )}
       {tab === 'roles' && (
         <div className="drawer-body tab-panel active crew-panel">
           <div className="crew-panel-toolbar">

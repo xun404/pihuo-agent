@@ -35,6 +35,15 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Form controls do not consistently inherit text-rendering from body in Chromium. */
+button,
+input,
+textarea,
+select {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
 button {
   font: inherit;
   color: inherit;

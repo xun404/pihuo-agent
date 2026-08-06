@@ -181,6 +181,13 @@ import {
 } from './custom-acp-registration.js'
 import { shouldMarkRoleReviewPrompted } from './role-review-prompt.js'
 import { getTeamTemplateService, TeamTemplateServiceError } from './team-template-service.js'
+import {
+  isProjectMemoryEnabled,
+  readProjectMemory,
+  resolveProjectMemoryContext,
+  resolveProjectMemoryOptions,
+  updateProjectWorkingMemory,
+} from './project-memory.js'
 
 function parseSessionPermissionSource(
   value: unknown,
@@ -878,6 +885,17 @@ const server = createServer(async (req, res) => {
           }
           const resourceId = boundProjectId
 
+          // Resolve the persisted Router tuple before applying any memory
+          // options. The browser may request a thread, but it cannot choose a
+          // different Project resource or override this project's switch.
+          const routerSession = sessionByThread ?? null
+          const routerProject = routerSession
+            ? (store.listProjects().find((p) => p.id === routerSession.projectId) ?? null)
+            : (active.project ?? null)
+          const projectMemoryOptions = resolveProjectMemoryOptions(
+            isProjectMemoryEnabled(routerProject),
+          )
+
           // Per-chat model from UI picker (provider/model), else settings leaderModel
           const settings = loadSettings()
           const leaderMaxSteps = resolveLeaderMaxSteps(settings.leaderMaxSteps)
@@ -934,8 +952,6 @@ const server = createServer(async (req, res) => {
           requestContext.set('leaderModel', leaderModel)
           requestContext.set('thinkingIntensity', thinkingIntensity)
 
-          const routerSession =
-            store.listSessions().find((s) => s.memoryThreadId === threadId) ?? null
           let roleReviewPending = false
           if (routerSession) {
             requestContext.set('routerSessionId', routerSession.id)
@@ -949,7 +965,6 @@ const server = createServer(async (req, res) => {
               'bootstrappedRoleCount',
               store.listTeamMembers(routerSession.id).length,
             )
-            const routerProject = store.listProjects().find((p) => p.id === routerSession.projectId)
             if (routerProject) {
               requestContext.set('routerProjectRoot', routerProject.rootPath)
             }
@@ -970,9 +985,7 @@ const server = createServer(async (req, res) => {
             memory: {
               thread: threadId,
               resource: resourceId,
-              ...(typeof clientMemory === 'object' && clientMemory && 'options' in clientMemory
-                ? { options: (clientMemory as { options?: unknown }).options }
-                : {}),
+              options: projectMemoryOptions,
             },
             requestContext,
             providerOptions,
@@ -1140,6 +1153,7 @@ const server = createServer(async (req, res) => {
               memory: {
                 thread: threadId,
                 resource: resourceId,
+                options: projectMemoryOptions,
               },
               requestContext,
               providerOptions,
@@ -1219,6 +1233,128 @@ const server = createServer(async (req, res) => {
           source: result.source,
           providers: result.catalog,
         })
+        return
+      }
+
+      // —— Project-scoped working memory ————————————————————————————————
+      // Project memory is bound to a persisted Session before its Project
+      // resource is used. The browser may select a thread, but it cannot
+      // forge a project/resource boundary.
+      const projectMemoryMatch = match(path, '/api/projects/:id/memory')
+      if ((method === 'GET' || method === 'PATCH') && projectMemoryMatch) {
+        const projectId = projectMemoryMatch.id!
+        const project = store.listProjects().find((candidate) => candidate.id === projectId)
+        if (!project) {
+          send(res, 404, {
+            error: 'Project not found',
+            code: 'PROJECT_NOT_FOUND',
+            projectId,
+          })
+          return
+        }
+
+        if (method === 'PATCH') {
+          const body = (await readJson(req)) as { enabled?: unknown }
+          if (typeof body.enabled !== 'boolean') {
+            send(res, 400, {
+              error: 'enabled must be a boolean',
+              code: 'PROJECT_MEMORY_ENABLED_REQUIRED',
+            })
+            return
+          }
+          try {
+            const updatedProject = store.setProjectMemoryEnabled(projectId, body.enabled)
+            send(res, 200, { project: updatedProject, snapshot: store.snapshot() })
+          } catch (error) {
+            console.error('[memory] project switch failed', error)
+            send(res, 500, {
+              error: 'Project memory switch failed',
+              code: 'PROJECT_MEMORY_UPDATE_FAILED',
+            })
+          }
+          return
+        }
+
+        const threadId = url.searchParams.get('threadId')?.trim()
+        if (!threadId) {
+          send(res, 400, {
+            error: 'threadId required',
+            code: 'PROJECT_MEMORY_SESSION_REQUIRED',
+          })
+          return
+        }
+        const context = resolveProjectMemoryContext(store, projectId, threadId)
+        if (!context) {
+          send(res, 404, {
+            error: 'Project memory session not found',
+            code: 'PROJECT_MEMORY_SESSION_NOT_FOUND',
+          })
+          return
+        }
+        try {
+          send(res, 200, await readProjectMemory(context))
+        } catch (error) {
+          console.error('[memory] project read failed', error)
+          send(res, 500, {
+            error: 'Project memory unavailable',
+            code: 'PROJECT_MEMORY_UNAVAILABLE',
+          })
+        }
+        return
+      }
+
+      const projectMemoryWorkingMatch = match(path, '/api/projects/:id/memory/working')
+      if (method === 'PUT' && projectMemoryWorkingMatch) {
+        const projectId = projectMemoryWorkingMatch.id!
+        const project = store.listProjects().find((candidate) => candidate.id === projectId)
+        if (!project) {
+          send(res, 404, {
+            error: 'Project not found',
+            code: 'PROJECT_NOT_FOUND',
+            projectId,
+          })
+          return
+        }
+        const body = (await readJson(req)) as { threadId?: unknown; content?: unknown }
+        const threadId = typeof body.threadId === 'string' ? body.threadId.trim() : ''
+        if (!threadId) {
+          send(res, 400, {
+            error: 'threadId required',
+            code: 'PROJECT_MEMORY_SESSION_REQUIRED',
+          })
+          return
+        }
+        if (typeof body.content !== 'string') {
+          send(res, 400, {
+            error: 'content must be a string',
+            code: 'PROJECT_MEMORY_CONTENT_REQUIRED',
+          })
+          return
+        }
+        const context = resolveProjectMemoryContext(store, projectId, threadId)
+        if (!context) {
+          send(res, 404, {
+            error: 'Project memory session not found',
+            code: 'PROJECT_MEMORY_SESSION_NOT_FOUND',
+          })
+          return
+        }
+        try {
+          send(res, 200, await updateProjectWorkingMemory(context, body.content))
+        } catch (error) {
+          if (error instanceof Error && error.message === 'PROJECT_MEMORY_CONTENT_TOO_LARGE') {
+            send(res, 413, {
+              error: 'Project memory content is too large',
+              code: 'PROJECT_MEMORY_CONTENT_TOO_LARGE',
+            })
+            return
+          }
+          console.error('[memory] project working-memory update failed', error)
+          send(res, 500, {
+            error: 'Project memory update failed',
+            code: 'PROJECT_MEMORY_UPDATE_FAILED',
+          })
+        }
         return
       }
 

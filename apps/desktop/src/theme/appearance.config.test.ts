@@ -41,9 +41,15 @@ test('maps Mono Plus source colors, syntax, and typography', () => {
     'ui-monospace, "SFMono-Regular", "Menlo", "Cascadia Mono", "Segoe UI Mono", monospace',
   )
   assert.equal(vars['--mono'], vars['--font'])
-  // Wireframe may set --font == mono, but --font-sans stays the readable UI/CJK stack.
-  assert.match(vars['--font-sans'] ?? '', /PingFang SC|system-ui|sans-serif/u)
-  assert.notEqual(vars['--font-sans'], vars['--mono'])
+  assert.equal(vars['--font-heading'], mono.fonts?.heading)
+  assert.match(vars['--font-prose'] ?? '', /PingFang SC|system-ui|sans-serif/u)
+  assert.equal(vars['--chat-body-size'], '15px')
+  assert.equal(vars['--chat-body-line-height'], '1.65')
+  assert.equal(vars['--chat-user-message-background'], '#E5E5E5')
+  assert.equal(vars['--markdown-inline-code-background'], '#f1f1f1')
+  assert.equal(vars['--tools-edit-added'], '#5a7a5a')
+  // --font-sans follows the theme font stack like OpenChamber (no fixed canonical).
+  assert.equal(vars['--font-sans'], vars['--font'])
   assert.notEqual(
     vars['--bg-main'],
     createAppearanceVariables('light', openchamberLight)['--bg-main'],
@@ -109,6 +115,27 @@ test('never applies a builtin variant to the opposite resolved mode', () => {
 
 // Keep the type contract exercised when custom themes are passed by callers.
 test('accepts normalized custom themes as appearance inputs', () => {
-  const custom: ColorTheme = { ...mono, id: 'custom-light', name: 'Custom Light', source: 'custom' }
-  assert.equal(createAppearanceVariables('light', custom)['--accent'], mono.colors.accent)
+  const custom: ColorTheme = {
+    ...mono,
+    id: 'custom-light',
+    name: 'Custom Light',
+    source: 'custom',
+    fonts: {
+      ...mono.fonts,
+      heading: 'Custom Heading',
+      prose: 'Custom Prose',
+    },
+    typography: {
+      chat: {
+        'body-size': '17px',
+        'process-line-height': 1.6,
+      },
+    },
+  }
+  const vars = createAppearanceVariables('light', custom)
+  assert.equal(vars['--accent'], mono.colors.accent)
+  assert.equal(vars['--font-heading'], 'Custom Heading')
+  assert.equal(vars['--font-prose'], 'Custom Prose')
+  assert.equal(vars['--chat-body-size'], '17px')
+  assert.equal(vars['--chat-process-line-height'], '1.6')
 })

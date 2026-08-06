@@ -736,6 +736,8 @@ export interface Project {
   name: string
   rootPath: string
   defaultBranch?: string
+  /** Whether this project's resource-scoped working memory is used by Leader. */
+  memoryEnabled?: boolean
   workerIds: string[]
   createdAt: string
   updatedAt: string

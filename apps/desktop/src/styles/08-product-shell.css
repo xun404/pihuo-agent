@@ -11,7 +11,6 @@ body,
   line-height: var(--lh-body);
   color: var(--text-1);
   background: var(--bg-main);
-  -webkit-font-smoothing: antialiased;
   /* 桌面端默认不可选中：避免侧栏/工具条/标签被拖蓝 */
   -webkit-user-select: none;
   user-select: none;
@@ -623,7 +622,7 @@ body.is-resizing-panels * {
   gap: 4px;
 }
 .think-tags span {
-  font-size: 10px;
+  font-size: var(--chat-micro-size);
   font-family: var(--mono);
   padding: 2px 6px;
   border-radius: 4px;
@@ -870,12 +869,11 @@ body.is-resizing-panels * {
 .inspector-approval-card {
   border: 1px solid color-mix(in srgb, var(--warn) 32%, var(--border-soft));
   border-radius: var(--r-lg);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--warn-soft) 88%, var(--bg-surface)) 0%,
-      color-mix(in srgb, var(--warn-soft) 48%, var(--bg-surface)) 100%
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--warn-soft) 88%, var(--bg-surface)) 0%,
+    color-mix(in srgb, var(--warn-soft) 48%, var(--bg-surface)) 100%
+  );
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--warn) 6%, transparent),
     var(--shadow-md);
@@ -982,7 +980,7 @@ body.is-resizing-panels * {
   border: 1px solid color-mix(in srgb, var(--warn) 16%, transparent);
   background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
   font-size: var(--fs-2xs);
-  line-height: 1.45;
+  line-height: var(--chat-process-line-height);
   color: color-mix(in srgb, var(--warn) 55%, var(--text-2));
 }
 .inspector-actions {

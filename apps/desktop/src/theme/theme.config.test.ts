@@ -40,6 +40,10 @@ test('every bundled OpenChamber JSON source normalizes with its metadata', () =>
     new Set(bundledThemeJson.map((raw) => raw.metadata.id)),
   )
   assert.ok(normalized.every((theme) => theme?.source === 'builtin'))
+  const mono = normalized.find((theme) => theme?.id === 'mono-plus-light')
+  assert.equal(mono?.chatColors?.['user-message-background'], '#E5E5E5')
+  assert.equal(mono?.markdownColors?.['inline-code-background'], '#f1f1f1')
+  assert.equal(mono?.toolsColors?.['edit-added'], '#5a7a5a')
 })
 
 test('normalizes valid OpenChamber themes and rejects malformed payloads', () => {
@@ -56,6 +60,24 @@ test('normalizes valid OpenChamber themes and rejects malformed payloads', () =>
   assert.equal(normalized?.variant, 'light')
   assert.equal(normalized?.colors.accent, '#123456')
   assert.equal(normalizeColorTheme({ metadata: { id: 'bad', variant: 'light' } }), null)
+})
+
+test('normalizes supported typography overrides and ignores unknown values', () => {
+  const custom = structuredClone(monoPlus) as Record<string, unknown>
+  const config = custom.config as Record<string, unknown>
+  config.typography = {
+    chat: {
+      'body-size': '17px',
+      'process-line-height': 1.6,
+      unknown: 'ignored',
+      'code-size': { invalid: true },
+    },
+  }
+  const normalized = normalizeColorTheme(custom)
+  assert.equal(normalized?.typography?.chat?.['body-size'], '17px')
+  assert.equal(normalized?.typography?.chat?.['process-line-height'], 1.6)
+  assert.equal(normalized?.typography?.chat?.['unknown' as never], undefined)
+  assert.equal(normalized?.typography?.chat?.['code-size'], undefined)
 })
 
 test('custom themes override matching built-ins and support unique ids', () => {

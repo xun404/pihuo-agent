@@ -182,6 +182,18 @@ export interface ThreadMessagesResult {
   error?: string
 }
 
+export interface ProjectMemorySnapshot {
+  projectId: string
+  enabled: boolean
+  content: string
+  lastMessages: number
+  workingMemory: boolean
+  semanticRecall: boolean
+  observationalMemory: boolean
+  storage: string
+  docs: string
+}
+
 export type DangerZoneAction =
   'reset-settings' | 'clear-workers-and-crews' | 'clear-sessions' | 'clear-cache' | 'reset-all'
 
@@ -347,6 +359,25 @@ export const api = {
     request<{ project: Project }>('/api/projects', {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  getProjectMemory: (projectId: string, threadId: string) => {
+    const query = new URLSearchParams({ threadId })
+    return request<ProjectMemorySnapshot>(
+      `/api/projects/${encodePathSegment(projectId)}/memory?${query.toString()}`,
+    )
+  },
+  setProjectMemoryEnabled: (projectId: string, enabled: boolean) =>
+    request<{ project: Project; snapshot: AppSnapshot }>(
+      `/api/projects/${encodePathSegment(projectId)}/memory`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      },
+    ),
+  updateProjectWorkingMemory: (projectId: string, threadId: string, content: string) =>
+    request<ProjectMemorySnapshot>(`/api/projects/${encodePathSegment(projectId)}/memory/working`, {
+      method: 'PUT',
+      body: JSON.stringify({ threadId, content }),
     }),
   createSession: (body: {
     projectId: string

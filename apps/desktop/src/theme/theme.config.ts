@@ -13,6 +13,47 @@ export type ColorThemeVariant = 'light' | 'dark'
 /** IDs are metadata-driven; these aliases document the product defaults. */
 export type BuiltInThemeId = string
 export type ColorThemeId = string
+export type CssTokenValue = string | number
+
+export type TypographySizeToken =
+  '2xs' | 'xs' | 'sm' | 'base' | 'md' | 'lg' | 'xl' | '2xl' | 'display'
+export type TypographyWeightToken = 'regular' | 'medium' | 'semibold' | 'bold'
+export type TypographyLineHeightToken = 'tight' | 'snug' | 'body' | 'relaxed'
+export type TypographyLetterSpacingToken = 'tight' | 'display' | 'label'
+export type ChatTypographyToken =
+  | 'body-size'
+  | 'body-line-height'
+  | 'user-line-height'
+  | 'heading-h1-size'
+  | 'heading-h2-size'
+  | 'heading-line-height'
+  | 'heading-tight'
+  | 'heading-snug'
+  | 'code-size'
+  | 'code-line-height'
+  | 'process-size'
+  | 'process-line-height'
+  | 'process-summary-line-height'
+  | 'meta-size'
+  | 'micro-size'
+  | 'tiny-size'
+  | 'badge-size'
+  | 'preview-index-size'
+  | 'preview-index-spacing'
+  | 'preview-question-size'
+  | 'preview-answer-size'
+  | 'preview-running-size'
+  | 'preview-line-height'
+
+export interface ThemeTypographyOverrides {
+  sizes?: Partial<Record<TypographySizeToken, CssTokenValue>>
+  weights?: Partial<Record<TypographyWeightToken, CssTokenValue>>
+  lineHeights?: Partial<Record<TypographyLineHeightToken, CssTokenValue>>
+  letterSpacing?: Partial<Record<TypographyLetterSpacingToken, CssTokenValue>>
+  chat?: Partial<Record<ChatTypographyToken, CssTokenValue>>
+}
+
+export type ThemeColorMap = Record<string, string>
 
 export interface ColorTokens {
   'text-1': string
@@ -70,6 +111,8 @@ export interface ThemeFontDefaults {
   sans: string
   mono: string
   heading?: string
+  /** Optional readable prose face; defaults to the canonical CJK sans stack. */
+  prose?: string
 }
 
 export interface ColorTheme {
@@ -81,6 +124,11 @@ export interface ColorTheme {
   colors: ColorTokens
   /** Optional source defaults consumed by appearance.config.ts. */
   fonts?: ThemeFontDefaults
+  typography?: ThemeTypographyOverrides
+  /** Source-specific colors preserved as CSS namespaces for Chat consumers. */
+  chatColors?: ThemeColorMap
+  markdownColors?: ThemeColorMap
+  toolsColors?: ThemeColorMap
   source: 'builtin' | 'custom'
 }
 
@@ -174,6 +222,7 @@ export interface OpenChamberThemeJson {
   }
   config?: {
     fonts?: ThemeFontDefaults
+    typography?: Record<string, unknown>
     transitions?: Record<string, string>
   }
 }
@@ -309,6 +358,121 @@ function sourceString(value: unknown, fallback: string): string {
   return nonEmptyString(value) ? value : fallback
 }
 
+const typographySizeKeys = [
+  '2xs',
+  'xs',
+  'sm',
+  'base',
+  'md',
+  'lg',
+  'xl',
+  '2xl',
+  'display',
+] as const satisfies readonly TypographySizeToken[]
+
+const typographyWeightKeys = [
+  'regular',
+  'medium',
+  'semibold',
+  'bold',
+] as const satisfies readonly TypographyWeightToken[]
+
+const typographyLineHeightKeys = [
+  'tight',
+  'snug',
+  'body',
+  'relaxed',
+] as const satisfies readonly TypographyLineHeightToken[]
+
+const typographyLetterSpacingKeys = [
+  'tight',
+  'display',
+  'label',
+] as const satisfies readonly TypographyLetterSpacingToken[]
+
+const chatTypographyKeys = [
+  'body-size',
+  'body-line-height',
+  'user-line-height',
+  'heading-h1-size',
+  'heading-h2-size',
+  'heading-line-height',
+  'heading-tight',
+  'heading-snug',
+  'code-size',
+  'code-line-height',
+  'process-size',
+  'process-line-height',
+  'process-summary-line-height',
+  'meta-size',
+  'micro-size',
+  'tiny-size',
+  'badge-size',
+  'preview-index-size',
+  'preview-index-spacing',
+  'preview-question-size',
+  'preview-answer-size',
+  'preview-running-size',
+  'preview-line-height',
+] as const satisfies readonly ChatTypographyToken[]
+
+function cssTokenValue(value: unknown): CssTokenValue | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  return nonEmptyString(value) ? value.trim() : undefined
+}
+
+function normalizeTokenGroup<T extends string>(
+  value: unknown,
+  keys: readonly T[],
+): Partial<Record<T, CssTokenValue>> | undefined {
+  if (!isRecord(value)) return undefined
+  const result: Partial<Record<T, CssTokenValue>> = {}
+  for (const key of keys) {
+    const normalized = cssTokenValue(value[key])
+    if (normalized !== undefined) result[key] = normalized
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
+function normalizeTypography(value: unknown): ThemeTypographyOverrides | undefined {
+  if (!isRecord(value)) return undefined
+  const sizes = normalizeTokenGroup(value.sizes, typographySizeKeys)
+  const weights = normalizeTokenGroup(value.weights, typographyWeightKeys)
+  const lineHeights = normalizeTokenGroup(value.lineHeights, typographyLineHeightKeys)
+  const letterSpacing = normalizeTokenGroup(value.letterSpacing, typographyLetterSpacingKeys)
+  const chat = normalizeTokenGroup(value.chat, chatTypographyKeys)
+  if (!sizes && !weights && !lineHeights && !letterSpacing && !chat) return undefined
+  return { sizes, weights, lineHeights, letterSpacing, chat }
+}
+
+function kebabCase(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/gu, '$1-$2')
+    .replace(/([a-zA-Z])(\d)/gu, '$1-$2')
+    .replace(/[_\s]+/gu, '-')
+    .replace(/[^a-zA-Z0-9-]/gu, '-')
+    .replace(/-+/gu, '-')
+    .replace(/^-|-$/gu, '')
+    .toLowerCase()
+}
+
+function normalizeColorLeaves(value: unknown, prefix = ''): ThemeColorMap | undefined {
+  if (!isRecord(value)) return undefined
+  const result: ThemeColorMap = {}
+  for (const [rawKey, rawValue] of Object.entries(value)) {
+    const key = kebabCase(rawKey)
+    if (!key) continue
+    const name = prefix ? `${prefix}-${key}` : key
+    if (nonEmptyString(rawValue)) {
+      result[name] = rawValue.trim()
+      continue
+    }
+    const nested = normalizeColorLeaves(rawValue, name)
+    if (nested) Object.assign(result, nested)
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
 function themeId(value: unknown): string | null {
   if (!nonEmptyString(value)) return null
   const id = value.trim().toLowerCase()
@@ -434,8 +598,10 @@ function normalizeOpenChamberTheme(
           sans: fontsRecord.sans,
           mono: fontsRecord.mono,
           ...(nonEmptyString(fontsRecord.heading) ? { heading: fontsRecord.heading } : {}),
+          ...(nonEmptyString(fontsRecord.prose) ? { prose: fontsRecord.prose } : {}),
         }
       : undefined
+  const typography = normalizeTypography(config?.typography)
 
   return {
     id,
@@ -445,6 +611,10 @@ function normalizeOpenChamberTheme(
     variant,
     colors: adaptOpenChamberColors(source.colors, fallback),
     fonts,
+    typography,
+    chatColors: normalizeColorLeaves(colors.chat),
+    markdownColors: normalizeColorLeaves(colors.markdown),
+    toolsColors: normalizeColorLeaves(colors.tools),
     source: origin,
   }
 }

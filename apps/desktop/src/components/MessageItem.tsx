@@ -466,7 +466,7 @@ function MessageItemImpl({
           <div className="sup-body">
             {msgLive ? (
               liveNodes
-            ) : processNodes.length > 0 ? (
+            ) : (
               <>
                 <WorkedForSection
                   open={workedOpen}
@@ -477,8 +477,6 @@ function MessageItemImpl({
                 </WorkedForSection>
                 {resultNodes}
               </>
-            ) : (
-              resultNodes
             )}
             {/* pending 占位符：busy 且本轮还没产出任何 text 正文时显示。
                 放在 parts 之后（最末尾），这样思考/工具流式时它在最下面，

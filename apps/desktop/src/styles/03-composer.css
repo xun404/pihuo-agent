@@ -72,7 +72,7 @@
   color: var(--text-2);
   font: inherit;
   font-size: var(--fs-sm);
-  line-height: 1.2;
+  line-height: var(--chat-process-summary-line-height);
   cursor: pointer;
   text-align: left;
   transition:
@@ -104,7 +104,7 @@
 .pending-changes-count {
   flex-shrink: 0;
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 .pending-changes-label {
   min-width: 0;
@@ -117,7 +117,7 @@
   display: inline-flex;
   gap: 4px;
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
 }
 .pending-changes-stats .is-add {
   color: var(--green, #2f9e64);
@@ -148,7 +148,7 @@
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
@@ -191,11 +191,11 @@
   gap: 6px;
   padding: 6px 8px 4px;
   font-size: var(--fs-sm);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--text-2);
 }
 .composer-status-popover-count {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
@@ -234,8 +234,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--chat-micro-size);
+  font-weight: var(--fw-semibold);
   font-family: var(--mono, ui-monospace, monospace);
   flex-shrink: 0;
   background: var(--bg-hover, color-mix(in srgb, var(--text-1) 6%, transparent));
@@ -284,14 +284,14 @@
 .pending-changes-file-name {
   flex: 0 0 auto;
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 .pending-changes-file-stats {
   display: inline-flex;
   gap: 5px;
   flex-shrink: 0;
   margin-left: 6px;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   font-family: var(--mono, ui-monospace, monospace);
 }
@@ -420,7 +420,7 @@
   color: var(--text-1);
   font: inherit;
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -437,7 +437,7 @@
   transform: rotate(180deg);
 }
 .diff-scope-count {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--text-2);
 }
 .diff-scope-menu {
@@ -493,7 +493,7 @@
   margin-left: auto;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
 }
 .diff-scope-check {
   color: var(--blue);
@@ -546,7 +546,7 @@
   overflow: hidden;
   white-space: nowrap;
   font-family: var(--mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: var(--chat-code-size);
 }
 .diff-file-block-dir {
   /* grow:0 so we don't open a gap before the filename */
@@ -566,14 +566,14 @@
 .diff-file-block-name {
   flex: 0 0 auto;
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 .diff-file-block-stats {
   display: inline-flex;
   gap: 6px;
   flex-shrink: 0;
   margin-left: 8px;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   font-family: var(--mono, ui-monospace, monospace);
 }
@@ -614,7 +614,7 @@
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -647,7 +647,7 @@
   background: transparent;
   color: var(--text-3);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -661,13 +661,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-size: var(--fs-md);
   color: var(--text-1);
 }
 .changed-files-diff-count {
   font-size: var(--fs-sm);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--text-3);
 }
 .changed-files-diff-body {
@@ -719,8 +719,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--chat-micro-size);
+  font-weight: var(--fw-semibold);
   font-family: var(--mono, ui-monospace, monospace);
   flex-shrink: 0;
   background: var(--bg-hover, color-mix(in srgb, var(--text-1) 6%, transparent));
@@ -764,14 +764,14 @@
 }
 .changed-files-diff-view-path strong {
   color: var(--text-1);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .changed-files-diff-view-meta {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .changed-files-diff-view-meta .is-add {
@@ -807,8 +807,8 @@
   margin: 0;
   padding: 4px 0 12px;
   font-family: var(--mono, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--chat-code-size);
+  line-height: var(--chat-process-line-height);
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -865,7 +865,7 @@
 }
 .syn-keyword {
   color: var(--diff-syn-keyword, #7c3aed);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .syn-type {
   color: var(--diff-syn-type, #0891b2);
@@ -894,16 +894,36 @@
 .diff-stacked-scroll,
 .changed-files-diff-scroll,
 .diff-file-block-body-inner {
-  --diff-add-bg: color-mix(in srgb, var(--green) 14%, var(--bg-surface, #fff));
-  --diff-add-bg-full: color-mix(in srgb, var(--green) 20%, var(--bg-surface, #fff));
-  --diff-add-mark: color-mix(in srgb, var(--green) 75%, #0b3d28);
-  --diff-add-gutter: color-mix(in srgb, var(--green) 12%, var(--bg-surface, #fff));
-  --diff-del-bg: color-mix(in srgb, var(--danger) 12%, var(--bg-surface, #fff));
-  --diff-del-bg-full: color-mix(in srgb, var(--danger) 18%, var(--bg-surface, #fff));
-  --diff-del-mark: color-mix(in srgb, var(--danger) 78%, #5c1212);
-  --diff-del-gutter: color-mix(in srgb, var(--danger) 10%, var(--bg-surface, #fff));
+  --diff-add-bg: var(
+    --tools-edit-added-background,
+    color-mix(in srgb, var(--green) 14%, var(--bg-surface))
+  );
+  --diff-add-bg-full: var(
+    --tools-edit-added-background,
+    color-mix(in srgb, var(--green) 20%, var(--bg-surface))
+  );
+  --diff-add-mark: var(--tools-edit-added, color-mix(in srgb, var(--green) 75%, var(--text-1)));
+  --diff-add-gutter: color-mix(
+    in srgb,
+    var(--tools-edit-added, var(--green)) 12%,
+    var(--bg-surface)
+  );
+  --diff-del-bg: var(
+    --tools-edit-removed-background,
+    color-mix(in srgb, var(--danger) 12%, var(--bg-surface))
+  );
+  --diff-del-bg-full: var(
+    --tools-edit-removed-background,
+    color-mix(in srgb, var(--danger) 18%, var(--bg-surface))
+  );
+  --diff-del-mark: var(--tools-edit-removed, color-mix(in srgb, var(--danger) 78%, var(--text-1)));
+  --diff-del-gutter: color-mix(
+    in srgb,
+    var(--tools-edit-removed, var(--danger)) 10%,
+    var(--bg-surface)
+  );
   --diff-ctx-fg: var(--text-2);
-  --diff-hunk-bg: color-mix(in srgb, var(--blue) 8%, var(--bg-surface, #fff));
+  --diff-hunk-bg: color-mix(in srgb, var(--blue) 8%, var(--bg-surface));
   --diff-hunk-fg: color-mix(in srgb, var(--blue) 55%, var(--text-2));
 }
 
@@ -912,7 +932,7 @@
 .unified-diff-line.is-add .syn-keyword,
 .side-diff-cell.is-del .syn-keyword,
 .unified-diff-line.is-del .syn-keyword {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .unified-diff-line.is-add {
   background: var(--diff-add-bg, color-mix(in srgb, var(--green) 14%, transparent));
@@ -923,7 +943,7 @@
 }
 .unified-diff-line.is-add .unified-diff-sign {
   color: var(--diff-add-mark, var(--green));
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .unified-diff-line.is-del {
   background: var(--diff-del-bg, color-mix(in srgb, var(--danger) 12%, transparent));
@@ -934,7 +954,7 @@
 }
 .unified-diff-line.is-del .unified-diff-sign {
   color: var(--diff-del-mark, var(--danger));
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 /* Full-file: clearer change bands + left accent (no opacity fade on ctx) */
 .unified-diff.is-full .unified-diff-line.is-add {
@@ -977,7 +997,7 @@
 }
 .unified-diff-line.is-meta {
   color: var(--text-3);
-  font-size: 11px;
+  font-size: var(--chat-meta-size);
   background: color-mix(in srgb, var(--text-1) 2%, transparent);
 }
 .unified-diff-line.is-hunk .unified-diff-code,
@@ -988,8 +1008,8 @@
 /* Side-by-side — columns must clip; long unwrapped lines must not paint into the sibling cell */
 .side-diff {
   font-family: var(--mono, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--chat-code-size);
+  line-height: var(--chat-process-line-height);
   padding-bottom: 12px;
   width: 100%;
   min-width: 0;
@@ -998,7 +1018,7 @@
 .side-diff-full {
   padding: 4px 10px;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: var(--chat-meta-size);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
   border-bottom: 1px solid var(--border-soft);
   white-space: pre-wrap;
@@ -1081,7 +1101,7 @@
 .side-diff-full.is-hunk {
   background: var(--diff-hunk-bg);
   color: var(--diff-hunk-fg);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 /* Nested token spans must allow wrapping */
 .side-diff-code .syn,
@@ -1322,7 +1342,7 @@
   flex-shrink: 0;
 }
 .chip.menu .caret {
-  font-size: 9px;
+  font-size: var(--chat-badge-size);
   color: var(--text-3);
   margin-left: 4px;
   flex-shrink: 0;
@@ -1393,29 +1413,23 @@
 }
 .ctx-meter .ring-bg {
   fill: none;
-  stroke: rgba(20, 30, 50, 0.1);
+  stroke: var(--tools-border, var(--border-soft));
   stroke-width: 2;
 }
 .ctx-meter .ring-fg {
   fill: none;
-  stroke: rgba(20, 30, 50, 0.28); /* 浅灰 */
+  stroke: var(--tools-icon, var(--text-3));
   stroke-width: 2;
   stroke-linecap: round;
   /* r=8 → C≈50.27; 80% ≈ 40.2 */
   stroke-dasharray: 40.2 50.27;
 }
-html[data-theme='dark'] .ctx-meter .ring-fg {
-  stroke: rgba(255, 255, 255, 0.35);
-}
-html[data-theme='dark'] .ctx-meter .ring-bg {
-  stroke: rgba(255, 255, 255, 0.12);
-}
 /* 超过 80%：浅橙，仍克制 */
 .ctx-meter.high .ring-fg {
-  stroke: color-mix(in srgb, var(--accent) 65%, #d0d0d0);
+  stroke: color-mix(in srgb, var(--accent) 65%, var(--bg-surface));
 }
 .ctx-meter.crit .ring-fg {
-  stroke: color-mix(in srgb, var(--danger) 70%, #d0d0d0);
+  stroke: color-mix(in srgb, var(--danger) 70%, var(--bg-surface));
 }
 /* 上下文环命中区：相对定位，tip 居中浮在上方 */
 .ctx-meter-hit {
@@ -1624,7 +1638,7 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
 .pop-item .check {
   margin-left: auto;
   color: var(--text-1);
-  font-size: 14px;
+  font-size: var(--icon-sm);
   line-height: 1;
   padding-top: 2px;
 }
@@ -1689,7 +1703,7 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
   white-space: nowrap;
 }
 .pop-row .val .arrow {
-  font-size: 12px;
+  font-size: var(--chat-code-size);
   opacity: 0.6;
 }
 .pop-sep {
@@ -1800,7 +1814,7 @@ html[data-theme='dark'] .ctx-meter .ring-bg {
   font-size: var(--fs-2xs);
   font-weight: var(--fw-semibold);
   color: var(--text-4);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ls-label);
   text-transform: uppercase;
 }
 .pop-prov-header .prov-ico {
@@ -1893,7 +1907,7 @@ html[data-theme='dark'] .send.stop {
   cursor: default;
 }
 .branch-trigger .caret {
-  font-size: 9px;
+  font-size: var(--chat-badge-size);
   color: var(--text-3);
   line-height: 1;
 }

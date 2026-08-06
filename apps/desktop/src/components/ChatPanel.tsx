@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, DatabaseCheck, DatabaseX } from 'lucide-react'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
@@ -19,7 +19,14 @@ import type {
 import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
 import { shouldAnimateSessionTitleTransition } from '../lib/session-title-animation'
 import type { PendingNewSession } from '../hooks/useAppState'
-import { api, abortChatRun, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
+import {
+  api,
+  abortChatRun,
+  chatUrl,
+  clearDesktopToken,
+  ensureDesktopToken,
+  type ProjectMemorySnapshot,
+} from '../lib/api'
 import { ThrottledChat } from '../lib/throttled-chat'
 import { useI18n } from '../i18n/I18nProvider'
 import {
@@ -47,6 +54,7 @@ import {
   IconFolder,
 } from './Icons'
 import { RightPanel, type InspectorTab } from './RightPanel'
+import type { MemoryPanelError } from './MemoryPanel'
 import { BrandLogo } from './BrandLogo'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
@@ -269,6 +277,10 @@ export function ChatPanel({
   const [compactionMarkers, setCompactionMarkers] = useState<CompactionMarkerData[]>([])
   /** Header bubble: crew / approvals (null = closed). */
   const [inspectorTab, setInspectorTab] = useState<InspectorTab | null>(null)
+  const [projectMemory, setProjectMemory] = useState<ProjectMemorySnapshot | null>(null)
+  const [projectMemoryLoading, setProjectMemoryLoading] = useState(false)
+  const [projectMemorySaving, setProjectMemorySaving] = useState(false)
+  const [projectMemoryError, setProjectMemoryError] = useState<MemoryPanelError | null>(null)
   const inspectorAnchorRef = useRef<HTMLDivElement>(null)
   const { success: toastSuccess, error: toastError } = useToast()
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -358,6 +370,23 @@ export function ChatPanel({
           },
     [reduceMotion],
   )
+  const memoryIconMotion = useMemo(
+    () =>
+      reduceMotion
+        ? {
+            initial: { opacity: 0 },
+            animate: { opacity: 1 },
+            exit: { opacity: 0 },
+            transition: { duration: 0.12 },
+          }
+        : {
+            initial: { opacity: 0, scale: 0.72, rotate: -18 },
+            animate: { opacity: 1, scale: 1, rotate: 0 },
+            exit: { opacity: 0, scale: 0.72, rotate: 18 },
+            transition: { duration: 0.2, ease: [0.32, 0.72, 0, 1] as const },
+          },
+    [reduceMotion],
+  )
   const bottomRef = useRef<HTMLDivElement>(null)
   /** messages-scroll 容器：TurnNavigator 跳转 + 滚动监听用 */
   const messagesScrollRef = useRef<HTMLDivElement>(null)
@@ -418,7 +447,102 @@ export function ChatPanel({
 
   // Bind Mastra memory thread/resource so goal-state + working memory can run
   const memoryThreadId = session.memoryThreadId ?? session.id
+  const projectId = project?.id
   const memoryResourceId = project?.id ?? session.projectId ?? 'default-resource'
+  const hasPendingNewSession = Boolean(pendingNewSession)
+  const currentProjectMemory = projectMemory?.projectId === project?.id ? projectMemory : null
+  const memoryEnabled = currentProjectMemory?.enabled ?? project?.memoryEnabled !== false
+
+  const handleMemoryToggle = useCallback(
+    async (enabled: boolean) => {
+      if (!project || projectMemorySaving) return
+      setProjectMemorySaving(true)
+      setProjectMemoryError(null)
+      try {
+        const result = await api.setProjectMemoryEnabled(project.id, enabled)
+        setProjectMemory((current) =>
+          current
+            ? {
+                ...current,
+                enabled: result.project.memoryEnabled !== false,
+                workingMemory: result.project.memoryEnabled !== false,
+              }
+            : current,
+        )
+        onRefreshSnapshot?.()
+      } catch (error) {
+        console.warn('[ChatPanel] project memory toggle failed', error)
+        setProjectMemoryError('toggle')
+        toastError(t('memory.toggleFailed'))
+      } finally {
+        setProjectMemorySaving(false)
+      }
+    },
+    [onRefreshSnapshot, project, projectMemorySaving, t, toastError],
+  )
+
+  const handleMemorySave = useCallback(
+    async (content: string) => {
+      if (!project || !currentProjectMemory || projectMemorySaving) return false
+      setProjectMemorySaving(true)
+      setProjectMemoryError(null)
+      try {
+        const snapshot = await api.updateProjectWorkingMemory(project.id, memoryThreadId, content)
+        setProjectMemory(snapshot)
+        onRefreshSnapshot?.()
+        toastSuccess(t('memory.saved'))
+        return true
+      } catch (error) {
+        console.warn('[ChatPanel] project memory save failed', error)
+        setProjectMemoryError('save')
+        toastError(t('memory.saveFailed'))
+        return false
+      } finally {
+        setProjectMemorySaving(false)
+      }
+    },
+    [
+      memoryThreadId,
+      onRefreshSnapshot,
+      project,
+      currentProjectMemory,
+      projectMemorySaving,
+      t,
+      toastError,
+      toastSuccess,
+    ],
+  )
+
+  useEffect(() => {
+    if (!isActive || !projectId || hasPendingNewSession) {
+      setProjectMemory(null)
+      setProjectMemoryLoading(false)
+      setProjectMemoryError(null)
+      return
+    }
+    let cancelled = false
+    setProjectMemory(null)
+    setProjectMemoryLoading(true)
+    setProjectMemoryError(null)
+    void api
+      .getProjectMemory(projectId, memoryThreadId)
+      .then((snapshot) => {
+        if (cancelled) return
+        setProjectMemory(snapshot)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.warn('[ChatPanel] project memory load failed', error)
+        setProjectMemory(null)
+        setProjectMemoryError('load')
+      })
+      .finally(() => {
+        if (!cancelled) setProjectMemoryLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hasPendingNewSession, isActive, memoryThreadId, projectId])
 
   const loadModels = useCallback(async () => {
     setModelsLoading(true)
@@ -1975,18 +2099,51 @@ export function ChatPanel({
               </span>
             )}
           </button>
+          {project && isActive && !hasPendingNewSession && (
+            <button
+              type="button"
+              className={`icon-btn chat-head-tool-btn chat-head-tool-memory${
+                inspectorTab === 'memory' ? ' is-active' : ''
+              }${memoryEnabled ? ' is-memory-on' : ' is-memory-off'}`}
+              title={t(memoryEnabled ? 'memory.openEnabled' : 'memory.openDisabled')}
+              aria-label={t(memoryEnabled ? 'memory.openEnabled' : 'memory.openDisabled')}
+              aria-expanded={inspectorTab === 'memory'}
+              aria-pressed={inspectorTab === 'memory'}
+              data-memory-enabled={memoryEnabled}
+              onClick={() => toggleInspectorTab('memory')}
+            >
+              <AnimatePresence initial={false} mode="wait">
+                {memoryEnabled ? (
+                  <motion.span key="memory-on" {...memoryIconMotion} aria-hidden>
+                    <DatabaseCheck className="i" strokeWidth={1.75} />
+                  </motion.span>
+                ) : (
+                  <motion.span key="memory-off" {...memoryIconMotion} aria-hidden>
+                    <DatabaseX className="i" strokeWidth={1.75} />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </button>
+          )}
           <AnimatePresence>
             {inspectorTab &&
-              onCreateTeamMember &&
-              onUpdateTeamMember &&
-              onArchiveTeamMember &&
-              onResetTeamMemberSession &&
-              onResolveApproval && (
+              (inspectorTab === 'memory' ||
+                (onCreateTeamMember &&
+                  onUpdateTeamMember &&
+                  onArchiveTeamMember &&
+                  onResetTeamMemberSession &&
+                  onResolveApproval)) && (
                 <motion.div
                   key="chat-inspector-bubble"
                   className="chat-inspector-bubble"
                   role="dialog"
-                  aria-label={inspectorTab === 'roles' ? t('right.roles') : t('right.approvals')}
+                  aria-label={
+                    inspectorTab === 'roles'
+                      ? t('right.roles')
+                      : inspectorTab === 'approvals'
+                        ? t('right.approvals')
+                        : t('memory.title')
+                  }
                   {...inspectorBubbleMotion}
                 >
                   <AnimatePresence mode="wait" initial={false}>
@@ -2001,12 +2158,20 @@ export function ChatPanel({
                         teamMembers={teamMembers}
                         approvals={sessionApprovals}
                         projectId={project?.id ?? null}
+                        projectName={project?.name ?? t('memory.noProject')}
                         sessionId={session.id}
-                        onCreateTeamMember={onCreateTeamMember}
-                        onUpdateTeamMember={onUpdateTeamMember}
-                        onArchiveTeamMember={onArchiveTeamMember}
-                        onResetTeamMemberSession={onResetTeamMemberSession}
-                        onResolveApproval={onResolveApproval}
+                        memoryEnabled={memoryEnabled}
+                        memory={currentProjectMemory}
+                        memoryLoading={projectMemoryLoading}
+                        memorySaving={projectMemorySaving}
+                        memoryError={projectMemoryError}
+                        onToggleMemory={handleMemoryToggle}
+                        onSaveMemory={handleMemorySave}
+                        onCreateTeamMember={onCreateTeamMember ?? (async () => {})}
+                        onUpdateTeamMember={onUpdateTeamMember ?? (async () => {})}
+                        onArchiveTeamMember={onArchiveTeamMember ?? (async () => {})}
+                        onResetTeamMemberSession={onResetTeamMemberSession ?? (async () => {})}
+                        onResolveApproval={onResolveApproval ?? (() => {})}
                         resolving={resolving}
                         onRefreshSnapshot={() => onRefreshSnapshot?.()}
                       />

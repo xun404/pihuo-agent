@@ -125,6 +125,13 @@
   background: var(--bg-hover);
   color: var(--text-1);
 }
+.chat-head-tool-memory {
+  color: var(--text-2);
+}
+.chat-head-tool-memory.is-memory-on,
+.chat-head-tool-memory.is-memory-off {
+  color: var(--text-2);
+}
 .chat-head-tool-badge {
   position: absolute;
   top: 1px;
@@ -135,7 +142,7 @@
   border-radius: var(--r-pill);
   background: var(--blue);
   color: var(--text-inv, #fff);
-  font-size: 9px;
+  font-size: var(--chat-badge-size);
   font-weight: var(--fw-semibold);
   line-height: 14px;
   text-align: center;
@@ -389,8 +396,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .sup-text {
   font-size: var(--fs-md);
-  line-height: 1.65;
-  color: var(--text-1);
+  line-height: var(--chat-body-line-height);
+  color: var(--chat-assistant-message, var(--text-1));
   padding: 2px 0;
 }
 .sup-footer {
@@ -398,9 +405,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   align-items: center;
   gap: var(--sp-3);
   padding-top: var(--sp-1);
-  border-top: 1px solid var(--border-soft);
-  font-size: var(--fs-2xs);
-  color: var(--text-3);
+  border-top: 1px solid var(--chat-divider, var(--border-soft));
+  font-size: var(--chat-meta-size);
+  color: var(--chat-timestamp, var(--text-3));
 }
 .sup-footer-meta {
   display: inline-flex;
@@ -425,8 +432,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   gap: 6px;
   padding-top: 8px;
   margin-top: 8px;
-  font-size: var(--fs-xs);
-  color: var(--text-3);
+  font-size: var(--chat-meta-size);
+  color: var(--chat-timestamp, var(--text-3));
   opacity: 0.6;
 }
 .lead-footer-meta {
@@ -530,7 +537,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   color: var(--text-2);
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  line-height: 1.25;
+  line-height: var(--chat-process-summary-line-height);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -554,9 +561,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .task-row-detail {
   min-width: 0;
   color: var(--text-3);
-  font-size: 12.5px;
+  font-size: var(--chat-process-size);
   font-weight: var(--fw-regular);
-  line-height: 1.55;
+  line-height: var(--chat-code-line-height);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -592,7 +599,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 /* 用户：浅蓝、无描边阴影，右缘贴消息列 */
 .msg.user .bubble {
-  background: var(--blue-soft);
+  background: var(--chat-user-message-background, var(--blue-soft));
+  color: var(--chat-user-message, var(--text-1));
   border-color: transparent;
   box-shadow: none;
   margin-right: 0;
@@ -605,15 +613,15 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 /* Leader：无气泡壳；正文层级高于过程层（思考/工具） */
 .msg.leader .bubble {
-  background: transparent;
+  background: var(--chat-assistant-message-background, transparent);
   border: none;
   box-shadow: none;
   padding: 4px 0 2px;
   font-size: var(--fs-md);
-  line-height: 1.65;
+  line-height: var(--chat-body-line-height);
   width: auto;
   max-width: none;
-  color: var(--text-1);
+  color: var(--chat-assistant-message, var(--text-1));
   font-weight: var(--fw-regular);
   letter-spacing: 0;
   box-sizing: border-box;
@@ -621,9 +629,10 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 
 /* —— Markdown 正文：主阅读层，对比过程旁注更清晰 —— */
 .msg.leader .md-content {
-  font-size: var(--fs-md);
-  line-height: 1.65;
-  color: var(--text-1);
+  font-family: var(--font-prose, var(--font));
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  color: var(--chat-assistant-message, var(--text-1));
   font-weight: var(--fw-regular);
   overflow-wrap: break-word;
   word-break: break-word;
@@ -635,34 +644,38 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   margin-bottom: 0;
 }
 .msg.leader .md-content strong {
-  font-weight: var(--fw-semibold);
-  color: var(--text-1);
+  font-weight: var(--fw-bold);
+  color: var(--markdown-bold, var(--chat-assistant-message, var(--text-1)));
 }
 /* 标题：em 相对尺寸 */
 .sup-text h1,
 .sup-text.md-content h1 {
-  font-size: 1.125em;
+  font-family: var(--font-prose, var(--font));
+  font-size: var(--chat-heading-h1-size);
   font-weight: var(--fw-semibold);
-  color: var(--text-1);
-  letter-spacing: -0.02em;
+  color: var(--markdown-heading-1, var(--text-1));
+  letter-spacing: var(--chat-heading-tight);
   margin: 0.8em 0 0.35em;
-  line-height: 1.3;
+  line-height: var(--chat-heading-line-height);
 }
 .sup-text h2,
 .sup-text.md-content h2 {
-  font-size: 1.0625em;
+  font-family: var(--font-prose, var(--font));
+  font-size: var(--chat-heading-h2-size);
   font-weight: var(--fw-semibold);
-  color: var(--text-1);
-  letter-spacing: -0.015em;
+  color: var(--markdown-heading-2, var(--text-1));
+  letter-spacing: var(--chat-heading-snug);
   margin: 0.7em 0 0.3em;
-  line-height: 1.3;
+  line-height: var(--chat-heading-line-height);
 }
 .sup-text h3,
 .sup-text.md-content h3 {
+  font-family: var(--font-prose, var(--font));
   font-size: 1em;
   font-weight: var(--fw-semibold);
-  color: var(--text-1);
+  color: var(--markdown-heading-3, var(--text-1));
   margin: 0.6em 0 0.25em;
+  line-height: var(--chat-heading-line-height);
 }
 .sup-text h4,
 .sup-text h5,
@@ -670,10 +683,12 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .sup-text.md-content h4,
 .sup-text.md-content h5,
 .sup-text.md-content h6 {
+  font-family: var(--font-prose, var(--font));
   font-size: 1em;
   font-weight: var(--fw-semibold);
-  color: var(--text-1);
+  color: var(--markdown-heading-4, var(--text-1));
   margin: 0.5em 0 0.2em;
+  line-height: var(--chat-heading-line-height);
 }
 .msg.leader .md-content h1:first-child,
 .msg.leader .md-content h2:first-child,
@@ -689,8 +704,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   border-radius: var(--r-md);
   overflow: auto;
   font-family: var(--mono);
-  font-size: var(--fs-xs);
+  font-size: var(--chat-code-size);
   color: var(--text-2);
+  line-height: var(--chat-code-line-height);
   border: 1px solid var(--border-soft);
   margin: 0.4em 0;
 }
@@ -717,7 +733,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .md-code-block-lang {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--chat-meta-size);
   letter-spacing: 0.02em;
   text-transform: none;
   color: var(--text-2);
@@ -742,7 +758,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   background: transparent;
   color: var(--text-3);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--chat-meta-size);
   cursor: pointer;
   transition:
     color var(--dur-instant) var(--ease-out),
@@ -770,8 +786,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   background: transparent;
   overflow: auto;
   font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--chat-code-size);
+  line-height: var(--chat-code-line-height);
   color: var(--text-1);
   max-width: 100%;
 }
@@ -805,7 +821,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   padding: 0 12px 0 12px;
   font-family: inherit;
   font-size: inherit;
-  font-weight: 400;
+  font-weight: var(--fw-regular);
   background: transparent !important;
   color: inherit;
   min-width: 0;
@@ -835,35 +851,45 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .sup-text.md-content blockquote {
   margin: 0.5em 0;
   padding: 0.3em 0 0.3em 0.9em;
-  border-left: 2px solid var(--border);
-  color: var(--text-3);
+  border-left: 2px solid var(--markdown-blockquote-border, var(--border));
+  color: var(--markdown-blockquote, var(--text-3));
 }
 .sup-text blockquote p,
 .sup-text.md-content blockquote p {
   margin: 0;
 }
+/* Markdown 分隔线：覆盖浏览器默认的 inset 边框，跟随主题分隔线颜色。 */
+.sup-text hr,
+.sup-text.md-content hr {
+  height: 0;
+  margin: 0.9em 0;
+  border: 0;
+  border-top: 1px solid var(--chat-divider, var(--border-soft));
+  opacity: 0.7;
+}
 /* 链接：蓝（对齐线稿）*/
 .sup-text a,
 .sup-text.md-content a {
-  color: var(--blue);
+  color: var(--markdown-link, var(--blue));
   text-decoration: none;
 }
 .sup-text a:hover,
 .sup-text.md-content a:hover {
+  color: var(--markdown-link-hover, var(--blue));
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 /* inline code：弱化底色（从 accent-soft 改为 bg-input）*/
 .sup-text .md-code-inline,
 .sup-text.md-content .md-code-inline {
-  color: var(--text-1);
-  background: var(--bg-input);
+  color: var(--markdown-inline-code, var(--text-1));
+  background: var(--markdown-inline-code-background, var(--bg-input));
   padding: 0.08em 0.35em;
   border-radius: var(--r-xs);
 }
 .sup-text .md-code-block,
 .sup-text.md-content .md-code-block {
-  color: var(--text-1);
+  color: var(--markdown-inline-code, var(--text-1));
 }
 /* worker reply markdown reuses the same block chrome */
 .worker-action-markdown .md-code-block-wrap {
@@ -890,7 +916,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   content: '\2013'; /* en-dash – */
   position: absolute;
   left: -1.1em;
-  color: var(--text-3);
+  color: var(--markdown-list-marker, var(--text-3));
 }
 .sup-text ol,
 .sup-text.md-content ol {
@@ -915,7 +941,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   border-collapse: collapse;
   width: 100%;
   font-size: var(--fs-sm);
-  line-height: 1.5;
+  line-height: var(--lh-body);
 }
 .msg.leader .md-content th,
 .msg.leader .md-content td {
@@ -960,7 +986,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   margin: 0;
   padding: 0;
   max-width: 100%;
-  line-height: 1.25;
+  line-height: var(--chat-process-summary-line-height);
 }
 
 /* —— 共用 process summary 行 ——
@@ -980,6 +1006,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .process-row-summary:hover {
   background: var(--bg-hover);
+}
+.tool-row-summary:hover {
+  background: var(--tools-header-hover, var(--bg-hover));
 }
 /* 状态图标槽：折叠=类型图标，hover=›，展开=⌄ */
 /* 图标槽：relative 固定尺寸容器，内部 type 图标 + chevron 都 absolute 叠放，
@@ -1179,7 +1208,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
   color: var(--text-3);
-  line-height: 1.25;
+  line-height: var(--chat-process-summary-line-height);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -1208,11 +1237,17 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .thinking-block-body {
   padding: 0;
   border-left: 0;
-  font-size: 12.5px;
+  font-size: var(--chat-process-size);
   color: var(--text-3);
   white-space: pre-wrap;
-  line-height: 1.45;
+  line-height: var(--chat-process-line-height);
   opacity: 0.92;
+}
+/* 思考块：加黑不放大字重，颜色跟随降级正文（对齐推理区语义） */
+.thinking-block-body strong,
+.thinking-block-body b {
+  font-weight: inherit;
+  color: inherit;
 }
 /*
  * Streaming (live): grow with content — no max-height.
@@ -1247,7 +1282,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .tool-row-name {
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  color: var(--text-2);
+  color: var(--tools-title, var(--text-2));
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -1297,11 +1332,11 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   min-width: 0;
   font-family: var(--mono);
   font-size: var(--fs-2xs);
-  line-height: 1.55;
+  line-height: var(--chat-code-line-height);
 }
 .tool-row-block-marker {
-  color: var(--text-4);
-  line-height: 1.55;
+  color: var(--tools-icon, var(--text-4));
+  line-height: var(--chat-code-line-height);
   text-align: center;
   user-select: none;
 }
@@ -1309,17 +1344,17 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   min-width: 0;
   margin: 0;
   padding: 5px 7px;
-  border: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
+  border: 1px solid var(--tools-border, color-mix(in srgb, var(--border) 52%, transparent));
   border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--bg-input) 62%, transparent);
-  color: var(--text-3);
+  background: var(--tools-background, color-mix(in srgb, var(--bg-input) 62%, transparent));
+  color: var(--tools-description, var(--text-3));
   font: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 .tool-row-block-output .tool-row-block-content {
-  color: var(--text-2);
+  color: var(--tools-description, var(--text-2));
 }
 .tool-row-block-error .tool-row-block-marker,
 .tool-row-block-error .tool-row-block-content {
@@ -1336,8 +1371,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   padding-left: 1px;
   font-family: var(--mono);
   font-size: var(--fs-2xs);
-  line-height: 1.55;
-  color: var(--text-3);
+  line-height: var(--chat-code-line-height);
+  color: var(--tools-description, var(--text-3));
 }
 .tool-row-status.is-success > :first-child {
   color: var(--green);
@@ -1350,7 +1385,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   padding-left: 1px;
   font-family: var(--mono);
   font-size: var(--fs-2xs);
-  line-height: 1.55;
+  line-height: var(--chat-code-line-height);
 }
 .tool-field-group {
   display: grid;
@@ -1365,7 +1400,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .tool-field-group-title {
   grid-column: 1 / -1;
-  color: var(--text-2);
+  color: var(--tools-title, var(--text-2));
   font-weight: var(--fw-medium);
 }
 .tool-field-group .tool-field-row {
@@ -1429,7 +1464,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .worked-for-label {
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  line-height: 1.25;
+  line-height: var(--chat-process-summary-line-height);
   white-space: nowrap;
 }
 .worked-for-chevron {
@@ -1450,7 +1485,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   width: 100%;
   height: 0;
   margin: 2px 0 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--chat-divider, var(--border));
   opacity: 0.7;
 }
 .worked-for-collapse {
@@ -1543,8 +1578,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   color: var(--codex-fg);
 }
 .worker-logo.oc {
-  background: #2f6fed;
-  color: #fff;
+  background: var(--opencode-bg, var(--blue));
+  color: var(--opencode-fg, var(--text-inv));
 }
 /* name：与 .tool-row-name / .thinking-block-label 同款 */
 .worker-card-head .name {
@@ -1555,7 +1590,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   flex-shrink: 0;
 }
 .worker-card-head .role {
-  font-size: 10px;
+  font-size: var(--chat-micro-size);
   color: var(--text-4);
   font-weight: var(--fw-regular);
   flex-shrink: 0;
@@ -1596,7 +1631,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 /* Worker 角色 pill（node-cap 样式）——持久化在 WorkerJob.role，不随 session 设置变化。
    克制配色：plan 紫、coder 蓝、review 橙、test/research 绿、general 灰。*/
 .worker-card-head .node-cap {
-  font-size: 9.5px;
+  font-size: var(--chat-tiny-size);
   font-weight: var(--fw-semibold);
   padding: 0 5px;
   border-radius: var(--r-pill);
@@ -1672,7 +1707,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   font-family: var(--mono);
   font-size: var(--fs-2xs);
   font-weight: var(--fw-medium);
-  line-height: 1.45;
+  line-height: var(--chat-process-line-height);
   color: var(--text-4);
 }
 .worker-action-label::after {
@@ -1685,18 +1720,18 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   color: var(--green);
 }
 /*
- * Worker 输出 Markdown：正文用 --font-sans（含 CJK，即使 wireframe 主题 --font==mono），
+ * Worker 输出 Markdown：正文用 --font-prose（默认 CJK 可读 sans，即使 chrome --font==mono），
  * 仅 code/pre 保持 mono。输入区仍走 tool-row 等宽日志风格。
  */
 .worker-action-output .tool-row-block {
-  font-family: var(--font-sans, var(--font));
+  font-family: var(--font-prose, var(--font-sans, var(--font)));
   font-size: var(--fs-xs);
 }
 .worker-action-output .worker-action-content {
   color: var(--text-2);
-  font-family: var(--font-sans, var(--font));
+  font-family: var(--font-prose, var(--font-sans, var(--font)));
   font-size: var(--fs-xs);
-  line-height: 1.55;
+  line-height: var(--chat-code-line-height);
   white-space: normal;
   /* 覆盖 .tool-row-block-content 的 anywhere/break-word，避免中文硬切 */
   overflow-wrap: break-word;
@@ -1745,8 +1780,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .worker-action-markdown .md-content li::marker {
   font-variant-numeric: tabular-nums;
-  font-family: var(--font-sans, var(--font));
-  color: var(--text-3);
+  font-family: var(--font-prose, var(--font-sans, var(--font)));
+  color: var(--markdown-list-marker, var(--text-3));
 }
 .worker-action-markdown .md-content strong {
   color: inherit;
@@ -1765,8 +1800,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   font-family: var(--mono);
   font-size: 0.92em;
   font-weight: var(--fw-medium);
-  color: var(--text-1);
-  background: var(--bg-input);
+  color: var(--markdown-inline-code, var(--text-1));
+  background: var(--markdown-inline-code-background, var(--bg-input));
   padding: 0.08em 0.35em;
   border-radius: var(--r-xs);
   white-space: break-spaces;
@@ -1797,9 +1832,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   border: none;
   border-radius: 0;
   background: transparent;
-  font-family: var(--font-sans, var(--font));
+  font-family: var(--font-prose, var(--font-sans, var(--font)));
   font-size: var(--fs-xs);
-  line-height: 1.5;
+  line-height: var(--lh-body);
   color: var(--text-3);
   white-space: normal;
   overflow-wrap: break-word;
@@ -1820,7 +1855,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   white-space: pre-wrap;
   color: var(--text-3);
   font-size: var(--fs-2xs);
-  line-height: 1.5;
+  line-height: var(--chat-process-line-height);
 }
 /* Thought + tool calls share one execution box; the divider keeps the two
    streams readable without making them look like separate cards. */
@@ -1832,14 +1867,14 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .worker-action-activity-divider {
   height: 1px;
   width: 100%;
-  background: color-mix(in srgb, var(--border) 58%, transparent);
+  background: color-mix(in srgb, var(--chat-divider, var(--border)) 58%, transparent);
 }
 .worker-action-plan-list {
   margin: 0;
   padding-left: 1.2em;
   color: var(--text-2);
   font-size: var(--fs-2xs);
-  line-height: 1.5;
+  line-height: var(--chat-process-line-height);
 }
 .worker-action-tool-list {
   display: flex;
@@ -1854,7 +1889,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   color: var(--text-1);
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  line-height: 1.4;
+  line-height: var(--lh-snug);
   word-break: break-word;
 }
 .worker-action-tool-status {
@@ -1868,7 +1903,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   margin-top: 2px;
   color: var(--text-3);
   font-size: var(--fs-2xs);
-  line-height: 1.45;
+  line-height: var(--chat-process-line-height);
   word-break: break-word;
   white-space: pre-wrap;
 }
@@ -1891,12 +1926,11 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--warn) 36%, var(--border));
   border-radius: var(--r-lg);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--warn-soft) 96%, var(--bg-surface)) 0%,
-      color-mix(in srgb, var(--warn-soft) 62%, var(--bg-surface)) 100%
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--warn-soft) 96%, var(--bg-surface)) 0%,
+    color-mix(in srgb, var(--warn-soft) 62%, var(--bg-surface)) 100%
+  );
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--warn) 8%, transparent),
     0 2px 8px color-mix(in srgb, var(--warn) 10%, transparent);
@@ -1919,7 +1953,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .worker-action-approval-detail {
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  line-height: 1.45;
+  line-height: var(--chat-process-line-height);
   color: var(--text-1);
   word-break: break-word;
 }
@@ -1931,7 +1965,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   border: 1px solid color-mix(in srgb, var(--warn) 16%, transparent);
   background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
   font-size: var(--fs-2xs);
-  line-height: 1.45;
+  line-height: var(--chat-process-line-height);
   color: color-mix(in srgb, var(--warn) 55%, var(--text-2));
   font-weight: var(--fw-regular);
 }
@@ -2032,7 +2066,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   font-family: var(--mono);
   font-size: var(--fs-2xs);
   color: var(--text-3);
-  line-height: 1.55;
+  line-height: var(--chat-code-line-height);
 }
 .node-body-inner .line .mk {
   color: var(--text-4);
@@ -2053,7 +2087,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   background: var(--bg-input);
   padding: 0 4px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: var(--chat-micro-size);
   color: var(--text-2);
 }
 /* Worker 回复行：内嵌 markdown（块级内容），放宽 line 的 inline-flex 约束 */
@@ -2062,7 +2096,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .node-body-inner .line.worker-reply .tx {
   flex: 1 1 auto;
-  font-family: var(--font);
+  font-family: var(--font-prose, var(--font));
   font-size: var(--fs-sm);
   color: var(--text-2);
   line-height: var(--lh-body);
@@ -2092,9 +2126,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .worker-readiness-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: var(--chat-meta-size);
   font-weight: var(--fw-medium);
-  line-height: 1.2;
+  line-height: var(--lh-snug);
   padding: 2px 7px;
   border-radius: 999px;
   border: 1px solid var(--border-soft);
@@ -2289,7 +2323,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   color: var(--text-2);
   font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: var(--fs-2xs);
-  line-height: 1.45;
+  line-height: var(--chat-process-line-height);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -2468,16 +2502,16 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .turn-nav-preview-idx {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--chat-preview-index-size);
   color: var(--text-4);
   margin-bottom: 6px;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--chat-preview-index-spacing);
 }
 .turn-nav-preview-q {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--chat-preview-question-size);
+  font-weight: var(--fw-medium);
   color: var(--text-1);
-  line-height: 1.45;
+  line-height: var(--chat-preview-line-height);
   margin-bottom: 6px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2485,9 +2519,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   overflow: hidden;
 }
 .turn-nav-preview-a {
-  font-size: 12.5px;
+  font-size: var(--chat-preview-answer-size);
   color: var(--text-3);
-  line-height: 1.5;
+  line-height: var(--chat-preview-line-height);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -2495,7 +2529,7 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 }
 .turn-nav-preview-running {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--chat-preview-running-size);
   color: var(--accent);
   display: inline-flex;
   align-items: center;
