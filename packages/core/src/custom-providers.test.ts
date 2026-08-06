@@ -169,11 +169,11 @@ describe('applyMastraProviderKeyAliases', () => {
 })
 
 describe('normalizeApiStyle', () => {
-  it('maps aliases to openai|anthropic|google|custom', () => {
+  it('maps aliases to openai|anthropic|google (legacy custom → openai)', () => {
     assert.equal(normalizeApiStyle('openai'), 'openai')
     assert.equal(normalizeApiStyle('claude'), 'anthropic')
     assert.equal(normalizeApiStyle('gemini'), 'google')
-    assert.equal(normalizeApiStyle('custom'), 'custom')
+    assert.equal(normalizeApiStyle('custom'), 'openai')
     assert.equal(normalizeApiStyle(undefined), 'openai')
   })
 })

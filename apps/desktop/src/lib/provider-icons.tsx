@@ -3,7 +3,7 @@
  * Monochrome currentColor glyphs + neutral fallback. No per-brand colors.
  */
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { memo, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { api } from './api'
 
 /** providerId → successful SVG text only (failures are not cached permanently). */
@@ -109,7 +109,7 @@ function FallbackLogo({ id, size }: { id: string; size: number }) {
   )
 }
 
-export function ProviderLogo({
+export const ProviderLogo = memo(function ProviderLogo({
   providerId,
   size = 18,
   className,
@@ -158,4 +158,4 @@ export function ProviderLogo({
       {mark}
     </span>
   )
-}
+})

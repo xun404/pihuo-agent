@@ -47,7 +47,7 @@ import { normalizePromptSettings, type PromptSettings } from '@swarmdesk-agent/s
 
 export type SecretsMap = Record<string, string>
 
-export type CustomApiStyle = 'openai' | 'anthropic' | 'google' | 'custom'
+export type CustomApiStyle = 'openai' | 'anthropic' | 'google'
 
 export interface CustomProviderModel {
   id: string
@@ -71,7 +71,7 @@ export interface CustomProviderSettings {
    * Applied as `{ID}_BASE_URL` and (for openai style) may set OPENAI_BASE_URL when id is openai.
    */
   baseURL?: string
-  /** Protocol style — OpenCode-like: openai | anthropic | google | custom */
+  /** Protocol style: openai | anthropic | google (legacy `custom` normalizes to openai) */
   apiStyle?: CustomApiStyle
   /** Whether this custom provider is available in Desktop model pickers. */
   enabled?: boolean
@@ -609,14 +609,15 @@ export function resolveProviderBaseUrlForModel(
   )
   if (!match?.baseURL?.trim()) return null
   const base = match.baseURL.trim().replace(/\/$/, '')
-  const style = match.apiStyle ?? 'openai'
-  if (style === 'openai' || style === 'custom') {
-    return { baseURL: base, envKey: 'OPENAI_BASE_URL', providerId }
-  }
+  const style = String(match.apiStyle ?? 'openai').toLowerCase()
   if (style === 'anthropic') {
     return { baseURL: base, envKey: 'ANTHROPIC_BASE_URL', providerId }
   }
-  return null
+  // openai + legacy `custom` (and unknown) all use OpenAI-compatible base URL wiring
+  if (style === 'google') {
+    return null
+  }
+  return { baseURL: base, envKey: 'OPENAI_BASE_URL', providerId }
 }
 
 /**

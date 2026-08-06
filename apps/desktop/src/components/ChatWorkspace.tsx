@@ -29,7 +29,7 @@ import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
 import { IconArrowUp, IconFolder } from './Icons'
 import { ComposerStatusRow } from './chat/ComposerStatusRow'
-import { SETTINGS_CLOSED_EVENT } from './SettingsLayer'
+import { LEADER_MODEL_CHANGED_EVENT, SETTINGS_CLOSED_EVENT } from './SettingsLayer'
 
 /**
  * Empty-state hint pool. Each time the user lands on the empty Chat state
@@ -223,19 +223,21 @@ export function ChatWorkspace({
       setPresetModels(list)
       const current = s.settings.leaderModel
       const prev = presetModelRef.current
-      // Follow the configured default model for new sessions: sync the preset
-      // whenever the leader changed (e.g. after settings), but keep the user's
-      // own pick for the same leader.
+      // Home tracks the app default model. When leaderModel changes, always
+      // follow it. A one-off pick on Home is kept only while the default is
+      // unchanged (existing sessions have their own ChatPanel state).
       const leaderChanged = lastLeaderRef.current !== null && lastLeaderRef.current !== current
-      lastLeaderRef.current = current
-      const nextModel =
-        prev && list.some((m) => m.id === prev)
-          ? leaderChanged && current && list.some((m) => m.id === current)
-            ? current
-            : prev
-          : current && list.some((m) => m.id === current)
-            ? current
-            : (list[0]?.id ?? current ?? '')
+      lastLeaderRef.current = current ?? null
+      let nextModel = ''
+      if (leaderChanged && current && list.some((m) => m.id === current)) {
+        nextModel = current
+      } else if (prev && list.some((m) => m.id === prev)) {
+        nextModel = prev
+      } else if (current && list.some((m) => m.id === current)) {
+        nextModel = current
+      } else {
+        nextModel = list[0]?.id ?? current ?? ''
+      }
       setPresetModel(nextModel)
       presetModelRef.current = nextModel
       // Linked default for new sessions: 中 → 高 → strongest; never 关 unless
@@ -254,13 +256,18 @@ export function ChatWorkspace({
   }, [loadPresetModels])
 
   // Home empty-state owns its own model list (not ChatPanel). Re-fetch after
-  // settings close so newly saved API keys appear without remounting the app.
+  // settings close or an immediate “设为默认” so the draft composer tracks
+  // leaderModel without remounting the app. Existing sessions are untouched.
   useEffect(() => {
-    const onClosed = () => {
+    const reload = () => {
       void loadPresetModels()
     }
-    window.addEventListener(SETTINGS_CLOSED_EVENT, onClosed)
-    return () => window.removeEventListener(SETTINGS_CLOSED_EVENT, onClosed)
+    window.addEventListener(SETTINGS_CLOSED_EVENT, reload)
+    window.addEventListener(LEADER_MODEL_CHANGED_EVENT, reload)
+    return () => {
+      window.removeEventListener(SETTINGS_CLOSED_EVENT, reload)
+      window.removeEventListener(LEADER_MODEL_CHANGED_EVENT, reload)
+    }
   }, [loadPresetModels])
 
   const draftProjectId = pendingNewSession?.projectId ?? project?.id

@@ -18,19 +18,31 @@ import {
 import type { CustomApiStyle, CustomProviderModel, CustomProviderSettings } from './secure-secrets.js'
 
 export const MODELS_DEV_API_URL_DEFAULT = 'https://models.dev/api.json'
+
 /**
- * Provider logo primary source.
- * Prefer GitHub raw (reliable); models.dev/logos often fails in some networks.
- * Single URL only — no multi-mirror fallback chain; miss → caller uses fallback SVG.
+ * Provider logo URL candidates (ordered).
+ * 1) Official models.dev
+ * 2) GitHub raw (anomalyco/models.dev source tree)
+ * 3) jsDelivr gh mirror of the same path
+ * Offline/dev: MODELS_DEV_LOGO_BASE → only that base (no multi-mirror).
+ * All remote misses → caller uses fallback SVG.
  */
-export const MODELS_DEV_LOGO_URL = (providerId: string) => {
+export function modelsDevLogoCandidateUrls(providerId: string): string[] {
   const id = encodeURIComponent(providerId)
   const override = process.env.MODELS_DEV_LOGO_BASE?.trim()
   if (override) {
-    return `${override.replace(/\/$/, '')}/${id}.svg`
+    return [`${override.replace(/\/$/, '')}/${id}.svg`]
   }
-  return `https://raw.githubusercontent.com/anomalyco/models.dev/dev/providers/${id}/logo.svg`
+  return [
+    `https://models.dev/logos/${id}.svg`,
+    `https://raw.githubusercontent.com/anomalyco/models.dev/dev/providers/${id}/logo.svg`,
+    `https://cdn.jsdelivr.net/gh/anomalyco/models.dev@dev/providers/${id}/logo.svg`,
+  ]
 }
+
+/** Preferred logo URL (first candidate). Prefer {@link modelsDevLogoCandidateUrls} when fetching. */
+export const MODELS_DEV_LOGO_URL = (providerId: string) =>
+  modelsDevLogoCandidateUrls(providerId)[0] ?? `https://models.dev/logos/${encodeURIComponent(providerId)}.svg`
 
 export type ModelsDevMeta = {
   fetchedAt: string
@@ -73,6 +85,8 @@ export type ModelsDevProviderSummary = {
   /** Derived transport hint */
   apiStyle: CustomApiStyle
   needsBaseURL: boolean
+  /** Built-in or already imported — show in list but cannot add again */
+  alreadyAdded?: boolean
 }
 
 export type ModelsDevCatalogPaths = {
@@ -286,15 +300,21 @@ export async function refreshModelsDevCatalog(opts?: {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), opts?.timeoutMs ?? 60_000)
   try {
-    const res = await fetchImpl(url, {
-      headers: {
-        accept: 'application/json',
-        'user-agent': 'swarmdesk-models-dev-catalog',
-      },
-      signal: controller.signal,
-    })
+    let res: Response
+    try {
+      res = await fetchImpl(url, {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'swarmdesk-models-dev-catalog',
+        },
+        signal: controller.signal,
+      })
+    } catch (err) {
+      // Surface syscall / abort cause (e.g. ECONNRESET) so UI and 502 body are actionable.
+      throw new Error(formatModelsDevFetchError(url, err), { cause: err })
+    }
     if (!res.ok) {
-      throw new Error(`models.dev fetch failed: HTTP ${res.status} ${res.statusText}`)
+      throw new Error(`models.dev fetch failed: HTTP ${res.status} ${res.statusText} (${url})`)
     }
     const text = await res.text()
     const data = JSON.parse(text) as Record<string, ModelsDevProviderRaw>
@@ -317,8 +337,42 @@ export async function refreshModelsDevCatalog(opts?: {
   }
 }
 
+function formatModelsDevFetchError(url: string, err: unknown): string {
+  const parts: string[] = [`models.dev fetch failed (${url})`]
+  if (err instanceof Error) {
+    if (err.name === 'AbortError') {
+      parts.push('timed out')
+    } else if (err.message && err.message !== 'fetch failed') {
+      parts.push(err.message)
+    }
+    const cause = (err as Error & { cause?: unknown }).cause
+    if (cause instanceof Error) {
+      const code =
+        typeof (cause as NodeJS.ErrnoException).code === 'string'
+          ? (cause as NodeJS.ErrnoException).code
+          : undefined
+      if (code) parts.push(code)
+      else if (cause.message) parts.push(cause.message)
+    } else if (cause != null) {
+      parts.push(String(cause))
+    } else if (err.message === 'fetch failed') {
+      parts.push('network error')
+    }
+  } else {
+    parts.push(String(err))
+  }
+  return parts.join(': ')
+}
+
 export function listModelsDevProviders(opts?: {
   q?: string
+  /**
+   * Provider ids already owned (built-in + custom). Still listed, marked
+   * `alreadyAdded` so the UI can disable the Add button.
+   * @deprecated use ownedIds — excludeIds still accepted as alias for ownedIds
+   */
+  ownedIds?: Iterable<string>
+  /** @deprecated alias of ownedIds (no longer removes rows) */
   excludeIds?: Iterable<string>
   registry?: Record<string, ModelsDevProviderRaw> | null
   paths?: ModelsDevCatalogPaths
@@ -328,22 +382,32 @@ export function listModelsDevProviders(opts?: {
   const meta = loadModelsDevMeta(paths)
   if (!registry) return { providers: [], meta }
 
-  const exclude = new Set(
-    [...(opts?.excludeIds ?? [])].map((id) => id.trim().toLowerCase()).filter(Boolean),
+  const owned = new Set(
+    [...(opts?.ownedIds ?? opts?.excludeIds ?? [])]
+      .map((id) => id.trim().toLowerCase())
+      .filter(Boolean),
   )
   const q = (opts?.q ?? '').trim().toLowerCase()
 
   const providers: ModelsDevProviderSummary[] = []
   for (const [id, raw] of Object.entries(registry)) {
-    if (exclude.has(id.toLowerCase())) continue
     const summary = providerSummary(id, raw ?? {})
+    if (owned.has(id.toLowerCase())) {
+      summary.alreadyAdded = true
+    }
     if (q) {
       const hay = `${summary.id} ${summary.name} ${summary.npm ?? ''}`.toLowerCase()
       if (!hay.includes(q)) continue
     }
     providers.push(summary)
   }
-  providers.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+  // Available first, then already-added; name within each group
+  providers.sort((a, b) => {
+    const aa = a.alreadyAdded ? 1 : 0
+    const ba = b.alreadyAdded ? 1 : 0
+    if (aa !== ba) return aa - ba
+    return a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+  })
   return { providers, meta }
 }
 
@@ -442,15 +506,15 @@ export function readCachedProviderLogo(
 }
 
 /**
- * Fetch logo once into cache. On any failure returns null (caller uses fallback SVG).
- * No multi-mirror fallback chain.
+ * Fetch logo once into cache. Tries models.dev → GitHub raw → jsDelivr in order.
+ * On all failures returns null (caller uses fallback SVG).
  */
 export async function ensureProviderLogoCached(opts: {
   providerId: string
   paths?: ModelsDevCatalogPaths
   fetchImpl?: typeof fetch
   timeoutMs?: number
-}): Promise<{ svg: string | null; fromCache: boolean }> {
+}): Promise<{ svg: string | null; fromCache: boolean; sourceUrl?: string }> {
   const paths = opts.paths ?? modelsDevCatalogPaths()
   const cached = readCachedProviderLogo(opts.providerId, paths)
   if (cached) return { svg: cached, fromCache: true }
@@ -458,21 +522,28 @@ export async function ensureProviderLogoCached(opts: {
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch
   if (!fetchImpl) return { svg: null, fromCache: false }
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000)
-  try {
-    const res = await fetchImpl(MODELS_DEV_LOGO_URL(opts.providerId), {
-      headers: { accept: 'image/svg+xml,*/*', 'user-agent': 'swarmdesk-models-dev-logo' },
-      signal: controller.signal,
-    })
-    if (!res.ok) return { svg: null, fromCache: false }
-    const text = await res.text()
-    if (!text.includes('<svg') && !text.includes('<SVG')) return { svg: null, fromCache: false }
-    atomicWriteText(providerLogoCachePath(opts.providerId, paths), text)
-    return { svg: text, fromCache: false }
-  } catch {
-    return { svg: null, fromCache: false }
-  } finally {
-    clearTimeout(timer)
+  const urls = modelsDevLogoCandidateUrls(opts.providerId)
+  const totalMs = opts.timeoutMs ?? 15_000
+  const perAttemptMs = Math.max(3_000, Math.floor(totalMs / Math.max(1, urls.length)))
+
+  for (const url of urls) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), perAttemptMs)
+    try {
+      const res = await fetchImpl(url, {
+        headers: { accept: 'image/svg+xml,*/*', 'user-agent': 'swarmdesk-models-dev-logo' },
+        signal: controller.signal,
+      })
+      if (!res.ok) continue
+      const text = await res.text()
+      if (!text.includes('<svg') && !text.includes('<SVG')) continue
+      atomicWriteText(providerLogoCachePath(opts.providerId, paths), text)
+      return { svg: text, fromCache: false, sourceUrl: url }
+    } catch {
+      // try next candidate
+    } finally {
+      clearTimeout(timer)
+    }
   }
+  return { svg: null, fromCache: false }
 }

@@ -35,7 +35,7 @@ export type CuratedProvider = {
   apiKeyEnv: string
   apiKeyEnvAliases?: string[]
   docsUrl: string
-  apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+  apiStyle?: 'openai' | 'anthropic' | 'google'
   baseURL?: string
   models: CuratedModel[]
 }
@@ -56,7 +56,7 @@ export type ProviderPolicy = {
   apiKeyEnv: string
   apiKeyEnvAliases?: string[]
   docsUrl: string
-  apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+  apiStyle?: 'openai' | 'anthropic' | 'google'
   baseURL?: string
   maxModels: number
   includePrefixes: string[]

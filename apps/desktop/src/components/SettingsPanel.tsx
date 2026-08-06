@@ -39,6 +39,8 @@ import {
   slugProviderId,
 } from '../lib/custom-provider-form'
 import { ProviderLogo } from '../lib/provider-icons'
+import { ModelsDevImportPanel } from './ModelsDevImportPanel'
+import { dispatchLeaderModelChanged } from './SettingsLayer'
 import { useTheme } from '../theme/ThemeProvider'
 import { sortThemesForDisplay } from '../theme/theme.config'
 import { useSendShortcut } from '../hooks/useSendShortcut'
@@ -224,7 +226,7 @@ export function SettingsPanel({
     duration: reduceMotion ? 0 : 0.16,
     ease: SETTINGS_TAB_EASE,
   }
-  const { success: toastSuccess, error: toastError } = useToast()
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast()
   const [reloadThemesUiBusy, setReloadThemesUiBusy] = useState(false)
   const displayLightThemes = useMemo(() => sortThemesForDisplay(lightThemes), [lightThemes])
   const displayDarkThemes = useMemo(() => sortThemesForDisplay(darkThemes), [darkThemes])
@@ -371,24 +373,6 @@ export function SettingsPanel({
   const [focusProviderId, setFocusProviderId] = useState<string | null>(null)
   /** Add-provider wizard: models.dev catalog vs hand-built custom */
   const [addProviderMode, setAddProviderMode] = useState<'models-dev' | 'custom'>('models-dev')
-  const [modelsDevQuery, setModelsDevQuery] = useState('')
-  const [modelsDevList, setModelsDevList] = useState<
-    Array<{
-      id: string
-      name: string
-      modelCount: number
-      npm?: string
-      api?: string
-      needsBaseURL: boolean
-    }>
-  >([])
-  const [modelsDevMeta, setModelsDevMeta] = useState<{
-    fetchedAt: string
-    providerCount: number
-  } | null>(null)
-  const [modelsDevLoading, setModelsDevLoading] = useState(false)
-  const [modelsDevError, setModelsDevError] = useState<string | null>(null)
-  const [modelsDevImportingId, setModelsDevImportingId] = useState<string | null>(null)
   const [leaderMaxSteps, setLeaderMaxSteps] = useState<number | null>(null)
   const [leaderMaxStepsDraft, setLeaderMaxStepsDraft] = useState<string>('')
   const [leaderMaxStepsError, setLeaderMaxStepsError] = useState<string | null>(null)
@@ -500,90 +484,6 @@ export function SettingsPanel({
     setRegOpen(false)
     void load()
   }, [load])
-
-  const loadModelsDevList = useCallback(
-    async (opts?: { forceRefresh?: boolean; q?: string }) => {
-      setModelsDevLoading(true)
-      setModelsDevError(null)
-      const q = opts?.q ?? modelsDevQuery
-      try {
-        if (opts?.forceRefresh) {
-          try {
-            await api.refreshModelsDevCatalog()
-          } catch (e) {
-            // Keep serving local LKG if refresh fails (e.g. models.dev unreachable)
-            const msg = e instanceof Error ? e.message : String(e)
-            const existing = await api.listModelsDevProviders(q).catch(() => null)
-            if (existing?.catalogAvailable) {
-              setModelsDevList(existing.providers)
-              setModelsDevMeta(
-                existing.meta
-                  ? {
-                      fetchedAt: existing.meta.fetchedAt,
-                      providerCount: existing.meta.providerCount,
-                    }
-                  : null,
-              )
-              setModelsDevError(t('settings.modelsDevRefreshFailedKeepLkg', { error: msg }))
-              return
-            }
-            setModelsDevList([])
-            setModelsDevMeta(null)
-            setModelsDevError(t('settings.modelsDevRefreshFailed', { error: msg }))
-            return
-          }
-        }
-
-        let res = await api.listModelsDevProviders(q)
-        if (!res.catalogAvailable && !opts?.forceRefresh) {
-          // First open with no LKG: try one network refresh
-          try {
-            await api.refreshModelsDevCatalog()
-            res = await api.listModelsDevProviders(q)
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e)
-            setModelsDevList([])
-            setModelsDevMeta(null)
-            setModelsDevError(t('settings.modelsDevRefreshFailed', { error: msg }))
-            return
-          }
-        }
-        setModelsDevList(res.providers)
-        setModelsDevMeta(
-          res.meta ? { fetchedAt: res.meta.fetchedAt, providerCount: res.meta.providerCount } : null,
-        )
-      } catch (e) {
-        setModelsDevError(e instanceof Error ? e.message : String(e))
-      } finally {
-        setModelsDevLoading(false)
-      }
-    },
-    [modelsDevQuery, t],
-  )
-
-  useEffect(() => {
-    if (focusProviderId !== '__new__' || addProviderMode !== 'models-dev') return
-    void loadModelsDevList()
-  }, [focusProviderId, addProviderMode, loadModelsDevList])
-
-  const importModelsDevProvider = async (providerId: string) => {
-    setModelsDevImportingId(providerId)
-    setModelsDevError(null)
-    try {
-      const res = await api.importModelsDevProvider(providerId)
-      toastSuccess(t('settings.modelsDevImported', { name: res.provider.name }))
-      await load()
-      setFocusProviderId(res.provider.id)
-      setEditingId(res.provider.id)
-      setAddProviderMode('models-dev')
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setModelsDevError(msg)
-      toastError(msg)
-    } finally {
-      setModelsDevImportingId(null)
-    }
-  }
 
   useEffect(
     () => () => {
@@ -702,12 +602,9 @@ export function SettingsPanel({
   const pickProvider = (p: SettingsProvider) => {
     setFocusProviderId(p.id)
     setCustomModel(false)
-    // Keep current model if it belongs to this provider; else first model
-    const stays = p.models.some((m) => m.id === leaderModel)
-    if (!stays) {
-      const next = p.models[0]?.id ?? `${p.id}/`
-      setLeaderModel(next)
-    }
+    // Browsing a provider must NOT change the persisted default model — only
+    // pickModel / set-default does. Otherwise switching rails makes the default
+    // appear to "jump" and a later Save can clobber leaderModel.
     // Hand-built custom: editable form. Built-in + models.dev: readonly panel.
     if (isHandCustomProvider(p)) {
       const cp = customProviders.find((c) => c.id === p.id)
@@ -735,13 +632,34 @@ export function SettingsPanel({
   }
 
   const pickModel = (id: string) => {
+    // Persist immediately — toast already claims the default was set; leaving it
+    // only in React state made the default "change back" after reload/close.
     setLeaderModel(id)
     setCustomModel(false)
-    toastSuccess(t('settings.defaultModelSet', { model: id }))
-    void api
-      .getModelsCatalog({ featured: true, current: id })
-      .then((feat) => setSelectionStatus(feat.currentSelection?.status ?? null))
-      .catch(() => setSelectionStatus(null))
+    setSaving(true)
+    void (async () => {
+      try {
+        const saved = await saveSettings({ leaderModel: id })
+        if (saved.ok === false) throw new Error(saved.error || t('settings.apiRestartFailed'))
+        toastSuccess(t('settings.defaultModelSet', { model: id }))
+        dispatchLeaderModelChanged(id)
+        void api
+          .getModelsCatalog({ featured: true, current: id })
+          .then((feat) => setSelectionStatus(feat.currentSelection?.status ?? null))
+          .catch(() => setSelectionStatus(null))
+      } catch (e) {
+        toastError(e instanceof Error ? e.message : String(e))
+        // Revert local highlight to the last known server value.
+        try {
+          const s = await fetchSettings()
+          setLeaderModel(s.settings.leaderModel)
+        } catch {
+          /* keep local id */
+        }
+      } finally {
+        setSaving(false)
+      }
+    })()
   }
 
   const resetForm = () => {
@@ -755,7 +673,8 @@ export function SettingsPanel({
     setForm({
       name: p.name,
       baseURL: p.baseURL ?? '',
-      apiStyle: p.apiStyle ?? 'openai',
+      // Legacy `custom` style was OpenAI-compatible; fold into openai.
+      apiStyle: p.apiStyle === 'anthropic' || p.apiStyle === 'google' ? p.apiStyle : 'openai',
       apiKey: '',
       enabled: p.enabled !== false,
       showAdvanced: false,
@@ -2226,8 +2145,6 @@ export function SettingsPanel({
                   setEditingId(null)
                   setForm(emptySimpleForm())
                   setAddProviderMode('models-dev')
-                  setModelsDevQuery('')
-                  setModelsDevError(null)
                   setFocusProviderId('__new__')
                 }}
               >
@@ -2263,82 +2180,21 @@ export function SettingsPanel({
                   </div>
 
                   {addProviderMode === 'models-dev' ? (
-                    <div className="models-dev-import">
-                      <p className="settings-field-hint">{t('settings.modelsDevHint')}</p>
-                      <div className="models-dev-toolbar">
-                        <input
-                          className="settings-input"
-                          value={modelsDevQuery}
-                          onChange={(e) => setModelsDevQuery(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              void loadModelsDevList({ q: modelsDevQuery })
-                            }
-                          }}
-                          placeholder={t('settings.modelsDevSearchPh')}
-                          aria-label={t('settings.modelsDevSearchPh')}
-                        />
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          disabled={modelsDevLoading}
-                          onClick={() => void loadModelsDevList({ q: modelsDevQuery })}
-                        >
-                          {t('settings.modelsDevSearch')}
-                        </button>
-                        <button
-                          type="button"
-                          className="settings-save-btn"
-                          disabled={modelsDevLoading}
-                          onClick={() => void loadModelsDevList({ forceRefresh: true, q: modelsDevQuery })}
-                        >
-                          {modelsDevLoading ? t('app.loading') : t('settings.modelsDevRefresh')}
-                        </button>
-                      </div>
-                      {modelsDevMeta && (
-                        <p className="settings-muted models-dev-meta">
-                          {t('settings.modelsDevMeta', {
-                            count: String(modelsDevMeta.providerCount),
-                            at: new Date(modelsDevMeta.fetchedAt).toLocaleString(),
-                          })}
-                        </p>
-                      )}
-                      {modelsDevError && (
-                        <p className="settings-error" role="alert">
-                          {modelsDevError}
-                        </p>
-                      )}
-                      <div className="models-dev-list" role="listbox" aria-label={t('settings.addFromModelsDev')}>
-                        {modelsDevList.map((p) => (
-                          <div key={p.id} className="models-dev-row" role="option">
-                            <span className="logo models-dev-row-logo" aria-hidden>
-                              <ProviderLogo providerId={p.id} size={16} />
-                            </span>
-                            <span className="models-dev-row-text">
-                              <span className="models-dev-row-name">{p.name}</span>
-                              <span className="models-dev-row-meta">
-                                {p.id} · {t('settings.modelsDevModelCount', { n: String(p.modelCount) })}
-                                {p.needsBaseURL && p.api ? ` · ${p.api}` : ''}
-                              </span>
-                            </span>
-                            <button
-                              type="button"
-                              className="settings-save-btn btn-sm"
-                              disabled={saving || modelsDevImportingId === p.id}
-                              onClick={() => void importModelsDevProvider(p.id)}
-                            >
-                              {modelsDevImportingId === p.id
-                                ? t('app.loading')
-                                : t('settings.modelsDevAdd')}
-                            </button>
-                          </div>
-                        ))}
-                        {!modelsDevLoading && modelsDevList.length === 0 && !modelsDevError && (
-                          <p className="settings-muted">{t('settings.modelsDevEmpty')}</p>
-                        )}
-                      </div>
-                    </div>
+                    <ModelsDevImportPanel
+                      active={focusProviderId === '__new__' && addProviderMode === 'models-dev'}
+                      saving={saving}
+                      t={t}
+                      toastInfo={toastInfo}
+                      toastSuccess={toastSuccess}
+                      toastError={toastError}
+                      onRequestConfirm={(config) => setPendingConfirm(config)}
+                      onImported={async (providerId) => {
+                        await load()
+                        setFocusProviderId(providerId)
+                        setEditingId(providerId)
+                        setAddProviderMode('models-dev')
+                      }}
+                    />
                   ) : (
                     <>
                       <div className="settings-field">
@@ -2371,10 +2227,9 @@ export function SettingsPanel({
                             }
                             aria-label={t('settings.apiStyle')}
                           >
-                            <option value="openai">OpenAI</option>
-                            <option value="anthropic">Anthropic</option>
-                            <option value="google">Google</option>
-                            <option value="custom">Custom</option>
+                            <option value="openai">{t('settings.styleOpenai')}</option>
+                            <option value="anthropic">{t('settings.styleAnthropic')}</option>
+                            <option value="google">{t('settings.styleGoogle')}</option>
                           </select>
                         </div>
                       </div>

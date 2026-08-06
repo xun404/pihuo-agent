@@ -292,19 +292,27 @@ async function request<T>(
     // friendly messages instead of showing the raw JSON body to the user.
     let code: string | undefined
     let message: string | undefined
+    let npmSnapshotSuggested: boolean | undefined
     try {
-      const parsed = JSON.parse(text) as { error?: string; code?: string }
+      const parsed = JSON.parse(text) as {
+        error?: string
+        code?: string
+        npmSnapshotSuggested?: boolean
+      }
       code = parsed.code
       message = parsed.error
+      if (parsed.npmSnapshotSuggested === true) npmSnapshotSuggested = true
     } catch {
       /* non-JSON error body */
     }
     const err = new Error(message ?? `${res.status} ${path}: ${text}`) as Error & {
       code?: string
       status?: number
+      npmSnapshotSuggested?: boolean
     }
     err.code = code
     err.status = res.status
+    if (npmSnapshotSuggested) err.npmSnapshotSuggested = true
     throw err
   }
   return res.json() as Promise<T>
@@ -622,6 +630,7 @@ export const api = {
         docsUrl?: string
         apiStyle: string
         needsBaseURL: boolean
+        alreadyAdded?: boolean
       }>
       meta: {
         fetchedAt: string
@@ -635,9 +644,12 @@ export const api = {
       `/api/models-dev/providers${q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`,
       { signal },
     ),
-  refreshModelsDevCatalog: (signal?: AbortSignal) =>
+  refreshModelsDevCatalog: (
+    opts?: { source?: 'models.dev' | 'npm-snapshot'; signal?: AbortSignal },
+  ) =>
     request<{
       ok: boolean
+      via?: string
       meta: {
         fetchedAt: string
         sourceUrl: string
@@ -647,7 +659,20 @@ export const api = {
       }
       providerCount: number
       fromCache: boolean
-    }>('/api/models-dev/refresh', { method: 'POST', signal }, false, 90_000),
+      packageVersion?: string
+      generatedAt?: string
+    }>(
+      '/api/models-dev/refresh',
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          opts?.source === 'npm-snapshot' ? { source: 'npm-snapshot' } : {},
+        ),
+        signal: opts?.signal,
+      },
+      false,
+      opts?.source === 'npm-snapshot' ? 200_000 : 90_000,
+    ),
   importModelsDevProvider: (providerId: string, signal?: AbortSignal) =>
     request<{
       ok: boolean
@@ -965,7 +990,7 @@ export const api = {
           apiKeyEnv: string
           docsUrl?: string
           baseURL?: string
-          apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+          apiStyle?: 'openai' | 'anthropic' | 'google'
           thinkingIntensities?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max')[]
           models: {
             id: string
@@ -998,7 +1023,7 @@ export const api = {
         apiKeyEnv: string
         docsUrl?: string
         baseURL?: string
-        apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+        apiStyle?: 'openai' | 'anthropic' | 'google'
         thinkingIntensities?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max')[]
         models: {
           id: string
@@ -1022,7 +1047,7 @@ export const api = {
       apiKeyEnv: string
       docsUrl?: string
       baseURL?: string
-      apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+      apiStyle?: 'openai' | 'anthropic' | 'google'
       thinkingIntensities?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max')[]
       models: {
         id: string

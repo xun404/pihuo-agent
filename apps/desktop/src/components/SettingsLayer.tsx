@@ -10,6 +10,14 @@ type SettingsTab = 'general' | 'model' | 'prompts' | 'workers' | 'about'
 
 export const OPEN_SETTINGS_EVENT = 'swarmdesk-agent:open-settings'
 export const SETTINGS_CLOSED_EVENT = 'swarmdesk-agent:settings-closed'
+/** Fired when the persisted Leader default model changes (settings “设为默认”). */
+export const LEADER_MODEL_CHANGED_EVENT = 'swarmdesk-agent:leader-model-changed'
+
+export function dispatchLeaderModelChanged(modelId: string): void {
+  window.dispatchEvent(
+    new CustomEvent(LEADER_MODEL_CHANGED_EVENT, { detail: { leaderModel: modelId } }),
+  )
+}
 
 function resolveSettingsTab(nextTab?: string): SettingsTab | undefined {
   if (

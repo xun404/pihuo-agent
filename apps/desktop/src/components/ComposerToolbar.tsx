@@ -162,7 +162,8 @@ export function ComposerToolbar({
 
   const selectThinking = (level: ThinkingIntensity) => {
     onThinkingChange(level)
-    setThinkMenuOpen(false)
+    // Keep the model/thinking cascade open so the user can tweak both without
+    // reopening the menu after every click.
     if (persistThinking) {
       void saveThinkingIntensity(level).catch((e) => {
         console.warn('[ComposerToolbar] save thinkingIntensity failed', e)
@@ -626,9 +627,8 @@ export function ComposerToolbar({
                               onModelChange(m.id)
                               const nextThink = defaultThinkingFor(m.thinkingIntensities)
                               if (nextThink !== thinkingIntensity) onThinkingChange(nextThink)
-                              setModelSideOpen(false)
-                              setModelMenuOpen(false)
-                              setThinkMenuOpen(false)
+                              // Leave the cascade open: model + thinking are often
+                              // adjusted together; only outside-click / Esc closes.
                             }}
                           >
                             <span className="pop-label">{m.label}</span>

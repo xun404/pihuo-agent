@@ -139,6 +139,7 @@ export {
 export {
   MODELS_DEV_API_URL_DEFAULT,
   MODELS_DEV_LOGO_URL,
+  modelsDevLogoCandidateUrls,
   modelsDevCatalogPaths,
   loadModelsDevMeta,
   loadModelsDevRegistry,
@@ -160,6 +161,14 @@ export {
   type RefreshModelsDevResult,
   type ImportModelsDevErrorCode,
 } from './models-dev-catalog.js'
+export {
+  MODELS_DEV_NPM_PACKAGE,
+  installAndApplyModelsDevNpmSnapshot,
+  clearModelsDevNpmInstallPrefix,
+  resolveNpmInvoke,
+  type ModelsDevNpmSnapshotResult,
+  type InstallModelsDevNpmSnapshotOptions,
+} from './models-dev-npm-snapshot.js'
 export {
   applyFeaturedPolicy,
   type FeaturedPolicyEntry,

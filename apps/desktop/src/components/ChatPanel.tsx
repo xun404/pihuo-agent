@@ -22,7 +22,11 @@ import type { PendingNewSession } from '../hooks/useAppState'
 import { api, abortChatRun, chatUrl, clearDesktopToken, ensureDesktopToken } from '../lib/api'
 import { ThrottledChat } from '../lib/throttled-chat'
 import { useI18n } from '../i18n/I18nProvider'
-import { THINKING_INTENSITY_OPTIONS, defaultThinkingFor, type ThinkingIntensity } from '../lib/settings'
+import {
+  THINKING_INTENSITY_OPTIONS,
+  defaultThinkingFor,
+  type ThinkingIntensity,
+} from '../lib/settings'
 import { formatChatError, serializeChatErrorForSticky } from '../lib/chat-errors'
 import { enrichLastUserMessageForWire, parseRouterUserMessage } from '../lib/user-message-display'
 import { MarkdownContent } from './MarkdownContent'
@@ -78,11 +82,7 @@ import {
   type WorkerCardPlacement,
 } from '../lib/worker-card-placement'
 import { setRecordKey } from '../lib/chat-state'
-import type {
-  WorkerRunEvent,
-  WorkerRunState,
-  LeaderStepBudgetEvent,
-} from '@swarmdesk-agent/shared'
+import type { WorkerRunEvent, WorkerRunState, LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
 
 type ModelOption = {
   id: string
@@ -295,7 +295,10 @@ export function ChatPanel({
     }
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      if (isPortaledOverlay(document.activeElement) || document.querySelector('.modal-overlay-anim'))
+      if (
+        isPortaledOverlay(document.activeElement) ||
+        document.querySelector('.modal-overlay-anim')
+      )
         return
       setInspectorTab(null)
     }
@@ -453,6 +456,9 @@ export function ChatPanel({
       setModels(list)
       const current = s.settings.leaderModel
       const previous = selectedModelRef.current
+      // Existing session selection is sticky: never clobber a valid previous pick
+      // when the app default (leaderModel) changes. Only seed from default when
+      // this panel has no selection yet (and no first-message initialModel).
       const nextModel =
         initialModel && list.some((m) => m.id === initialModel)
           ? initialModel
@@ -461,14 +467,17 @@ export function ChatPanel({
             : current && list.some((m) => m.id === current)
               ? current
               : (list[0]?.id ?? current ?? '')
+      const modelChanged = nextModel !== previous
       setSelectedModel(nextModel)
       selectedModelRef.current = nextModel
       const meta = list.find((m) => m.id === nextModel) ?? list[0]
-      // Linked default: 中 → 高 → strongest; never 关 when another level exists.
-      const nextThink =
-        initialThinking ?? defaultThinkingFor(meta?.thinkingIntensities ?? [])
-      setThinkingIntensity(nextThink)
-      thinkingIntensityRef.current = nextThink
+      // Only re-seed thinking when model is first chosen or changed — do not
+      // overwrite a manual intensity pick on settings reload.
+      if (modelChanged || !thinkingIntensityRef.current) {
+        const nextThink = initialThinking ?? defaultThinkingFor(meta?.thinkingIntensities ?? [])
+        setThinkingIntensity(nextThink)
+        thinkingIntensityRef.current = nextThink
+      }
     } catch (e) {
       console.warn('[ChatPanel] load models failed', e)
     } finally {

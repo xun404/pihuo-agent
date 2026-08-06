@@ -2,7 +2,7 @@ import { api, clearDesktopToken, ensureDesktopToken, type DangerZoneAction } fro
 import type { AppSnapshot } from '@swarmdesk-agent/shared'
 import type { PromptSettings, WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
 
-export type ApiStyle = 'openai' | 'anthropic' | 'google' | 'custom'
+export type ApiStyle = 'openai' | 'anthropic' | 'google'
 
 export type ThinkingIntensity = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 

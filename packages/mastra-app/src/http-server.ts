@@ -47,6 +47,7 @@ import {
   getLeaderFeaturedCatalog,
   resolveRouterDataPaths,
   refreshModelsDevCatalog,
+  installAndApplyModelsDevNpmSnapshot,
   listModelsDevProviders,
   buildCustomProviderFromModelsDev,
   loadModelsDevMeta,
@@ -3142,7 +3143,7 @@ const server = createServer(async (req, res) => {
         const customIds = (status.settings.customProviders ?? []).map((c) => c.id)
         const { providers, meta } = listModelsDevProviders({
           q,
-          excludeIds: [...builtinIds, ...customIds],
+          ownedIds: [...builtinIds, ...customIds],
         })
         send(res, 200, {
           providers,
@@ -3155,13 +3156,45 @@ const server = createServer(async (req, res) => {
       if (method === 'POST' && path === '/api/models-dev/refresh') {
         // Public catalog only (config models-dev/ LKG). Safe in Desktop API child
         // (SECRETS_PARENT_INJECTED) — does not touch secrets.enc.
+        // body.source === 'npm-snapshot': hot-install @opencode-ai/models@latest via
+        // configured npm registry and apply package snapshot (no models.dev HTTP).
+        const body = (await readJson(req).catch(() => ({}))) as { source?: string }
+        const source = typeof body?.source === 'string' ? body.source.trim() : ''
+
+        if (source === 'npm-snapshot') {
+          try {
+            const settings = loadSettings()
+            const registry =
+              typeof settings.npmRegistry === 'string' && settings.npmRegistry.trim()
+                ? settings.npmRegistry.trim()
+                : undefined
+            const result = await installAndApplyModelsDevNpmSnapshot({
+              registry,
+              timeoutMs: 180_000,
+            })
+            send(res, 200, { ok: true, ...result })
+          } catch (e) {
+            send(res, 502, {
+              error:
+                e instanceof Error
+                  ? e.message
+                  : 'Failed to install @opencode-ai/models snapshot',
+              code: 'MODELS_DEV_NPM_SNAPSHOT_FAILED',
+              npmSnapshotSuggested: true,
+            })
+          }
+          return
+        }
+
         try {
           const result = await refreshModelsDevCatalog()
-          send(res, 200, { ok: true, ...result })
+          send(res, 200, { ok: true, via: 'models.dev', ...result })
         } catch (e) {
           send(res, 502, {
             error: e instanceof Error ? e.message : 'Failed to refresh models.dev catalog',
             code: 'MODELS_DEV_REFRESH_FAILED',
+            /** Desktop should prompt to hot-install @opencode-ai/models snapshot. */
+            npmSnapshotSuggested: true,
           })
         }
         return

@@ -6,10 +6,13 @@ import { describe, it } from 'node:test'
 import {
   buildCustomProviderFromModelsDev,
   deriveTransportFromModelsDev,
+  ensureProviderLogoCached,
   listModelsDevProviders,
   loadModelsDevRegistry,
   mapModelsDevModel,
   modelsDevCatalogPaths,
+  modelsDevLogoCandidateUrls,
+  readCachedProviderLogo,
   refreshModelsDevCatalog,
   type ModelsDevProviderRaw,
 } from './models-dev-catalog.js'
@@ -104,11 +107,26 @@ describe('models-dev-catalog', () => {
     assert.ok(m.thinkingIntensities?.includes('high'))
   })
 
-  it('listModelsDevProviders excludes ids and filters query', () => {
+  it('listModelsDevProviders marks owned ids as alreadyAdded and filters query', () => {
     const paths = writeFixtureRoot()
-    const all = listModelsDevProviders({ paths, excludeIds: ['openai'] })
-    assert.equal(all.providers.some((p) => p.id === 'openai'), false)
-    assert.ok(all.providers.some((p) => p.id === 'deepseek'))
+    const all = listModelsDevProviders({ paths, ownedIds: ['openai'] })
+    assert.equal(all.providers.length, 3)
+    const openai = all.providers.find((p) => p.id === 'openai')
+    assert.ok(openai)
+    assert.equal(openai!.alreadyAdded, true)
+    const deepseek = all.providers.find((p) => p.id === 'deepseek')
+    assert.ok(deepseek)
+    assert.equal(Boolean(deepseek!.alreadyAdded), false)
+    // Available rows sort before already-added
+    const firstOwned = all.providers.findIndex((p) => p.alreadyAdded)
+    const lastFree = (() => {
+      let i = -1
+      all.providers.forEach((p, idx) => {
+        if (!p.alreadyAdded) i = idx
+      })
+      return i
+    })()
+    assert.ok(lastFree < firstOwned)
 
     const q = listModelsDevProviders({ paths, q: 'cool' })
     assert.equal(q.providers.length, 1)
@@ -172,5 +190,66 @@ describe('models-dev-catalog', () => {
     assert.ok(reg?.['cool-gateway'])
     const meta = JSON.parse(readFileSync(paths.metaPath, 'utf8')) as { sourceUrl: string }
     assert.equal(meta.sourceUrl, fixtureFile)
+  })
+
+  it('modelsDevLogoCandidateUrls prefers models.dev then GitHub then jsDelivr', () => {
+    const urls = modelsDevLogoCandidateUrls('openrouter')
+    assert.equal(urls.length, 3)
+    assert.equal(urls[0], 'https://models.dev/logos/openrouter.svg')
+    assert.match(urls[1]!, /raw\.githubusercontent\.com\/anomalyco\/models\.dev/)
+    assert.match(urls[2]!, /cdn\.jsdelivr\.net\/gh\/anomalyco\/models\.dev/)
+  })
+
+  it('ensureProviderLogoCached falls back to the next candidate after models.dev fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'sd-md-logo-'))
+    const paths = modelsDevCatalogPaths(root, join(root, 'cache'))
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+    const tried: string[] = []
+    const result = await ensureProviderLogoCached({
+      providerId: 'openrouter',
+      paths,
+      timeoutMs: 9_000,
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        const url = String(input)
+        tried.push(url)
+        if (url.includes('models.dev/logos')) {
+          throw Object.assign(new TypeError('fetch failed'), {
+            cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+          })
+        }
+        if (url.includes('raw.githubusercontent.com')) {
+          return new Response(svg, { status: 200, headers: { 'content-type': 'image/svg+xml' } })
+        }
+        return new Response('nope', { status: 404 })
+      }) as typeof fetch,
+    })
+    assert.equal(result.fromCache, false)
+    assert.equal(result.svg, svg)
+    assert.match(result.sourceUrl ?? '', /raw\.githubusercontent\.com/)
+    assert.ok(tried.some((u) => u.includes('models.dev/logos')))
+    assert.equal(readCachedProviderLogo('openrouter', paths), svg)
+  })
+
+  it('refreshModelsDevCatalog surfaces network cause codes in the error message', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'sd-md-refresh-net-'))
+    const paths = modelsDevCatalogPaths(root, join(root, 'cache'))
+    const cause = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })
+    const err = Object.assign(new TypeError('fetch failed'), { cause })
+    await assert.rejects(
+      () =>
+        refreshModelsDevCatalog({
+          url: 'https://models.dev/api.json',
+          paths,
+          fetchImpl: (async () => {
+            throw err
+          }) as typeof fetch,
+        }),
+      (e: unknown) => {
+        assert.ok(e instanceof Error)
+        assert.match(e.message, /models\.dev fetch failed/i)
+        assert.match(e.message, /ECONNRESET/)
+        return true
+      },
+    )
   })
 })

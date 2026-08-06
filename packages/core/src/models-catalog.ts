@@ -42,7 +42,7 @@ export interface ModelProviderDef {
   apiKeyEnvAliases?: string[]
   docsUrl: string
   /** Default API style for OpenCode-like custom gateways */
-  apiStyle?: 'openai' | 'anthropic' | 'google' | 'custom'
+  apiStyle?: 'openai' | 'anthropic' | 'google'
   /** Optional default base URL (OpenAI-compatible gateways) */
   baseURL?: string
   models: ModelOption[]
@@ -223,12 +223,12 @@ export async function getProviderCatalog(forceRefresh?: boolean): Promise<ModelP
 }
 
 /** Normalize api style for custom / OpenCode-like gateways */
-export type ApiStyle = 'openai' | 'anthropic' | 'google' | 'custom'
+export type ApiStyle = 'openai' | 'anthropic' | 'google'
 
 export function normalizeApiStyle(raw: string | undefined | null): ApiStyle {
   const v = (raw ?? 'openai').toLowerCase().trim()
   if (v === 'anthropic' || v === 'claude') return 'anthropic'
   if (v === 'google' || v === 'gemini') return 'google'
-  if (v === 'custom') return 'custom'
+  // Legacy `custom` was OpenAI-compatible baseURL routing — fold into openai.
   return 'openai'
 }
