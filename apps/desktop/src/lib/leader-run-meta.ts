@@ -129,6 +129,47 @@ function durableRunMeta(msg: RunMessage): LeaderRunMeta {
   return {}
 }
 
+type LeaderRunMetaMessage = {
+  id: string
+  role: string
+  parts?: unknown[]
+}
+
+function isLeaderRunMetaPart(part: unknown): boolean {
+  return Boolean(
+    part &&
+      typeof part === 'object' &&
+      (part as { type?: unknown }).type === 'data-leader-run-meta',
+  )
+}
+
+/**
+ * Merge completion markers saved by the server into the live UI messages.
+ *
+ * AI SDK streams do not include the separate marker row written from the
+ * server's onFinish callback, so a just-finished turn can briefly render
+ * without a duration until history is reloaded. Keep the live message body
+ * and append only a marker that is missing from the same assistant id.
+ */
+export function mergeDurableLeaderRunMeta<T extends LeaderRunMetaMessage>(
+  current: T[],
+  persisted: ReadonlyArray<LeaderRunMetaMessage>,
+): T[] {
+  if (current.length === 0 || persisted.length === 0) return current
+
+  const persistedById = new Map(persisted.map((message) => [message.id, message]))
+  let changed = false
+  const next = current.map((message) => {
+    if (message.role !== 'assistant') return message
+    const durable = persistedById.get(message.id)
+    const durableMarkers = durable?.parts?.filter(isLeaderRunMetaPart) ?? []
+    if (durableMarkers.length === 0 || message.parts?.some(isLeaderRunMetaPart)) return message
+    changed = true
+    return { ...message, parts: [...(message.parts ?? []), ...durableMarkers] } as T
+  })
+  return changed ? next : current
+}
+
 function assistantMetadataModel(msg: RunMessage): string | undefined {
   if (!msg.metadata || typeof msg.metadata !== 'object') return undefined
   const metadata = msg.metadata as Record<string, unknown>

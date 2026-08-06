@@ -145,6 +145,49 @@ describe('WorkerRunCard Registry auth_required', () => {
     assert.doesNotMatch(html, /worker-action-(?:approval|error|thinking)/u)
   })
 
+  it('puts thought and tool calls in one execution box', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider serverLocale="en">
+        <WorkerRunCard
+          state={{
+            jobId: 'job-activity',
+            workerId: 'worker-codex',
+            workerName: 'Codex',
+            workerKind: 'codex',
+            role: 'coder',
+            reusedSession: false,
+            sequence: 2,
+            output: '',
+            thought: 'Inspecting the target file.',
+            toolCalls: [
+              {
+                toolCallId: 'tool-1',
+                title: 'Read file',
+                kind: 'read',
+                status: 'completed',
+                detail: '/tmp/example.txt',
+              },
+            ],
+            status: 'running',
+            truncated: false,
+            startedAt: 1_000,
+            lastDeltaAt: 2_000,
+            pendingApprovals: [],
+          }}
+          open
+          onToggle={() => undefined}
+        />
+      </I18nProvider>,
+    )
+
+    assert.equal((html.match(/worker-action-activity/g) ?? []).length >= 2, true)
+    assert.match(html, /Thinking · Tools/u)
+    assert.match(html, /Inspecting the target file\./u)
+    assert.match(html, /Read file/u)
+    assert.match(html, /worker-action-activity-divider/u)
+    assert.doesNotMatch(html, /worker-action-section worker-action-(?:thought|tool)/u)
+  })
+
   it('renders every pending approval in stable order with an explicit cancel action', () => {
     const approval = (id: string, createdAt: string, title: string) => ({
       id,

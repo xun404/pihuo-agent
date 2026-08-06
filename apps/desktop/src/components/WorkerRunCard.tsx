@@ -196,6 +196,10 @@ export const WorkerRunCard = memo(function WorkerRunCard({
         ? [state.pendingApproval]
         : [],
   )
+  const toolCalls = Array.isArray(state.toolCalls) ? state.toolCalls : []
+  const hasThought = Boolean(state.thought?.trim())
+  const hasToolCalls = toolCalls.length > 0
+  const hasWorkerActivity = hasThought || hasToolCalls
   const publicError = state.recoveryError ?? state.error
   const hasPublicError = Boolean(publicError || state.errorCode === 'RUNTIME_RESTARTED')
 
@@ -319,10 +323,54 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 {taskPrompt || state.task}
               </WorkerActionSection>
             )}
-            {Boolean(state.thought?.trim()) && (
-              <WorkerActionSection kind="thought" label={t('workers.runThought')} marker="…">
-                <div className="worker-action-thought">{state.thought}</div>
-              </WorkerActionSection>
+            {hasWorkerActivity && (
+              <section className="worker-action-section worker-action-activity">
+                <div className="worker-action-label">
+                  {t('workers.runThought')} · {t('workers.runTools')}
+                </div>
+                <div className="tool-row-block tool-row-block-input worker-action-block worker-action-activity-block">
+                  <span className="tool-row-block-marker" aria-hidden>
+                    …
+                  </span>
+                  <div className="tool-row-block-content worker-action-content worker-action-activity-content">
+                    {hasThought && (
+                      <div className="worker-action-thought">{state.thought}</div>
+                    )}
+                    {hasThought && hasToolCalls && (
+                      <div className="worker-action-activity-divider" aria-hidden />
+                    )}
+                    {hasToolCalls && (
+                      <div className="worker-action-tool-list">
+                        {toolCalls.map((tool) => (
+                          <div className="worker-action-tool-item" key={tool.toolCallId}>
+                            <div className="worker-action-tool-title">
+                              <span className="worker-action-tool-status" aria-hidden>
+                                {toolStatusMarker(tool.status)}
+                              </span>
+                              {tool.kind
+                                ? `${TOOL_KIND_LABELS[tool.kind] ?? tool.kind} · `
+                                : ''}
+                              {tool.title}
+                              {tool.status ? ` · ${tool.status}` : ''}
+                            </div>
+                            {(tool.detail || (tool.locations && tool.locations.length > 0)) && (
+                              <div className="worker-action-tool-detail">
+                                {tool.locations && tool.locations.length > 0
+                                  ? formatLocations(tool.locations)
+                                  : null}
+                                {tool.locations && tool.locations.length > 0 && tool.detail
+                                  ? ' · '
+                                  : null}
+                                {tool.detail}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
             )}
             {Array.isArray(state.planEntries) && state.planEntries.length > 0 && (
               <WorkerActionSection kind="plan" label={t('workers.runPlan')} marker="≡">
@@ -334,38 +382,6 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                     </li>
                   ))}
                 </ul>
-              </WorkerActionSection>
-            )}
-            {Array.isArray(state.toolCalls) && state.toolCalls.length > 0 && (
-              <WorkerActionSection kind="tool" label={t('workers.runTools')} marker="⚙">
-                <div className="worker-action-tool-list">
-                  {state.toolCalls.map((tool) => (
-                    <div className="worker-action-tool-item" key={tool.toolCallId}>
-                      <div className="worker-action-tool-title">
-                        <span className="worker-action-tool-status" aria-hidden>
-                          {toolStatusMarker(tool.status)}
-                        </span>
-                        {tool.kind
-                          ? `${TOOL_KIND_LABELS[tool.kind] ?? tool.kind} · `
-                          : ''}
-                        {tool.title}
-                        {tool.status ? ` · ${tool.status}` : ''}
-                      </div>
-                      {(tool.detail ||
-                        (tool.locations && tool.locations.length > 0)) && (
-                        <div className="worker-action-tool-detail">
-                          {tool.locations && tool.locations.length > 0
-                            ? formatLocations(tool.locations)
-                            : null}
-                          {tool.locations && tool.locations.length > 0 && tool.detail
-                            ? ' · '
-                            : null}
-                          {tool.detail}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
               </WorkerActionSection>
             )}
             {isPendingApproval && pendingApprovals.length > 0 && (
@@ -467,8 +483,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
             {/* Running with no activity yet: keep a short live hint line. */}
             {isRunning &&
               !state.output &&
-              !state.thought?.trim() &&
-              !(state.toolCalls && state.toolCalls.length > 0) &&
+              !hasWorkerActivity &&
               !(state.planEntries && state.planEntries.length > 0) &&
               !publicError &&
               !isPendingApproval && (

@@ -158,7 +158,7 @@ describe('MessageItem Worked-for collapse', () => {
       ],
     })
     assert.match(markup, /class="worked-for"/u)
-    assert.match(markup, /已处理/u)
+    assert.match(markup, /已处理 1m 13s/u)
     assert.match(markup, /最终结果正文/u)
     // Default collapsed: process body unmounted
     assert.doesNotMatch(markup, /secret reasoning chain/u)

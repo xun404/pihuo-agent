@@ -59,6 +59,7 @@ import { approvalsForSession } from '../lib/session-approvals'
 import {
   findCurrentTurnAssistant,
   formatClockTime,
+  mergeDurableLeaderRunMeta,
   resolveLeaderRunMeta,
   shortModelId,
   type ClientTurnMeta,
@@ -835,6 +836,7 @@ export function ChatPanel({
     return false
   }, [workerStates])
   const effectiveBusy = busy || hasRunningWorker
+  const hasMessages = messages.length > 0 || historyLoading
 
   useEffect(() => {
     onBusyChangeRef.current?.(effectiveBusy)
@@ -866,18 +868,73 @@ export function ChatPanel({
   /** On session open/switch/reload, reveal the tail instantly — never animate
    *  a top-to-bottom smooth scroll through the whole history. */
   const jumpToTailRef = useRef(true)
-  /** Cheap signature of live worker output growth (deltas often skip `messages`). */
+  /**
+   * Signature of live Worker growth. Must include thought/tools/plan/approvals —
+   * those expand the card without always changing message text, and used to
+   * leave the approval card half-hidden until the user scrolled manually.
+   */
   const workerTailSig = useMemo(() => {
-    let out = 0
-    let n = 0
+    const active: string[] = []
     for (const s of workerStates.values()) {
       if (s.status !== 'running' && s.status !== 'pending_approval') continue
-      n += 1
-      out += s.output?.length ?? 0
-      out += s.task?.length ?? 0
+      const tools = (s.toolCalls ?? [])
+        .map((tool) =>
+          [
+            tool.toolCallId,
+            tool.status ?? '',
+            tool.title.length,
+            tool.detail?.length ?? 0,
+            tool.locations?.length ?? 0,
+          ].join(':'),
+        )
+        .join(',')
+      const plan = (s.planEntries ?? [])
+        .map((entry) => [entry.status ?? '', entry.content.length].join(':'))
+        .join(',')
+      const pendingApprovals = Array.isArray(s.pendingApprovals)
+        ? s.pendingApprovals
+        : s.pendingApproval
+          ? [s.pendingApproval]
+          : []
+      const approvals = pendingApprovals
+        .map((approval) =>
+          [
+            approval.id,
+            approval.status,
+            approval.title.length,
+            approval.detail?.length ?? 0,
+            approval.pathOrTarget?.length ?? 0,
+            approval.locations?.length ?? 0,
+            approval.options.length,
+          ].join(':'),
+        )
+        .join(',')
+      active.push(
+        [
+          s.jobId,
+          s.status,
+          s.sequence,
+          s.output?.length ?? 0,
+          s.task?.length ?? 0,
+          s.thought?.length ?? 0,
+          tools,
+          plan,
+          approvals,
+        ].join('|'),
+      )
     }
-    return `${n}:${out}`
+    return active.join('||')
   }, [workerStates])
+
+  /** Pin the messages scroller to its true bottom (more reliable than scrollIntoView
+   *  when nested layouts / composer dock compete for the scroll ancestor). */
+  const pinMessagesToBottom = useCallback(() => {
+    if (!followTailRef.current) return
+    const el = messagesScrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [])
+
   useEffect(() => {
     jumpToTailRef.current = true
     followTailRef.current = true
@@ -891,17 +948,39 @@ export function ChatPanel({
       // First reveal of a session: land on the tail instantly, follow mode on.
       jumpToTailRef.current = false
       followTailRef.current = true
-      bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+      pinMessagesToBottom()
+      // Second frame: Worker/approval layout often settles after first paint.
+      requestAnimationFrame(() => pinMessagesToBottom())
       return
     }
     if (!followTailRef.current) return
     // Typewriter follow: lock the view to the tail on every update. Instant,
     // not smooth — retargeting a smooth scroll on every chunk makes the
     // viewport oscillate (the visible "jumping" while streaming).
-    // Also re-run when workerStates grow: ACP deltas update worker cards without
-    // always rewriting `messages`, which previously left the tail off-screen.
-    bottomRef.current?.scrollIntoView({ behavior: 'instant' })
-  }, [messages, status, isActive, workerTailSig, hasRunningWorker, tick])
+    // Also re-run when workerStates grow: ACP deltas / thought / tool / approval
+    // update cards without always rewriting `messages`.
+    pinMessagesToBottom()
+    requestAnimationFrame(() => pinMessagesToBottom())
+  }, [messages, status, isActive, workerTailSig, hasRunningWorker, tick, pinMessagesToBottom])
+
+  // While following the tail, any content-height growth (approval card expand,
+  // tool list, thinking open) must re-pin — effect deps alone miss CSS/layout
+  // settles that happen without a React state change in the same tick.
+  useEffect(() => {
+    if (!isActive) return
+    if (typeof ResizeObserver === 'undefined') return
+    const scroller = messagesScrollRef.current
+    if (!scroller) return
+    const content = scroller.querySelector('.messages')
+    if (!content) return
+    const ro = new ResizeObserver(() => pinMessagesToBottom())
+    // Observe both the viewport and its content. The content catches Worker
+    // card growth; the viewport catches window/composer layout changes that
+    // alter the maximum scroll position without changing message state.
+    ro.observe(scroller)
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [isActive, hasMessages, session.id, pinMessagesToBottom])
 
   /**
    * Supervisor 本轮计时：
@@ -914,15 +993,36 @@ export function ChatPanel({
     model?: string
     thinking?: string
     assistantId?: string
+    /** busy may end one render before the final assistant message is published. */
+    endedAt?: number
   } | null>(null)
   const wasBusyRef = useRef(false)
+  const wasBusyForMetaSyncRef = useRef(false)
   useEffect(() => {
     const map = turnTimingRef.current
     let changed = false
     const currentAssistant = findCurrentTurnAssistant(messages)
     const wasBusy = wasBusyRef.current
 
+    const seal = (at: NonNullable<typeof activeTurnRef.current>, id: string | undefined) => {
+      if (!id) return false
+      map.set(id, {
+        startedAt: at.startedAt,
+        endedAt: at.endedAt,
+        model: at.model || selectedModelRef.current || undefined,
+        thinking: at.thinking || thinkingIntensityRef.current || undefined,
+      })
+      return true
+    }
+
     if (busy) {
+      // A previous run can finish before its final assistant message is
+      // published. Do not let that orphaned timing object become the next run.
+      if (activeTurnRef.current?.endedAt != null) {
+        const previous = activeTurnRef.current
+        if (seal(previous, previous.assistantId)) changed = true
+        activeTurnRef.current = null
+      }
       if (!activeTurnRef.current) {
         activeTurnRef.current = {
           startedAt: Date.now(),
@@ -974,22 +1074,58 @@ export function ChatPanel({
     } else if (wasBusy && activeTurnRef.current) {
       // 本轮结束：封印到最终 assistant
       const at = activeTurnRef.current
+      at.endedAt = Date.now()
       const id = currentAssistant?.id ?? at.assistantId
-      if (id) {
-        map.set(id, {
-          startedAt: at.startedAt,
-          endedAt: Date.now(),
-          model: at.model || selectedModelRef.current || undefined,
-          thinking: at.thinking || thinkingIntensityRef.current || undefined,
-        })
+      if (seal(at, id)) {
         changed = true
+        activeTurnRef.current = null
       }
-      activeTurnRef.current = null
+    } else if (!busy && activeTurnRef.current?.endedAt != null) {
+      // The stream status can settle before useChat publishes the final
+      // assistant message (notably after an approval cancellation). Keep the
+      // sealed clock alive and bind it on the next messages update.
+      const at = activeTurnRef.current
+      const id = currentAssistant?.id ?? at.assistantId
+      if (seal(at, id)) {
+        changed = true
+        activeTurnRef.current = null
+      }
     }
 
     wasBusyRef.current = busy
     if (changed) setTimingEpoch((n) => n + 1)
   }, [messages, busy])
+
+  // The server persists data-leader-run-meta from onFinish, but that marker is
+  // a separate memory row and is not part of the live AI SDK stream. Re-read
+  // the just-completed turn a few times and merge only missing markers so the
+  // collapsed "已处理" summary gets its duration without replacing live UI.
+  useEffect(() => {
+    const wasBusy = wasBusyForMetaSyncRef.current
+    wasBusyForMetaSyncRef.current = busy
+    if (busy || !wasBusy) return
+
+    let cancelled = false
+    const syncPersistedMeta = async () => {
+      // onFinish saves after the stream settles; the short retries cover both
+      // the normal completion and approval/continuation timing paths.
+      for (const delay of [0, 200, 700]) {
+        if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
+        if (cancelled) return
+        try {
+          const result = await api.getThreadMessages(memoryThreadId, memoryResourceId)
+          if (cancelled) return
+          setMessages((current) => mergeDurableLeaderRunMeta(current, result.messages) as never)
+        } catch {
+          // History sync is best-effort; the client timing path remains active.
+        }
+      }
+    }
+    void syncPersistedMeta()
+    return () => {
+      cancelled = true
+    }
+  }, [busy, memoryThreadId, memoryResourceId, setMessages])
 
   const selectedMeta = models.find((m) => m.id === selectedModel)
   const modelShort = selectedMeta
@@ -1032,8 +1168,6 @@ export function ChatPanel({
       : ctxPct % 1 === 0
         ? String(Math.round(ctxPct))
         : ctxPct.toFixed(1)
-  const hasMessages = messages.length > 0 || historyLoading
-
   // Follow-mode event wiring:
   // - detach on explicit user scroll intent ONLY (wheel-up, touch drag-up,
   //   scrollbar-track mousedown). Content-height changes above the fold must

@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import {
   extractPrecedingUserMeta,
   formatClockTime,
+  mergeDurableLeaderRunMeta,
   parseMessageTimestamp,
   resolveLeaderRunMeta,
   providerIdFromModel,
@@ -157,6 +158,27 @@ describe('leader-run-meta', () => {
     assert.equal(meta.thinking, 'max')
     assert.equal(meta.startedAt, Date.parse('2026-07-30T02:08:17.000Z'))
     assert.equal(meta.endedAt, Date.parse('2026-07-30T02:09:30.000Z'))
+  })
+
+  it('merges a persisted completion marker without replacing live message parts', () => {
+    const current = [
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'run it' }] },
+      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'done' }] },
+    ]
+    const marker = {
+      type: 'data-leader-run-meta',
+      data: {
+        startedAt: '2026-07-30T02:08:17.000Z',
+        completedAt: '2026-07-30T02:09:30.000Z',
+      },
+    }
+    const merged = mergeDurableLeaderRunMeta(current, [
+      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'done' }, marker] },
+    ])
+    assert.equal(merged.length, current.length)
+    assert.equal(merged[0], current[0])
+    assert.equal(merged[1]?.parts?.length, 2)
+    assert.equal((merged[1]?.parts?.[1] as { type?: string }).type, 'data-leader-run-meta')
   })
 
   it('uses the persisted assistant timestamp as legacy completion time, including the last turn', () => {

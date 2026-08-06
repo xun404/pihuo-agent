@@ -1822,6 +1822,18 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   font-size: var(--fs-2xs);
   line-height: 1.5;
 }
+/* Thought + tool calls share one execution box; the divider keeps the two
+   streams readable without making them look like separate cards. */
+.worker-action-activity-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.worker-action-activity-divider {
+  height: 1px;
+  width: 100%;
+  background: color-mix(in srgb, var(--border) 58%, transparent);
+}
 .worker-action-plan-list {
   margin: 0;
   padding-left: 1.2em;
