@@ -188,18 +188,32 @@ export function createRemoteRuntimeDispatchPort(
     }
   }
 
-  async function reconcileAfterEventDeadline(jobId: string): Promise<WorkerRunEvent> {
+  async function fetchJobSnapshot(jobId: string): Promise<WorkerJob | null> {
+    const data = await requestJson<{ job: WorkerJob | null }>(
+      'GET',
+      `/internal/runtime/jobs/${encodeURIComponent(jobId)}`,
+      undefined,
+      { timeoutMs: 2_000 },
+    )
+    return data.job ?? null
+  }
+
+  /**
+   * After the wall-clock observation slice expires, reconcile durable Job state.
+   * - terminal Job → yield terminal event
+   * - pending_approval → return null so the caller can pause/extend (no approval timeout)
+   * - still running/queued/missing → throw interrupted stream error
+   */
+  async function reconcileAfterEventDeadline(
+    jobId: string,
+  ): Promise<{ kind: 'terminal'; event: WorkerRunEvent } | { kind: 'pause' } | never> {
     let status: string | undefined
     try {
-      const data = await requestJson<{ job: WorkerJob | null }>(
-        'GET',
-        `/internal/runtime/jobs/${encodeURIComponent(jobId)}`,
-        undefined,
-        { timeoutMs: 2_000 },
-      )
-      const terminal = data.job ? jobToTerminalEvent(data.job, jobId) : null
-      if (terminal) return terminal
-      status = data.job?.status ?? 'missing'
+      const job = await fetchJobSnapshot(jobId)
+      const terminal = job ? jobToTerminalEvent(job, jobId) : null
+      if (terminal) return { kind: 'terminal', event: terminal }
+      if (job?.status === 'pending_approval') return { kind: 'pause' }
+      status = job?.status ?? 'missing'
     } catch (error) {
       if (error instanceof RuntimeDiscoveryError && error.code === 'RUNTIME_AUTH_FAILED')
         throw error
@@ -349,14 +363,34 @@ export function createRemoteRuntimeDispatchPort(
                 ),
               )
             })()
-      const startedAt = Date.now()
-      const deadlineAt = startedAt + deadlineMs
+      // Active observation budget (paused while Job is pending_approval — no approval timeout).
+      let remainingMs = deadlineMs
+      let sliceStartedAt = Date.now()
+      let pausedForApproval = false
+      const activeDeadlineAt = () =>
+        pausedForApproval ? Number.POSITIVE_INFINITY : sliceStartedAt + remainingMs
+      const pauseForApproval = () => {
+        if (pausedForApproval) return
+        remainingMs = Math.max(0, remainingMs - (Date.now() - sliceStartedAt))
+        pausedForApproval = true
+      }
+      const resumeAfterApproval = () => {
+        if (!pausedForApproval) return
+        pausedForApproval = false
+        sliceStartedAt = Date.now()
+      }
       let authFailures = 0
       for (let attempt = 0; ; attempt++) {
         if (signal?.aborted) return
-        if (Date.now() >= deadlineAt) {
-          yield await reconcileAfterEventDeadline(jobId)
-          return
+        if (Date.now() >= activeDeadlineAt()) {
+          const reconciled = await reconcileAfterEventDeadline(jobId)
+          if (reconciled.kind === 'terminal') {
+            yield reconciled.event
+            return
+          }
+          // Still pending human approval — pause budget and keep listening.
+          pauseForApproval()
+          continue
         }
         let endpoint: RuntimeEndpoint
         try {
@@ -377,6 +411,9 @@ export function createRemoteRuntimeDispatchPort(
           ? AbortSignal.any([signal, streamAbort.signal])
           : streamAbort.signal
         try {
+          const fetchBudgetMs = pausedForApproval
+            ? Math.min(MAX_TIMER_DELAY_MS, 60_000)
+            : Math.max(1, activeDeadlineAt() - Date.now())
           res = await raceWithTimeout(
             fetchImpl(
               `${endpoint.baseUrl}/internal/runtime/events/${encodeURIComponent(jobId)}${qs}`,
@@ -390,7 +427,7 @@ export function createRemoteRuntimeDispatchPort(
                 signal: streamSignal,
               },
             ),
-            Math.max(1, deadlineAt - Date.now()),
+            fetchBudgetMs,
             () => {
               streamAbort.abort()
               return interruptedEventStream(jobId)
@@ -400,8 +437,13 @@ export function createRemoteRuntimeDispatchPort(
           streamAbort.abort()
           if (signal?.aborted) return
           if (isInterruptedEventStream(e)) {
-            yield await reconcileAfterEventDeadline(jobId)
-            return
+            const reconciled = await reconcileAfterEventDeadline(jobId)
+            if (reconciled.kind === 'terminal') {
+              yield reconciled.event
+              return
+            }
+            pauseForApproval()
+            continue
           }
           await new Promise((r) => setTimeout(r, Math.min(2000, 100 * 2 ** attempt)))
           continue
@@ -456,9 +498,12 @@ export function createRemoteRuntimeDispatchPort(
           while (true) {
             let read: Awaited<ReturnType<typeof reader.read>>
             try {
+              const readBudgetMs = pausedForApproval
+                ? Math.min(MAX_TIMER_DELAY_MS, 60_000)
+                : Math.max(1, activeDeadlineAt() - Date.now())
               read = await raceWithTimeout(
                 reader.read(),
-                Math.max(1, deadlineAt - Date.now()),
+                readBudgetMs,
                 () => {
                   streamAbort.abort()
                   return interruptedEventStream(jobId)
@@ -468,8 +513,14 @@ export function createRemoteRuntimeDispatchPort(
               if (signal?.aborted) return
               if (isInterruptedEventStream(error)) {
                 void reader.cancel().catch(() => {})
-                yield await reconcileAfterEventDeadline(jobId)
-                return
+                const reconciled = await reconcileAfterEventDeadline(jobId)
+                if (reconciled.kind === 'terminal') {
+                  yield reconciled.event
+                  return
+                }
+                pauseForApproval()
+                // Break inner read loop so outer reconnect continues with paused budget.
+                break
               }
               throw error
             }
@@ -546,6 +597,17 @@ export function createRemoteRuntimeDispatchPort(
                 continue
               }
               if (!event) continue
+              if (event.type === 'approval_requested') pauseForApproval()
+              else if (event.type === 'approval_resolved') {
+                // May still be pending_approval when multiple items are open.
+                try {
+                  const latest = await fetchJobSnapshot(jobId)
+                  if (latest?.status === 'pending_approval') pauseForApproval()
+                  else resumeAfterApproval()
+                } catch {
+                  resumeAfterApproval()
+                }
+              }
               yield event
               if (isTerminalWorkerEvent(event)) {
                 sawTerminal = true
@@ -574,6 +636,10 @@ export function createRemoteRuntimeDispatchPort(
           if (terminal) {
             yield terminal
             return
+          }
+          if (data.job?.status === 'pending_approval') pauseForApproval()
+          else if (data.job?.status === 'running' || data.job?.status === 'queued') {
+            resumeAfterApproval()
           }
           // Job still open: if owner epoch reset, try from 0 once
           if (data.job && cursor > 0 && attempt >= 2 && attempt % 3 === 0) {

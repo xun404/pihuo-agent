@@ -207,7 +207,14 @@ type RuntimeEntry = {
   timeoutGeneration?: number
   /** Wall-clock deadline while the active Job timer is armed. */
   timeoutDeadlineMs?: number
-  /** Remaining active Job time while the Job is pending_approval. */
+  /**
+   * Idle window for the Job timeout (jobTimeoutMs snapshot).
+   * Timer is inactivity-based: any ACP activity re-arms a full window; the
+   * clock only runs while the Job is running with no recent ACP updates and
+   * no pending approval / terminal stop.
+   */
+  timeoutDurationMs?: number
+  /** Remaining ms when the timer was last paused (approval); optional diagnostics. */
   timeoutRemainingMs?: number
   /** Explicit in-memory pause marker; the timer handle may be absent while paused. */
   timeoutPaused?: boolean
@@ -914,9 +921,8 @@ export class WorkerScheduler {
   }
 
   /**
-   * Arm the active Job timer for the supplied amount of active (non-approval)
-   * time. The generation check makes a callback that was already queued before
-   * pause/resume harmless; only the currently armed timer may terminalize.
+   * Arm the idle Job timer for the supplied delay. Generation check makes a
+   * callback that was already queued before pause/touch/resume harmless.
    */
   private armJobTimeout(jobId: string, delayMs: number): void {
     const runtime = this.runtime.get(jobId)
@@ -952,35 +958,53 @@ export class WorkerScheduler {
     runtime.timeoutPaused = false
   }
 
-  /** Start an active Job timer once the Job has durably entered running. */
+  /**
+   * Start the idle Job timer once the Job has durably entered running.
+   * Duration is an inactivity window: ACP updates re-arm a full window.
+   */
   private startJobTimeout(jobId: string, durationMs: number, handler: () => void): void {
     const runtime = this.runtime.get(jobId)
     if (!runtime) return
-    runtime.timeoutHandler = handler
-    runtime.timeoutPaused = false
-    runtime.timeoutRemainingMs = Math.min(
-      Math.max(0, Math.floor(Number.isFinite(durationMs) ? durationMs : 0)),
+    const duration = Math.min(
+      Math.max(1, Math.floor(Number.isFinite(durationMs) ? durationMs : 0)),
       MAX_TIMER_DELAY_MS,
     )
-    this.armJobTimeout(jobId, runtime.timeoutRemainingMs)
+    runtime.timeoutHandler = handler
+    runtime.timeoutDurationMs = duration
+    runtime.timeoutPaused = false
+    this.armJobTimeout(jobId, duration)
   }
 
   /**
-   * Pause only the active Job timer while ACP waits for a permission decision.
+   * Re-arm a full idle window after ACP activity (message / thought / tool / plan).
+   * No-op while paused for human approval or when the Job is no longer running.
+   */
+  private touchJobTimeout(jobId: string): void {
+    const job = store().getJob(jobId)
+    if (!job || job.status !== 'running') return
+    const runtime = this.runtime.get(jobId)
+    if (!runtime || !runtime.timeoutHandler || runtime.timeoutPaused) return
+    const duration =
+      runtime.timeoutDurationMs ??
+      workerTimeoutSnapshotFromJob(job).jobTimeoutMs
+    runtime.timeoutDurationMs = duration
+    this.armJobTimeout(jobId, duration)
+  }
+
+  /**
+   * Pause the idle Job timer while ACP waits for a permission decision.
    * Queue admission timeout is intentionally separate and is never touched.
    */
   private pauseJobTimeout(jobId: string): void {
     const runtime = this.runtime.get(jobId)
     if (!runtime) return
-    if (!runtime.timeout) {
-      if (runtime.timeoutRemainingMs !== undefined) runtime.timeoutPaused = true
-      return
+    if (runtime.timeout) {
+      const deadline = runtime.timeoutDeadlineMs ?? Date.now()
+      runtime.timeoutRemainingMs = Math.max(0, deadline - Date.now())
+      clearTimeout(runtime.timeout)
+      runtime.timeout = undefined
+      runtime.timeoutDeadlineMs = undefined
     }
-    const deadline = runtime.timeoutDeadlineMs ?? Date.now()
-    runtime.timeoutRemainingMs = Math.max(0, deadline - Date.now())
-    clearTimeout(runtime.timeout)
-    runtime.timeout = undefined
-    runtime.timeoutDeadlineMs = undefined
     runtime.timeoutPaused = true
     runtime.timeoutGeneration = (runtime.timeoutGeneration ?? 0) + 1
   }
@@ -992,21 +1016,27 @@ export class WorkerScheduler {
       return persist()
     } catch (error) {
       // No pending Approval was committed, so the Job remains running and its
-      // active timer must continue. If cancellation already won, resume is a
+      // idle timer must continue. If cancellation already won, resume is a
       // no-op and terminal cleanup has (or will) discard the runtime.
       this.resumeJobTimeout(jobId)
       throw error
     }
   }
 
-  /** Resume the active Job timer after the final pending Approval resolves. */
+  /**
+   * Resume the idle Job timer after the final pending Approval resolves.
+   * Starts a fresh full idle window (approval wait itself has no timeout).
+   */
   private resumeJobTimeout(jobId: string): void {
     const job = store().getJob(jobId)
     if (!job || job.status !== 'running') return
     const runtime = this.runtime.get(jobId)
     if (!runtime || runtime.timeout || !runtime.timeoutHandler) return
-    if (runtime.timeoutRemainingMs === undefined) return
-    this.armJobTimeout(jobId, runtime.timeoutRemainingMs)
+    const duration =
+      runtime.timeoutDurationMs ??
+      workerTimeoutSnapshotFromJob(job).jobTimeoutMs
+    runtime.timeoutDurationMs = duration
+    this.armJobTimeout(jobId, duration)
   }
 
   /** Clear an active Job timer and discard its pause/resume state. */
@@ -1017,6 +1047,7 @@ export class WorkerScheduler {
     runtime.timeout = undefined
     runtime.timeoutDeadlineMs = undefined
     runtime.timeoutRemainingMs = undefined
+    runtime.timeoutDurationMs = undefined
     runtime.timeoutPaused = false
     runtime.timeoutHandler = undefined
     runtime.timeoutGeneration = (runtime.timeoutGeneration ?? 0) + 1
@@ -1536,21 +1567,21 @@ export class WorkerScheduler {
     this.startJobTimeout(jobId, workerTimeouts.jobTimeoutMs, () => {
       const latest = store().getJob(jobId)
       if (!latest || !isJobOpen(latest.status)) return
-      // A stale callback can only arrive after a pause if it was already queued
-      // by the event loop. Keep the timer paused while waiting for approval;
-      // resumeJobTimeout will arm the remaining active duration once running.
+      // Idle timer must stay paused while waiting for human approval.
       if (latest.status === 'pending_approval') return
+      const idleMs = workerTimeouts.jobTimeoutMs
+      const idleError = `Timed out after ${idleMs}ms without ACP activity`
       this.terminalize(
         jobId,
         {
           status: 'timed_out',
-          error: `Timed out after ${workerTimeouts.jobTimeoutMs}ms`,
-          message: `Timed out after ${workerTimeouts.jobTimeoutMs}ms`,
+          error: idleError,
+          message: idleError,
         },
         {
           type: 'timed_out',
           jobId,
-          error: `Timed out after ${workerTimeouts.jobTimeoutMs}ms`,
+          error: idleError,
           truncated: false,
           workerName: worker.name,
           teamMemberName: job.teamMemberName,
@@ -1705,7 +1736,75 @@ export class WorkerScheduler {
           onOutputDelta: (sequence, delta) => {
             const latest = store().getJob(jobId)
             if (!latest || !isJobOpen(latest.status)) return
+            // Any ACP message chunk proves the Agent is still working.
+            this.touchJobTimeout(jobId)
             emitWorkerEvent(jobId, { type: 'delta', jobId, sequence, delta })
+          },
+          onSessionActivity: (sequence, activity) => {
+            const latest = store().getJob(jobId)
+            if (!latest || !isJobOpen(latest.status)) return
+            if (activity.kind === 'message_delta') {
+              // Already emitted via onOutputDelta (and idle timer touched there).
+              return
+            }
+            // Thought / tool / plan updates also count as live ACP activity.
+            this.touchJobTimeout(jobId)
+            if (activity.kind === 'thought_delta') {
+              emitWorkerEvent(jobId, {
+                type: 'thought_delta',
+                jobId,
+                sequence,
+                delta: activity.text,
+              })
+              return
+            }
+            if (activity.kind === 'tool_call' || activity.kind === 'tool_call_update') {
+              const tc = activity.toolCall
+              emitWorkerEvent(jobId, {
+                type: activity.kind,
+                jobId,
+                sequence,
+                toolCall: {
+                  toolCallId: tc.toolCallId,
+                  title: tc.title,
+                  ...(tc.kind
+                    ? {
+                        kind: tc.kind as
+                          | 'read'
+                          | 'edit'
+                          | 'delete'
+                          | 'move'
+                          | 'search'
+                          | 'execute'
+                          | 'think'
+                          | 'fetch'
+                          | 'switch_mode'
+                          | 'other',
+                      }
+                    : {}),
+                  ...(tc.status
+                    ? {
+                        status: tc.status as
+                          | 'pending'
+                          | 'in_progress'
+                          | 'completed'
+                          | 'failed',
+                      }
+                    : {}),
+                  ...(tc.detail ? { detail: tc.detail } : {}),
+                  ...(tc.locations ? { locations: tc.locations } : {}),
+                },
+              })
+              return
+            }
+            if (activity.kind === 'plan') {
+              emitWorkerEvent(jobId, {
+                type: 'plan',
+                jobId,
+                sequence,
+                entries: activity.entries,
+              })
+            }
           },
         },
         signal: abort.signal,

@@ -1084,6 +1084,176 @@ describe('dispatchTeamMemberTool via RuntimeDispatchPort', () => {
     assert.equal(cancelCalls, 1)
   })
 
+  it('wait=true re-arms idle observation budget on ACP activity and does not cancel long streams', async () => {
+    const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
+    const { dispatchTeamMemberTool, setWorkerObservationTimeoutForTests } =
+      await import('./tools/session-tools.js')
+    // Idle window shorter than total stream duration; activity must keep extending it.
+    setWorkerObservationTimeoutForTests(50)
+    const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-idle-touch-'))
+    const job = makeJob({
+      id: 'job_idle_touch',
+      status: 'running',
+      task: 'long stream',
+      cwd: projectRoot,
+    })
+    let cancelCalls = 0
+    const port: RuntimeDispatchPort = {
+      resolveSessionContext: async () => null,
+      dispatch: async () => job,
+      events: async function* (_jobId: string, signal?: AbortSignal) {
+        for (let i = 0; i < 4; i++) {
+          if (signal?.aborted) return
+          yield {
+            type: 'delta',
+            jobId: job.id,
+            sequence: i + 1,
+            delta: `chunk-${i} `,
+          } as WorkerRunEvent
+          await new Promise((resolve) => setTimeout(resolve, 30))
+        }
+        if (signal?.aborted) return
+        yield {
+          type: 'completed',
+          jobId: job.id,
+          output: 'chunk-0 chunk-1 chunk-2 chunk-3 ',
+          truncated: false,
+          workerName: job.workerName,
+          role: job.role,
+        } as WorkerRunEvent
+      },
+      cancel: async () => {
+        cancelCalls += 1
+      },
+      resolveApproval: async () => {},
+    }
+    setRuntimeDispatchPort(port)
+
+    const result = (await dispatchTeamMemberTool.execute!(
+      {
+        teamMemberId: 'role_idle_touch',
+        task: job.task,
+        wait: true,
+      },
+      {
+        requestContext: {
+          get(key: string) {
+            const values: Record<string, string> = {
+              routerSessionId: job.sessionId,
+              routerProjectId: job.projectId,
+              routerProjectRoot: projectRoot,
+              memoryThreadId: job.threadId!,
+            }
+            return values[key]
+          },
+        },
+      } as never,
+    )) as { status?: string; ok?: boolean; output?: string }
+
+    assert.equal(result.status, 'succeeded')
+    assert.equal(result.ok, true)
+    assert.match(result.output ?? '', /chunk-3/)
+    assert.equal(cancelCalls, 0, 'live ACP deltas must prevent idle observation timeout')
+  })
+
+  it('wait=true pauses observation budget while pending_approval and does not cancel', async () => {
+    const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
+    const { dispatchTeamMemberTool, setWorkerObservationTimeoutForTests } =
+      await import('./tools/session-tools.js')
+    // Short budget: if approval wait counted wall-clock, this would cancel.
+    setWorkerObservationTimeoutForTests(40)
+    const projectRoot = mkdtempSync(join(tmpdir(), 'dispatch-approval-pause-'))
+    const job = makeJob({
+      id: 'job_approval_pause',
+      status: 'running',
+      task: 'needs human approval',
+      cwd: projectRoot,
+    })
+    let liveJob: WorkerJob = job
+    let cancelCalls = 0
+    const port: RuntimeDispatchPort = {
+      resolveSessionContext: async () => null,
+      dispatch: async () => liveJob,
+      getJob: async () => liveJob,
+      events: async function* (_jobId: string, signal?: AbortSignal) {
+        yield {
+          type: 'approval_requested',
+          jobId: job.id,
+          approval: {
+            id: 'appr_1',
+            status: 'pending',
+            title: 'Write file',
+            options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+            source: 'acp',
+            createdAt: new Date().toISOString(),
+          },
+        } as WorkerRunEvent
+        liveJob = { ...liveJob, status: 'pending_approval' }
+        // Stay pending longer than the observation budget.
+        await new Promise<void>((resolve) => setTimeout(resolve, 120))
+        if (signal?.aborted) return
+        liveJob = {
+          ...liveJob,
+          status: 'succeeded',
+          output: 'approved-and-done',
+          finishedAt: new Date().toISOString(),
+        }
+        yield {
+          type: 'approval_resolved',
+          jobId: job.id,
+          approval: {
+            id: 'appr_1',
+            status: 'allowed',
+            title: 'Write file',
+            options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+            source: 'acp',
+            createdAt: new Date().toISOString(),
+            decision: 'allow',
+          },
+        } as WorkerRunEvent
+        yield {
+          type: 'completed',
+          jobId: job.id,
+          output: 'approved-and-done',
+          truncated: false,
+          workerName: job.workerName,
+          role: job.role,
+        } as WorkerRunEvent
+      },
+      cancel: async () => {
+        cancelCalls += 1
+      },
+      resolveApproval: async () => {},
+    }
+    setRuntimeDispatchPort(port)
+
+    const result = (await dispatchTeamMemberTool.execute!(
+      {
+        teamMemberId: 'role_approval_pause',
+        task: job.task,
+        wait: true,
+      },
+      {
+        requestContext: {
+          get(key: string) {
+            const values: Record<string, string> = {
+              routerSessionId: job.sessionId,
+              routerProjectId: job.projectId,
+              routerProjectRoot: projectRoot,
+              memoryThreadId: job.threadId!,
+            }
+            return values[key]
+          },
+        },
+      } as never,
+    )) as { status?: string; ok?: boolean; output?: string; error?: string }
+
+    assert.equal(result.status, 'succeeded')
+    assert.equal(result.ok, true)
+    assert.equal(result.output, 'approved-and-done')
+    assert.equal(cancelCalls, 0, 'must not cancel Job while human approval is pending')
+  })
+
   it('wait=true chat abort calls port.cancel exactly once (non-streaming)', async () => {
     const { setRuntimeDispatchPort } = await import('./runtime-dispatch-port.js')
     const { dispatchTeamMemberTool } = await import('./tools/session-tools.js')

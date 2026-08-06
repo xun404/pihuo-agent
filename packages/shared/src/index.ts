@@ -1164,9 +1164,29 @@ export const JOB_HISTORY_LIMIT = 100
 /** Truncate job output stored on disk */
 export const JOB_OUTPUT_MAX_CHARS = 32_000
 
+/** UI-facing snapshot of an ACP tool call (tool_call / tool_call_update). */
+export type WorkerToolCallStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
+
+export interface WorkerToolCallView {
+  toolCallId: string
+  title: string
+  kind?: AcpToolKind
+  status?: WorkerToolCallStatus
+  /** Short human-readable detail (paths, truncated content). */
+  detail?: string
+  locations?: ApprovalLocation[]
+}
+
+export interface WorkerPlanEntryView {
+  content: string
+  priority?: string
+  status?: string
+}
+
 /**
  * Typed event stream for worker execution (Scheduler → tool bridge → Chat UI).
- * Order: started -> delta* -> completed | failed | cancelled | timed_out
+ * Order: started -> (delta|thought_delta|tool_call|tool_call_update|plan|approval_*)*
+ *        -> completed | failed | cancelled | timed_out
  * Preflight failure (e.g. Worker not found) may skip started and emit failed directly.
  */
 export type WorkerRunEvent =
@@ -1191,6 +1211,30 @@ export type WorkerRunEvent =
       jobId: string
       sequence: number
       delta: string
+    }
+  | {
+      type: 'thought_delta'
+      jobId: string
+      sequence: number
+      delta: string
+    }
+  | {
+      type: 'tool_call'
+      jobId: string
+      sequence: number
+      toolCall: WorkerToolCallView
+    }
+  | {
+      type: 'tool_call_update'
+      jobId: string
+      sequence: number
+      toolCall: WorkerToolCallView
+    }
+  | {
+      type: 'plan'
+      jobId: string
+      sequence: number
+      entries: WorkerPlanEntryView[]
     }
   | {
       type: 'completed'
@@ -1285,6 +1329,12 @@ export interface WorkerRunState {
   reusedSession: boolean
   sequence: number
   output: string
+  /** Accumulated ACP agent_thought_chunk text. */
+  thought?: string
+  /** Live ACP tool_call / tool_call_update snapshots in first-seen order. */
+  toolCalls?: WorkerToolCallView[]
+  /** Latest ACP plan entries (replaced on each plan/plan_update). */
+  planEntries?: WorkerPlanEntryView[]
   status: 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out' | 'pending_approval'
   truncated: boolean
   error?: string

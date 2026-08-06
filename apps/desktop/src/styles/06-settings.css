@@ -328,6 +328,17 @@
   border-radius: var(--r-md);
   background: var(--bg-surface);
 }
+.models-dev-row.is-added {
+  opacity: 0.72;
+}
+.models-dev-row .settings-save-btn.is-added,
+.models-dev-row .settings-save-btn:disabled.is-added {
+  opacity: 0.85;
+  cursor: default;
+  color: var(--text-3);
+  background: var(--bg-input);
+  border-color: var(--border-soft);
+}
 .models-dev-row .logo,
 .models-dev-row-logo,
 .settings-provider-head-logo {
@@ -3271,6 +3282,27 @@ textarea.settings-input.team-library-desc-input {
   color: var(--blue);
   text-decoration: none;
 }
+/* models.dev 提示行内「刷新目录」：按钮外观等同文本链接 */
+.settings-field-hint .settings-link-inline {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--blue);
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.settings-field-hint .settings-link-inline:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.settings-field-hint .settings-link-inline:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .custom-provider-form {
   margin-top: 12px;
   padding: 16px;
@@ -3923,35 +3955,63 @@ textarea.settings-input.team-library-desc-input {
   stroke-linejoin: round;
 }
 
-/* panel / inspector approval actions (非 chat wireframe) */
+/* panel / inspector approval actions — 与 chat 一致：[标签] 超链接，默认下划线 */
 .approval-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 10px 14px;
   margin-top: 8px;
 }
 .approval-actions-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 10px 14px;
 }
 .approval-actions-btn {
-  height: var(--h-sm);
-  padding: 0 10px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--bg-surface);
+  height: auto;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font: inherit;
   font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
+.approval-actions-btn:hover:not(:disabled) {
+  text-decoration: underline;
+  opacity: 0.88;
+}
 .approval-actions-btn-allow {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: var(--text-inv);
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-weight: var(--fw-semibold);
+  text-decoration: underline;
 }
 .approval-actions-btn-deny {
+  background: none;
+  border: none;
   color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  text-decoration: underline;
+}
+.approval-actions-btn-cancel {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  text-decoration: underline;
+}
+.approval-actions-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  text-decoration: underline;
 }
 .approval-block {
   padding: 8px 0;

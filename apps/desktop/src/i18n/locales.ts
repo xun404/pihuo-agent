@@ -56,6 +56,10 @@ export type MessageKey =
   | 'approvals.pending'
   | 'approvals.target'
   | 'approvals.worker'
+  | 'approvals.allowOnce'
+  | 'approvals.allowAlways'
+  | 'approvals.rejectOnce'
+  | 'approvals.rejectAlways'
   | 'approvals.agentAlwaysHint'
   | 'approvals.unknownScope'
   | 'chat.budgetExhausted'
@@ -361,12 +365,20 @@ export type MessageKey =
   | 'settings.modelsDevSearch'
   | 'settings.modelsDevRefresh'
   | 'settings.modelsDevMeta'
+  | 'settings.modelsDevFilterCount'
   | 'settings.modelsDevModelCount'
   | 'settings.modelsDevAdd'
+  | 'settings.modelsDevAlreadyAdded'
   | 'settings.modelsDevEmpty'
   | 'settings.modelsDevImported'
   | 'settings.modelsDevRefreshFailed'
   | 'settings.modelsDevRefreshFailedKeepLkg'
+  | 'settings.modelsDevNpmSnapshotTitle'
+  | 'settings.modelsDevNpmSnapshotMessage'
+  | 'settings.modelsDevNpmSnapshotConfirm'
+  | 'settings.modelsDevNpmSnapshotBusy'
+  | 'settings.modelsDevNpmSnapshotDone'
+  | 'settings.modelsDevNpmSnapshotFailed'
   | 'settings.apiStyle'
   | 'settings.addModel'
   | 'settings.addModelBtn'
@@ -821,6 +833,9 @@ export type MessageKey =
   | 'workers.runInput'
   | 'workers.runNoOutput'
   | 'workers.runOutput'
+  | 'workers.runThought'
+  | 'workers.runTools'
+  | 'workers.runPlan'
   | 'workers.runRestartContext'
   | 'workers.runTruncated'
   | 'workers.terminalCancel'
@@ -876,8 +891,12 @@ const zh: Dict = {
   'approvals.pending': '待审批',
   'approvals.target': '目标',
   'approvals.worker': 'Worker',
+  'approvals.allowOnce': '允许本次',
+  'approvals.allowAlways': '始终允许',
+  'approvals.rejectOnce': '拒绝',
+  'approvals.rejectAlways': '始终拒绝',
   'approvals.agentAlwaysHint':
-    'Always 的有效期由 Agent 决定，不等同于 App Session 自动授权或永久授权；Agent 直通操作仍由 Agent 自身策略处理。',
+    '「始终允许」的有效期由 Agent 决定，不等同于 App Session 自动授权或永久授权；Agent 直通操作仍由 Agent 自身策略处理。',
   'approvals.unknownScope': 'Agent 未提供可验证路径',
   'chat.budgetExhausted': '已消耗 {used}/{max} 步骤预算，任务可能尚未完成。',
   'chat.continueTask': '继续',
@@ -1187,20 +1206,28 @@ const zh: Dict = {
   'settings.addProvider': '添加供应商',
   'settings.addFromModelsDev': '从 models.dev 添加',
   'settings.addCustomGateway': '自定义网关',
-  'settings.modelsDevHint':
-    '从 models.dev 选用已注册供应商，将写入完整模型列表（目录缓存在本机配置目录，不进安装包）。内置供应商不会出现在此列表。',
+  'settings.modelsDevHint': '从 models.dev 选用已注册供应商。',
   'settings.modelsDevSearchPh': '搜索供应商名称或 id…',
   'settings.modelsDevSearch': '搜索',
   'settings.modelsDevRefresh': '刷新目录',
   'settings.modelsDevMeta': '目录共 {count} 家 · 更新于 {at}',
+  'settings.modelsDevFilterCount': '筛选 {n} 家',
   'settings.modelsDevModelCount': '{n} 个模型',
   'settings.modelsDevAdd': '添加',
+  'settings.modelsDevAlreadyAdded': '已添加',
   'settings.modelsDevEmpty': '没有可添加的供应商。可尝试刷新目录或换个关键词。',
   'settings.modelsDevImported': '已添加「{name}」',
   'settings.modelsDevRefreshFailed':
     '无法从 models.dev 下载目录（{error}）。请检查网络后重试，或稍后再刷新。',
   'settings.modelsDevRefreshFailedKeepLkg':
     '在线刷新失败（{error}），已继续使用本机缓存目录。',
+  'settings.modelsDevNpmSnapshotTitle': '将使用 models.dev 的 npm 包更新目录',
+  'settings.modelsDevNpmSnapshotMessage':
+    '暂时无法连接 models.dev，将改用 models.dev 官方 npm 包（@opencode-ai/models）尝试更新目录，大约需要 1–2 分钟。若 npm 仍然失败，请到「设置 → 运行时」配置可用的 npm 镜像后再试。',
+  'settings.modelsDevNpmSnapshotConfirm': '安装并刷新',
+  'settings.modelsDevNpmSnapshotBusy': '正在安装…',
+  'settings.modelsDevNpmSnapshotDone': '已通过 @opencode-ai/models{version} 更新目录（{count} 家供应商）',
+  'settings.modelsDevNpmSnapshotFailed': 'npm 安装或写入目录失败（{error}）。请到「设置 → 运行时」检查 npm 镜像后重试。',
   'settings.apiStyle': '接口类型',
   'settings.addModel': '添加模型',
   'settings.addModelBtn': '+ 添加',
@@ -1387,7 +1414,8 @@ const zh: Dict = {
   'settings.runtime.minutesUnit': '分钟',
   'settings.runtime.stepsUnit': '步',
   'settings.runtime.workerJobTimeout': 'Worker 任务超时',
-  'settings.runtime.workerJobTimeoutDesc': '进入运行状态后的总执行时间，默认 10 分钟。',
+  'settings.runtime.workerJobTimeoutDesc':
+    'ACP 无回传且无审批，等到超时将终止 Worker。有回传会续期。默认 10 分钟。',
   'settings.runtime.workerJobTimeoutError': '请输入 1 到 120 之间的整数',
   'settings.runtime.workerQueueTimeout': 'Worker 排队超时',
   'settings.runtime.workerQueueTimeoutDesc': '等待并发槽或 ACP Session 容量的时间，默认 10 分钟。',
@@ -1681,6 +1709,9 @@ const zh: Dict = {
   'workers.runInput': '输入',
   'workers.runNoOutput': '已完成（无输出）',
   'workers.runOutput': '输出',
+  'workers.runThought': '思考',
+  'workers.runTools': '工具',
+  'workers.runPlan': '计划',
   'workers.runRestartContext': '重新开始该 Agent 上下文',
   'workers.runTruncated': '输出已截断',
   'workers.terminalCancel': '取消并关闭',
@@ -1736,8 +1767,12 @@ const en: Dict = {
   'approvals.pending': 'Pending',
   'approvals.target': 'Target',
   'approvals.worker': 'Worker',
+  'approvals.allowOnce': 'Allow once',
+  'approvals.allowAlways': 'Always allow',
+  'approvals.rejectOnce': 'Reject',
+  'approvals.rejectAlways': 'Always reject',
   'approvals.agentAlwaysHint':
-    'The Agent decides how long Always lasts; it is not App Session auto-approve or a permanent grant. Direct Agent operations remain governed by the Agent.',
+    'How long “Always allow” lasts is decided by the Agent; it is not App Session auto-approve or a permanent grant. Direct Agent operations remain governed by the Agent.',
   'approvals.unknownScope': 'Agent did not provide a verifiable path',
   'chat.budgetExhausted': '{used}/{max} step budget exhausted. Task may be incomplete.',
   'chat.continueTask': 'Continue',
@@ -2057,20 +2092,30 @@ const en: Dict = {
   'settings.addProvider': 'Add provider',
   'settings.addFromModelsDev': 'Add from models.dev',
   'settings.addCustomGateway': 'Custom gateway',
-  'settings.modelsDevHint':
-    'Pick a registered provider from models.dev to import its full model list (catalog is cached under your local config dir, not the install package). Built-in providers are excluded.',
+  'settings.modelsDevHint': 'Pick a registered provider from models.dev.',
   'settings.modelsDevSearchPh': 'Search by name or id…',
   'settings.modelsDevSearch': 'Search',
   'settings.modelsDevRefresh': 'Refresh catalog',
   'settings.modelsDevMeta': '{count} providers · updated {at}',
+  'settings.modelsDevFilterCount': '{n} shown',
   'settings.modelsDevModelCount': '{n} models',
   'settings.modelsDevAdd': 'Add',
+  'settings.modelsDevAlreadyAdded': 'Added',
   'settings.modelsDevEmpty': 'No providers to add. Try refreshing the catalog or another query.',
   'settings.modelsDevImported': 'Added “{name}”',
   'settings.modelsDevRefreshFailed':
     'Could not download the models.dev catalog ({error}). Check your network and try again.',
   'settings.modelsDevRefreshFailedKeepLkg':
     'Online refresh failed ({error}); still using the local cached catalog.',
+  'settings.modelsDevNpmSnapshotTitle': 'Update catalog with the models.dev npm package',
+  'settings.modelsDevNpmSnapshotMessage':
+    'models.dev is temporarily unreachable. We will try updating the catalog from the official models.dev npm package (@opencode-ai/models). This usually takes 1–2 minutes. If npm still fails, open Settings → Runtime and set a working npm registry mirror, then try again.',
+  'settings.modelsDevNpmSnapshotConfirm': 'Install and refresh',
+  'settings.modelsDevNpmSnapshotBusy': 'Installing…',
+  'settings.modelsDevNpmSnapshotDone':
+    'Catalog updated via @opencode-ai/models{version} ({count} providers)',
+  'settings.modelsDevNpmSnapshotFailed':
+    'npm install or catalog update failed ({error}). Check the npm registry under Settings → Runtime and try again.',
   'settings.apiStyle': 'API style',
   'settings.addModel': 'Add model',
   'settings.addModelBtn': '+ Add',
@@ -2266,7 +2311,7 @@ const en: Dict = {
   'settings.runtime.stepsUnit': 'steps',
   'settings.runtime.workerJobTimeout': 'Worker task timeout',
   'settings.runtime.workerJobTimeoutDesc':
-    'Total time after entering running state; default 10 minutes.',
+    'If ACP is silent and there is no pending approval, the Worker is terminated when this idle timeout elapses. Activity resets the timer. Default 10 minutes.',
   'settings.runtime.workerJobTimeoutError': 'Enter an integer from 1 to 120',
   'settings.runtime.workerQueueTimeout': 'Worker queue timeout',
   'settings.runtime.workerQueueTimeoutDesc':
@@ -2572,6 +2617,9 @@ const en: Dict = {
   'workers.runInput': 'Input',
   'workers.runNoOutput': 'Completed (no output)',
   'workers.runOutput': 'Output',
+  'workers.runThought': 'Thinking',
+  'workers.runTools': 'Tools',
+  'workers.runPlan': 'Plan',
   'workers.runRestartContext': 'Restart this agent context',
   'workers.runTruncated': 'Output truncated',
   'workers.terminalCancel': 'Cancel and close',

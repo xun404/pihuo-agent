@@ -175,20 +175,35 @@ function sanitiseDelta(delta: string): string {
  * a consumer cannot mutate another consumer's view or the replay journal.
  */
 function cloneWorkerRunEvent(event: WorkerRunEvent): WorkerRunEvent {
-  if (event.type !== 'approval_requested' && event.type !== 'approval_resolved') {
-    return { ...event }
+  if (event.type === 'approval_requested' || event.type === 'approval_resolved') {
+    return {
+      ...event,
+      approval: {
+        ...event.approval,
+        options: event.approval.options.map((option) => ({ ...option })),
+        locations: event.approval.locations?.map((location) => ({ ...location })),
+        selectedOption: event.approval.selectedOption
+          ? { ...event.approval.selectedOption }
+          : undefined,
+      },
+    }
   }
-  return {
-    ...event,
-    approval: {
-      ...event.approval,
-      options: event.approval.options.map((option) => ({ ...option })),
-      locations: event.approval.locations?.map((location) => ({ ...location })),
-      selectedOption: event.approval.selectedOption
-        ? { ...event.approval.selectedOption }
-        : undefined,
-    },
+  if (event.type === 'tool_call' || event.type === 'tool_call_update') {
+    return {
+      ...event,
+      toolCall: {
+        ...event.toolCall,
+        locations: event.toolCall.locations?.map((location) => ({ ...location })),
+      },
+    }
   }
+  if (event.type === 'plan') {
+    return {
+      ...event,
+      entries: event.entries.map((entry) => ({ ...entry })),
+    }
+  }
+  return { ...event }
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +422,7 @@ export class WorkerEventEmitter {
       }
       if (state.terminal) return // already terminated
 
-      if (event.type === 'delta') {
+      if (event.type === 'delta' || event.type === 'thought_delta') {
         ;(event as WorkerRunEvent & { delta: string }).delta = sanitiseDelta(
           (event as WorkerRunEvent & { delta: string }).delta,
         )

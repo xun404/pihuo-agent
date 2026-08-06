@@ -17,7 +17,6 @@ import {
 import {
   enrichTerminalWorkerEvent,
   MAX_TIMER_DELAY_MS,
-  raceWithTimeout,
   resolveWorkerJobTimeoutMs,
   splitWorkerDeltaChunks,
   subscribeAbort,
@@ -124,20 +123,6 @@ export function jobToTerminalEvent(job: WorkerJob): WorkerRunEvent {
   }
 }
 
-/** Wait for a terminal WorkerRunEvent via port.events (works for Local and Remote). */
-async function waitForTerminalEvent(
-  port: RuntimeDispatchPort,
-  jobId: string,
-  signal: AbortSignal | undefined,
-  onEvent?: (event: WorkerRunEvent) => void,
-): Promise<WorkerRunEvent | null> {
-  for await (const event of port.events(jobId, signal)) {
-    onEvent?.(event)
-    if (isTerminalWorkerEvent(event)) return event
-  }
-  return null
-}
-
 class WorkerJobWaitTimeoutError extends Error {
   constructor(jobId: string) {
     super(`Job ${jobId} timed out waiting for terminal status`)
@@ -152,6 +137,29 @@ export function setWorkerObservationTimeoutForTests(timeoutMs?: number): void {
   workerObservationTimeoutMsForTests = timeoutMs
 }
 
+function resolveObservationBudgetMs(job: WorkerJob): number {
+  if (workerObservationTimeoutMsForTests !== undefined) {
+    return Math.max(1, Math.floor(workerObservationTimeoutMsForTests))
+  }
+  const workerTimeouts = workerTimeoutSnapshotFromJob(job)
+  return Math.min(
+    MAX_TIMER_DELAY_MS,
+    Math.floor(
+      (resolveWorkerJobTimeoutMs(workerTimeouts.jobTimeoutMs) + workerTimeouts.queueTimeoutMs) *
+        1.2,
+    ),
+  )
+}
+
+/**
+ * Leader sync wait observation budget — inactivity-based, aligned with Scheduler.
+ *
+ * - Each non-terminal ACP event (delta / thought / tool / plan / started / …)
+ *   re-arms a full idle window.
+ * - `pending_approval` pauses the clock entirely (human approval has no timeout).
+ * - Timeout only fires when the idle window elapses with no ACP activity and the
+ *   Job has not yet reached a terminal stop state.
+ */
 async function waitForTerminalWithDeadline(
   port: RuntimeDispatchPort,
   job: WorkerJob,
@@ -162,28 +170,87 @@ async function waitForTerminalWithDeadline(
   const signal = externalSignal
     ? AbortSignal.any([externalSignal, observer.signal])
     : observer.signal
-  const workerTimeouts = workerTimeoutSnapshotFromJob(job)
-  const timeoutMs =
-    workerObservationTimeoutMsForTests === undefined
-      ? Math.min(
-          MAX_TIMER_DELAY_MS,
-          Math.floor(
-            (resolveWorkerJobTimeoutMs(workerTimeouts.jobTimeoutMs) +
-              workerTimeouts.queueTimeoutMs) *
-              1.2,
-          ),
-        )
-      : Math.max(1, Math.floor(workerObservationTimeoutMsForTests))
+
+  const idleBudgetMs = resolveObservationBudgetMs(job)
+  let pausedForApproval = job.status === 'pending_approval'
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let rejectTimeout: ((error: Error) => void) | undefined
+
+  const clearTimer = () => {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+  }
+
+  const armTimer = () => {
+    clearTimer()
+    if (pausedForApproval) return
+    // Keep the timer ref'd so a never-settling event stream cannot drain the
+    // Node event loop before the deadline (same contract as raceWithTimeout).
+    timer = setTimeout(() => {
+      rejectTimeout?.(new WorkerJobWaitTimeoutError(job.id))
+    }, idleBudgetMs)
+  }
+
+  const touchIdle = () => {
+    if (pausedForApproval) return
+    armTimer()
+  }
+
+  const pauseForApproval = () => {
+    if (pausedForApproval) return
+    pausedForApproval = true
+    clearTimer()
+  }
+
+  const resumeAfterApproval = () => {
+    if (!pausedForApproval) return
+    pausedForApproval = false
+    // Fresh idle window after human approval (approval wait itself is unbounded).
+    armTimer()
+  }
+
+  const refreshPauseFromJob = async () => {
+    if (!port.getJob) return
+    try {
+      const latest = await port.getJob(job.id)
+      if (!latest) return
+      if (latest.status === 'pending_approval') pauseForApproval()
+      else if (latest.status === 'running' || latest.status === 'queued') resumeAfterApproval()
+    } catch {
+      // Best-effort; event types remain the primary signal.
+    }
+  }
+
   try {
-    return await raceWithTimeout(
-      waitForTerminalEvent(port, job.id, signal, onEvent),
-      timeoutMs,
-      () => {
-        observer.abort()
-        return new WorkerJobWaitTimeoutError(job.id)
-      },
-    )
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      rejectTimeout = reject
+    })
+    armTimer()
+
+    const waitPromise = (async (): Promise<WorkerRunEvent | null> => {
+      for await (const event of port.events(job.id, signal)) {
+        onEvent?.(event)
+        if (event.type === 'approval_requested') {
+          pauseForApproval()
+        } else if (event.type === 'approval_resolved') {
+          // Multi-approval jobs may stay pending_approval after one resolve.
+          await refreshPauseFromJob()
+          // If getJob is unavailable, resume — the next approval_requested will re-pause.
+          if (!port.getJob) resumeAfterApproval()
+        } else if (!isTerminalWorkerEvent(event)) {
+          // Any live ACP progress (delta / thought / tool / plan / started) resets idle.
+          touchIdle()
+        }
+        if (isTerminalWorkerEvent(event)) return event
+      }
+      return null
+    })()
+
+    return await Promise.race([waitPromise, timeoutPromise])
   } finally {
+    clearTimer()
     // Release fetch readers/subscriptions even when the timeout race wins.
     observer.abort()
   }
@@ -804,6 +871,17 @@ export const dispatchTeamMemberTool = createTool({
                 await writeEvent(
                   { type: 'data-worker-run', id: jid, data: event, transient: true },
                   `approval for ${jid}`,
+                )
+                lastFlush = Date.now()
+              } else if (
+                event.type === 'thought_delta' ||
+                event.type === 'tool_call' ||
+                event.type === 'tool_call_update' ||
+                event.type === 'plan'
+              ) {
+                await writeEvent(
+                  { type: 'data-worker-run', id: jid, data: event, transient: true },
+                  `activity for ${jid}`,
                 )
                 lastFlush = Date.now()
               } else {

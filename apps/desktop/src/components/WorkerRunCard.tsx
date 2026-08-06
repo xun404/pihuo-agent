@@ -109,7 +109,7 @@ function kindClass(kind?: WorkerKind | string, name?: string): string {
   return resolveWorkerBrand(kind, name)
 }
 
-type WorkerActionKind = 'input' | 'approval' | 'error' | 'output'
+type WorkerActionKind = 'input' | 'approval' | 'error' | 'output' | 'thought' | 'tool' | 'plan'
 
 function WorkerActionSection({
   kind,
@@ -122,7 +122,8 @@ function WorkerActionSection({
   marker: string
   children: React.ReactNode
 }) {
-  const toolBlockKind = kind === 'error' ? 'error' : kind === 'output' ? 'output' : 'input'
+  const toolBlockKind =
+    kind === 'error' ? 'error' : kind === 'output' || kind === 'thought' ? 'output' : 'input'
   return (
     <section className={`worker-action-section worker-action-${kind}`}>
       <div className="worker-action-label">{label}</div>
@@ -134,6 +135,13 @@ function WorkerActionSection({
       </div>
     </section>
   )
+}
+
+function toolStatusMarker(status?: string): string {
+  if (status === 'completed') return '✓'
+  if (status === 'failed') return '✗'
+  if (status === 'in_progress') return '…'
+  return '·'
 }
 
 /**
@@ -311,6 +319,55 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 {taskPrompt || state.task}
               </WorkerActionSection>
             )}
+            {Boolean(state.thought?.trim()) && (
+              <WorkerActionSection kind="thought" label={t('workers.runThought')} marker="…">
+                <div className="worker-action-thought">{state.thought}</div>
+              </WorkerActionSection>
+            )}
+            {Array.isArray(state.planEntries) && state.planEntries.length > 0 && (
+              <WorkerActionSection kind="plan" label={t('workers.runPlan')} marker="≡">
+                <ul className="worker-action-plan-list">
+                  {state.planEntries.map((entry, index) => (
+                    <li key={`${index}-${entry.content.slice(0, 24)}`}>
+                      {entry.status ? `[${entry.status}] ` : ''}
+                      {entry.content}
+                    </li>
+                  ))}
+                </ul>
+              </WorkerActionSection>
+            )}
+            {Array.isArray(state.toolCalls) && state.toolCalls.length > 0 && (
+              <WorkerActionSection kind="tool" label={t('workers.runTools')} marker="⚙">
+                <div className="worker-action-tool-list">
+                  {state.toolCalls.map((tool) => (
+                    <div className="worker-action-tool-item" key={tool.toolCallId}>
+                      <div className="worker-action-tool-title">
+                        <span className="worker-action-tool-status" aria-hidden>
+                          {toolStatusMarker(tool.status)}
+                        </span>
+                        {tool.kind
+                          ? `${TOOL_KIND_LABELS[tool.kind] ?? tool.kind} · `
+                          : ''}
+                        {tool.title}
+                        {tool.status ? ` · ${tool.status}` : ''}
+                      </div>
+                      {(tool.detail ||
+                        (tool.locations && tool.locations.length > 0)) && (
+                        <div className="worker-action-tool-detail">
+                          {tool.locations && tool.locations.length > 0
+                            ? formatLocations(tool.locations)
+                            : null}
+                          {tool.locations && tool.locations.length > 0 && tool.detail
+                            ? ' · '
+                            : null}
+                          {tool.detail}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </WorkerActionSection>
+            )}
             {isPendingApproval && pendingApprovals.length > 0 && (
               <WorkerActionSection kind="approval" label={t('workers.runApproval')} marker="!">
                 {pendingApprovals.map((approval) => (
@@ -407,8 +464,14 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 </div>
               </WorkerActionSection>
             )}
-            {/* Running with no output yet: keep a short live hint line. */}
-            {isRunning && !state.output && !publicError && !isPendingApproval && (
+            {/* Running with no activity yet: keep a short live hint line. */}
+            {isRunning &&
+              !state.output &&
+              !state.thought?.trim() &&
+              !(state.toolCalls && state.toolCalls.length > 0) &&
+              !(state.planEntries && state.planEntries.length > 0) &&
+              !publicError &&
+              !isPendingApproval && (
               <div className="line">
                 <span className="mk" aria-hidden>
                   ▸

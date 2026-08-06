@@ -185,6 +185,6 @@ describe('WorkerRunCard Registry auth_required', () => {
     )
 
     assert.ok(html.indexOf('First approval') < html.indexOf('Second approval'))
-    assert.equal((html.match(/approval-actions-btn-cancel|>Cancel</gu) ?? []).length, 2)
+    assert.equal((html.match(/>\[Cancel\]</gu) ?? []).length, 2)
   })
 })

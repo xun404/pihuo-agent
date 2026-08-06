@@ -1,5 +1,6 @@
-import type { ApprovalItem } from '@swarmdesk-agent/shared'
+import type { ApprovalItem, ApprovalOptionKind } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
+import type { MessageKey } from '../i18n/locales.js'
 
 interface ApprovalActionsProps {
   approval: ApprovalItem
@@ -13,6 +14,13 @@ interface ApprovalActionsProps {
   ) => void
   /** wireframe: 线稿 approval-row 内 .btn / .btn.primary / .btn.danger */
   variant?: 'default' | 'wireframe'
+}
+
+const OPTION_LABEL_KEYS: Record<ApprovalOptionKind, MessageKey> = {
+  allow_once: 'approvals.allowOnce',
+  allow_always: 'approvals.allowAlways',
+  reject_once: 'approvals.rejectOnce',
+  reject_always: 'approvals.rejectAlways',
 }
 
 export function ApprovalActions({
@@ -35,6 +43,14 @@ export function ApprovalActions({
   const hasNoOptions = allowOptions.length === 0 && rejectOptions.length === 0
   const hasUnknownScope = !approval.locations || approval.locations.length === 0
   const hasAgentAlways = allowOptions.some((option) => option.kind === 'allow_always')
+
+  const optionLabel = (kind: ApprovalOptionKind, fallbackName: string) => {
+    const key = OPTION_LABEL_KEYS[kind]
+    const label = key ? t(key) : fallbackName
+    return `[${label}]`
+  }
+
+  const cancelLabel = () => `[${t('approvals.cancel')}]`
 
   const handleResolve = (optionId: string | undefined, decision: 'allow' | 'deny' | 'cancel') => {
     if (isResolving) return
@@ -62,7 +78,7 @@ export function ApprovalActions({
                 disabled={isResolving}
                 onClick={() => handleResolve(opt.optionId, 'allow')}
               >
-                {opt.name}
+                {optionLabel(opt.kind, opt.name)}
               </button>
             ))}
             {rejectOptions.map((opt) => (
@@ -73,18 +89,18 @@ export function ApprovalActions({
                 disabled={isResolving}
                 onClick={() => handleResolve(opt.optionId, 'deny')}
               >
-                {opt.name}
+                {optionLabel(opt.kind, opt.name)}
               </button>
             ))}
           </>
         )}
         <button
           type="button"
-          className="btn"
+          className="btn btn-cancel"
           disabled={isResolving}
           onClick={() => handleResolve(undefined, 'cancel')}
         >
-          {t('approvals.cancel')}
+          {cancelLabel()}
         </button>
       </>
     )
@@ -110,7 +126,7 @@ export function ApprovalActions({
                   disabled={isResolving}
                   onClick={() => handleResolve(opt.optionId, 'allow')}
                 >
-                  {opt.name}
+                  {optionLabel(opt.kind, opt.name)}
                 </button>
               ))}
             </div>
@@ -125,7 +141,7 @@ export function ApprovalActions({
                   disabled={isResolving}
                   onClick={() => handleResolve(opt.optionId, 'deny')}
                 >
-                  {opt.name}
+                  {optionLabel(opt.kind, opt.name)}
                 </button>
               ))}
             </div>
@@ -139,7 +155,7 @@ export function ApprovalActions({
           disabled={isResolving}
           onClick={() => handleResolve(undefined, 'cancel')}
         >
-          {t('approvals.cancel')}
+          {cancelLabel()}
         </button>
       </div>
     </div>

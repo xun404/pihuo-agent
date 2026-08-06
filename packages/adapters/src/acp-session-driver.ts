@@ -108,6 +108,31 @@ export function isAcpSessionRuntimeError(value: unknown): value is AcpSessionRun
   return value instanceof AcpSessionRuntimeError
 }
 
+/** Normalized ACP session/update payloads forwarded to the Scheduler/UI. */
+export type AcpSessionActivity =
+  | { kind: 'message_delta'; text: string }
+  | { kind: 'thought_delta'; text: string }
+  | {
+      kind: 'tool_call' | 'tool_call_update'
+      toolCall: {
+        toolCallId: string
+        title: string
+        kind?: string
+        status?: string
+        detail?: string
+        locations?: Array<{
+          filePath?: string
+          line?: number
+          column?: number
+          description?: string
+        }>
+      }
+    }
+  | {
+      kind: 'plan'
+      entries: Array<{ content: string; priority?: string; status?: string }>
+    }
+
 export interface PromptBinding {
   jobId: string
   signal?: AbortSignal
@@ -115,8 +140,118 @@ export interface PromptBinding {
     req: AcpPermissionRequest,
   ) => Promise<{ outcome: 'selected' | 'cancelled'; optionId?: string }>
   onOutputDelta?: (sequence: number, delta: string) => void
+  /** Thought / tool / plan updates (message deltas still also fire onOutputDelta). */
+  onSessionActivity?: (sequence: number, activity: AcpSessionActivity) => void
   onSessionReady?: (disposition: string) => void
   sequence: number
+}
+
+const TOOL_KIND_SET = new Set([
+  'read',
+  'edit',
+  'delete',
+  'move',
+  'search',
+  'execute',
+  'think',
+  'fetch',
+  'switch_mode',
+  'other',
+])
+
+const TOOL_STATUS_SET = new Set(['pending', 'in_progress', 'completed', 'failed'])
+
+function textFromUnknownContent(content: unknown): string {
+  if (!content || typeof content !== 'object') return ''
+  const block = content as { type?: string; text?: unknown }
+  if (block.type === 'text' && typeof block.text === 'string') return block.text
+  return ''
+}
+
+function summarizeToolContent(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return undefined
+  const parts: string[] = []
+  for (const item of content) {
+    if (!item || typeof item !== 'object') continue
+    const row = item as { type?: string; content?: unknown; path?: string; newText?: string }
+    if (row.type === 'content') {
+      const t = textFromUnknownContent(row.content)
+      if (t) parts.push(t)
+    } else if (row.type === 'diff' && typeof row.path === 'string') {
+      parts.push(row.path)
+    } else if (row.type === 'terminal') {
+      parts.push('(terminal)')
+    }
+  }
+  if (parts.length === 0) return undefined
+  const joined = parts.join('\n').trim()
+  if (!joined) return undefined
+  return joined.length > 400 ? `${joined.slice(0, 400)}…` : joined
+}
+
+function normalizeToolCallPayload(update: Record<string, unknown>): AcpSessionActivity | null {
+  const toolCallId = typeof update.toolCallId === 'string' ? update.toolCallId.trim() : ''
+  if (!toolCallId) return null
+  const title =
+    typeof update.title === 'string' && update.title.trim()
+      ? update.title.trim()
+      : toolCallId
+  const kindRaw = typeof update.kind === 'string' ? update.kind : undefined
+  const statusRaw = typeof update.status === 'string' ? update.status : undefined
+  const locations = Array.isArray(update.locations)
+    ? update.locations
+        .map((loc) => {
+          if (!loc || typeof loc !== 'object') return null
+          const row = loc as Record<string, unknown>
+          return {
+            ...(typeof row.path === 'string'
+              ? { filePath: row.path }
+              : typeof row.filePath === 'string'
+                ? { filePath: row.filePath }
+                : {}),
+            ...(typeof row.line === 'number' ? { line: row.line } : {}),
+            ...(typeof row.column === 'number' ? { column: row.column } : {}),
+            ...(typeof row.description === 'string' ? { description: row.description } : {}),
+          }
+        })
+        .filter((x): x is NonNullable<typeof x> => x != null && Object.keys(x).length > 0)
+    : undefined
+  const detailFromContent = summarizeToolContent(update.content)
+  let detail = detailFromContent
+  if (!detail && update.rawInput != null) {
+    try {
+      const raw =
+        typeof update.rawInput === 'string' ? update.rawInput : JSON.stringify(update.rawInput)
+      if (raw && raw !== '{}' && raw !== 'null') {
+        detail = raw.length > 400 ? `${raw.slice(0, 400)}…` : raw
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const sessionUpdate = update.sessionUpdate
+  const kind =
+    sessionUpdate === 'tool_call_update' ? ('tool_call_update' as const) : ('tool_call' as const)
+  return {
+    kind,
+    toolCall: {
+      toolCallId,
+      title,
+      ...(kindRaw && TOOL_KIND_SET.has(kindRaw) ? { kind: kindRaw } : {}),
+      ...(statusRaw && TOOL_STATUS_SET.has(statusRaw) ? { status: statusRaw } : {}),
+      ...(detail ? { detail } : {}),
+      ...(locations && locations.length > 0 ? { locations } : {}),
+    },
+  }
+}
+
+function emitActivity(binding: PromptBinding, activity: AcpSessionActivity): void {
+  binding.sequence++
+  try {
+    binding.onSessionActivity?.(binding.sequence, activity)
+  } catch {
+    // Rendering/telemetry observers must not break the ACP transport.
+  }
 }
 
 export interface PromptResult {
@@ -265,13 +400,13 @@ export class AcpSessionDriver {
         const b = drv.currentBinding
         if (!b) return
         try {
-          const update = ctx.params.update as {
+          const update = ctx.params.update as Record<string, unknown> & {
             sessionUpdate?: string
-            configOptions?: SessionConfigOption[]
             content?: { type?: string; text?: unknown }
           }
-          // Type-safe consumption: known types handled; unknown never throw.
-          if (update?.sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text') {
+          const sessionUpdate = update?.sessionUpdate
+          // Agent final/streamed message text
+          if (sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text') {
             const text = String(update.content.text ?? '')
             drv._outputAcc += text
             b.sequence++
@@ -280,9 +415,45 @@ export class AcpSessionDriver {
             } catch {
               // Rendering/telemetry observers must not break the ACP transport.
             }
+            try {
+              b.onSessionActivity?.(b.sequence, { kind: 'message_delta', text })
+            } catch {
+              /* ignore */
+            }
             return
           }
-          // thought/tool/plan/usage/config/session-info: accepted, not rendered here
+          // Agent thinking / reasoning stream
+          if (sessionUpdate === 'agent_thought_chunk' && update.content?.type === 'text') {
+            const text = String(update.content.text ?? '')
+            if (text) emitActivity(b, { kind: 'thought_delta', text })
+            return
+          }
+          // Tool call lifecycle
+          if (sessionUpdate === 'tool_call' || sessionUpdate === 'tool_call_update') {
+            const activity = normalizeToolCallPayload(update)
+            if (activity) emitActivity(b, activity)
+            return
+          }
+          // Plan (full replace)
+          if (sessionUpdate === 'plan' || sessionUpdate === 'plan_update') {
+            const rawEntries = Array.isArray(update.entries) ? update.entries : []
+            const entries = rawEntries
+              .map((entry) => {
+                if (!entry || typeof entry !== 'object') return null
+                const row = entry as Record<string, unknown>
+                const content = typeof row.content === 'string' ? row.content.trim() : ''
+                if (!content) return null
+                return {
+                  content,
+                  ...(typeof row.priority === 'string' ? { priority: row.priority } : {}),
+                  ...(typeof row.status === 'string' ? { status: row.status } : {}),
+                }
+              })
+              .filter((x): x is NonNullable<typeof x> => x != null)
+            emitActivity(b, { kind: 'plan', entries })
+            return
+          }
+          // usage/config/session-info/commands/mode: accepted, not rendered here
         } catch {
           // Malformed updates must not abort the stream.
         }

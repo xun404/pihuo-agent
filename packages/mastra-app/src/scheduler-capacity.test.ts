@@ -121,7 +121,7 @@ describe('Worker queue timeout', () => {
     )
   })
 
-  it('pauses active Job time in pending_approval and resumes the remaining time', async () => {
+  it('pauses idle Job timer in pending_approval and re-arms a full window after resume', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'scheduler-active-timeout-'))
     const previousState = process.env.SWARMDESK_AGENT_AGENTS_STATE
     process.env.SWARMDESK_AGENT_AGENTS_STATE = join(dir, 'state.json')
@@ -145,12 +145,18 @@ describe('Worker queue timeout', () => {
       const internals = scheduler as unknown as {
         runtime: Map<
           string,
-          { abort: AbortController; timeout?: ReturnType<typeof setTimeout>; timeoutPaused?: boolean }
+          {
+            abort: AbortController
+            timeout?: ReturnType<typeof setTimeout>
+            timeoutPaused?: boolean
+            timeoutDurationMs?: number
+          }
         >
         startJobTimeout: (jobId: string, durationMs: number, handler: () => void) => void
         pauseJobTimeout: (jobId: string) => void
         pauseWhilePersistingApproval: <T>(jobId: string, persist: () => T) => T
         resumeJobTimeout: (jobId: string) => void
+        touchJobTimeout: (jobId: string) => void
       }
       internals.runtime.set(job.id, { abort: new AbortController() })
       internals.startJobTimeout(job.id, 50, () => {
@@ -158,17 +164,29 @@ describe('Worker queue timeout', () => {
       })
       internals.pauseJobTimeout(job.id)
       await new Promise((resolve) => setTimeout(resolve, 80))
-      assert.equal(fired, 0, 'pending approval must not consume active Job time')
+      assert.equal(fired, 0, 'pending approval must not consume idle Job time')
       assert.equal(internals.runtime.get(job.id)?.timeout, undefined)
       assert.equal(internals.runtime.get(job.id)?.timeoutPaused, true)
 
       internals.resumeJobTimeout(job.id)
       assert.equal(internals.runtime.get(job.id)?.timeoutPaused, false)
       await new Promise((resolve) => setTimeout(resolve, 100))
-      assert.equal(fired, 1, 'remaining active time must continue after approval resolution')
+      assert.equal(fired, 1, 'fresh idle window after approval must eventually fire without ACP activity')
+
+      // ACP activity re-arms a full idle window (no cumulative wall-clock burn).
+      fired = 0
+      internals.startJobTimeout(job.id, 60, () => {
+        fired += 1
+      })
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      internals.touchJobTimeout(job.id)
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      assert.equal(fired, 0, 'activity must reset the idle Job timer')
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      assert.equal(fired, 1, 'idle timeout fires only after a full silent window')
 
       // A failed waiter reservation / durable Approval create must restore the
-      // active timer because no pending_approval transition became durable.
+      // idle timer because no pending_approval transition became durable.
       let failed = false
       internals.startJobTimeout(job.id, 40, () => {
         failed = true

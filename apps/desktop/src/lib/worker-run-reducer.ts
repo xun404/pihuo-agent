@@ -10,6 +10,7 @@ import {
   type WorkerRole,
   type WorkerRunEvent,
   type WorkerRunState,
+  type WorkerToolCallView,
 } from '@swarmdesk-agent/shared'
 
 export function isActiveWorkerStatus(status: WorkerRunState['status']): boolean {
@@ -217,6 +218,16 @@ export function workerRunReducer(
       }
       break
     }
+    case 'thought_delta':
+    case 'tool_call':
+    case 'tool_call_update':
+    case 'plan': {
+      const prev = state.get(event.jobId)
+      if (prev && isActiveWorkerStatus(prev.status) && prev.sequence < event.sequence) {
+        changed = true
+      }
+      break
+    }
     case 'approval_requested': {
       const prev = state.get(event.jobId)
       if (prev && isActiveWorkerStatus(prev.status)) {
@@ -291,6 +302,9 @@ export function workerRunReducer(
         reusedSession: event.reusedSession,
         sequence: 0,
         output: '',
+        thought: '',
+        toolCalls: [],
+        planEntries: [],
         status: 'running',
         truncated: false,
         startedAt: now,
@@ -306,6 +320,60 @@ export function workerRunReducer(
           ...prev,
           sequence: event.sequence,
           output: prev.output + event.delta,
+          lastDeltaAt: Date.now(),
+        })
+      }
+      break
+    }
+    case 'thought_delta': {
+      const prev = state.get(event.jobId)
+      if (prev && isActiveWorkerStatus(prev.status) && prev.sequence < event.sequence) {
+        next.set(event.jobId, {
+          ...prev,
+          sequence: event.sequence,
+          thought: (prev.thought ?? '') + event.delta,
+          lastDeltaAt: Date.now(),
+        })
+      }
+      break
+    }
+    case 'tool_call':
+    case 'tool_call_update': {
+      const prev = state.get(event.jobId)
+      if (prev && isActiveWorkerStatus(prev.status) && prev.sequence < event.sequence) {
+        const incoming = event.toolCall
+        const existing = Array.isArray(prev.toolCalls) ? prev.toolCalls : []
+        const idx = existing.findIndex((item) => item.toolCallId === incoming.toolCallId)
+        let toolCalls: WorkerToolCallView[]
+        if (idx < 0) {
+          toolCalls = [...existing, { ...incoming }]
+        } else {
+          const current = existing[idx]!
+          const merged: WorkerToolCallView = {
+            ...current,
+            ...incoming,
+            title: incoming.title || current.title,
+            locations: incoming.locations ?? current.locations,
+            detail: incoming.detail ?? current.detail,
+          }
+          toolCalls = existing.map((item, i) => (i === idx ? merged : item))
+        }
+        next.set(event.jobId, {
+          ...prev,
+          sequence: event.sequence,
+          toolCalls,
+          lastDeltaAt: Date.now(),
+        })
+      }
+      break
+    }
+    case 'plan': {
+      const prev = state.get(event.jobId)
+      if (prev && isActiveWorkerStatus(prev.status) && prev.sequence < event.sequence) {
+        next.set(event.jobId, {
+          ...prev,
+          sequence: event.sequence,
+          planEntries: event.entries.map((entry) => ({ ...entry })),
           lastDeltaAt: Date.now(),
         })
       }

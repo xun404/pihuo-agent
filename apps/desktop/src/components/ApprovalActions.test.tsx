@@ -35,17 +35,23 @@ describe('ApprovalActions', () => {
       </I18nProvider>,
     )
 
-    assert.match(html, />Cancel</u)
-    assert.match(html, /class="btn"[^>]*>Cancel</u)
+    assert.match(html, />\[Cancel\]</u)
+    assert.match(html, /class="btn btn-cancel"/u)
+    assert.match(html, />\[Allow once\]</u)
+    assert.match(html, />\[Reject\]</u)
   })
 
-  it('explains Agent-owned Always scope and unknown paths without exposing raw payloads', () => {
+  it('localizes bracketed option labels with Always hint to match UI language', () => {
     const html = renderToStaticMarkup(
       <I18nProvider serverLocale="zh">
         <ApprovalActions
           approval={{
             ...approval,
-            options: [{ optionId: 'allow-always', name: 'Always', kind: 'allow_always' }],
+            options: [
+              { optionId: 'allow-always', name: 'Always Allow all Write', kind: 'allow_always' },
+              { optionId: 'allow-once', name: 'Allow', kind: 'allow_once' },
+              { optionId: 'reject-once', name: 'Reject', kind: 'reject_once' },
+            ],
           }}
           surface="chat"
           resolving={{}}
@@ -54,8 +60,12 @@ describe('ApprovalActions', () => {
       </I18nProvider>,
     )
 
-    assert.match(html, /Always 的有效期由 Agent 决定/u)
+    assert.match(html, /\[始终允许\]/u)
+    assert.match(html, /\[允许本次\]/u)
+    assert.match(html, /\[拒绝\]/u)
+    assert.match(html, /\[取消\]/u)
+    assert.match(html, /「始终允许」的有效期由 Agent 决定/u)
     assert.match(html, /Agent 未提供可验证路径/u)
-    assert.doesNotMatch(html, /rawInput|rawOutput/u)
+    assert.doesNotMatch(html, /Always Allow all Write|rawInput|rawOutput/u)
   })
 })

@@ -245,6 +245,69 @@ describe('AcpSessionDriver — catalog miss (new session)', () => {
     assert.equal(result.output, 'Hello World')
   })
 
+  it('forwards thought and tool_call session updates via onSessionActivity', async () => {
+    const { driver } = await setupDriver({
+      sessionIds: ['sid-activity'],
+      onPromptClient: async (ctx) => {
+        await ctx.client.notify(methods.client.session.update, {
+          sessionId: ctx.params.sessionId,
+          update: {
+            sessionUpdate: 'agent_thought_chunk' as const,
+            content: { type: 'text' as const, text: 'thinking…' },
+          },
+        })
+        await ctx.client.notify(methods.client.session.update, {
+          sessionId: ctx.params.sessionId,
+          update: {
+            sessionUpdate: 'tool_call' as const,
+            toolCallId: 'tc-1',
+            title: 'Read file',
+            kind: 'read',
+            status: 'in_progress',
+            locations: [{ path: '/tmp/a.ts' }],
+          },
+        })
+        await ctx.client.notify(methods.client.session.update, {
+          sessionId: ctx.params.sessionId,
+          update: {
+            sessionUpdate: 'tool_call_update' as const,
+            toolCallId: 'tc-1',
+            status: 'completed',
+            title: 'Read file',
+          },
+        })
+        await ctx.client.notify(methods.client.session.update, {
+          sessionId: ctx.params.sessionId,
+          update: {
+            sessionUpdate: 'agent_message_chunk' as const,
+            content: { type: 'text' as const, text: 'done' },
+          },
+        })
+      },
+    })
+
+    await driver.sessionNew()
+    const activities: Array<{ seq: number; kind: string }> = []
+    let message = ''
+    const binding = makeBinding({
+      onOutputDelta: (_seq, delta) => {
+        message += delta
+      },
+      onSessionActivity: (seq, activity) => {
+        activities.push({ seq, kind: activity.kind })
+      },
+    })
+
+    const result = await driver.prompt('hi', binding)
+    assert.ok(result.ok)
+    assert.equal(message, 'done')
+    assert.equal(result.output, 'done')
+    assert.deepEqual(
+      activities.map((a) => a.kind),
+      ['thought_delta', 'tool_call', 'tool_call_update', 'message_delta'],
+    )
+  })
+
   it('keeps the transport alive when an output observer throws', async () => {
     const { driver } = await setupDriver({
       sessionIds: ['sid-observer'],

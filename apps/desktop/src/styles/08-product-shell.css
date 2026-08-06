@@ -868,10 +868,17 @@ body.is-resizing-panels * {
   background: var(--bg-hover);
 }
 .inspector-approval-card {
-  border: 1px solid var(--border-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 32%, var(--border-soft));
   border-radius: var(--r-lg);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-md);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--warn-soft) 88%, var(--bg-surface)) 0%,
+      color-mix(in srgb, var(--warn-soft) 48%, var(--bg-surface)) 100%
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--warn) 6%, transparent),
+    var(--shadow-md);
   overflow: hidden;
 }
 .inspector-approval-title {
@@ -891,7 +898,92 @@ body.is-resizing-panels * {
   font-family: var(--mono);
 }
 .inspector-approval-actions {
-  margin-top: 6px;
+  margin-top: 8px;
+  margin-inline: var(--sp-3);
+  margin-bottom: 10px;
+  padding-top: 0;
+  border-top: none;
+  background: transparent;
+  gap: 10px 16px;
+}
+/* 右侧审批卡操作：与 chat 一致 [标签] 超链接，默认带下划线 */
+.inspector-approval-actions.approval-row .btn {
+  display: inline;
+  align-items: baseline;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.inspector-approval-actions.approval-row .btn:hover:not(:disabled) {
+  background: none;
+  border: none;
+  filter: none;
+  text-decoration: underline;
+  opacity: 0.88;
+}
+.inspector-approval-actions.approval-row .btn.primary {
+  border: none;
+  background: none;
+  color: var(--blue);
+  font-weight: var(--fw-semibold);
+  text-decoration: underline;
+}
+.inspector-approval-actions.approval-row .btn.primary:hover:not(:disabled) {
+  filter: none;
+  text-decoration: underline;
+}
+.inspector-approval-actions.approval-row .btn.danger {
+  border: none;
+  background: none;
+  color: var(--danger);
+  text-decoration: underline;
+}
+.inspector-approval-actions.approval-row .btn.danger:hover:not(:disabled) {
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+.inspector-approval-actions.approval-row .btn.btn-cancel {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-weight: var(--fw-regular);
+  text-decoration: underline;
+}
+.inspector-approval-actions.approval-row .btn.btn-cancel:hover:not(:disabled) {
+  background: none;
+  color: var(--text-2);
+  text-decoration: underline;
+}
+.inspector-approval-actions.approval-row .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  text-decoration: underline;
+}
+.inspector-approval-card .approval-scope-hint,
+.inspector-approval-card .approval-agent-hint {
+  margin: 0 var(--sp-3) 6px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--warn) 16%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+  font-size: var(--fs-2xs);
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--warn) 55%, var(--text-2));
 }
 .inspector-actions {
   display: flex;

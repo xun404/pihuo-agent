@@ -1791,11 +1791,212 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   display: block;
   margin-top: 4px;
 }
-.worker-action-approval-controls.approval-row {
-  margin-top: 6px;
-  padding: 6px 0 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+/* 审批区：醒目 warn 卡，详情 + 实心/描边操作按钮 */
+.worker-action-approval .tool-row-block-content.worker-action-content {
+  padding: 0;
+  border: none;
+  border-radius: 0;
   background: transparent;
+  font-family: var(--font-sans, var(--font));
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--text-3);
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.worker-action-approval .tool-row-block-marker {
+  color: var(--warn);
+  font-weight: var(--fw-semibold);
+  padding-top: 10px;
+}
+.worker-action-approval .worker-action-label {
+  color: var(--warn);
+}
+.worker-action-approval .worker-action-label::after {
+  background: color-mix(in srgb, var(--warn) 28%, transparent);
+}
+.worker-action-thought {
+  white-space: pre-wrap;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  line-height: 1.5;
+}
+.worker-action-plan-list {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--text-2);
+  font-size: var(--fs-2xs);
+  line-height: 1.5;
+}
+.worker-action-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.worker-action-tool-item {
+  min-width: 0;
+}
+.worker-action-tool-title {
+  color: var(--text-1);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.worker-action-tool-status {
+  display: inline-block;
+  width: 1em;
+  margin-right: 4px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.worker-action-tool-detail {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.worker-action-approval .tool-row-block-marker {
+  color: var(--warn);
+}
+.worker-action-thought .tool-row-block-marker,
+.worker-action-tool .tool-row-block-marker,
+.worker-action-plan .tool-row-block-marker {
+  color: var(--text-4);
+}
+.worker-action-approval-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px 11px 14px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--warn) 36%, var(--border));
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--warn-soft) 96%, var(--bg-surface)) 0%,
+      color-mix(in srgb, var(--warn-soft) 62%, var(--bg-surface)) 100%
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--warn) 8%, transparent),
+    0 2px 8px color-mix(in srgb, var(--warn) 10%, transparent);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.worker-action-approval-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 78%, transparent);
+}
+.worker-action-approval-item + .worker-action-approval-item {
+  margin-top: 6px;
+}
+.worker-action-approval-detail {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: 1.45;
+  color: var(--text-1);
+  word-break: break-word;
+}
+.worker-action-approval .approval-scope-hint,
+.worker-action-approval .approval-agent-hint {
+  margin: 0;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--warn) 16%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+  font-size: var(--fs-2xs);
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--warn) 55%, var(--text-2));
+  font-weight: var(--fw-regular);
+}
+.worker-action-approval-controls.approval-row {
+  margin-top: 2px;
+  padding: 0;
+  gap: 10px 16px;
+  border-top: none;
+  background: transparent;
+}
+/* 审批卡内操作：[标签] 超链接，默认带下划线 */
+.worker-action-approval-controls.approval-row .btn {
+  display: inline;
+  align-items: baseline;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.worker-action-approval-controls.approval-row .btn:hover:not(:disabled) {
+  background: none;
+  border: none;
+  filter: none;
+  text-decoration: underline;
+  opacity: 0.88;
+}
+.worker-action-approval-controls.approval-row .btn.primary {
+  border: none;
+  background: none;
+  color: var(--blue);
+  font-weight: var(--fw-semibold);
+  text-decoration: underline;
+}
+.worker-action-approval-controls.approval-row .btn.primary:hover:not(:disabled) {
+  filter: none;
+  text-decoration: underline;
+}
+.worker-action-approval-controls.approval-row .btn.danger {
+  border: none;
+  background: none;
+  color: var(--danger);
+  text-decoration: underline;
+}
+.worker-action-approval-controls.approval-row .btn.danger:hover:not(:disabled) {
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+.worker-action-approval-controls.approval-row .btn.btn-cancel {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-weight: var(--fw-regular);
+  text-decoration: underline;
+}
+.worker-action-approval-controls.approval-row .btn.btn-cancel:hover:not(:disabled) {
+  background: none;
+  color: var(--text-2);
+  text-decoration: underline;
+}
+.worker-action-approval-controls.approval-row .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  text-decoration: underline;
 }
 /* —— 共用展开体 ——
    思考 / 工具 / Worker 三者共用缩进、1px guide 与上下节奏。 */
@@ -1915,52 +2116,73 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
    Worker 展开体改用线稿 .node-body-inner .line 流（见上方共用规则）。
    保留 worker-card-pending-dots 动画（busy-dots 复用）。*/
 
-/* 审批条（线稿 approval-row） */
+/* 审批操作：文本链接 */
 .approval-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2);
-  padding: 10px var(--sp-3);
-  border-top: 1px solid var(--border-soft);
-  background: color-mix(in srgb, var(--accent) 7%, var(--bg-surface));
+  gap: 10px 16px;
+  padding: 0;
+  border-top: none;
+  background: transparent;
 }
 .approval-row .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  height: var(--h-sm);
-  padding: 0 var(--sp-3);
-  border-radius: var(--r-md);
+  display: inline;
+  align-items: baseline;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font: inherit;
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
-  border: 1px solid var(--border);
-  background: var(--bg-surface);
-  color: var(--text-1);
-  line-height: 1;
+  line-height: var(--lh-snug);
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
   box-sizing: border-box;
 }
-.approval-row .btn:hover {
-  background: var(--bg-hover);
+.approval-row .btn:hover:not(:disabled) {
+  background: none;
+  filter: none;
+  text-decoration: underline;
+  opacity: 0.88;
 }
 .approval-row .btn.primary {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: var(--text-inv);
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-weight: var(--fw-semibold);
+  text-decoration: underline;
 }
-.approval-row .btn.primary:hover {
-  filter: brightness(1.05);
+.approval-row .btn.primary:hover:not(:disabled) {
+  filter: none;
+  text-decoration: underline;
 }
 .approval-row .btn.danger {
+  background: none;
+  border: none;
   color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
-  background: var(--bg-surface);
+  text-decoration: underline;
+}
+.approval-row .btn.danger:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.approval-row .btn.btn-cancel {
+  color: var(--text-3);
+  font-weight: var(--fw-regular);
+  text-decoration: underline;
 }
 .approval-row .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
+  text-decoration: underline;
 }
 
 .chat-history-loading {
