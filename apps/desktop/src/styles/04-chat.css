@@ -473,6 +473,23 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .lead-footer-action {
   color: var(--text-2);
 }
+/* Leader footer copy button: appended at the end, shown on message hover.
+   Revealed at calc(1/0.6) to offset the .lead-footer opacity: 0.6 parent
+   (same compensation as .lead-footer-provider). */
+.lead-footer-copy {
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast, 0.15s) ease,
+    color var(--dur-fast, 0.15s) ease,
+    background var(--dur-fast, 0.15s) ease;
+}
+.msg.leader:hover .lead-footer-copy,
+.msg.leader:focus-within .lead-footer-copy {
+  opacity: calc(1 / 0.6);
+  pointer-events: auto;
+}
 
 /* ============ TaskListCard（data-signal 任务列表）============
    inline 渲染在 Leader 消息流里。线稿 icon-spec-v3 配色。
@@ -610,6 +627,58 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   align-self: flex-end;
   white-space: pre-wrap;
   word-break: break-word;
+}
+/* 用户气泡悬浮操作：发送时间 + 复制，hover 消息时才显示。
+   visibility 保持 visible，仅用 opacity + pointer-events 隐藏：
+   按钮仍在 Tab 序中，键盘聚焦（:focus-within）即可显示并操作。 */
+.msg-user-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-end;
+  padding: 2px 4px 0;
+  font-size: var(--chat-micro-size);
+  color: var(--text-3);
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast, 0.15s) ease;
+}
+.msg.user:hover .msg-user-actions,
+.msg.user:focus-within .msg-user-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.msg-user-time {
+  font-variant-numeric: tabular-nums;
+}
+.msg-user-copy,
+.lead-footer-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md, 4px);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast, 0.15s) ease,
+    background var(--dur-fast, 0.15s) ease;
+}
+.msg-user-copy:hover,
+.lead-footer-copy:hover {
+  color: var(--text-1);
+  background: var(--bg-hover, var(--border-soft));
+}
+.msg-user-copy svg,
+.lead-footer-copy svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 /* Leader：无气泡壳；正文层级高于过程层（思考/工具） */
 .msg.leader .bubble {

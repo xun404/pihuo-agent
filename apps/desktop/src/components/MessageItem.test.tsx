@@ -22,6 +22,8 @@ const STRINGS: Partial<Record<string, string>> = {
   'chat.runTzCst': 'CST',
   'chat.think.high': '高',
   'chat.think.medium': '中',
+  'chat.errorCopy': '复制',
+  'chat.errorCopied': '已复制',
 }
 
 const t: MessageItemProps['t'] = (key, vars) => formatMessage(STRINGS[key] ?? key, vars)
@@ -81,6 +83,41 @@ function renderLeader(options: { live: boolean; parts: UIMessage['parts'] }): st
       errorBlock={null}
       timingEpoch={0}
       turnTimingRef={{ current: turnTiming }}
+      toolStartTimes={{ current: new Map() }}
+      toolDurations={{ current: new Map() }}
+    />,
+  )
+}
+
+function renderUser(message: UIMessage, messages: UIMessage[]): string {
+  return renderToStaticMarkup(
+    <MessageItem
+      message={message}
+      msgIdx={messages.length - 1}
+      messages={messages}
+      busy={false}
+      lastAssistantId={undefined}
+      isTailMessage
+      showErrorInThisBubble={false}
+      t={t}
+      locale="zh"
+      models={[]}
+      selectedModel=""
+      thinkingIntensity="off"
+      modelShort=""
+      thinkShort=""
+      metaOpen={{}}
+      setMetaOpen={() => undefined}
+      tick={0}
+      placementByJobId={new Map()}
+      toolCallJobIds={new Map()}
+      hasRunningWorker={false}
+      resolving={{}}
+      registryIdentityFor={() => undefined}
+      isMetaOpen={() => false}
+      errorBlock={null}
+      timingEpoch={0}
+      turnTimingRef={{ current: new Map() }}
       toolStartTimes={{ current: new Map() }}
       toolDurations={{ current: new Map() }}
     />,
@@ -186,5 +223,46 @@ describe('MessageItem Worked-for collapse', () => {
     assert.doesNotMatch(markup, /class="worked-for"/u)
     assert.match(markup, /live reasoning/u)
     assert.match(markup, /partial/u)
+  })
+})
+
+describe('MessageItem message actions', () => {
+  it('renders user bubble with send time and a hover copy button', () => {
+    const message = {
+      id: 'u2',
+      role: 'user',
+      parts: [{ type: 'text', text: 'hello **world**' }],
+      metadata: { createdAt: '2026-08-07T04:00:00.000Z' },
+    } as UIMessage
+    const markup = renderUser(message, [message])
+
+    assert.match(markup, /class="msg user"/u)
+    assert.match(markup, /class="bubble"[^>]*>hello \*\*world\*\*</u)
+    assert.match(markup, /class="msg-user-actions"/u)
+    assert.match(markup, /class="msg-user-time">[^<]*2026/u)
+    assert.match(markup, /class="msg-user-copy"/u)
+    assert.match(markup, /lucide-copy/u)
+    assert.match(markup, /aria-label="复制"/u)
+  })
+
+  it('hides the send time when the message has no timestamp but keeps the copy button', () => {
+    const message = { id: 'u3', role: 'user', parts: [{ type: 'text', text: 'hi' }] } as UIMessage
+    const markup = renderUser(message, [message])
+
+    assert.match(markup, /class="msg-user-actions"/u)
+    assert.doesNotMatch(markup, /class="msg-user-time"/u)
+    assert.match(markup, /class="msg-user-copy"/u)
+  })
+
+  it('appends a copy button to the leader footer', () => {
+    const markup = renderLeader({
+      live: false,
+      parts: [{ type: 'text', text: 'reply **bold**' }],
+    })
+    const value = footer(markup)
+    assert.match(value, /class="lead-footer-copy"/u)
+    assert.match(value, /lucide-copy/u)
+    assert.match(value, /aria-label="复制"/u)
+    assert.match(markup, /<strong>bold<\/strong>/u)
   })
 })

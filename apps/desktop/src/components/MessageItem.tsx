@@ -9,7 +9,20 @@
  * areEqual 故意忽略不稳定的 props（t / 回调 / 派生函数）：它们在按键时虽
  * 拿到新引用，但输出不变；只有核心数据变了才需要重渲染。
  */
-import { memo, type ReactNode, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type ReactNode,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from 'react'
+import { Check, Copy } from 'lucide-react'
 import type { UIMessage } from '@ai-sdk/react'
 import type { WorkerRunEvent, WorkerRunState, ApprovalItem } from '@swarmdesk-agent/shared'
 import { MarkdownContent } from './MarkdownContent'
@@ -24,6 +37,7 @@ import type { MessageKey } from '../i18n/locales'
 import { parseRouterUserMessage } from '../lib/user-message-display'
 import {
   formatClockTime,
+  parseMessageTimestamp,
   providerIdFromModel,
   resolveLeaderActivity,
   resolveLeaderRunMeta,
@@ -452,6 +466,82 @@ function MessageItemImpl({
       ? t('chat.worked.for', { time: formatElapsedCompact(leaderMeta.durationSec) })
       : t('chat.worked.done')
 
+  // ── Message actions: user bubble (send time + copy) and leader footer copy, shown on hover ──
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    }
+  }, [])
+  const flashCopied = useCallback(() => {
+    setCopied(true)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1600)
+  }, [])
+  const copyToClipboard = useCallback(
+    async (text: string) => {
+      if (!text) return
+      try {
+        await navigator.clipboard.writeText(text)
+        flashCopied()
+      } catch {
+        /* ignore clipboard failures */
+      }
+    },
+    [flashCopied],
+  )
+
+  // User message: copy what is displayed (router chrome stripped), send time from the persisted timestamp.
+  const userCopyText = useMemo(() => {
+    if (message.role !== 'user') return ''
+    return message.parts
+      .filter((p) => p.type === 'text')
+      .map((p) => {
+        const raw = (p as { text?: string }).text ?? ''
+        const { text: display } = parseRouterUserMessage(raw)
+        return display || raw
+      })
+      .join('\n')
+      .trim()
+  }, [message])
+  const userSentAt = useMemo(
+    () => (message.role === 'user' ? parseMessageTimestamp(message) : null),
+    [message],
+  )
+
+  // Leader message: all text parts joined, used for the copy button and selection copy.
+  const leaderCopyText = useMemo(() => {
+    if (message.role === 'user') return ''
+    return message.parts
+      .filter((p) => p.type === 'text')
+      .map((p) => (p as { text?: string }).text ?? '')
+      .join('\n\n')
+      .trim()
+  }, [message])
+
+  // Intercept native copy (Cmd/Ctrl+C, context menu) over the leader markdown body:
+  // write the original Markdown source instead of the rendered plain text.
+  // Code-block selections and selections outside .sup-text (error cards, tool
+  // outputs, worker cards) keep their native behavior.
+  const handleLeaderCopyEvent = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      if (!leaderCopyText) return
+      const selection = window.getSelection()
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return
+      const container = selection.getRangeAt(0).commonAncestorContainer
+      if (!e.currentTarget.contains(container)) return
+      const elem = container instanceof Element ? container : container.parentElement
+      if (elem?.closest('.md-code-block') || !elem?.closest('.sup-text')) return
+      e.preventDefault()
+      void copyToClipboard(leaderCopyText)
+    },
+    [leaderCopyText, copyToClipboard],
+  )
+
+  const copyAriaLabel = copied ? t('chat.errorCopied') : t('chat.errorCopy')
+  const userTimeLabel = userSentAt != null ? formatClockTime(userSentAt, locale) : ''
+
   return (
     <div
       className={`msg ${message.role === 'user' ? 'user' : 'leader'}`}
@@ -463,7 +553,7 @@ function MessageItemImpl({
            Thinking, tools, workers, and body text are direct children of .msg.leader. */
         <>
           {/* body：过程折叠（已处理）+ 最终正文 */}
-          <div className="sup-body">
+          <div className="sup-body" onCopy={handleLeaderCopyEvent}>
             {msgLive ? (
               liveNodes
             ) : (
@@ -559,20 +649,49 @@ function MessageItemImpl({
                   )}
                 </>
               )}
+              {leaderCopyText && (
+                <button
+                  type="button"
+                  className="lead-footer-copy"
+                  onClick={() => void copyToClipboard(leaderCopyText)}
+                  aria-label={copyAriaLabel}
+                  title={copyAriaLabel}
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+              )}
             </div>
           )}
         </>
       ) : (
-        /* User message: just the bubble */
-        message.parts.map((part, i) => {
-          if (part.type !== 'text') return null
-          const { text: display } = parseRouterUserMessage(part.text)
-          return (
-            <div className="bubble" key={i} title={part.text}>
-              {display || part.text}
+        /* User message: bubble + hover-revealed send time & copy */
+        <>
+          {message.parts.map((part, i) => {
+            if (part.type !== 'text') return null
+            const { text: display } = parseRouterUserMessage(part.text)
+            return (
+              <div className="bubble" key={i} title={part.text}>
+                {display || part.text}
+              </div>
+            )
+          })}
+          {(userSentAt != null || userCopyText) && (
+            <div className="msg-user-actions">
+              {userTimeLabel && <span className="msg-user-time">{userTimeLabel}</span>}
+              {userCopyText && (
+                <button
+                  type="button"
+                  className="msg-user-copy"
+                  onClick={() => void copyToClipboard(userCopyText)}
+                  aria-label={copyAriaLabel}
+                  title={copyAriaLabel}
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+              )}
             </div>
-          )
-        })
+          )}
+        </>
       )}
     </div>
   )
