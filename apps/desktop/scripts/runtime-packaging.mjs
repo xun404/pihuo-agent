@@ -3,7 +3,12 @@ import { chmod, cp, mkdir, readFile } from 'node:fs/promises'
 import { dirname, join, parse, resolve } from 'node:path'
 
 const require = createRequire(import.meta.url)
-const OPTIONAL_RUNTIME_IMPORTS = new Set(['bufferutil', 'utf-8-validate'])
+const OPTIONAL_RUNTIME_IMPORTS = new Set([
+  'bufferutil',
+  'utf-8-validate',
+  // Mastra workspace_ast_edit optional native probe (lazy import, try/catch)
+  '@ast-grep/napi',
+])
 
 export function resolveLibsqlNativePackage(platform, arch, libcFamily = 'glibc') {
   if (platform === 'darwin' && arch === 'arm64') {

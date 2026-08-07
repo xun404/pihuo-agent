@@ -4,7 +4,13 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { UIMessage } from '@ai-sdk/react'
 import { formatMessage } from '../i18n/locales.js'
-import { MessageItem, type MessageItemProps } from './MessageItem.js'
+import {
+  MessageItem,
+  RANGE_BOUNDARY_END_TO_END,
+  RANGE_BOUNDARY_START_TO_START,
+  selectionCoversFullRange,
+  type MessageItemProps,
+} from './MessageItem.js'
 
 ;(globalThis as typeof globalThis & { React: typeof React }).React = React
 
@@ -264,5 +270,41 @@ describe('MessageItem message actions', () => {
     assert.match(value, /lucide-copy/u)
     assert.match(value, /aria-label="复制"/u)
     assert.match(markup, /<strong>bold<\/strong>/u)
+  })
+})
+
+describe('selectionCoversFullRange', () => {
+  // compareBoundaryPoints returns: negative when the selection starts before
+  // fullRange (START_TO_START), positive when it ends after (END_TO_END).
+  function fakeRange(
+    startCompare: number,
+    endCompare: number,
+  ): Pick<Range, 'compareBoundaryPoints'> {
+    return {
+      compareBoundaryPoints(how: number): number {
+        if (how === RANGE_BOUNDARY_START_TO_START) return startCompare
+        return endCompare
+      },
+    } as unknown as Pick<Range, 'compareBoundaryPoints'>
+  }
+
+  it('returns true when the selection spans the full range on both ends', () => {
+    assert.equal(selectionCoversFullRange(fakeRange(0, 0), fakeRange(0, 0)), true)
+  })
+
+  it('returns true when the selection extends beyond the full range', () => {
+    assert.equal(selectionCoversFullRange(fakeRange(-1, 1), fakeRange(0, 0)), true)
+  })
+
+  it('returns false when the selection starts after the full range', () => {
+    assert.equal(selectionCoversFullRange(fakeRange(1, 1), fakeRange(0, 0)), false)
+  })
+
+  it('returns false when the selection ends before the full range', () => {
+    assert.equal(selectionCoversFullRange(fakeRange(0, -1), fakeRange(0, 0)), false)
+  })
+
+  it('returns false when both boundaries fall inside the full range', () => {
+    assert.equal(selectionCoversFullRange(fakeRange(1, -1), fakeRange(0, 0)), false)
   })
 })

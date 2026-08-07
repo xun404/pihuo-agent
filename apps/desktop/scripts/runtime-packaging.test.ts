@@ -72,6 +72,7 @@ describe('desktop runtime native packages', () => {
           '@neon-rs/load',
           'bufferutil',
           'utf-8-validate',
+          '@ast-grep/napi',
           '@libsql/client',
           'node-pty',
         ],

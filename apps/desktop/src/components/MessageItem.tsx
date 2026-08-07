@@ -1,13 +1,16 @@
 /**
- * 单条消息的渲染（用户气泡 / Supervisor 卡片）。
+ * Renders a single message (user bubble / Supervisor card).
  *
- * 从 ChatPanel 抽出，并用 React.memo + 自定义 areEqual 包裹——
- * 这样在 composer 输入（setInput）导致 ChatPanel 重渲染时，只要消息本身
- * （message 引用、busy、workerStates、metaOpen 等核心数据）没变，就跳过
- * 本组件的重渲染。根治「输入越多越卡」——原来每次按键都会重建 340 行 JSX。
+ * Extracted from ChatPanel and wrapped in React.memo with a custom areEqual —
+ * so when typing in the composer (setInput) re-renders ChatPanel, this
+ * component skips re-rendering as long as the message itself (message
+ * reference, busy, workerStates, metaOpen, and other core data) is unchanged.
+ * This fixes the "typing more makes it slower" issue — every keystroke used to
+ * rebuild ~340 lines of JSX.
  *
- * areEqual 故意忽略不稳定的 props（t / 回调 / 派生函数）：它们在按键时虽
- * 拿到新引用，但输出不变；只有核心数据变了才需要重渲染。
+ * areEqual deliberately ignores unstable props (t / callbacks / derived
+ * functions): they get fresh references on each keystroke, but their output is
+ * unchanged; only core data changes warrant a re-render.
  */
 import {
   memo,
@@ -52,10 +55,10 @@ import {
 } from '../lib/worker-card-placement'
 import type { ThinkingIntensity } from '../lib/settings'
 
-// i18n：复用 locales 的 MessageKey 联合类型，和 I18nProvider 的 t 签名对齐。
+// i18n: reuse the MessageKey union from locales, aligned with I18nProvider's t signature.
 type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string
 
-/** 从 useChat 取到的消息形态（UIMessage）。parts 含 text / reasoning / tool-x / data-worker-run。 */
+/** Message shape as consumed from useChat (UIMessage). parts include text / reasoning / tool-x / data-worker-run. */
 type AnyMessage = UIMessage<any>
 
 const THINK_LABEL_KEY: Record<
@@ -80,6 +83,26 @@ type ModelOption = {
   label: string
 }
 
+export const RANGE_BOUNDARY_START_TO_START = 0
+export const RANGE_BOUNDARY_END_TO_END = 2
+
+/**
+ * Whether a selection range fully covers the rendered text parts range.
+ * Uses boundary-point comparison instead of string matching: the browser's
+ * `selection.toString()` and a hand-built `Range.toString()` serialize block
+ * boundaries with different newline rules, so string comparison is unreliable
+ * for multi-paragraph replies. Boundary comparison is exact for any shape.
+ */
+export function selectionCoversFullRange(
+  selection: Pick<Range, 'compareBoundaryPoints'>,
+  fullRange: Pick<Range, 'compareBoundaryPoints'>,
+): boolean {
+  return (
+    selection.compareBoundaryPoints(RANGE_BOUNDARY_START_TO_START, fullRange as Range) <= 0 &&
+    selection.compareBoundaryPoints(RANGE_BOUNDARY_END_TO_END, fullRange as Range) >= 0
+  )
+}
+
 export interface MessageItemProps {
   message: AnyMessage
   msgIdx: number
@@ -88,7 +111,7 @@ export interface MessageItemProps {
   lastAssistantId: string | undefined
   isTailMessage: boolean
   showErrorInThisBubble: boolean
-  // —— 以下在 areEqual 中被忽略（按键时不影响输出）——
+  // — the following are ignored in areEqual (they don't affect output on keystrokes) —
   t: TFunc
   locale: string
   models: ModelOption[]
@@ -166,7 +189,7 @@ function MessageItemImpl({
 }: MessageItemProps) {
   const msgLive = busy && message.id === lastAssistantId
 
-  // ── Supervisor (leader) meta（header 精简 + footer 下沉）──
+  // ── Supervisor (leader) meta (slim header + footer-anchored) ──
   const isLeader = message.role !== 'user'
   const leaderMeta = isLeader
     ? (() => {
@@ -416,9 +439,9 @@ function MessageItemImpl({
         />
       )
     }
-    // data-signal：Mastra TaskSignalProvider 下发的任务列表快照。
-    // tagName='task-list-update'(增量)/'current-task-list'(快照)，
-    // 全量 tasks 在 part.data.metadata.value.tasks。
+    // data-signal: task-list snapshot pushed by Mastra's TaskSignalProvider.
+    // tagName='task-list-update' (incremental) / 'current-task-list' (snapshot);
+    // the full tasks live in part.data.metadata.value.tasks.
     if (part.type === 'data-signal') {
       const sp = part as {
         type: 'data-signal'
@@ -521,9 +544,11 @@ function MessageItemImpl({
   }, [message])
 
   // Intercept native copy (Cmd/Ctrl+C, context menu) over the leader markdown body:
-  // write the original Markdown source instead of the rendered plain text.
-  // Code-block selections and selections outside .sup-text (error cards, tool
-  // outputs, worker cards) keep their native behavior.
+  // only rewrite the clipboard when the selection covers EVERY rendered text part
+  // (write the original Markdown source instead of the rendered plain text).
+  // Partial selections keep the native copy behavior (only the selected text is
+  // copied). Code-block selections and selections outside .sup-text (error cards,
+  // tool outputs, worker cards) keep their native behavior.
   const handleLeaderCopyEvent = useCallback(
     (e: ClipboardEvent<HTMLDivElement>) => {
       if (!leaderCopyText) return
@@ -533,6 +558,18 @@ function MessageItemImpl({
       if (!e.currentTarget.contains(container)) return
       const elem = container instanceof Element ? container : container.parentElement
       if (elem?.closest('.md-code-block') || !elem?.closest('.sup-text')) return
+      const supTexts = e.currentTarget.querySelectorAll('.sup-text')
+      if (supTexts.length === 0) return
+      // A Range spanning every .sup-text. Boundary comparison against the
+      // user's selection is exact regardless of paragraph/block structure;
+      // textContent or Range.toString() string matching breaks on block
+      // boundary newlines for multi-paragraph replies.
+      const fullRange = document.createRange()
+      const first = supTexts[0]!
+      const last = supTexts[supTexts.length - 1]!
+      fullRange.setStart(first, 0)
+      fullRange.setEnd(last, last.childNodes.length)
+      if (!selectionCoversFullRange(selection.getRangeAt(0), fullRange)) return
       e.preventDefault()
       void copyToClipboard(leaderCopyText)
     },
@@ -552,7 +589,7 @@ function MessageItemImpl({
         /* Leader flat layout: model / thinking / duration / time in footer.
            Thinking, tools, workers, and body text are direct children of .msg.leader. */
         <>
-          {/* body：过程折叠（已处理）+ 最终正文 */}
+          {/* body: collapsed process (handled) + final body text */}
           <div className="sup-body" onCopy={handleLeaderCopyEvent}>
             {msgLive ? (
               liveNodes
@@ -568,10 +605,12 @@ function MessageItemImpl({
                 {resultNodes}
               </>
             )}
-            {/* pending 占位符：busy 且本轮还没产出任何 text 正文时显示。
-                放在 parts 之后（最末尾），这样思考/工具流式时它在最下面，
-                不会跑到内容前面。条件用 text 正文而非所有 part——
-                思考/工具已在流但正文没来时仍显示，给用户"还在等回复"的信号。*/}
+            {/* Pending placeholder: shown while busy and this turn has no text
+                body yet. Placed after the parts (at the very end) so it stays
+                below streaming thinking/tools instead of jumping ahead. Keyed
+                off text body, not all parts — it still shows while thinking or
+                tools stream before any text arrives, signaling the reply is
+                coming. */}
             {msgLive &&
               !message.parts.some(
                 (p) => p.type === 'text' && (p as { text?: string }).text?.trim(),
@@ -582,7 +621,7 @@ function MessageItemImpl({
                   <span className="pdot" />
                 </div>
               )}
-            {/* 与失败轮次同一张 Supervisor 卡 */}
+            {/* Same Supervisor card as the failed turn */}
             {showErrorInThisBubble && errorBlock}
           </div>
           {/* /sup-body */}
@@ -698,13 +737,16 @@ function MessageItemImpl({
 }
 
 /**
- * 自定义浅比较：只检查「真正影响渲染输出」的核心数据。
+ * Custom shallow comparison: only core data that actually affects the rendered
+ * output is checked.
  *
- * 按键（setInput）时这些值都不变 → 返回 true → 跳过重渲染。
- * 流式/状态变化时 message 引用 / busy / tick / metaOpen / placements 会变 → 返回 false → 正常重渲染。
+ * On keystrokes (setInput) none of these change → returns true → skips re-render.
+ * On streaming/state changes the message reference / busy / tick / metaOpen /
+ * placements do change → returns false → re-renders normally.
  *
- * 故意忽略：t / setMetaOpen / onResolveApproval / registryIdentityFor / isMetaOpen / 回调等
- * ——它们每次 render 新引用，但按键时输出不变；只关心它们最终消费的数据。
+ * Deliberately ignored: t / setMetaOpen / onResolveApproval / registryIdentityFor /
+ * isMetaOpen / callbacks — they get fresh references on every render, but their
+ * output is unchanged on keystrokes; only the data they ultimately consume matters.
  */
 function areEqual(prev: MessageItemProps, next: MessageItemProps): boolean {
   return (

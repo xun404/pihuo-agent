@@ -13,16 +13,16 @@ export default defineConfig({
       ? [
           electron({
             main: {
-              entry: path.join(__dirname, 'electron/main.ts'),
+              entry: path.join(import.meta.dirname, 'electron/main.ts'),
               vite: {
                 resolve: {
                   alias: {
                     '@swarmdesk-agent/core': path.join(
-                      __dirname,
+                      import.meta.dirname,
                       '../../packages/core/src/index.ts',
                     ),
                     '@swarmdesk-agent/shared': path.join(
-                      __dirname,
+                      import.meta.dirname,
                       '../../packages/shared/src/index.ts',
                     ),
                   },
@@ -35,7 +35,7 @@ export default defineConfig({
               },
             },
             preload: {
-              input: path.join(__dirname, 'electron/preload.ts'),
+              input: path.join(import.meta.dirname, 'electron/preload.ts'),
             },
           }),
         ]
@@ -47,9 +47,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.join(__dirname, 'src'),
-      '@swarmdesk-agent/shared': path.join(__dirname, '../../packages/shared/src/index.ts'),
-      '@swarmdesk-agent/core': path.join(__dirname, '../../packages/core/src/index.ts'),
+      '@': path.join(import.meta.dirname, 'src'),
+      '@swarmdesk-agent/shared': path.join(
+        import.meta.dirname,
+        '../../packages/shared/src/index.ts',
+      ),
+      '@swarmdesk-agent/core': path.join(import.meta.dirname, '../../packages/core/src/index.ts'),
     },
   },
   // Avoid pre-bundling workspace TS packages incorrectly

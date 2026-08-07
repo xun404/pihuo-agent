@@ -185,7 +185,7 @@ export function createTerminalAuthFrameSender(
   onFailure: () => void,
 ): (frame: TerminalAuthClientFrame) => boolean {
   return (frame) => {
-    if (socket.readyState !== WebSocket.OPEN && socket.readyState !== 1) return false
+    if (socket.readyState !== WebSocket.OPEN) return false
     try {
       socket.send(encodeTerminalAuthClientFrame(frame))
       return true
@@ -219,7 +219,7 @@ export function disposeTerminalAuthSession(resources: TerminalAuthSessionResourc
   if (resources.disposed) return
   resources.disposed = true
   try {
-    if (resources.socket?.readyState === WebSocket.OPEN || resources.socket?.readyState === 1) {
+    if (resources.socket?.readyState === WebSocket.OPEN) {
       resources.socket.send(encodeTerminalAuthClientFrame({ type: 'cancel' }))
     }
   } catch {
