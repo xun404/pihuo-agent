@@ -357,6 +357,12 @@ export function SettingsPanel({
   const [npmRegistryDraft, setNpmRegistryDraft] = useState('')
   const [npmRegistrySaving, setNpmRegistrySaving] = useState(false)
   const [npmRegistryError, setNpmRegistryError] = useState<string | null>(null)
+  /**
+   * Native OS notification preferences (system notifications section). Loaded
+   * from server settings; each toggle saves the full object via
+   * `saveNotifications`, and the App-level settings state is refreshed when
+   * the panel closes so `useSystemNotifications` picks up changes immediately.
+   */
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => ({
     ...DEFAULT_NOTIFICATION_SETTINGS,
   }))

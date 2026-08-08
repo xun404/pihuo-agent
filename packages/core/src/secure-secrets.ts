@@ -145,6 +145,12 @@ export function normalizeDisabledProviderIds(raw: unknown): string[] {
   return out
 }
 
+/**
+ * Normalize notification preferences read from settings.json (or an IPC save
+ * payload) into a complete `NotificationSettings`. Missing fields fall back to
+ * the shared defaults — note the asymmetry: `enabled` defaults to false
+ * (notifications opt-in), while the three event toggles default to true.
+ */
 export function normalizeNotificationSettings(raw: unknown): NotificationSettings {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_NOTIFICATION_SETTINGS }
   const record = raw as Record<string, unknown>

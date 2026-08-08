@@ -1,6 +1,18 @@
 import type { ApprovalItem, NotificationSettings, Session } from '@swarmdesk-agent/shared'
 
+/**
+ * Pure decision logic for native OS notifications.
+ *
+ * The renderer runs this on every 8s `AppSnapshot` poll and turns the returned
+ * decisions into `routerAgents.notify.show` IPC calls. It shares the same
+ * data the sidebar lamps use (`lastFinishedAt` / `lastErrorAt` / `lastReadAt`),
+ * but tracks its OWN watermark so the two stay independent: a lamp can still
+ * burn after the banner fired, and vice versa. All timestamps are ISO strings
+ * compared lexicographically.
+ */
+
 export type NotificationDecision = {
+  /** Passed through to the main-process 5s dedupe (`claimNotification`). */
   id: string
   kind: 'completion' | 'error' | 'approval'
   title: string
@@ -8,9 +20,23 @@ export type NotificationDecision = {
   sessionId?: string
 }
 
+/** True when `candidate` is a non-empty ISO string strictly after `reference`. */
 const isNewerThan = (candidate: string | undefined, reference: string): boolean =>
   typeof candidate === 'string' && candidate.length > 0 && candidate > reference
 
+/**
+ * Detect session completion/error events newer than the notification
+ * watermark. A session fires a decision when BOTH hold:
+ *  - event timestamp is newer than `lastNotifiedAt` (not yet notified) and
+ *    newer than `lastReadAt` (still unread — reading the session suppresses
+ *    the banner);
+ *  - the focused gate passes: `hidden-only` mode skips while the window has
+ *    focus, and skipped events do NOT advance the watermark so they re-fire
+ *    once the window loses focus.
+ * `nextWatermarks` only lists sessions whose watermark moved; a session with
+ * both completion and error events takes the LATER timestamp (max), so the
+ * next poll never re-fires the earlier event.
+ */
 export function evaluateSessionNotifications(params: {
   sessions: Session[]
   settings: NotificationSettings
@@ -32,6 +58,7 @@ export function evaluateSessionNotifications(params: {
         id: `completion-${session.id}`,
         kind: 'completion',
         sessionId: session.id,
+        // NOTE: hardcoded zh copy today; i18n wiring is a tracked follow-up.
         title: session.title || '会话完成',
         body: 'Agent 已完成任务',
       })
@@ -59,6 +86,13 @@ export function evaluateSessionNotifications(params: {
   return { decisions, nextWatermarks }
 }
 
+/**
+ * Detect pending approvals not yet notified. Each approval fires once per
+ * lifecycle: ids are persisted by the hook in `swarmdesk:notification-approvals`
+ * and skipped on later polls. Like sessions, a focused window in `hidden-only`
+ * mode suppresses the banner WITHOUT marking the approval as notified, so it
+ * still fires after the user leaves the app.
+ */
 export function evaluateApprovalNotifications(params: {
   approvals: ApprovalItem[]
   settings: NotificationSettings
