@@ -18,9 +18,84 @@
     <link rel="icon" href="./icon.png" type="image/png" />
     <link rel="apple-touch-icon" href="./icon.png" />
     <title>SwarmDesk</title>
+    <style>
+      /* Startup splash. Uses theme variables applied by theme-bootstrap.ts
+         (--bg-main/--text-2/--danger); fallbacks match the light default so the
+         first frame never flashes a wrong color. Lives OUTSIDE #root on purpose:
+         createRoot discards the container's existing children on commit, which
+         would delete the splash before the app's dismissal logic can run. */
+      #initial-loading {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-main, #f7f4ef);
+        transition: opacity 0.3s ease-out;
+      }
+      #initial-loading.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #initial-loading .splash-logo {
+        width: 112px;
+        height: 112px;
+        object-fit: contain;
+      }
+      /* Startup progress line. Absolutely positioned so the logo never shifts
+         when the text appears/disappears (112px logo + 16px gap). */
+      #initial-loading .status-line {
+        position: absolute;
+        top: calc(50% + 78px);
+        left: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--text-2, #6f6a63);
+      }
+      #initial-loading .status-text.error-text {
+        color: var(--danger, #b3261e);
+      }
+      /* Busy dots — opacity only, so the animation never recalculates style. */
+      #initial-loading .boot-dots {
+        display: inline-flex;
+        gap: 3px;
+      }
+      #initial-loading .boot-dots span {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.3;
+        animation: oc-boot-dot 1.4s ease-in-out infinite;
+      }
+      #initial-loading .boot-dots span:nth-child(2) { animation-delay: 0.2s; }
+      #initial-loading .boot-dots span:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes oc-boot-dot {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #initial-loading .boot-dots span { animation: none; opacity: 0.5; }
+      }
+    </style>
     <script type="module" src="/src/theme-bootstrap.ts"></script>
   </head>
   <body>
+    <!-- Startup loading page; text is populated by App.tsx from authoritative
+         app state (useAppState loading/serverUp/error). -->
+    <div id="initial-loading">
+      <img class="splash-logo" src="./icon-glyph.png" alt="" aria-hidden="true" />
+      <div class="status-line" id="loading-status-line" aria-live="polite">
+        <span class="status-text" id="loading-status"></span>
+        <span class="boot-dots" id="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+      </div>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

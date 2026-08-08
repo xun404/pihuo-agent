@@ -190,6 +190,7 @@ export const zhTW: Record<string, string> = {
   'chat.you': '你',
   'common.refresh': '刷新',
   'common.loading': '加載中…',
+  'common.loadingError': '載入失敗',
   'files.empty': '目錄為空',
   'files.error': '無法列出文件',
   'files.noProject': '請先打開項目',

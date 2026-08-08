@@ -26,6 +26,7 @@ import { useSystemNotifications } from './hooks/useSystemNotifications'
 import { fetchSettings, type SettingsPayload, type ThinkingIntensity } from './lib/settings'
 import { I18nProvider, useI18n } from './i18n/I18nProvider'
 import type { Locale } from './i18n/locales'
+import { catalogs, isLocale } from './i18n/locales'
 import { ThemeProvider } from './theme/ThemeProvider'
 import { MotionPreferenceProvider } from './motion/MotionPreferenceProvider'
 import { ToastProvider, useToast } from './components/Toast'
@@ -547,6 +548,11 @@ function AppShell({
   )
 }
 
+// Minimum wall-clock display time for the startup loading page, even when the
+// API and initial snapshot are already ready — the branded splash must not
+// flash by in under ~3s.
+const MIN_SPLASH_DISPLAY_MS = 3000
+
 export default function App() {
   const state = useAppState()
   const [settings, setSettings] = useState<SettingsPayload | null>(null)
@@ -584,6 +590,58 @@ export default function App() {
       window.removeEventListener(SETTINGS_CLOSED_EVENT, onSettingsClosed)
     }
   }, [])
+
+  // Drive the static splash (index.html #initial-loading) from authoritative
+  // app state: loading (snapshot fetch), error (API down), ready (serverUp).
+  // No timers pretend progress here — the 3s hold is a wall-clock minimum only.
+  const splashShownAtRef = useRef<number | null>(null)
+  if (splashShownAtRef.current === null) {
+    splashShownAtRef.current = performance.now()
+  }
+  const splashDismissedRef = useRef(false)
+
+  useEffect(() => {
+    const statusEl = document.getElementById('loading-status')
+    if (!statusEl || splashDismissedRef.current) return
+
+    const catalog = catalogs[isLocale(state.snapshot.locale) ? state.snapshot.locale : 'zh']
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const scheduleDismiss = (extraDelayMs = 0) => {
+      const remaining = Math.max(
+        0,
+        MIN_SPLASH_DISPLAY_MS - (performance.now() - (splashShownAtRef.current ?? 0)),
+      )
+      return setTimeout(() => {
+        splashDismissedRef.current = true
+        const el = document.getElementById('initial-loading')
+        if (el) {
+          el.classList.add('fade-out')
+          setTimeout(() => el.remove(), 300)
+        }
+      }, remaining + 150 + extraDelayMs)
+    }
+
+    if (state.error) {
+      // Errors matter more than the minimum branding hold: show the error
+      // text and dismiss right away so the app's own error surface appears.
+      statusEl.textContent = catalog['common.loadingError']
+      statusEl.classList.add('error-text')
+      timer = scheduleDismiss(0)
+    } else if (state.loading) {
+      statusEl.textContent = catalog['common.loading']
+      statusEl.classList.remove('error-text')
+    } else if (state.serverUp) {
+      // Ready — stay silent for the remainder of the minimum hold, then fade.
+      statusEl.textContent = ''
+      statusEl.classList.remove('error-text')
+      timer = scheduleDismiss(0)
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer)
+    }
+  }, [state.loading, state.serverUp, state.error, state.snapshot.locale])
 
   return (
     <ThemeProvider>
