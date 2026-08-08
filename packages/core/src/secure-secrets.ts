@@ -43,7 +43,13 @@ import {
 } from './worker-timeouts.js'
 import { resolveProviderEnv, PROVIDER_ENV_OVERRIDES } from './provider-env-resolver.js'
 import { DEFAULT_LEADER_MODEL } from './models-catalog.js'
-import { normalizePromptSettings, type PromptSettings } from '@swarmdesk-agent/shared'
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  isNotificationMode,
+  normalizePromptSettings,
+  type NotificationSettings,
+  type PromptSettings,
+} from '@swarmdesk-agent/shared'
 
 export type SecretsMap = Record<string, string>
 
@@ -118,6 +124,8 @@ export interface AppSettings {
    * Empty / omitted → system default (~/.npmrc or ambient env).
    */
   npmRegistry?: string
+  /** Native OS notification preferences. Missing on legacy settings.json files. */
+  notifications?: NotificationSettings
   /** Non-secret prefs */
   updatedAt?: string
 }
@@ -135,6 +143,18 @@ export function normalizeDisabledProviderIds(raw: unknown): string[] {
     out.push(id)
   }
   return out
+}
+
+export function normalizeNotificationSettings(raw: unknown): NotificationSettings {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_NOTIFICATION_SETTINGS }
+  const record = raw as Record<string, unknown>
+  return {
+    enabled: record.enabled === true,
+    mode: isNotificationMode(record.mode) ? record.mode : DEFAULT_NOTIFICATION_SETTINGS.mode,
+    onCompletion: record.onCompletion === true,
+    onError: record.onError === true,
+    onApproval: record.onApproval === true,
+  }
 }
 
 export interface SecretsStatus {

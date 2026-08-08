@@ -1,4 +1,4 @@
-import { describe, it, after, before, beforeEach, afterEach } from 'node:test'
+import { describe, it, after, before, beforeEach, afterEach, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync, existsSync } from 'node:fs'
@@ -17,6 +17,7 @@ import {
   isConfigurableSecretEnvKey,
 } from './secure-secrets.js'
 import type { CustomProviderSettings } from './secure-secrets.js'
+import { normalizeNotificationSettings } from './secure-secrets.js'
 import { DEFAULT_PROMPT_SETTINGS } from '@swarmdesk-agent/shared'
 
 const TEST_KEY = 'RA_TEST_ONLY_API_KEY'
@@ -476,4 +477,42 @@ describe('computeAcpExecutionFingerprint', () => {
     const f2 = computeAcpExecutionFingerprint('cmd', [], 'm1', undefined, { A: 'b', C: 'd' }, {})
     assert.notEqual(f1, f2)
   })
+})
+
+// ── normalizeNotificationSettings ──
+
+test('normalizeNotificationSettings: defaults for empty input', () => {
+  const result = normalizeNotificationSettings(undefined)
+  assert.deepEqual(result, {
+    enabled: false,
+    mode: 'hidden-only',
+    onCompletion: true,
+    onError: true,
+    onApproval: true,
+  })
+})
+
+test('normalizeNotificationSettings: keeps valid fields, rejects invalid mode', () => {
+  const result = normalizeNotificationSettings({
+    enabled: true,
+    mode: 'always',
+    onCompletion: false,
+    onError: true,
+    onApproval: false,
+  })
+  assert.deepEqual(result, {
+    enabled: true,
+    mode: 'always',
+    onCompletion: false,
+    onError: true,
+    onApproval: false,
+  })
+  const invalid = normalizeNotificationSettings({ ...result, mode: 'sometimes' })
+  assert.equal(invalid.mode, 'hidden-only')
+})
+
+test('normalizeNotificationSettings: coerces non-boolean toggles', () => {
+  const result = normalizeNotificationSettings({ enabled: 1, onError: 'yes' })
+  assert.equal(result.enabled, false)
+  assert.equal(result.onError, false)
 })
