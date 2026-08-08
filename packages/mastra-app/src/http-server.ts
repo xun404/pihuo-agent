@@ -28,7 +28,7 @@ import {
   resolveLeaderMaxSteps,
   mergeProvidersWithCustom,
   applyCustomProviderEnv,
-  MASTRA_PROVIDERS,
+  resolveBuiltinProviders,
   DEFAULT_LEADER_MODEL,
   SECRET_ENV_KEYS,
   normalizeThinkingIntensity,
@@ -3161,7 +3161,7 @@ const server = createServer(async (req, res) => {
       }
 
       function providersPayload(status: ReturnType<typeof getSecretsStatus>) {
-        const merged = mergeProvidersWithCustom(MASTRA_PROVIDERS, status.settings.customProviders)
+        const merged = mergeProvidersWithCustom(resolveBuiltinProviders().providers, status.settings.customProviders)
         const secretKeys = [...SECRET_ENV_KEYS, ...merged.map((p) => p.apiKeyEnv)]
         const configured = getSecretsStatus([...new Set(secretKeys)]).configuredKeys
         const disabled = new Set(status.settings.disabledProviderIds ?? [])
@@ -3275,7 +3275,7 @@ const server = createServer(async (req, res) => {
       if (method === 'GET' && path === '/api/models-dev/providers') {
         const q = typeof url.searchParams.get('q') === 'string' ? url.searchParams.get('q')! : ''
         const status = getSecretsStatus(SECRET_ENV_KEYS)
-        const builtinIds = MASTRA_PROVIDERS.map((p) => p.id)
+        const builtinIds = resolveBuiltinProviders().providers.map((p) => p.id)
         const customIds = (status.settings.customProviders ?? []).map((c) => c.id)
         const { providers, meta } = listModelsDevProviders({
           q,
@@ -3348,7 +3348,7 @@ const server = createServer(async (req, res) => {
         const prev = loadSettings()
         const built = buildCustomProviderFromModelsDev({
           providerId,
-          builtinIds: MASTRA_PROVIDERS.map((p) => p.id),
+          builtinIds: resolveBuiltinProviders().providers.map((p) => p.id),
           existingCustomIds: (prev.customProviders ?? []).map((c) => c.id),
         })
         if (!built.ok) {

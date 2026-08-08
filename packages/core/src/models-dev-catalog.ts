@@ -11,11 +11,11 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { resolveRouterDataPaths } from './router-data-paths.js'
-import {
-  THINKING_INTENSITIES,
-  type ThinkingIntensity,
-} from './thinking-intensity.js'
 import type { CustomApiStyle, CustomProviderModel, CustomProviderSettings } from './secure-secrets.js'
+import {
+  isMultimodal,
+  modelThinkingIntensitiesFromModelsDev,
+} from './models-dev-registry-mapping.js'
 
 export const MODELS_DEV_API_URL_DEFAULT = 'https://models.dev/api.json'
 
@@ -50,6 +50,8 @@ export type ModelsDevMeta = {
   providerCount: number
   bytes: number
   etag?: string
+  /** Source snapshot generation time when available (npm snapshot), else fetchedAt is used. */
+  generatedAt?: string
 }
 
 /** Provider-level fields we care about from api.json */
@@ -109,35 +111,10 @@ export function modelsDevCatalogPaths(
   }
 }
 
-// —— mapping helpers (shared shape with sync-model-registry) ——
+// —— mapping helpers (shared with models-dev-registry-mapping) ——
 
-const REASONING_LEVEL_MAP: Record<string, ThinkingIntensity> = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  xhigh: 'xhigh',
-  max: 'max',
-  ultra: 'max',
-  minimal: 'low',
-  off: 'off',
-}
-
-function isMultimodal(m: ModelsDevModelRaw): boolean {
-  const mods = [m.modalities?.input ?? [], m.modalities?.output ?? []].flat()
-  return mods.some((mod) => mod !== 'text')
-}
-
-export function modelThinkingIntensitiesFromModelsDev(
-  m: ModelsDevModelRaw,
-): ThinkingIntensity[] | undefined {
-  if (m.reasoning === false) return ['off']
-  const values = (m.reasoning_options ?? []).flatMap((o) => o.values ?? [])
-  const mapped = [...new Set(values.map((v) => REASONING_LEVEL_MAP[v]).filter(Boolean))] as ThinkingIntensity[]
-  const ordered = THINKING_INTENSITIES.filter((l) => mapped.includes(l))
-  if (ordered.length > 0) return ['off', ...ordered.filter((l) => l !== 'off')]
-  if (m.reasoning === true) return ['off', 'medium', 'high', 'max']
-  return undefined
-}
+/** Re-exported for @swarmdesk-agent/core consumers (source in models-dev-registry-mapping). */
+export { modelThinkingIntensitiesFromModelsDev } from './models-dev-registry-mapping.js'
 
 export function mapModelsDevModel(
   providerId: string,

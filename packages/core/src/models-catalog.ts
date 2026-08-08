@@ -8,15 +8,36 @@
  * https://models.dev/api.json + builtin-providers.policy.json.
  * package:prepare runs the sync so release packages ship the latest registry.
  *
+ * Runtime override (see resolveBuiltinProviders): when the user-side external
+ * models.dev catalog (<root>/models-dev/api.json + meta.json) is fresher than
+ * the bundled snapshot, it is curated on the fly and takes priority.
+ *
  * @see https://models.dev
  * @see packages/core/src/bundled/builtin-providers.policy.json
  */
 
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { normalizeMastraProviderId } from './provider-ids.js'
 import type { FeaturedPolicy } from './featured-policy.js'
 import type { ThinkingIntensity } from './thinking-intensity.js'
 // Static import so esbuild/package bundles the JSON (readFileSync of import.meta.url breaks in dist-runtime).
 import builtinProvidersJson from './bundled/builtin-providers.json' with { type: 'json' }
+import {
+  buildBuiltinCatalog,
+  loadBuiltinProvidersPolicy,
+  type BuiltinProvidersCatalog,
+  type BuiltinProvidersPolicy,
+  type RegistryModelInfo,
+} from './builtin-catalog.js'
+import {
+  loadModelsDevMeta,
+  loadModelsDevRegistry,
+  modelsDevCatalogPaths,
+  type ModelsDevCatalogPaths,
+  type ModelsDevMeta,
+  type ModelsDevProviderRaw,
+} from './models-dev-catalog.js'
+import { modelInfo } from './models-dev-registry-mapping.js'
 
 export interface ModelOption {
   id: string
@@ -50,6 +71,7 @@ export interface ModelProviderDef {
 
 type BuiltinProvidersFile = {
   version: number
+  generatedAt?: string
   defaultLeaderModel?: string
   recommended?: Array<{ id: string; label: string; reason: string }>
   providers?: ModelProviderDef[]
@@ -220,6 +242,135 @@ export async function getProviderCatalog(forceRefresh?: boolean): Promise<ModelP
   } catch {
     return MASTRA_PROVIDERS
   }
+}
+
+/**
+ * Result of runtime resolution of the built-in provider list.
+ * `providers` is always structurally compatible with {@link MASTRA_PROVIDERS}
+ * (i.e. an array of {@link ModelProviderDef}).
+ */
+export type BuiltinProvidersResolution = {
+  providers: ModelProviderDef[]
+  /**
+   * Where the result came from:
+   * - `external`: runtime-curated from the user-side models.dev catalog (fresher than bundled)
+   * - `bundled`: inline builtin-providers.json snapshot (build-time curated)
+   * - `fallback`: hardcoded minimal list (bundled snapshot unavailable)
+   */
+  source: 'external' | 'bundled' | 'fallback'
+  /** ISO timestamp of the data used to produce the list. */
+  generatedAt: string
+}
+
+let resolveBuiltinCache: {
+  key: string
+  value: BuiltinProvidersResolution
+} | null = null
+
+function resolveBuiltinCacheKey(paths: ModelsDevCatalogPaths): string | null {
+  try {
+    if (!existsSync(paths.apiJsonPath)) return null
+    const st = statSync(paths.apiJsonPath)
+    const metaRaw = existsSync(paths.metaPath) ? readFileSync(paths.metaPath, 'utf8') : ''
+    return `${st.size}:${st.mtimeMs}:${metaRaw}`
+  } catch {
+    return null
+  }
+}
+
+function isStrictlyNewer(candidate: string | undefined, baseline: string): boolean {
+  if (!candidate) return false
+  const c = Date.parse(candidate)
+  const b = Date.parse(baseline)
+  if (Number.isNaN(c) || Number.isNaN(b)) return false
+  return c > b
+}
+
+function mapProviderModels(providerId: string, p: ModelsDevProviderRaw): RegistryModelInfo[] {
+  if (Array.isArray(p.models)) {
+    return p.models.map((mid) => modelInfo(mid, {}))
+  }
+  return Object.entries(p.models ?? {}).map(([mid, m]) => modelInfo(mid, m ?? {}))
+}
+
+function buildExternalCatalog(
+  policy: BuiltinProvidersPolicy,
+  registry: Record<string, ModelsDevProviderRaw>,
+  meta: ModelsDevMeta,
+  generatedAt: string,
+): BuiltinProvidersCatalog {
+  const registryByProvider: Record<string, RegistryModelInfo[]> = {}
+  for (const pp of policy.providers) {
+    const raw = registry[pp.id]
+    if (!raw) continue
+    registryByProvider[pp.id] = mapProviderModels(pp.id, raw)
+  }
+  return buildBuiltinCatalog(policy, registryByProvider, meta.sourceUrl ?? 'models.dev', generatedAt)
+}
+
+/**
+ * Resolve the built-in provider list at runtime, preferring the freshest data:
+ *
+ * 1. External models.dev catalog (`<root>/models-dev/api.json`) when its
+ *    meta.fetchedAt (or npm snapshot generatedAt) is newer than the bundled
+ *    builtin-providers.json generatedAt → curate live with the bundled policy.
+ * 2. Bundled inline snapshot (MASTRA_PROVIDERS default).
+ * 3. Hardcoded fallback.
+ *
+ * Never throws (failures silently fall back so Settings/UI never crash).
+ * Output shape is fully compatible with {@link MASTRA_PROVIDERS}.
+ */
+export function resolveBuiltinProviders(opts?: {
+  paths?: ModelsDevCatalogPaths
+  policy?: BuiltinProvidersPolicy
+}): BuiltinProvidersResolution {
+  const policy = opts?.policy ?? loadBuiltinProvidersPolicy()
+  const paths = opts?.paths ?? modelsDevCatalogPaths()
+  const bundledGeneratedAt =
+    typeof builtinCatalog.generatedAt === 'string' ? builtinCatalog.generatedAt : ''
+  const cacheKey = resolveBuiltinCacheKey(paths)
+
+  if (cacheKey && resolveBuiltinCache?.key === cacheKey) return resolveBuiltinCache.value
+
+  try {
+    const meta = loadModelsDevMeta(paths)
+    const registry = loadModelsDevRegistry(paths)
+    if (registry && meta) {
+      const externalFreshAt = meta.generatedAt ?? meta.fetchedAt
+      if (isStrictlyNewer(externalFreshAt, bundledGeneratedAt)) {
+        const catalog = buildExternalCatalog(policy, registry, meta, externalFreshAt)
+        const value: BuiltinProvidersResolution = {
+          providers: catalog.providers,
+          source: 'external',
+          generatedAt: externalFreshAt,
+        }
+        if (cacheKey) {
+          resolveBuiltinCache = {
+            key: cacheKey,
+            value,
+          }
+        }
+        return value
+      }
+    }
+  } catch {
+    // silent fallback — never let a resolver failure crash Settings/UI
+  }
+
+  const bundledProviders = builtinCatalog.providers
+  const bundled = Array.isArray(bundledProviders) && bundledProviders.length > 0
+  const value: BuiltinProvidersResolution = {
+    providers: bundled ? bundledProviders : FALLBACK_PROVIDERS,
+    source: bundled ? 'bundled' : 'fallback',
+    generatedAt: bundledGeneratedAt,
+  }
+  if (cacheKey) {
+    resolveBuiltinCache = {
+      key: cacheKey,
+      value,
+    }
+  }
+  return value
 }
 
 /** Normalize api style for custom / OpenCode-like gateways */

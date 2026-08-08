@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_FEATURED_POLICY,
-  MASTRA_PROVIDERS,
+  resolveBuiltinProviders,
   type ModelProviderDef,
 } from './models-catalog.js'
 import { applyFeaturedPolicy, type FeaturedCatalogResult } from './featured-policy.js'
@@ -266,12 +266,14 @@ function registryPaths(): string[] {
 
 /**
  * Attempt to sync the leader model catalog from the Mastra provider registry.
- * Merges registry data with the hardcoded MASTRA_PROVIDERS (hardcoded entries
- * take priority for their known model lists, new providers from registry are added).
+ * The built-in list (resolveBuiltinProviders — external models.dev catalog when
+ * fresher, else bundled) is the merge base: its curated model lists take
+ * priority, and the @mastra/core registry (installed) is merged in as
+ * secondary (adds missing providers / models).
  * Caches the result to <root>/cache/models-cache.json and persists a
  * RegistrySnapshot to <root>/data/mastra-model-registry.json.
  *
- * Falls back to cache (any age) if sync fails, then to hardcoded MASTRA_PROVIDERS.
+ * Falls back to cache (any age) if sync fails, then to the built-in list.
  */
 /**
  * Admin/maintenance refresh only — may write models-cache + persisted snapshot.
@@ -283,10 +285,11 @@ export function syncLeaderModelCatalog(opts?: { dataDir?: string }): {
   synced: boolean
 } {
   const dir = opts?.dataDir ?? dataDir()
+  const base = resolveBuiltinProviders().providers
   try {
     const registry = fetchMastraProviderRegistry()
     if (registry.length > 0) {
-      const merged = applyFeaturedTags(mergeCatalogs(MASTRA_PROVIDERS, registry))
+      const merged = applyFeaturedTags(mergeCatalogs(base, registry))
       saveCache(merged)
       try {
         writePersistedRegistrySnapshot(catalogToSnapshot(merged, 'persisted', 'installed'), dir)
@@ -305,7 +308,7 @@ export function syncLeaderModelCatalog(opts?: { dataDir?: string }): {
     installed: buildInstalledRegistrySnapshot(),
   })
   if (snapshot.ok) {
-    const merged = applyFeaturedTags(mergeCatalogs(MASTRA_PROVIDERS, snapshotToCatalog(snapshot)))
+    const merged = applyFeaturedTags(mergeCatalogs(base, snapshotToCatalog(snapshot)))
     return { catalog: merged, source: 'cache', synced: false }
   }
 
@@ -314,12 +317,13 @@ export function syncLeaderModelCatalog(opts?: { dataDir?: string }): {
     return { catalog: applyFeaturedTags(cached.catalog), source: 'cache', synced: false }
   }
 
-  return { catalog: applyFeaturedTags([...MASTRA_PROVIDERS]), source: 'fallback', synced: false }
+  return { catalog: applyFeaturedTags([...base]), source: 'fallback', synced: false }
 }
 
 /**
  * Read-only leader catalog for Settings / UI.
- * Priority: memory cache (if fresh) → persisted → bundled → installed static → MASTRA_PROVIDERS.
+ * Priority: memory cache (if fresh) → persisted → bundled → installed static →
+ * built-in list (resolveBuiltinProviders).
  * Never writes disk. Use forceRefresh / syncLeaderModelCatalog for admin refresh only.
  */
 export function getLeaderModelCatalog(forceRefresh = false): ModelProviderDef[] {
@@ -338,14 +342,16 @@ export function getLeaderModelCatalog(forceRefresh = false): ModelProviderDef[] 
     installed: buildInstalledRegistrySnapshot(),
   })
   if (loaded.ok) {
-    return applyFeaturedTags(mergeCatalogs(MASTRA_PROVIDERS, snapshotToCatalog(loaded)))
+    return applyFeaturedTags(
+      mergeCatalogs(resolveBuiltinProviders().providers, snapshotToCatalog(loaded)),
+    )
   }
 
   if (cached) {
     return applyFeaturedTags(cached.catalog)
   }
 
-  return applyFeaturedTags([...MASTRA_PROVIDERS])
+  return applyFeaturedTags([...resolveBuiltinProviders().providers])
 }
 
 /**

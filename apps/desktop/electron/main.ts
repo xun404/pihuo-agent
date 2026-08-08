@@ -58,7 +58,7 @@ import {
   getAcpFingerprintKeyForChild,
   getWorkerSecretsKeyForChild,
   SECRET_ENV_KEYS,
-  MASTRA_PROVIDERS,
+  resolveBuiltinProviders,
   mergeProvidersWithCustom,
   normalizeThinkingIntensity,
   normalizeThinkingIntensityList,
@@ -599,7 +599,7 @@ function restartApiServer(mode: ApiRestartMode): Promise<boolean> {
 
 function providersPayload() {
   const settings = loadSettings()
-  const merged = mergeProvidersWithCustom(MASTRA_PROVIDERS, settings.customProviders)
+  const merged = mergeProvidersWithCustom(resolveBuiltinProviders().providers, settings.customProviders)
   const secretKeys = [...new Set([...SECRET_ENV_KEYS, ...merged.map((p) => p.apiKeyEnv)])]
   const status = getSecretsStatus(secretKeys)
   const disabled = new Set(settings.disabledProviderIds ?? [])

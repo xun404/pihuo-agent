@@ -206,6 +206,7 @@ export async function installAndApplyModelsDevNpmSnapshot(
     sourceUrl: `npm:${MODELS_DEV_NPM_PACKAGE}@${packageVersion}/snapshot`,
     providerCount,
     bytes: Buffer.byteLength(text, 'utf8'),
+    ...(typeof snap.generatedAt === 'string' ? { generatedAt: snap.generatedAt } : {}),
   }
   const metaTmp = `${paths.metaPath}.${process.pid}.tmp`
   writeFileSync(metaTmp, JSON.stringify(meta, null, 2), { encoding: 'utf8', mode: 0o600 })

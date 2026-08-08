@@ -115,9 +115,35 @@ export {
   resolveApiKeyEnvsForModel,
   hasAnyApiKey,
   getProviderCatalog,
+  resolveBuiltinProviders,
   type ModelProviderDef,
   type ModelOption,
+  type BuiltinProvidersResolution,
 } from './models-catalog.js'
+export {
+  buildBuiltinCatalog,
+  curateProvider,
+  pickRecommended,
+  pickDefaultLeader,
+  compareVersionDesc,
+  versionKey,
+  filterAndSortModels,
+  loadBuiltinProvidersPolicy,
+  type ModelTag,
+  type CuratedModel,
+  type RegistryModelInfo,
+  type CuratedProvider,
+  type BuiltinProvidersCatalog,
+  type ProviderPolicy,
+  type BuiltinProvidersPolicy,
+} from './builtin-catalog.js'
+export {
+  modelInfo,
+  toRawProvider,
+  isMultimodal,
+  REASONING_LEVEL_MAP,
+  type RawProvider,
+} from './models-dev-registry-mapping.js'
 export {
   fetchMastraProviderRegistry,
   syncLeaderModelCatalog,

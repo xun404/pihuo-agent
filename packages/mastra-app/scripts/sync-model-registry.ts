@@ -24,14 +24,14 @@ import { fileURLToPath } from 'node:url'
 import {
   writePersistedRegistrySnapshot,
   persistedRegistryPath,
-  type RegistrySnapshot,
-} from '@swarmdesk-agent/core'
-import {
   buildBuiltinCatalog,
+  toRawProvider,
+  type RegistrySnapshot,
   type BuiltinProvidersPolicy,
   type RegistryModelInfo,
-} from './curate-builtin-providers.ts'
-import { THINKING_INTENSITIES, type ThinkingIntensity } from '@swarmdesk-agent/core'
+  type RawProvider,
+  type ModelsDevProviderRaw,
+} from '@swarmdesk-agent/core'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '../../..')
@@ -40,76 +40,8 @@ const coreBundledDir = join(root, 'packages/core/src/bundled')
 /** Authoritative source. Override with a URL or local file path for offline runs. */
 const MODELS_DEV_API_URL = process.env.MODELS_DEV_API_URL ?? 'https://models.dev/api.json'
 
-type RawProvider = {
-  name: string
-  apiKeyEnvVar: string
-  models?: RegistryModelInfo[]
-  docUrl?: string
-}
-
 /** models.dev/api.json provider shape (https://models.dev). */
-type ModelsDevProvider = {
-  name?: string
-  api_key?: string
-  env_key?: string
-  doc_url?: string
-  models?: Record<string, ModelsDevModel> | string[]
-}
-
-/** models.dev/api.json model entry shape. */
-type ModelsDevModel = {
-  id?: string
-  name?: string
-  reasoning?: boolean
-  reasoning_options?: Array<{ type?: string; values?: string[] }>
-  limit?: { context?: number; output?: number }
-  tool_call?: boolean
-  modalities?: { input?: string[]; output?: string[] }
-}
-
-/** True when the model accepts or emits non-text modalities (image/audio/video). */
-function isMultimodal(m: ModelsDevModel): boolean {
-  const mods = [m.modalities?.input ?? [], m.modalities?.output ?? []].flat()
-  return mods.some((mod) => mod !== 'text')
-}
-
-/** Map models.dev reasoning effort values onto our thinking ladder. */
-const REASONING_LEVEL_MAP: Record<string, ThinkingIntensity> = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  xhigh: 'xhigh',
-  max: 'max',
-  ultra: 'max',
-  minimal: 'low',
-  off: 'off',
-}
-
-/** Derive supported thinking levels from models.dev reasoning fields. 'off' is always included. */
-function modelThinkingIntensities(m: ModelsDevModel): ThinkingIntensity[] | undefined {
-  if (m.reasoning === false) return ['off']
-  const values = (m.reasoning_options ?? []).flatMap((o) => o.values ?? [])
-  const mapped = [...new Set(values.map((v) => REASONING_LEVEL_MAP[v]).filter(Boolean))]
-  const ordered = THINKING_INTENSITIES.filter((l) => mapped.includes(l))
-  if (ordered.length > 0) return ['off', ...ordered.filter((l) => l !== 'off')]
-  // 支持思考但未标注档位 → 常见档位（含关）
-  if (m.reasoning === true) return ['off', 'medium', 'high', 'max']
-  return undefined
-}
-
-function modelInfo(id: string, m: ModelsDevModel): RegistryModelInfo {
-  const short = id.includes('/') ? id.slice(id.indexOf('/') + 1) : id
-  return {
-    id: short,
-    label: m.name && m.name !== short ? m.name : short,
-    ...(m.limit?.context ? { contextWindow: m.limit.context } : {}),
-    ...(m.tool_call === true ? { toolCall: true } : {}),
-    ...(isMultimodal(m) ? { multimodal: true } : {}),
-    ...(modelThinkingIntensities(m)?.length
-      ? { thinkingIntensities: modelThinkingIntensities(m)! }
-      : {}),
-  }
-}
+type ModelsDevProvider = ModelsDevProviderRaw
 
 async function fetchModelsDevRegistry(): Promise<Record<string, ModelsDevProvider>> {
   if (/^https?:\/\//i.test(MODELS_DEV_API_URL)) {
@@ -129,20 +61,6 @@ async function fetchModelsDevRegistry(): Promise<Record<string, ModelsDevProvide
     }
   }
   return JSON.parse(readFileSync(MODELS_DEV_API_URL, 'utf8')) as Record<string, ModelsDevProvider>
-}
-
-/** Map models.dev provider entry → the allowlist-friendly RawProvider shape. */
-function toRawProvider(id: string, p: ModelsDevProvider): RawProvider {
-  const envVar = (p.api_key ?? p.env_key ?? '').replace(/^\$/, '')
-  const models = Array.isArray(p.models)
-    ? p.models.map((mid) => modelInfo(mid, {}))
-    : Object.entries(p.models ?? {}).map(([mid, m]) => modelInfo(mid, m))
-  return {
-    name: p.name ?? id,
-    apiKeyEnvVar: envVar,
-    ...(p.doc_url ? { docUrl: p.doc_url } : {}),
-    ...(models.length > 0 ? { models } : {}),
-  }
 }
 
 function buildAllowlistedSnapshot(
