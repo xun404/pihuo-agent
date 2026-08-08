@@ -4,13 +4,14 @@ import type {
   CustomAcpLaunchKind,
   CustomAcpRegistrationInput,
   CustomAcpPreview,
+  NotificationSettings,
   PromptSettings,
   TeamTemplate,
   WorkerTimeoutSettings,
   WorkerRegistration,
   WorkerRole,
 } from '@swarmdesk-agent/shared'
-import { normalizePromptSettings } from '@swarmdesk-agent/shared'
+import { normalizePromptSettings, DEFAULT_NOTIFICATION_SETTINGS } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   fetchSettings,
@@ -356,6 +357,15 @@ export function SettingsPanel({
   const [npmRegistryDraft, setNpmRegistryDraft] = useState('')
   const [npmRegistrySaving, setNpmRegistrySaving] = useState(false)
   const [npmRegistryError, setNpmRegistryError] = useState<string | null>(null)
+  /**
+   * Native OS notification preferences (system notifications section). Loaded
+   * from server settings; each toggle saves the full object via
+   * `saveNotifications`, and the App-level settings state is refreshed when
+   * the panel closes so `useSystemNotifications` picks up changes immediately.
+   */
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => ({
+    ...DEFAULT_NOTIFICATION_SETTINGS,
+  }))
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({})
 
   const [customModel, setCustomModel] = useState(false)
@@ -444,6 +454,7 @@ export function SettingsPanel({
       setPromptSettings(normalizePromptSettings(s.settings.prompts))
       setWorkerTimeouts(s.settings.workerTimeouts)
       setNpmRegistryDraft(s.settings.npmRegistry ?? '')
+      setNotificationSettings(s.settings.notifications ?? DEFAULT_NOTIFICATION_SETTINGS)
       setNpmRegistryError(null)
       setDraftKeys({})
       const customs = s.customProviders ?? s.settings.customProviders ?? []
@@ -1199,6 +1210,21 @@ export function SettingsPanel({
     }
   }
 
+  /**
+   * Notification toggles: optimistic update for instant checkbox feedback,
+   * then confirm with the normalized persisted value from the save response.
+   */
+  const saveNotifications = async (next: NotificationSettings) => {
+    setNotificationSettings(next)
+    try {
+      const saved = await saveSettings({ notifications: next })
+      if (saved.ok === false) return
+      setNotificationSettings(saved.settings?.notifications ?? next)
+    } catch {
+      // Silent auto-save; keep the optimistic value until the next reload.
+    }
+  }
+
   const npmRegistrySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -1937,6 +1963,130 @@ export function SettingsPanel({
               }
             }}
           />
+          <div className="settings-form-card settings-runtime-card">
+            <header className="settings-card-head">
+              <div className="settings-card-titles">
+                <h3 className="settings-card-title">{t('settings.notifications.title')}</h3>
+              </div>
+            </header>
+            <div className="settings-runtime-rows">
+              <div className="settings-row-block">
+                <label className="settings-row card-row">
+                  <span className="settings-check">
+                    <input
+                      type="checkbox"
+                      checked={notificationSettings.enabled}
+                      onChange={(e) =>
+                        void saveNotifications({
+                          ...notificationSettings,
+                          enabled: e.target.checked,
+                        })
+                      }
+                      aria-label={t('settings.notifications.enabled')}
+                    />
+                  </span>
+                  <span className="lbl-block">
+                    <span className="lbl">{t('settings.notifications.enabled')}</span>
+                  </span>
+                </label>
+                <label className="settings-row card-row">
+                  <span className="settings-check">
+                    <input
+                      type="checkbox"
+                      checked={notificationSettings.mode === 'always'}
+                      disabled={!notificationSettings.enabled}
+                      onChange={(e) =>
+                        void saveNotifications({
+                          ...notificationSettings,
+                          mode: e.target.checked ? 'always' : 'hidden-only',
+                        })
+                      }
+                      aria-label={t('settings.notifications.mode')}
+                    />
+                  </span>
+                  <span className="lbl-block">
+                    <span className="lbl">{t('settings.notifications.mode')}</span>
+                  </span>
+                </label>
+                <label className="settings-row card-row">
+                  <span className="settings-check">
+                    <input
+                      type="checkbox"
+                      checked={notificationSettings.onCompletion}
+                      disabled={!notificationSettings.enabled}
+                      onChange={(e) =>
+                        void saveNotifications({
+                          ...notificationSettings,
+                          onCompletion: e.target.checked,
+                        })
+                      }
+                      aria-label={t('settings.notifications.onCompletion')}
+                    />
+                  </span>
+                  <span className="lbl-block">
+                    <span className="lbl">{t('settings.notifications.onCompletion')}</span>
+                  </span>
+                </label>
+                <label className="settings-row card-row">
+                  <span className="settings-check">
+                    <input
+                      type="checkbox"
+                      checked={notificationSettings.onError}
+                      disabled={!notificationSettings.enabled}
+                      onChange={(e) =>
+                        void saveNotifications({
+                          ...notificationSettings,
+                          onError: e.target.checked,
+                        })
+                      }
+                      aria-label={t('settings.notifications.onError')}
+                    />
+                  </span>
+                  <span className="lbl-block">
+                    <span className="lbl">{t('settings.notifications.onError')}</span>
+                  </span>
+                </label>
+                <label className="settings-row card-row">
+                  <span className="settings-check">
+                    <input
+                      type="checkbox"
+                      checked={notificationSettings.onApproval}
+                      disabled={!notificationSettings.enabled}
+                      onChange={(e) =>
+                        void saveNotifications({
+                          ...notificationSettings,
+                          onApproval: e.target.checked,
+                        })
+                      }
+                      aria-label={t('settings.notifications.onApproval')}
+                    />
+                  </span>
+                  <span className="lbl-block">
+                    <span className="lbl">{t('settings.notifications.onApproval')}</span>
+                  </span>
+                </label>
+                <div className="settings-row card-row">
+                  <div className="lbl-block">
+                    <div className="lbl">{t('settings.notifications.test')}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-btn-soft"
+                    disabled={!notificationSettings.enabled}
+                    onClick={() =>
+                      void window.routerAgents?.notify?.show({
+                        id: 'test-notification',
+                        title: t('settings.notifications.title'),
+                        body: t('settings.notifications.testBody'),
+                      })
+                    }
+                  >
+                    {t('settings.notifications.test')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
           <div className="settings-form-card settings-runtime-card">
             <header className="settings-card-head">
               <div className="settings-card-titles">

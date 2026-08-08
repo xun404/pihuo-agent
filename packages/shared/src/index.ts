@@ -1709,4 +1709,11 @@ export function isModelCacheFresh(
   return isTimestampFresh(modelsFetchedAt, ttlMs, nowMs)
 }
 
+export {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  isNotificationMode,
+  type NotificationMode,
+  type NotificationSettings,
+} from './notification-settings.js'
+
 export { matchRegistryAgentForIcon } from './worker-icon-match.js'

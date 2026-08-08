@@ -1,12 +1,18 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import type { Project, Session, SessionPermissionMode, WorkerJob } from '@swarmdesk-agent/shared'
+import type {
+  Project,
+  Session,
+  SessionPermissionMode,
+  WorkerJob,
+} from '@swarmdesk-agent/shared'
 import {
   SESSION_LAMP_ACTIVE_TTL_MS,
   sessionHasUnreadLamp,
@@ -14,9 +20,10 @@ import {
 } from '@swarmdesk-agent/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
-import { SettingsLayer, openSettings } from './components/SettingsLayer'
+import { SettingsLayer, openSettings, SETTINGS_CLOSED_EVENT } from './components/SettingsLayer'
 import { useAppState } from './hooks/useAppState'
-import type { ThinkingIntensity } from './lib/settings'
+import { useSystemNotifications } from './hooks/useSystemNotifications'
+import { fetchSettings, type SettingsPayload, type ThinkingIntensity } from './lib/settings'
 import { I18nProvider, useI18n } from './i18n/I18nProvider'
 import type { Locale } from './i18n/locales'
 import { ThemeProvider } from './theme/ThemeProvider'
@@ -59,7 +66,8 @@ function AppShell({
   resetTeamMemberSession,
   refresh,
   setSessionPermissionMode,
-}: ReturnType<typeof useAppState>) {
+  settings,
+}: ReturnType<typeof useAppState> & { settings: SettingsPayload | null }) {
   const { t } = useI18n()
   const { toast: pushToast, error: toastError, info: toastInfo } = useToast()
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth())
@@ -111,6 +119,17 @@ function AppShell({
       return changed ? next : previous
     })
   }, [snapshot.approvals, snapshot.sessions])
+
+  /**
+   * System notifications: snapshot poll runs the watcher hook. Settings come
+   * from the App-level fetchSettings() state; SettingsPanel saves the
+   * notifications field and reuses this same state.
+   */
+  const appSettings = useMemo(
+    () => settings?.settings.notifications ?? null,
+    [settings],
+  )
+  useSystemNotifications({ snapshot, notifications: appSettings })
 
   /**
    * Sidebar notification lamps (error/done) are read-watermark driven:
@@ -173,6 +192,24 @@ function AppShell({
       unsubMenu?.()
     }
   }, [])
+
+  /**
+   * System notification click: open the session the banner was for. The
+   * notification service focuses the main window before dispatching, so here
+   * we only activate + mark-read the session (ignore unknown ids).
+   */
+  useEffect(() => {
+    const unsubscribe = window.routerAgents?.onOpenSession?.((detail) => {
+      if (!detail.sessionId) return
+      const session = snapshot.sessions.find((s) => s.id === detail.sessionId)
+      if (!session) return
+      void activateSession(session)
+      void markSessionRead(session.id)
+    })
+    return () => {
+      unsubscribe?.()
+    }
+  }, [snapshot, activateSession, markSessionRead])
 
   const beginSidebarResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -512,6 +549,41 @@ function AppShell({
 
 export default function App() {
   const state = useAppState()
+  const [settings, setSettings] = useState<SettingsPayload | null>(null)
+
+  // Server-owned settings for the whole app. The system notification watcher
+  // reads settings.settings.notifications; SettingsPanel will reuse this
+  // state for saving (Task 7).
+  useEffect(() => {
+    let cancelled = false
+    void fetchSettings()
+      .then((payload) => {
+        if (!cancelled) setSettings(payload)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // SettingsPanel persists via saveSettings IPC; refresh the app-level state
+  // whenever the panel closes so downstream consumers (e.g. system
+  // notifications) see the latest values without an app restart.
+  useEffect(() => {
+    let cancelled = false
+    const onSettingsClosed = () => {
+      void fetchSettings()
+        .then((payload) => {
+          if (!cancelled) setSettings(payload)
+        })
+        .catch(() => undefined)
+    }
+    window.addEventListener(SETTINGS_CLOSED_EVENT, onSettingsClosed)
+    return () => {
+      cancelled = true
+      window.removeEventListener(SETTINGS_CLOSED_EVENT, onSettingsClosed)
+    }
+  }, [])
 
   return (
     <ThemeProvider>
@@ -521,7 +593,7 @@ export default function App() {
           onLocaleChange={(locale: Locale) => void state.setLocale(locale)}
         >
           <ToastProvider>
-            <AppShell {...state} />
+            <AppShell {...state} settings={settings} />
           </ToastProvider>
         </I18nProvider>
       </MotionPreferenceProvider>

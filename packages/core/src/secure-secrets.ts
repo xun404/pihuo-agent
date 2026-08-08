@@ -43,7 +43,13 @@ import {
 } from './worker-timeouts.js'
 import { resolveProviderEnv, PROVIDER_ENV_OVERRIDES } from './provider-env-resolver.js'
 import { DEFAULT_LEADER_MODEL } from './models-catalog.js'
-import { normalizePromptSettings, type PromptSettings } from '@swarmdesk-agent/shared'
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  isNotificationMode,
+  normalizePromptSettings,
+  type NotificationSettings,
+  type PromptSettings,
+} from '@swarmdesk-agent/shared'
 
 export type SecretsMap = Record<string, string>
 
@@ -118,6 +124,8 @@ export interface AppSettings {
    * Empty / omitted → system default (~/.npmrc or ambient env).
    */
   npmRegistry?: string
+  /** Native OS notification preferences. Missing on legacy settings.json files. */
+  notifications?: NotificationSettings
   /** Non-secret prefs */
   updatedAt?: string
 }
@@ -135,6 +143,31 @@ export function normalizeDisabledProviderIds(raw: unknown): string[] {
     out.push(id)
   }
   return out
+}
+
+/**
+ * Normalize notification preferences read from settings.json (or an IPC save
+ * payload) into a complete `NotificationSettings`. Missing fields fall back to
+ * the shared defaults — note the asymmetry: `enabled` defaults to false
+ * (notifications opt-in), while the three event toggles default to true.
+ */
+export function normalizeNotificationSettings(raw: unknown): NotificationSettings {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_NOTIFICATION_SETTINGS }
+  const record = raw as Record<string, unknown>
+  return {
+    enabled: record.enabled === true,
+    mode: isNotificationMode(record.mode) ? record.mode : DEFAULT_NOTIFICATION_SETTINGS.mode,
+    onCompletion:
+      record.onCompletion === undefined
+        ? DEFAULT_NOTIFICATION_SETTINGS.onCompletion
+        : record.onCompletion === true,
+    onError:
+      record.onError === undefined ? DEFAULT_NOTIFICATION_SETTINGS.onError : record.onError === true,
+    onApproval:
+      record.onApproval === undefined
+        ? DEFAULT_NOTIFICATION_SETTINGS.onApproval
+        : record.onApproval === true,
+  }
 }
 
 export interface SecretsStatus {
@@ -386,6 +419,7 @@ function defaultAppSettings(opts?: { useEnvironment?: boolean }): AppSettings {
     prompts: normalizePromptSettings(undefined),
     workerTimeouts: resolveWorkerTimeoutSettings(undefined),
     npmRegistry: undefined,
+    notifications: { ...DEFAULT_NOTIFICATION_SETTINGS },
   }
 }
 
@@ -420,6 +454,7 @@ function loadSettingsStrict(): AppSettings {
     leaderMaxSteps: resolveLeaderMaxSteps(raw.leaderMaxSteps),
     prompts: normalizePromptSettings(raw.prompts),
     workerTimeouts: resolveWorkerTimeoutSettings(raw.workerTimeouts),
+    notifications: normalizeNotificationSettings(raw.notifications),
     npmRegistry: (() => {
       try {
         return normalizeNpmRegistry(raw.npmRegistry)
@@ -463,6 +498,10 @@ export function saveSettings(settings: Partial<AppSettings>): AppSettings {
       settings.workerTimeouts !== undefined
         ? parseWorkerTimeoutSettings(settings.workerTimeouts)
         : prev.workerTimeouts,
+    notifications:
+      settings.notifications !== undefined
+        ? normalizeNotificationSettings(settings.notifications)
+        : (prev.notifications ?? { ...DEFAULT_NOTIFICATION_SETTINGS }),
     npmRegistry:
       settings.npmRegistry !== undefined
         ? normalizeNpmRegistry(settings.npmRegistry)

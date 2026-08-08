@@ -45,6 +45,13 @@ contextBridge.exposeInMainWorld('routerAgents', {
       workerTimeouts?: WorkerTimeoutSettings
       npmRegistry?: string | null
       secrets?: Record<string, string | null>
+      notifications?: {
+        enabled?: boolean
+        mode?: 'always' | 'hidden-only'
+        onCompletion?: boolean
+        onError?: boolean
+        onApproval?: boolean
+      }
       customProviders?: {
         id: string
         name: string
@@ -56,6 +63,23 @@ contextBridge.exposeInMainWorld('routerAgents', {
     deleteSecret: (key: string) => ipcRenderer.invoke('settings:delete-secret', key),
     dangerAction: (action: DangerZoneAction) =>
       ipcRenderer.invoke('settings:danger-action', action),
+  },
+  notify: {
+    show: (payload: { id: string; title: string; body: string; sessionId?: string }) =>
+      ipcRenderer.invoke('notifications:show', payload) as Promise<{ ok: true }>,
+  },
+  /**
+   * Notification click → open the session in the main window.
+   * Returns an unsubscribe function (mirrors onOpenSettings).
+   */
+  onOpenSession: (handler: (detail: { sessionId?: string }) => void) => {
+    const listener = (_event: unknown, detail: { sessionId?: string } | undefined) => {
+      handler(detail ?? {})
+    }
+    ipcRenderer.on('app:open-session', listener)
+    return () => {
+      ipcRenderer.removeListener('app:open-session', listener)
+    }
   },
   dialog: {
     /**

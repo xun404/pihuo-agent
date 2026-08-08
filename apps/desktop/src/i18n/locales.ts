@@ -581,6 +581,14 @@ export type MessageKey =
   | 'settings.runtime.workerQueueTimeout'
   | 'settings.runtime.workerQueueTimeoutDesc'
   | 'settings.runtime.workerQueueTimeoutError'
+  | 'settings.notifications.title'
+  | 'settings.notifications.enabled'
+  | 'settings.notifications.mode'
+  | 'settings.notifications.onCompletion'
+  | 'settings.notifications.onError'
+  | 'settings.notifications.onApproval'
+  | 'settings.notifications.test'
+  | 'settings.notifications.testBody'
   | 'settings.prompts.leader'
   | 'settings.prompts.leaderHint'
   | 'settings.prompts.roles'
@@ -1468,6 +1476,14 @@ const zh: Dict = {
   'settings.runtime.workerQueueTimeout': 'Worker 排队超时',
   'settings.runtime.workerQueueTimeoutDesc': '等待并发槽或 ACP Session 容量的时间，默认 10 分钟。',
   'settings.runtime.workerQueueTimeoutError': '请输入 1 到 120 之间的整数',
+  'settings.notifications.title': '通知',
+  'settings.notifications.enabled': '启用系统通知',
+  'settings.notifications.mode': '窗口聚焦时也显示通知',
+  'settings.notifications.onCompletion': '会话完成时通知',
+  'settings.notifications.onError': '会话失败时通知',
+  'settings.notifications.onApproval': '需要审批时通知',
+  'settings.notifications.test': '发送测试通知',
+  'settings.notifications.testBody': '系统通知已就绪',
   'settings.prompts.leader': 'Leader',
   'settings.prompts.leaderHint': '此内容会附加在内置协议和工具约束之后，从下一轮对话开始生效。',
   'settings.prompts.roles': '角色默认提示词',
@@ -2389,6 +2405,14 @@ const en: Dict = {
   'settings.runtime.workerQueueTimeoutDesc':
     'Time waiting for concurrency or ACP Session capacity; default 10 minutes.',
   'settings.runtime.workerQueueTimeoutError': 'Enter an integer from 1 to 120',
+  'settings.notifications.title': 'Notifications',
+  'settings.notifications.enabled': 'Enable system notifications',
+  'settings.notifications.mode': 'Show notifications while the window is focused',
+  'settings.notifications.onCompletion': 'Notify on session completion',
+  'settings.notifications.onError': 'Notify on session failure',
+  'settings.notifications.onApproval': 'Notify when approval is needed',
+  'settings.notifications.test': 'Send test notification',
+  'settings.notifications.testBody': 'System notifications are ready',
   'settings.prompts.leader': 'Leader',
   'settings.prompts.leaderHint':
     'Appended after the protected protocol and tool contract; applies from the next turn.',

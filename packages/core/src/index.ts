@@ -251,6 +251,7 @@ export {
   type CustomProviderModel,
   type CustomApiStyle,
   normalizeDisabledProviderIds,
+  normalizeNotificationSettings,
 } from './secure-secrets.js'
 export {
   listWorkerSecretKeyNames,
