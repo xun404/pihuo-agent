@@ -29,6 +29,8 @@ interface Window {
     onOpenSettings?: (
       handler: (tab?: 'general' | 'model' | 'prompts' | 'workers' | 'about') => void,
     ) => () => void
+    /** Notification click → open the session in the main window; returns unsubscribe. */
+    onOpenSession?: (handler: (detail: { sessionId?: string }) => void) => () => void
     settings?: {
       get: () => Promise<unknown>
       setThinkingIntensity?: (
@@ -58,6 +60,14 @@ interface Window {
           | 'clear-cache'
           | 'reset-all',
       ) => Promise<unknown>
+    }
+    notify?: {
+      show: (payload: {
+        id: string
+        title: string
+        body: string
+        sessionId?: string
+      }) => Promise<{ ok: true }>
     }
     dialog?: {
       openDirectory: (labels?: {
