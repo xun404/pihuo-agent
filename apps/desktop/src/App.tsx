@@ -592,8 +592,9 @@ export default function App() {
   }, [])
 
   // Drive the static splash (index.html #initial-loading) from authoritative
-  // app state: loading (snapshot fetch), error (API down), ready (serverUp).
-  // No timers pretend progress here — the 3s hold is a wall-clock minimum only.
+  // app state (useAppState): loading (initial snapshot fetch), error (API
+  // down), ready (serverUp). No timers pretend progress — the 3s hold is a
+  // pure wall-clock minimum, applied only to the normal ready path.
   const splashShownAtRef = useRef<number | null>(null)
   if (splashShownAtRef.current === null) {
     splashShownAtRef.current = performance.now()
@@ -607,11 +608,12 @@ export default function App() {
     const catalog = catalogs[isLocale(state.snapshot.locale) ? state.snapshot.locale : 'zh']
     let timer: ReturnType<typeof setTimeout> | undefined
 
-    const scheduleDismiss = (extraDelayMs = 0) => {
-      const remaining = Math.max(
-        0,
-        MIN_SPLASH_DISPLAY_MS - (performance.now() - (splashShownAtRef.current ?? 0)),
-      )
+    // Fade the splash out over 300ms and remove it. `immediate` skips the
+    // minimum hold so failures surface to the app's own error UI without
+    // delay; the ready path keeps the splash until the hold has elapsed.
+    const scheduleDismiss = (immediate: boolean) => {
+      const elapsed = performance.now() - (splashShownAtRef.current ?? 0)
+      const remaining = immediate ? 0 : Math.max(0, MIN_SPLASH_DISPLAY_MS - elapsed)
       return setTimeout(() => {
         splashDismissedRef.current = true
         const el = document.getElementById('initial-loading')
@@ -619,23 +621,25 @@ export default function App() {
           el.classList.add('fade-out')
           setTimeout(() => el.remove(), 300)
         }
-      }, remaining + 150 + extraDelayMs)
+      }, remaining + 150)
     }
 
     if (state.error) {
-      // Errors matter more than the minimum branding hold: show the error
+      // Failures matter more than the minimum branding hold: show the error
       // text and dismiss right away so the app's own error surface appears.
       statusEl.textContent = catalog['common.loadingError']
       statusEl.classList.add('error-text')
-      timer = scheduleDismiss(0)
+      timer = scheduleDismiss(true)
     } else if (state.loading) {
-      statusEl.textContent = catalog['common.loading']
+      // Loading — keep the splash silent: the animated busy dots already
+      // signal work in progress, so no text is needed here.
+      statusEl.textContent = ''
       statusEl.classList.remove('error-text')
     } else if (state.serverUp) {
       // Ready — stay silent for the remainder of the minimum hold, then fade.
       statusEl.textContent = ''
       statusEl.classList.remove('error-text')
-      timer = scheduleDismiss(0)
+      timer = scheduleDismiss(false)
     }
 
     return () => {

@@ -19,11 +19,12 @@
     <link rel="apple-touch-icon" href="./icon.png" />
     <title>SwarmDesk</title>
     <style>
-      /* Startup splash. Uses theme variables applied by theme-bootstrap.ts
-         (--bg-main/--text-2/--danger); fallbacks match the light default so the
-         first frame never flashes a wrong color. Lives OUTSIDE #root on purpose:
-         createRoot discards the container's existing children on commit, which
-         would delete the splash before the app's dismissal logic can run. */
+      /* Startup loading page. Colors come from the theme variables applied by
+         theme-bootstrap.ts (--bg-main/--text-2/--danger); the fallbacks match
+         the light default theme so the very first frame never flashes a
+         mismatched color. The splash lives OUTSIDE #root on purpose:
+         createRoot discards the container's existing children on commit,
+         which would delete the splash before App.tsx's dismissal logic runs. */
       #initial-loading {
         position: fixed;
         inset: 0;
@@ -44,7 +45,7 @@
         object-fit: contain;
       }
       /* Startup progress line. Absolutely positioned so the logo never shifts
-         when the text appears/disappears (112px logo + 16px gap). */
+         when the line appears/disappears (112px logo + 16px gap). */
       #initial-loading .status-line {
         position: absolute;
         top: calc(50% + 78px);
@@ -57,10 +58,13 @@
         font-size: 13px;
         color: var(--text-2, #6f6a63);
       }
+      /* Error state only — the normal loading state stays text-free; the
+         animated dots below are the only loading affordance. */
       #initial-loading .status-text.error-text {
         color: var(--danger, #b3261e);
       }
-      /* Busy dots — opacity only, so the animation never recalculates style. */
+      /* Busy dots — animate opacity only, so the compositor drives the pulse
+         and no style/layout recalculation happens per frame. */
       #initial-loading .boot-dots {
         display: inline-flex;
         gap: 3px;
@@ -86,8 +90,9 @@
     <script type="module" src="/src/theme-bootstrap.ts"></script>
   </head>
   <body>
-    <!-- Startup loading page; text is populated by App.tsx from authoritative
-         app state (useAppState loading/serverUp/error). -->
+    <!-- Startup loading page. Text is populated by App.tsx from authoritative
+         app state (useAppState loading/serverUp/error); normally it stays
+         empty and only the busy dots animate. -->
     <div id="initial-loading">
       <img class="splash-logo" src="./icon-glyph.png" alt="" aria-hidden="true" />
       <div class="status-line" id="loading-status-line" aria-live="polite">
