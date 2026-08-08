@@ -19,6 +19,8 @@ import {
 import type { CustomProviderSettings } from './secure-secrets.js'
 import { normalizeNotificationSettings } from './secure-secrets.js'
 import { DEFAULT_PROMPT_SETTINGS } from '@swarmdesk-agent/shared'
+import type { NotificationSettings } from '@swarmdesk-agent/shared'
+import { DEFAULT_NOTIFICATION_SETTINGS } from '@swarmdesk-agent/shared'
 
 const TEST_KEY = 'RA_TEST_ONLY_API_KEY'
 
@@ -197,6 +199,45 @@ describe('secure-secrets', () => {
       })
       assert.deepEqual(next.disabledProviderIds, ['opencode-go'])
       assert.deepEqual(loadSettings().disabledProviderIds, ['opencode-go'])
+    } finally {
+      saveSettings(prev)
+    }
+  })
+
+  it('persists notification settings round-trip without losing unrelated settings', () => {
+    const prev = loadSettings()
+    const notifications: NotificationSettings = {
+      ...DEFAULT_NOTIFICATION_SETTINGS,
+      enabled: true,
+      mode: 'always',
+      onError: false,
+    }
+    try {
+      const next = saveSettings({ notifications })
+      assert.deepEqual(next.notifications, notifications)
+      assert.equal(next.leaderModel, prev.leaderModel)
+      assert.deepEqual(loadSettings().notifications, notifications)
+      // A later save of an unrelated field must not strip notifications.
+      saveSettings({ leaderModel: next.leaderModel })
+      assert.deepEqual(loadSettings().notifications, notifications)
+    } finally {
+      saveSettings(prev)
+    }
+  })
+
+  it('normalizes partial notification payloads on save', () => {
+    const prev = loadSettings()
+    try {
+      const next = saveSettings({
+        notifications: { enabled: true } as NotificationSettings,
+      })
+      assert.deepEqual(next.notifications, {
+        enabled: true,
+        mode: DEFAULT_NOTIFICATION_SETTINGS.mode,
+        onCompletion: DEFAULT_NOTIFICATION_SETTINGS.onCompletion,
+        onError: DEFAULT_NOTIFICATION_SETTINGS.onError,
+        onApproval: DEFAULT_NOTIFICATION_SETTINGS.onApproval,
+      })
     } finally {
       saveSettings(prev)
     }

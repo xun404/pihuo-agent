@@ -45,6 +45,13 @@ contextBridge.exposeInMainWorld('routerAgents', {
       workerTimeouts?: WorkerTimeoutSettings
       npmRegistry?: string | null
       secrets?: Record<string, string | null>
+      notifications?: {
+        enabled?: boolean
+        mode?: 'always' | 'hidden-only'
+        onCompletion?: boolean
+        onError?: boolean
+        onApproval?: boolean
+      }
       customProviders?: {
         id: string
         name: string

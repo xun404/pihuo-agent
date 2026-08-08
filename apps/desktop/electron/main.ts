@@ -73,10 +73,13 @@ import {
   type CustomProviderSettings,
   type ThinkingIntensity,
   type WorkerTimeoutSettings,
+  normalizeNotificationSettings,
 } from '@swarmdesk-agent/core'
 import {
+  DEFAULT_NOTIFICATION_SETTINGS,
   isValidPromptSettings,
   normalizePromptSettings,
+  type NotificationSettings,
   type PromptSettings,
 } from '@swarmdesk-agent/shared'
 
@@ -668,6 +671,10 @@ function registerIpc(): void {
     const paths = resolveRouterDataPaths()
     return {
       ...status,
+      settings: {
+        ...status.settings,
+        notifications: status.settings.notifications ?? DEFAULT_NOTIFICATION_SETTINGS,
+      },
       providers,
       customProviders,
       leaderMaxSteps: status.settings.leaderMaxSteps,
@@ -704,6 +711,7 @@ function registerIpc(): void {
         secrets?: Record<string, string | null>
         customProviders?: CustomProviderSettings[]
         disabledProviderIds?: string[]
+        notifications?: Partial<NotificationSettings>
       },
     ) => {
       requireTrustedRenderer(event)
@@ -751,6 +759,10 @@ function registerIpc(): void {
             ? parseWorkerTimeoutSettings(payload.workerTimeouts)
             : prev.workerTimeouts,
         npmRegistry: payload.npmRegistry !== undefined ? (nextNpmRegistry ?? '') : prev.npmRegistry,
+        notifications:
+          payload.notifications !== undefined
+            ? normalizeNotificationSettings(payload.notifications)
+            : prev.notifications,
         customProviders:
           payload.customProviders !== undefined
             ? payload.customProviders.map((c) => ({

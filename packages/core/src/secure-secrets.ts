@@ -413,6 +413,7 @@ function defaultAppSettings(opts?: { useEnvironment?: boolean }): AppSettings {
     prompts: normalizePromptSettings(undefined),
     workerTimeouts: resolveWorkerTimeoutSettings(undefined),
     npmRegistry: undefined,
+    notifications: { ...DEFAULT_NOTIFICATION_SETTINGS },
   }
 }
 
@@ -447,6 +448,7 @@ function loadSettingsStrict(): AppSettings {
     leaderMaxSteps: resolveLeaderMaxSteps(raw.leaderMaxSteps),
     prompts: normalizePromptSettings(raw.prompts),
     workerTimeouts: resolveWorkerTimeoutSettings(raw.workerTimeouts),
+    notifications: normalizeNotificationSettings(raw.notifications),
     npmRegistry: (() => {
       try {
         return normalizeNpmRegistry(raw.npmRegistry)
@@ -490,6 +492,10 @@ export function saveSettings(settings: Partial<AppSettings>): AppSettings {
       settings.workerTimeouts !== undefined
         ? parseWorkerTimeoutSettings(settings.workerTimeouts)
         : prev.workerTimeouts,
+    notifications:
+      settings.notifications !== undefined
+        ? normalizeNotificationSettings(settings.notifications)
+        : (prev.notifications ?? { ...DEFAULT_NOTIFICATION_SETTINGS }),
     npmRegistry:
       settings.npmRegistry !== undefined
         ? normalizeNpmRegistry(settings.npmRegistry)

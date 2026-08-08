@@ -8,7 +8,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import type {
-  NotificationSettings,
   Project,
   Session,
   SessionPermissionMode,
@@ -123,23 +122,13 @@ function AppShell({
 
   /**
    * System notifications: snapshot poll runs the watcher hook. Settings come
-   * from the App-level fetchSettings() state; Task 7 persists the
-   * notifications field and reuses this same state in SettingsPanel.
+   * from the App-level fetchSettings() state; SettingsPanel saves the
+   * notifications field and reuses this same state.
    */
-  const appSettings = useMemo(() => {
-    const notifications = (
-      settings?.settings as SettingsPayload['settings'] & { notifications?: NotificationSettings }
-    )?.notifications
-    return notifications
-      ? {
-          enabled: notifications.enabled,
-          mode: notifications.mode,
-          onCompletion: notifications.onCompletion,
-          onError: notifications.onError,
-          onApproval: notifications.onApproval,
-        }
-      : null
-  }, [settings])
+  const appSettings = useMemo(
+    () => settings?.settings.notifications ?? null,
+    [settings],
+  )
   useSystemNotifications({ snapshot, notifications: appSettings })
 
   /**

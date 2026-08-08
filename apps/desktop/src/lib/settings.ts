@@ -1,6 +1,10 @@
 import { api, clearDesktopToken, ensureDesktopToken, type DangerZoneAction } from './api'
 import type { AppSnapshot } from '@swarmdesk-agent/shared'
 import type { PromptSettings, WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  type NotificationSettings,
+} from '@swarmdesk-agent/shared'
 
 export type ApiStyle = 'openai' | 'anthropic' | 'google'
 
@@ -140,6 +144,8 @@ export interface SettingsPayload {
     npmRegistry?: string
     /** Built-in catalog provider ids turned off by the user */
     disabledProviderIds?: string[]
+    /** Native OS notification preferences (defaults applied when missing) */
+    notifications?: NotificationSettings
     updatedAt?: string
     customProviders?: CustomProvider[]
   }
@@ -160,6 +166,8 @@ export type SaveSettingsPayload = {
   secrets?: Record<string, string | null>
   customProviders?: CustomProvider[]
   disabledProviderIds?: string[]
+  /** Partial notification preferences; merged with persisted values by the owner. */
+  notifications?: NotificationSettings
 }
 
 export async function performDangerZoneAction(action: DangerZoneAction): Promise<{
@@ -199,10 +207,17 @@ export async function performDangerZoneAction(action: DangerZoneAction): Promise
 }
 
 export async function fetchSettings(): Promise<SettingsPayload> {
-  if (typeof window !== 'undefined' && window.routerAgents?.settings?.get) {
-    return window.routerAgents.settings.get() as Promise<SettingsPayload>
+  const payload: SettingsPayload =
+    typeof window !== 'undefined' && window.routerAgents?.settings?.get
+      ? ((await window.routerAgents.settings.get()) as SettingsPayload)
+      : await api.getSettings()
+  return {
+    ...payload,
+    settings: {
+      ...payload.settings,
+      notifications: payload.settings.notifications ?? DEFAULT_NOTIFICATION_SETTINGS,
+    },
   }
-  return api.getSettings()
 }
 
 export async function saveSettings(payload: SaveSettingsPayload): Promise<
