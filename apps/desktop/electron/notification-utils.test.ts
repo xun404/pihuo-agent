@@ -5,7 +5,7 @@ import {
   normalizeNotificationPayload,
   __clearClaimsForTest,
   type NativeNotificationPayload,
-} from './notification-service.js'
+} from './notification-utils.js'
 
 beforeEach(() => __clearClaimsForTest())
 
