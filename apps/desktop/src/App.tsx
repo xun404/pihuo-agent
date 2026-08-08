@@ -193,6 +193,24 @@ function AppShell({
     }
   }, [])
 
+  /**
+   * System notification click: open the session the banner was for. The
+   * notification service focuses the main window before dispatching, so here
+   * we only activate + mark-read the session (ignore unknown ids).
+   */
+  useEffect(() => {
+    const unsubscribe = window.routerAgents?.onOpenSession?.((detail) => {
+      if (!detail.sessionId) return
+      const session = snapshot.sessions.find((s) => s.id === detail.sessionId)
+      if (!session) return
+      void activateSession(session)
+      void markSessionRead(session.id)
+    })
+    return () => {
+      unsubscribe?.()
+    }
+  }, [snapshot, activateSession, markSessionRead])
+
   const beginSidebarResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     const startX = event.clientX
