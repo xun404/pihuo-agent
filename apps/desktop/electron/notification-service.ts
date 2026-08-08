@@ -36,9 +36,9 @@ export function showNativeNotification(
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.show()
       mainWindow.focus()
-    }
-    if (payload.sessionId) {
-      deps.getMainWindow()?.webContents.send('app:open-session', { sessionId: payload.sessionId })
+      if (payload.sessionId) {
+        mainWindow.webContents.send('app:open-session', { sessionId: payload.sessionId })
+      }
     }
     release()
   })

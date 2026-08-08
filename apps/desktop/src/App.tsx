@@ -20,7 +20,7 @@ import {
 } from '@swarmdesk-agent/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
-import { SettingsLayer, openSettings } from './components/SettingsLayer'
+import { SettingsLayer, openSettings, SETTINGS_CLOSED_EVENT } from './components/SettingsLayer'
 import { useAppState } from './hooks/useAppState'
 import { useSystemNotifications } from './hooks/useSystemNotifications'
 import { fetchSettings, type SettingsPayload, type ThinkingIntensity } from './lib/settings'
@@ -563,6 +563,25 @@ export default function App() {
       .catch(() => undefined)
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // SettingsPanel persists via saveSettings IPC; refresh the app-level state
+  // whenever the panel closes so downstream consumers (e.g. system
+  // notifications) see the latest values without an app restart.
+  useEffect(() => {
+    let cancelled = false
+    const onSettingsClosed = () => {
+      void fetchSettings()
+        .then((payload) => {
+          if (!cancelled) setSettings(payload)
+        })
+        .catch(() => undefined)
+    }
+    window.addEventListener(SETTINGS_CLOSED_EVENT, onSettingsClosed)
+    return () => {
+      cancelled = true
+      window.removeEventListener(SETTINGS_CLOSED_EVENT, onSettingsClosed)
     }
   }, [])
 
