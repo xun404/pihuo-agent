@@ -492,6 +492,17 @@ test('normalizeNotificationSettings: defaults for empty input', () => {
   })
 })
 
+test('normalizeNotificationSettings: missing toggles fall back to defaults', () => {
+  const result = normalizeNotificationSettings({ enabled: true })
+  assert.deepEqual(result, {
+    enabled: true,
+    mode: 'hidden-only',
+    onCompletion: true,
+    onError: true,
+    onApproval: true,
+  })
+})
+
 test('normalizeNotificationSettings: keeps valid fields, rejects invalid mode', () => {
   const result = normalizeNotificationSettings({
     enabled: true,

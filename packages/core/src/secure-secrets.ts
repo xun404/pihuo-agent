@@ -151,9 +151,16 @@ export function normalizeNotificationSettings(raw: unknown): NotificationSetting
   return {
     enabled: record.enabled === true,
     mode: isNotificationMode(record.mode) ? record.mode : DEFAULT_NOTIFICATION_SETTINGS.mode,
-    onCompletion: record.onCompletion === true,
-    onError: record.onError === true,
-    onApproval: record.onApproval === true,
+    onCompletion:
+      record.onCompletion === undefined
+        ? DEFAULT_NOTIFICATION_SETTINGS.onCompletion
+        : record.onCompletion === true,
+    onError:
+      record.onError === undefined ? DEFAULT_NOTIFICATION_SETTINGS.onError : record.onError === true,
+    onApproval:
+      record.onApproval === undefined
+        ? DEFAULT_NOTIFICATION_SETTINGS.onApproval
+        : record.onApproval === true,
   }
 }
 
