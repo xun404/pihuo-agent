@@ -394,6 +394,7 @@ export type MessageKey =
   | 'settings.modelsDevAlreadyAdded'
   | 'settings.modelsDevEmpty'
   | 'settings.modelsDevImported'
+  | 'settings.modelsDevListTimeout'
   | 'settings.modelsDevRefreshFailed'
   | 'settings.modelsDevRefreshFailedKeepLkg'
   | 'settings.modelsDevNpmSnapshotTitle'
@@ -1263,6 +1264,7 @@ const zh: Dict = {
   'settings.modelsDevAlreadyAdded': '已添加',
   'settings.modelsDevEmpty': '没有可添加的供应商。可尝试刷新目录或换个关键词。',
   'settings.modelsDevImported': '已添加「{name}」',
+  'settings.modelsDevListTimeout': '目录刷新进行中，列表加载超时。请稍后重试。',
   'settings.modelsDevRefreshFailed':
     '无法从 models.dev 下载目录（{error}）。请检查网络后重试，或稍后再刷新。',
   'settings.modelsDevRefreshFailedKeepLkg':
@@ -2172,6 +2174,7 @@ const en: Dict = {
   'settings.modelsDevAlreadyAdded': 'Added',
   'settings.modelsDevEmpty': 'No providers to add. Try refreshing the catalog or another query.',
   'settings.modelsDevImported': 'Added “{name}”',
+  'settings.modelsDevListTimeout': 'Catalog refresh in progress; the list request timed out. Please retry shortly.',
   'settings.modelsDevRefreshFailed':
     'Could not download the models.dev catalog ({error}). Check your network and try again.',
   'settings.modelsDevRefreshFailedKeepLkg':

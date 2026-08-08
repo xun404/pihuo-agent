@@ -375,6 +375,7 @@ export const zhTW: Record<string, string> = {
   'settings.modelsDevAlreadyAdded': '已添加',
   'settings.modelsDevEmpty': '沒有可添加的供應商。可嘗試刷新目錄或換個關鍵詞。',
   'settings.modelsDevImported': '已添加「{name}」',
+  'settings.modelsDevListTimeout': '目錄刷新進行中，列表載入逾時。請稍後重試。',
   'settings.modelsDevRefreshFailed': '無法從 models.dev 下載目錄（{error}）。請檢查網絡後重試，或稍後再刷新。',
   'settings.modelsDevRefreshFailedKeepLkg': '在線刷新失敗（{error}），已繼續使用本機緩存目錄。',
   'settings.modelsDevNpmSnapshotTitle': '將使用 models.dev 的 npm 包更新目錄',

@@ -2,7 +2,7 @@
  * models.dev add-provider list — isolated state so search typing does not
  * re-render the entire SettingsPanel (~180 ProviderLogo rows).
  */
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { ProviderLogo } from '../lib/provider-icons'
 import type { MessageKey } from '../i18n/locales'
@@ -105,11 +105,27 @@ export function ModelsDevImportPanel({
   const [error, setError] = useState<string | null>(null)
   const [importingId, setImportingId] = useState<string | null>(null)
 
+  // Tab switching / navigation unmounts this panel while refresh is in flight;
+  // guard every async continuation so a late failure can neither setState on an
+  // unmounted component nor pop a confirm dialog the user never asked for.
+  // Reset on every effect setup so Vite HMR (which runs cleanup without a full
+  // remount) never leaves the guard stuck at false.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const filtered = useMemo(() => filterProviders(list, deferredQuery), [list, deferredQuery])
 
   const applyList = useCallback(async () => {
     // Always load full catalog; filter is client-side for snappy search.
-    const res = await api.listModelsDevProviders('')
+    // 10s cap: while a refresh request is in flight the browser may reuse the
+    // busy socket and stall this GET far beyond its normal ~50ms.
+    const res = await api.listModelsDevProviders('', undefined, 10_000)
+    if (!mountedRef.current) return res
     setList(res.providers)
     setMeta(
       res.meta ? { fetchedAt: res.meta.fetchedAt, providerCount: res.meta.providerCount } : null,
@@ -118,6 +134,9 @@ export function ModelsDevImportPanel({
   }, [])
 
   const offerNpmSnapshot = useCallback(() => {
+    // Never propose a blocking confirm dialog after the panel was unmounted
+    // (user switched tabs/closed settings while the refresh was failing).
+    if (!mountedRef.current) return
     onRequestConfirm({
       title: t('settings.modelsDevNpmSnapshotTitle'),
       message: t('settings.modelsDevNpmSnapshotMessage'),
@@ -130,6 +149,7 @@ export function ModelsDevImportPanel({
         try {
           const result = await api.refreshModelsDevCatalog({ source: 'npm-snapshot' })
           await applyList()
+          if (!mountedRef.current) return
           const ver = result.packageVersion ? `@${result.packageVersion}` : ''
           toastInfo(
             t('settings.modelsDevNpmSnapshotDone', {
@@ -138,11 +158,12 @@ export function ModelsDevImportPanel({
             }),
           )
         } catch (e) {
+          if (!mountedRef.current) return
           const msg = e instanceof Error ? e.message : String(e)
           setError(t('settings.modelsDevNpmSnapshotFailed', { error: msg }))
           throw e
         } finally {
-          setLoading(false)
+          if (mountedRef.current) setLoading(false)
         }
       },
     })
@@ -150,6 +171,7 @@ export function ModelsDevImportPanel({
 
   const loadList = useCallback(
     async (opts?: { forceRefresh?: boolean }) => {
+      if (!mountedRef.current) return
       setLoading(true)
       setError(null)
       try {
@@ -157,6 +179,7 @@ export function ModelsDevImportPanel({
           try {
             await api.refreshModelsDevCatalog()
           } catch (e) {
+            if (!mountedRef.current) return
             const msg = e instanceof Error ? e.message : String(e)
             const suggest =
               (e as Error & { npmSnapshotSuggested?: boolean; code?: string })
@@ -164,6 +187,7 @@ export function ModelsDevImportPanel({
               (e as Error & { code?: string }).code === 'MODELS_DEV_REFRESH_FAILED'
             try {
               const existing = await applyList()
+              if (!mountedRef.current) return
               if (existing.catalogAvailable) {
                 setError(t('settings.modelsDevRefreshFailedKeepLkg', { error: msg }))
               } else {
@@ -172,21 +196,25 @@ export function ModelsDevImportPanel({
                 setError(t('settings.modelsDevRefreshFailed', { error: msg }))
               }
             } catch {
+              if (!mountedRef.current) return
               setList([])
               setMeta(null)
               setError(t('settings.modelsDevRefreshFailed', { error: msg }))
             }
-            if (suggest) offerNpmSnapshot()
+            if (suggest && mountedRef.current) offerNpmSnapshot()
             return
           }
         }
 
-        let res = await api.listModelsDevProviders('')
+        if (!mountedRef.current) return
+        let res = await api.listModelsDevProviders('', undefined, 10_000)
         if (!res.catalogAvailable && !opts?.forceRefresh) {
           try {
             await api.refreshModelsDevCatalog()
+            if (!mountedRef.current) return
             res = await api.listModelsDevProviders('')
           } catch (e) {
+            if (!mountedRef.current) return
             const msg = e instanceof Error ? e.message : String(e)
             const suggest =
               (e as Error & { npmSnapshotSuggested?: boolean; code?: string })
@@ -195,18 +223,26 @@ export function ModelsDevImportPanel({
             setList([])
             setMeta(null)
             setError(t('settings.modelsDevRefreshFailed', { error: msg }))
-            if (suggest) offerNpmSnapshot()
+            if (suggest && mountedRef.current) offerNpmSnapshot()
             return
           }
         }
+        if (!mountedRef.current) return
         setList(res.providers)
         setMeta(
           res.meta ? { fetchedAt: res.meta.fetchedAt, providerCount: res.meta.providerCount } : null,
         )
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+        if (!mountedRef.current) return
+        // 10s list timeout (likely a refresh occupying the connection): show a
+        // friendly hint instead of a raw timeout error and stop the spinner.
+        const isTimeout =
+          e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')
+        setError(
+          isTimeout ? t('settings.modelsDevListTimeout') : (e instanceof Error ? e.message : String(e)),
+        )
       } finally {
-        setLoading(false)
+        if (mountedRef.current) setLoading(false)
       }
     },
     [offerNpmSnapshot, t, applyList],
@@ -219,10 +255,12 @@ export function ModelsDevImportPanel({
 
   const onImport = useCallback(
     async (providerId: string) => {
+      if (!mountedRef.current) return
       setImportingId(providerId)
       setError(null)
       try {
         const res = await api.importModelsDevProvider(providerId)
+        if (!mountedRef.current) return
         toastSuccess(t('settings.modelsDevImported', { name: res.provider.name }))
         // Mark as added in-place so the row stays visible with a disabled button.
         setList((prev) =>
@@ -230,11 +268,12 @@ export function ModelsDevImportPanel({
         )
         await onImported(res.provider.id)
       } catch (e) {
+        if (!mountedRef.current) return
         const msg = e instanceof Error ? e.message : String(e)
         setError(msg)
         toastError(msg)
       } finally {
-        setImportingId(null)
+        if (mountedRef.current) setImportingId(null)
       }
     },
     [onImported, t, toastError, toastSuccess],

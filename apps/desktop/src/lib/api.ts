@@ -650,7 +650,7 @@ export const api = {
   /** models.dev logo (cached server-side). 404 → use fallback SVG. */
   providerLogo: (providerId: string, signal?: AbortSignal) =>
     requestText(`/api/provider-logos/${encodePathSegment(providerId)}`, signal),
-  listModelsDevProviders: (q?: string, signal?: AbortSignal) =>
+  listModelsDevProviders: (q?: string, signal?: AbortSignal, timeoutMs?: number) =>
     request<{
       providers: Array<{
         id: string
@@ -674,6 +674,8 @@ export const api = {
     }>(
       `/api/models-dev/providers${q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`,
       { signal },
+      false,
+      timeoutMs,
     ),
   refreshModelsDevCatalog: (
     opts?: { source?: 'models.dev' | 'npm-snapshot'; signal?: AbortSignal },

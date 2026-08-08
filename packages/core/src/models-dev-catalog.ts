@@ -275,7 +275,10 @@ export async function refreshModelsDevCatalog(opts?: {
   }
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), opts?.timeoutMs ?? 60_000)
+  // Short timeout: a hanging refresh keeps the browser connection busy and
+  // delays subsequent requests to this origin (Chromium reuses the in-flight
+  // socket), which made the provider list appear to hang after tab switches.
+  const timer = setTimeout(() => controller.abort(), opts?.timeoutMs ?? 15_000)
   try {
     let res: Response
     try {
