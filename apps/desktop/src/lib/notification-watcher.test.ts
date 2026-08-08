@@ -129,3 +129,49 @@ test('approval suppressed while focused in hidden-only and not marked notified',
   assert.equal(decisions.length, 0)
   assert.deepEqual(nextNotifiedIds, [])
 })
+
+test('watermark advances to the later of completion and error in the same round', () => {
+  const s = session({ lastFinishedAt: '2026-08-08T11:00:00.000Z', lastErrorAt: '2026-08-08T10:30:00.000Z' })
+  const first = evaluateSessionNotifications({
+    sessions: [s],
+    settings: { ...DEFAULT_NOTIFICATION_SETTINGS, enabled: true },
+    focused: false,
+    lastNotifiedAt: {},
+  })
+  assert.deepEqual(first.decisions.map((d) => d.kind), ['completion', 'error'])
+  assert.equal(first.nextWatermarks.s1, '2026-08-08T11:00:00.000Z')
+  const second = evaluateSessionNotifications({
+    sessions: [s],
+    settings: { ...DEFAULT_NOTIFICATION_SETTINGS, enabled: true },
+    focused: false,
+    lastNotifiedAt: first.nextWatermarks,
+  })
+  assert.equal(second.decisions.length, 0)
+})
+
+test('approval suppressed when onApproval is disabled, fires when enabled', () => {
+  const approval = {
+    id: 'a3',
+    status: 'pending' as const,
+    title: 't',
+    createdAt: '2026-08-08T10:00:00.000Z',
+    options: [],
+    source: 'acp' as const,
+  }
+  const off = evaluateApprovalNotifications({
+    approvals: [approval],
+    settings: { ...DEFAULT_NOTIFICATION_SETTINGS, onApproval: false },
+    focused: false,
+    notifiedApprovalIds: new Set(),
+  })
+  assert.equal(off.decisions.length, 0)
+  assert.deepEqual(off.nextNotifiedIds, [])
+  const on = evaluateApprovalNotifications({
+    approvals: [approval],
+    settings: { ...DEFAULT_NOTIFICATION_SETTINGS, enabled: true },
+    focused: false,
+    notifiedApprovalIds: new Set(),
+  })
+  assert.equal(on.decisions.length, 1)
+  assert.deepEqual(on.nextNotifiedIds, ['a3'])
+})

@@ -35,7 +35,9 @@ export function evaluateSessionNotifications(params: {
         title: session.title || '会话完成',
         body: 'Agent 已完成任务',
       })
-      nextWatermarks[session.id] = session.lastFinishedAt!
+      const prevWatermark = nextWatermarks[session.id] ?? watermarkedAt
+      nextWatermarks[session.id] =
+        session.lastFinishedAt! > prevWatermark ? session.lastFinishedAt! : prevWatermark
     }
 
     if (settings.onError && isNewerThan(session.lastErrorAt, watermarkedAt)) {
@@ -48,7 +50,9 @@ export function evaluateSessionNotifications(params: {
         title: session.title || '会话失败',
         body: 'Agent 运行失败，点击查看详情',
       })
-      nextWatermarks[session.id] = session.lastErrorAt!
+      const prevWatermark = nextWatermarks[session.id] ?? watermarkedAt
+      nextWatermarks[session.id] =
+        session.lastErrorAt! > prevWatermark ? session.lastErrorAt! : prevWatermark
     }
   }
 
@@ -68,6 +72,7 @@ export function evaluateApprovalNotifications(params: {
   for (const approval of approvals) {
     if (approval.status !== 'pending') continue
     if (notifiedApprovalIds.has(approval.id)) continue
+    if (!settings.onApproval) continue
     if (settings.mode === 'hidden-only' && focused) continue
     const body = [approval.workerName, approval.detail ?? approval.action ?? '']
       .filter(Boolean)
