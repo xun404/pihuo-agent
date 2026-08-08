@@ -206,6 +206,7 @@ export type MessageKey =
   | 'chat.you'
   | 'common.refresh'
   | 'common.loading'
+  | 'common.loadingError'
   | 'files.empty'
   | 'files.error'
   | 'files.noProject'
@@ -1071,6 +1072,7 @@ const zh: Dict = {
   'chat.you': '你',
   'common.refresh': '刷新',
   'common.loading': '加载中…',
+  'common.loadingError': '加载失败',
   'files.empty': '目录为空',
   'files.error': '无法列出文件',
   'files.noProject': '请先打开项目',
@@ -1973,6 +1975,7 @@ const en: Dict = {
   'chat.you': 'You',
   'common.refresh': 'Refresh',
   'common.loading': 'Loading…',
+  'common.loadingError': 'Failed to load',
   'files.empty': 'Directory is empty',
   'files.error': 'Could not list files',
   'files.noProject': 'Open a project first',
