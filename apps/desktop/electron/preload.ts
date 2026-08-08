@@ -57,6 +57,23 @@ contextBridge.exposeInMainWorld('routerAgents', {
     dangerAction: (action: DangerZoneAction) =>
       ipcRenderer.invoke('settings:danger-action', action),
   },
+  notify: {
+    show: (payload: { id: string; title: string; body: string; sessionId?: string }) =>
+      ipcRenderer.invoke('notifications:show', payload) as Promise<{ ok: true }>,
+  },
+  /**
+   * Notification click → open the session in the main window.
+   * Returns an unsubscribe function (mirrors onOpenSettings).
+   */
+  onOpenSession: (handler: (detail: { sessionId?: string }) => void) => {
+    const listener = (_event: unknown, detail: { sessionId?: string } | undefined) => {
+      handler(detail ?? {})
+    }
+    ipcRenderer.on('app:open-session', listener)
+    return () => {
+      ipcRenderer.removeListener('app:open-session', listener)
+    }
+  },
   dialog: {
     /**
      * Native OS folder picker — system dialog with "选择此文件夹", not HTML upload.

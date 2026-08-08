@@ -33,6 +33,7 @@ import {
   resolveDesktopApiPort,
   resolveTrustedDevServerUrl,
 } from './renderer-security.js'
+import { normalizeNotificationPayload, showNativeNotification } from './notification-service.js'
 import {
   allowsExistingApiReuse,
   createSerialTaskRunner,
@@ -870,6 +871,16 @@ function registerIpc(): void {
       }
     }
     return { ...result, ok: true, action }
+  })
+
+  ipcMain.handle('notifications:show', (event, payload) => {
+    requireTrustedRenderer(event)
+    const normalized = normalizeNotificationPayload(payload)
+    if (!normalized) {
+      throw new Error('Notification payload is invalid')
+    }
+    showNativeNotification(normalized, { getMainWindow: () => win })
+    return { ok: true }
   })
 
   /**

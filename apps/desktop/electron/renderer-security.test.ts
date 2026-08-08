@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import {
   isSafeExternalUrl,
@@ -6,6 +7,9 @@ import {
   resolveDesktopApiPort,
   resolveTrustedDevServerUrl,
 } from './renderer-security.js'
+
+const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8')
+const preload = readFileSync(new URL('./preload.ts', import.meta.url), 'utf8')
 
 describe('desktop renderer security boundary', () => {
   it('accepts only valid TCP ports and falls back on injected URL-like values', () => {
@@ -48,5 +52,25 @@ describe('desktop renderer security boundary', () => {
     assert.equal(isSafeExternalUrl('file:///etc/passwd'), false)
     assert.equal(isSafeExternalUrl('javascript:alert(1)'), false)
     assert.equal(isSafeExternalUrl('custom-protocol://payload'), false)
+  })
+
+  it('notifications:show rejects untrusted senders: handler must call requireTrustedRenderer first', () => {
+    // main.ts imports electron at module scope and keeps requireTrustedRenderer
+    // module-private, so the handler cannot be exercised in-process. Verify the
+    // security contract at the source level instead (same pattern as
+    // theme-ipc-contract.test.ts): the handler's first statement is the trust
+    // gate whose sole failure path is the "untrusted renderer" rejection.
+    assert.match(main, /ipcMain\.handle\('notifications:show'/u)
+    assert.match(main, /notifications:show[\s\S]{0,240}requireTrustedRenderer\(event\)/u)
+    assert.match(main, /IPC request rejected from an untrusted renderer/u)
+    assert.match(main, /throw new Error\('Notification payload is invalid'\)/u)
+    assert.match(preload, /notify:\s*\{/u)
+    assert.match(preload, /ipcRenderer\.invoke\('notifications:show', payload\)/u)
+  })
+
+  it('preload onOpenSession mirrors onOpenSettings with an unsubscribe pattern', () => {
+    assert.match(preload, /onOpenSession:/u)
+    assert.match(preload, /ipcRenderer\.on\('app:open-session', listener\)/u)
+    assert.match(preload, /ipcRenderer\.removeListener\('app:open-session', listener\)/u)
   })
 })
