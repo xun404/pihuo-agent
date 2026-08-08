@@ -36,7 +36,7 @@ export function modelThinkingIntensitiesFromModelsDev(
   const mapped = [...new Set(values.map((v) => REASONING_LEVEL_MAP[v]).filter(Boolean))]
   const ordered = THINKING_INTENSITIES.filter((l) => mapped.includes(l))
   if (ordered.length > 0) return ['off', ...ordered.filter((l) => l !== 'off')]
-  // 支持思考但未标注档位 → 常见档位（含关）
+  // Reasoning without declared levels → typical ladder (including off).
   if (m.reasoning === true) return ['off', 'medium', 'high', 'max']
   return undefined
 }

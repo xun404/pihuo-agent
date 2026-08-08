@@ -37,7 +37,7 @@ import {
   type ModelsDevMeta,
   type ModelsDevProviderRaw,
 } from './models-dev-catalog.js'
-import { modelInfo } from './models-dev-registry-mapping.js'
+import { toRawProvider } from './models-dev-registry-mapping.js'
 
 export interface ModelOption {
   id: string
@@ -287,10 +287,9 @@ function isStrictlyNewer(candidate: string | undefined, baseline: string): boole
 }
 
 function mapProviderModels(providerId: string, p: ModelsDevProviderRaw): RegistryModelInfo[] {
-  if (Array.isArray(p.models)) {
-    return p.models.map((mid) => modelInfo(mid, {}))
-  }
-  return Object.entries(p.models ?? {}).map(([mid, m]) => modelInfo(mid, m ?? {}))
+  // Same mapping as sync-model-registry (models-dev-registry-mapping) so the
+  // runtime curate output is identical to the build-time generated snapshot.
+  return toRawProvider(providerId, p).models ?? []
 }
 
 function buildExternalCatalog(
@@ -305,6 +304,8 @@ function buildExternalCatalog(
     if (!raw) continue
     registryByProvider[pp.id] = mapProviderModels(pp.id, raw)
   }
+  // mastraPackageVersion doubles as the provenance stamp of the data source
+  // (e.g. https://models.dev/api.json or npm:@opencode-ai/models@x.y.z/snapshot).
   return buildBuiltinCatalog(policy, registryByProvider, meta.sourceUrl ?? 'models.dev', generatedAt)
 }
 
