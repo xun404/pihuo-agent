@@ -886,16 +886,19 @@ function registerIpc(): void {
     return { ...result, ok: true, action }
   })
 
-  ipcMain.handle('notifications:show', (event, payload) => {
+  ipcMain.handle('notifications:show', async (event, payload) => {
     requireTrustedRenderer(event)
     const normalized = normalizeNotificationPayload(payload)
     if (!normalized) {
       throw new Error('Notification payload is invalid')
     }
-    const shown = showNativeNotification(normalized, { getMainWindow: () => win })
+    // Awaits the OS show/failed confirmation (bounded by the service's
+    // internal timeout) so callers learn whether the banner actually
+    // appeared — macOS denies unsandboxed dev builds' permission silently.
+    const shown = await showNativeNotification(normalized, { getMainWindow: () => win })
     if (!shown) {
       console.warn(
-        `[notifications] show skipped for id=${normalized.id} (supported=${Notification.isSupported()})`,
+        `[notifications] show rejected by OS for id=${normalized.id} (supported=${Notification.isSupported()})`,
       )
     }
     return { ok: shown }
