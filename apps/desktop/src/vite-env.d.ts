@@ -74,7 +74,7 @@ interface Window {
         title: string
         body: string
         sessionId?: string
-      }) => Promise<{ ok: true }>
+      }) => Promise<{ ok: boolean }>
     }
     dialog?: {
       openDirectory: (labels?: {

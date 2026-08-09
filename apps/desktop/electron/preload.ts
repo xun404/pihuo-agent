@@ -66,7 +66,7 @@ contextBridge.exposeInMainWorld('routerAgents', {
   },
   notify: {
     show: (payload: { id: string; title: string; body: string; sessionId?: string }) =>
-      ipcRenderer.invoke('notifications:show', payload) as Promise<{ ok: true }>,
+      ipcRenderer.invoke('notifications:show', payload) as Promise<{ ok: boolean }>,
   },
   /**
    * Notification click → open the session in the main window.

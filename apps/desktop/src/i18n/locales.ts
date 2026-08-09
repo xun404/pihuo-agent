@@ -590,6 +590,7 @@ export type MessageKey =
   | 'settings.notifications.onApproval'
   | 'settings.notifications.test'
   | 'settings.notifications.testBody'
+  | 'settings.notifications.testFailed'
   | 'settings.prompts.leader'
   | 'settings.prompts.leaderHint'
   | 'settings.prompts.roles'
@@ -1486,6 +1487,7 @@ const zh: Dict = {
   'settings.notifications.onApproval': '需要审批时通知',
   'settings.notifications.test': '发送测试通知',
   'settings.notifications.testBody': '系统通知已就绪',
+  'settings.notifications.testFailed': '测试通知未能显示：请在系统设置中允许本应用的通知',
   'settings.prompts.leader': 'Leader',
   'settings.prompts.leaderHint': '此内容会附加在内置协议和工具约束之后，从下一轮对话开始生效。',
   'settings.prompts.roles': '角色默认提示词',
@@ -2416,6 +2418,7 @@ const en: Dict = {
   'settings.notifications.onApproval': 'Notify when approval is needed',
   'settings.notifications.test': 'Send test notification',
   'settings.notifications.testBody': 'System notifications are ready',
+  'settings.notifications.testFailed': 'Test notification could not be shown: allow notifications for this app in system settings',
   'settings.prompts.leader': 'Leader',
   'settings.prompts.leaderHint':
     'Appended after the protected protocol and tool contract; applies from the next turn.',

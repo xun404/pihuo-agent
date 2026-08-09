@@ -51,10 +51,10 @@ describe('SettingsPanel notification section', () => {
     assert.match(source, /saveSettings\(\{ notifications: next \}\)/u)
   })
 
-  it('sends the test notification through the notify bridge with the brief payload', () => {
+  it('sends the test notification through the notify bridge with a unique id', () => {
     assert.match(
       source,
-      /window\.routerAgents\?\.notify\?\.show\(\{[\s\S]*?id: 'test-notification'[\s\S]*?settings\.notifications\.testBody[\s\S]*?\}\)/u,
+      /window\.routerAgents\?\.notify\?\.show\(\{[\s\S]*?id: `test-notification-\$\{Date\.now\(\)\}`[\s\S]*?settings\.notifications\.testBody[\s\S]*?\}\)/u,
     )
   })
 
@@ -82,6 +82,11 @@ describe('SettingsPanel notification section', () => {
         zh: '系统通知已就绪',
         'zh-TW': '系統通知已就緒',
         en: 'System notifications are ready',
+      },
+      testFailed: {
+        zh: '测试通知未能显示：请在系统设置中允许本应用的通知',
+        'zh-TW': '測試通知未能顯示：請在系統設定中允許本應用程式的通知',
+        en: 'Test notification could not be shown: allow notifications for this app in system settings',
       },
     }
     for (const [key, byLocale] of Object.entries(expected)) {

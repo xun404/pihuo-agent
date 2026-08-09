@@ -2073,13 +2073,21 @@ export function SettingsPanel({
                     type="button"
                     className="settings-btn-soft"
                     disabled={!notificationSettings.enabled}
-                    onClick={() =>
-                      void window.routerAgents?.notify?.show({
-                        id: 'test-notification',
-                        title: t('settings.notifications.title'),
-                        body: t('settings.notifications.testBody'),
-                      })
-                    }
+                    onClick={() => {
+                      void (async () => {
+                        const result = await window.routerAgents?.notify?.show({
+                          // Unique id so the main-process 5s dedupe never
+                          // swallows repeated test clicks (real notifications
+                          // keep their stable ids for dedupe).
+                          id: `test-notification-${Date.now()}`,
+                          title: t('settings.notifications.title'),
+                          body: t('settings.notifications.testBody'),
+                        })
+                        if (result?.ok === false) {
+                          toastError(t('settings.notifications.testFailed'))
+                        }
+                      })()
+                    }}
                   >
                     {t('settings.notifications.test')}
                   </button>

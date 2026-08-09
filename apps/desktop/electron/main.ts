@@ -6,6 +6,7 @@ import {
   dialog,
   utilityProcess,
   nativeImage,
+  Notification,
   type IpcMainInvokeEvent,
 } from 'electron'
 import { flushPendingSettingsTab, installApplicationMenu } from './app-menu.js'
@@ -891,8 +892,13 @@ function registerIpc(): void {
     if (!normalized) {
       throw new Error('Notification payload is invalid')
     }
-    showNativeNotification(normalized, { getMainWindow: () => win })
-    return { ok: true }
+    const shown = showNativeNotification(normalized, { getMainWindow: () => win })
+    if (!shown) {
+      console.warn(
+        `[notifications] show skipped for id=${normalized.id} (supported=${Notification.isSupported()})`,
+      )
+    }
+    return { ok: shown }
   })
 
   /**

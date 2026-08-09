@@ -572,6 +572,7 @@ export const zhTW: Record<string, string> = {
   'settings.notifications.onApproval': '需要審批時通知',
   'settings.notifications.test': '傳送測試通知',
   'settings.notifications.testBody': '系統通知已就緒',
+  'settings.notifications.testFailed': '測試通知未能顯示：請在系統設定中允許本應用程式的通知',
   'settings.prompts.leader': 'Leader',
   'settings.prompts.leaderHint': '此內容會附加在內置協議和工具約束之後，從下一輪對話開始生效。',
   'settings.prompts.roles': '角色默認提示詞',
