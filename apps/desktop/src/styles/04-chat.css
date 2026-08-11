@@ -1761,6 +1761,25 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .worker-card-collapse {
   overflow: hidden;
 }
+/* Ordered ACP trail: each thought/tool owns a compact collapsible row.
+   It deliberately has no external section title or shared terminal frame,
+   so the visual rhythm follows the actual execution order. */
+.worker-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-left: 18px;
+}
+.worker-activity-list > .thinking-block,
+.worker-activity-list > .tool-row {
+  width: 100%;
+  min-width: 0;
+}
+.worker-activity-list .thinking-block-inner,
+.worker-activity-list .tool-row .node-body-inner {
+  padding-left: 22px;
+}
 .worker-action-section {
   display: flex;
   flex-direction: column;
@@ -1920,24 +1939,6 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
 .worker-action-approval .worker-action-label::after {
   background: color-mix(in srgb, var(--warn) 28%, transparent);
 }
-.worker-action-thought {
-  white-space: pre-wrap;
-  color: var(--text-3);
-  font-size: var(--fs-2xs);
-  line-height: var(--chat-process-line-height);
-}
-/* Thought + tool calls share one execution box; the divider keeps the two
-   streams readable without making them look like separate cards. */
-.worker-action-activity-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.worker-action-activity-divider {
-  height: 1px;
-  width: 100%;
-  background: color-mix(in srgb, var(--chat-divider, var(--border)) 58%, transparent);
-}
 .worker-action-plan-list {
   margin: 0;
   padding-left: 1.2em;
@@ -1945,42 +1946,9 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   font-size: var(--fs-2xs);
   line-height: var(--chat-process-line-height);
 }
-.worker-action-tool-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.worker-action-tool-item {
-  min-width: 0;
-}
-.worker-action-tool-title {
-  color: var(--text-1);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  line-height: var(--lh-snug);
-  word-break: break-word;
-}
-.worker-action-tool-status {
-  display: inline-block;
-  width: 1em;
-  margin-right: 4px;
-  color: var(--text-3);
-  font-family: var(--mono);
-}
-.worker-action-tool-detail {
-  margin-top: 2px;
-  color: var(--text-3);
-  font-size: var(--fs-2xs);
-  line-height: var(--chat-process-line-height);
-  word-break: break-word;
-  white-space: pre-wrap;
-}
 .worker-action-approval .tool-row-block-marker {
   color: var(--warn);
 }
-.worker-action-thought .tool-row-block-marker,
-.worker-action-tool .tool-row-block-marker,
 .worker-action-plan .tool-row-block-marker {
   color: var(--text-4);
 }

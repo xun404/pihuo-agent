@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useState } from 'react'
 import type {
+  WorkerActivityItem,
   WorkerRunState,
   WorkerKind,
   WorkerRole,
@@ -15,6 +16,8 @@ import { shortModelId } from '../lib/leader-run-meta'
 import { useI18n } from '../i18n/I18nProvider'
 import { useStickScrollBottom } from '../lib/use-stick-scroll-bottom'
 import { useCollapsible } from './chat/useCollapsible'
+import { ThinkingBlock } from './chat/ThinkingBlock'
+import { ToolCallRow } from './chat/ToolCallRow'
 
 function ChevronIcon() {
   return (
@@ -109,7 +112,7 @@ function kindClass(kind?: WorkerKind | string, name?: string): string {
   return resolveWorkerBrand(kind, name)
 }
 
-type WorkerActionKind = 'input' | 'approval' | 'error' | 'output' | 'thought' | 'tool' | 'plan'
+type WorkerActionKind = 'input' | 'approval' | 'error' | 'output' | 'plan'
 
 function WorkerActionSection({
   kind,
@@ -122,8 +125,7 @@ function WorkerActionSection({
   marker: string
   children: React.ReactNode
 }) {
-  const toolBlockKind =
-    kind === 'error' ? 'error' : kind === 'output' || kind === 'thought' ? 'output' : 'input'
+  const toolBlockKind = kind === 'error' ? 'error' : kind === 'output' ? 'output' : 'input'
   return (
     <section className={`worker-action-section worker-action-${kind}`}>
       <div className="worker-action-label">{label}</div>
@@ -137,11 +139,37 @@ function WorkerActionSection({
   )
 }
 
-function toolStatusMarker(status?: string): string {
-  if (status === 'completed') return '✓'
-  if (status === 'failed') return '✗'
-  if (status === 'in_progress') return '…'
-  return '·'
+/**
+ * Legacy snapshots predate the ordered activity list. Keep their aggregate
+ * thought/tool data visible, although only live events can preserve the true
+ * interleaving.
+ */
+function activityItemsForDisplay(state: WorkerRunState): WorkerActivityItem[] {
+  if (Array.isArray(state.activityItems)) return state.activityItems
+
+  const items: WorkerActivityItem[] = []
+  const thought = state.thought?.trim()
+  if (thought) items.push({ id: 'legacy-thought', type: 'thought', sequence: 0, text: thought })
+  for (const toolCall of state.toolCalls ?? []) {
+    items.push({
+      id: `legacy-tool:${toolCall.toolCallId}`,
+      type: 'tool',
+      sequence: 0,
+      toolCall,
+    })
+  }
+  return items
+}
+
+function workerToolDetails(
+  toolCall: WorkerActivityItem & { type: 'tool' },
+): Record<string, string> {
+  const locations = formatLocations(toolCall.toolCall.locations)
+  return {
+    status: toolCall.toolCall.status ?? 'in_progress',
+    ...(toolCall.toolCall.detail ? { detail: toolCall.toolCall.detail } : {}),
+    ...(locations ? { locations } : {}),
+  }
 }
 
 /**
@@ -159,7 +187,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
   registryIdentity,
   taskPrompt,
 }: Props) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [internalOpen, setInternalOpen] = useState(
     state.status === 'running' || state.status === 'pending_approval',
   )
@@ -196,10 +224,8 @@ export const WorkerRunCard = memo(function WorkerRunCard({
         ? [state.pendingApproval]
         : [],
   )
-  const toolCalls = Array.isArray(state.toolCalls) ? state.toolCalls : []
-  const hasThought = Boolean(state.thought?.trim())
-  const hasToolCalls = toolCalls.length > 0
-  const hasWorkerActivity = hasThought || hasToolCalls
+  const activityItems = activityItemsForDisplay(state)
+  const [activityOpen, setActivityOpen] = useState<Record<string, boolean>>({})
   const publicError = state.recoveryError ?? state.error
   const hasPublicError = Boolean(publicError || state.errorCode === 'RUNTIME_RESTARTED')
 
@@ -220,6 +246,18 @@ export const WorkerRunCard = memo(function WorkerRunCard({
     },
     [handleToggle],
   )
+
+  const isActivityActive = useCallback(
+    (item: WorkerActivityItem) => isRunning && state.activeActivityItemId === item.id,
+    [isRunning, state.activeActivityItemId],
+  )
+  const isActivityOpen = useCallback(
+    (item: WorkerActivityItem) => isActivityActive(item) || activityOpen[item.id] === true,
+    [activityOpen, isActivityActive],
+  )
+  const toggleActivity = useCallback((id: string, nextOpen: boolean) => {
+    setActivityOpen((previous) => ({ ...previous, [id]: nextOpen }))
+  }, [])
 
   const { shouldRender, contentRef } = useCollapsible({
     open: isOpen,
@@ -323,54 +361,45 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 {taskPrompt || state.task}
               </WorkerActionSection>
             )}
-            {hasWorkerActivity && (
-              <section className="worker-action-section worker-action-activity">
-                <div className="worker-action-label">
-                  {t('workers.runThought')} · {t('workers.runTools')}
-                </div>
-                <div className="tool-row-block tool-row-block-input worker-action-block worker-action-activity-block">
-                  <span className="tool-row-block-marker" aria-hidden>
-                    …
-                  </span>
-                  <div className="tool-row-block-content worker-action-content worker-action-activity-content">
-                    {hasThought && (
-                      <div className="worker-action-thought">{state.thought}</div>
-                    )}
-                    {hasThought && hasToolCalls && (
-                      <div className="worker-action-activity-divider" aria-hidden />
-                    )}
-                    {hasToolCalls && (
-                      <div className="worker-action-tool-list">
-                        {toolCalls.map((tool) => (
-                          <div className="worker-action-tool-item" key={tool.toolCallId}>
-                            <div className="worker-action-tool-title">
-                              <span className="worker-action-tool-status" aria-hidden>
-                                {toolStatusMarker(tool.status)}
-                              </span>
-                              {tool.kind
-                                ? `${TOOL_KIND_LABELS[tool.kind] ?? tool.kind} · `
-                                : ''}
-                              {tool.title}
-                              {tool.status ? ` · ${tool.status}` : ''}
-                            </div>
-                            {(tool.detail || (tool.locations && tool.locations.length > 0)) && (
-                              <div className="worker-action-tool-detail">
-                                {tool.locations && tool.locations.length > 0
-                                  ? formatLocations(tool.locations)
-                                  : null}
-                                {tool.locations && tool.locations.length > 0 && tool.detail
-                                  ? ' · '
-                                  : null}
-                                {tool.detail}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
+            {activityItems.length > 0 && (
+              <div className="worker-activity-list">
+                {activityItems.map((item) => {
+                  const active = isActivityActive(item)
+                  const itemOpen = isActivityOpen(item)
+                  if (item.type === 'thought') {
+                    return (
+                      <ThinkingBlock
+                        key={item.id}
+                        text={item.text}
+                        streaming={active}
+                        open={itemOpen}
+                        onToggle={(nextOpen) => toggleActivity(item.id, nextOpen)}
+                        streamingLabel={t('chat.thinkingLive')}
+                        doneLabel={t('chat.thinkingDone')}
+                        doneLabelFor={(time) => t('chat.thinkingDoneFor', { time })}
+                        locale={locale}
+                        persistKey={`${state.jobId}:${item.id}`}
+                      />
+                    )
+                  }
+
+                  const tool = item.toolCall
+                  const toolName =
+                    tool.title || (tool.kind ? TOOL_KIND_LABELS[tool.kind] : '') || 'Tool'
+                  return (
+                    <ToolCallRow
+                      key={item.id}
+                      name={toolName}
+                      input={workerToolDetails(item)}
+                      durationSec={null}
+                      running={active}
+                      open={itemOpen}
+                      onToggle={(nextOpen) => toggleActivity(item.id, nextOpen)}
+                      errorLabel={t('chat.toolError')}
+                    />
+                  )
+                })}
+              </div>
             )}
             {Array.isArray(state.planEntries) && state.planEntries.length > 0 && (
               <WorkerActionSection kind="plan" label={t('workers.runPlan')} marker="≡">
@@ -483,17 +512,17 @@ export const WorkerRunCard = memo(function WorkerRunCard({
             {/* Running with no activity yet: keep a short live hint line. */}
             {isRunning &&
               !state.output &&
-              !hasWorkerActivity &&
+              activityItems.length === 0 &&
               !(state.planEntries && state.planEntries.length > 0) &&
               !publicError &&
               !isPendingApproval && (
-              <div className="line">
-                <span className="mk" aria-hidden>
-                  ▸
-                </span>
-                <span className="tx">{t('chat.runningShort')}</span>
-              </div>
-            )}
+                <div className="line">
+                  <span className="mk" aria-hidden>
+                    ▸
+                  </span>
+                  <span className="tx">{t('chat.runningShort')}</span>
+                </div>
+              )}
             {/* Completed with empty output. */}
             {status === 'completed' && !state.output && (
               <div className="line ok">

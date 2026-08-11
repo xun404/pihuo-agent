@@ -1179,6 +1179,27 @@ export interface WorkerToolCallView {
   locations?: ApprovalLocation[]
 }
 
+/**
+ * A single visible item in the worker's live execution trail.
+ *
+ * Unlike the compatibility `thought` / `toolCalls` projections on
+ * `WorkerRunState`, this preserves the order in which ACP emitted thought and
+ * tool events. A tool update always replaces the existing item in place.
+ */
+export type WorkerActivityItem =
+  | {
+      id: string
+      type: 'thought'
+      sequence: number
+      text: string
+    }
+  | {
+      id: string
+      type: 'tool'
+      sequence: number
+      toolCall: WorkerToolCallView
+    }
+
 export interface WorkerPlanEntryView {
   content: string
   priority?: string
@@ -1335,6 +1356,10 @@ export interface WorkerRunState {
   thought?: string
   /** Live ACP tool_call / tool_call_update snapshots in first-seen order. */
   toolCalls?: WorkerToolCallView[]
+  /** Ordered thought/tool trail for the current live worker run. */
+  activityItems?: WorkerActivityItem[]
+  /** The currently streaming/executing item; cleared as soon as it completes. */
+  activeActivityItemId?: string
   /** Latest ACP plan entries (replaced on each plan/plan_update). */
   planEntries?: WorkerPlanEntryView[]
   status: 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out' | 'pending_approval'

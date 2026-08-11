@@ -145,47 +145,67 @@ describe('WorkerRunCard Registry auth_required', () => {
     assert.doesNotMatch(html, /worker-action-(?:approval|error|thinking)/u)
   })
 
-  it('puts thought and tool calls in one execution box', () => {
+  it('renders an ordered activity trail and expands only the currently active item', () => {
+    const state: WorkerRunState = {
+      jobId: 'job-activity',
+      workerId: 'worker-codex',
+      workerName: 'Codex',
+      workerKind: 'codex',
+      role: 'coder',
+      reusedSession: false,
+      sequence: 4,
+      output: '',
+      activityItems: [
+        { id: 'thought:1', type: 'thought', sequence: 1, text: 'Inspecting the target file.' },
+        {
+          id: 'tool:tool-1',
+          type: 'tool',
+          sequence: 2,
+          toolCall: {
+            toolCallId: 'tool-1',
+            title: 'Read file',
+            kind: 'read',
+            status: 'completed',
+            detail: '/tmp/example.txt',
+          },
+        },
+        { id: 'thought:3', type: 'thought', sequence: 3, text: 'Planning the edit.' },
+      ],
+      activeActivityItemId: 'thought:3',
+      status: 'running',
+      truncated: false,
+      startedAt: 1_000,
+      lastDeltaAt: 2_000,
+      pendingApprovals: [],
+    }
     const html = renderToStaticMarkup(
       <I18nProvider serverLocale="en">
+        <WorkerRunCard state={state} open onToggle={() => undefined} />
+      </I18nProvider>,
+    )
+
+    assert.match(html, /worker-activity-list/u)
+    assert.doesNotMatch(html, /Inspecting the target file\./u)
+    assert.match(html, /Read file/u)
+    assert.match(html, /Planning the edit\./u)
+    assert.match(html, /class="thinking-block live is-open"/u)
+    assert.equal((html.match(/class="thinking-block"/gu) ?? []).length, 1)
+    assert.match(html, /class="tool-row"/u)
+    assert.doesNotMatch(html, /worker-action-activity|Thinking · Tools/u)
+
+    const completedHtml = renderToStaticMarkup(
+      <I18nProvider serverLocale="en">
         <WorkerRunCard
-          state={{
-            jobId: 'job-activity',
-            workerId: 'worker-codex',
-            workerName: 'Codex',
-            workerKind: 'codex',
-            role: 'coder',
-            reusedSession: false,
-            sequence: 2,
-            output: '',
-            thought: 'Inspecting the target file.',
-            toolCalls: [
-              {
-                toolCallId: 'tool-1',
-                title: 'Read file',
-                kind: 'read',
-                status: 'completed',
-                detail: '/tmp/example.txt',
-              },
-            ],
-            status: 'running',
-            truncated: false,
-            startedAt: 1_000,
-            lastDeltaAt: 2_000,
-            pendingApprovals: [],
-          }}
+          state={{ ...state, status: 'completed', activeActivityItemId: undefined }}
           open
           onToggle={() => undefined}
         />
       </I18nProvider>,
     )
-
-    assert.equal((html.match(/worker-action-activity/g) ?? []).length >= 2, true)
-    assert.match(html, /Thinking · Tools/u)
-    assert.match(html, /Inspecting the target file\./u)
-    assert.match(html, /Read file/u)
-    assert.match(html, /worker-action-activity-divider/u)
-    assert.doesNotMatch(html, /worker-action-section worker-action-(?:thought|tool)/u)
+    assert.doesNotMatch(
+      completedHtml,
+      /thinking-block live|thinking-block is-open|tool-row is-open/u,
+    )
   })
 
   it('renders every pending approval in stable order with an explicit cancel action', () => {

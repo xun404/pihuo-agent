@@ -44,6 +44,35 @@ function makeDelta(
   }
 }
 
+function makeThought(
+  overrides: Partial<Extract<WorkerRunEvent, { type: 'thought_delta' }>> = {},
+): Extract<WorkerRunEvent, { type: 'thought_delta' }> {
+  return {
+    type: 'thought_delta',
+    jobId: 'job-1',
+    sequence: 1,
+    delta: 'Inspecting the target.',
+    ...overrides,
+  }
+}
+
+function makeTool(
+  overrides: Partial<Extract<WorkerRunEvent, { type: 'tool_call' }>> = {},
+): Extract<WorkerRunEvent, { type: 'tool_call' }> {
+  return {
+    type: 'tool_call',
+    jobId: 'job-1',
+    sequence: 1,
+    toolCall: {
+      toolCallId: 'tool-1',
+      title: 'Read file',
+      kind: 'read',
+      status: 'in_progress',
+    },
+    ...overrides,
+  }
+}
+
 function makeCompleted(
   overrides: Partial<WorkerRunEvent & { type: 'completed' }> = {},
 ): WorkerRunEvent & { type: 'completed' } {
@@ -270,6 +299,60 @@ describe('workerRunReducer', () => {
       s = workerRunReducer(s, makeDelta({ sequence: 2, delta: 'X' }))
       assert.equal(get(s, 'job-1').output, 'final')
       assert.equal(get(s, 'job-1').status, 'completed')
+    })
+  })
+
+  describe('ordered activity items', () => {
+    it('preserves thought/tool interleaving and marks only the active item as openable live work', () => {
+      let s = workerRunReducer(new Map(), makeStarted())
+      s = workerRunReducer(s, makeThought({ sequence: 1, delta: 'Inspect ' }))
+      s = workerRunReducer(s, makeThought({ sequence: 2, delta: 'the file.' }))
+      s = workerRunReducer(s, makeTool({ sequence: 3 }))
+      s = workerRunReducer(s, {
+        type: 'tool_call_update',
+        jobId: 'job-1',
+        sequence: 4,
+        toolCall: {
+          toolCallId: 'tool-1',
+          title: 'Read file',
+          kind: 'read',
+          status: 'completed',
+          detail: '/tmp/example.ts',
+        },
+      })
+      s = workerRunReducer(s, makeThought({ sequence: 5, delta: 'Plan the edit.' }))
+
+      const entry = get(s, 'job-1')
+      assert.deepEqual(
+        entry.activityItems?.map((item) => item.type),
+        ['thought', 'tool', 'thought'],
+      )
+      assert.equal(entry.activityItems?.[0]?.type, 'thought')
+      assert.equal(
+        entry.activityItems?.[0]?.type === 'thought' ? entry.activityItems[0].text : undefined,
+        'Inspect the file.',
+      )
+      assert.equal(entry.activityItems?.[1]?.type, 'tool')
+      assert.equal(
+        entry.activityItems?.[1]?.type === 'tool'
+          ? entry.activityItems[1].toolCall.detail
+          : undefined,
+        '/tmp/example.ts',
+      )
+      assert.equal(entry.activeActivityItemId, 'thought:5')
+
+      s = workerRunReducer(s, makeDelta({ sequence: 6, delta: 'Final answer.' }))
+      assert.equal(get(s, 'job-1').activeActivityItemId, undefined)
+    })
+
+    it('collapses the active item on a terminal event without discarding the trail', () => {
+      let s = workerRunReducer(new Map(), makeStarted())
+      s = workerRunReducer(s, makeThought({ sequence: 1 }))
+      s = workerRunReducer(s, makeCompleted({ output: 'done' }))
+
+      const entry = get(s, 'job-1')
+      assert.equal(entry.activeActivityItemId, undefined)
+      assert.equal(entry.activityItems?.[0]?.type, 'thought')
     })
   })
 

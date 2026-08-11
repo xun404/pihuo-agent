@@ -8,6 +8,7 @@ import {
   type WorkerRegistration,
   type WorkerKind,
   type WorkerRole,
+  type WorkerActivityItem,
   type WorkerRunEvent,
   type WorkerRunState,
   type WorkerToolCallView,
@@ -21,6 +22,100 @@ function taskFromUnknown(value: unknown): string | undefined {
   if (!value || typeof value !== 'object') return undefined
   const task = (value as { task?: unknown }).task
   return typeof task === 'string' && task.trim() ? task : undefined
+}
+
+/**
+ * Older hydrated cards only carry the aggregate compatibility projections.
+ * Keep them readable, even though their original interleaving is unavailable.
+ */
+function activityItemsForState(state: WorkerRunState): WorkerActivityItem[] {
+  if (Array.isArray(state.activityItems)) return state.activityItems
+
+  const items: WorkerActivityItem[] = []
+  const thought = state.thought?.trim()
+  if (thought) {
+    items.push({ id: 'legacy-thought', type: 'thought', sequence: 0, text: thought })
+  }
+  for (const toolCall of state.toolCalls ?? []) {
+    items.push({
+      id: `legacy-tool:${toolCall.toolCallId}`,
+      type: 'tool',
+      sequence: 0,
+      toolCall: { ...toolCall },
+    })
+  }
+  return items
+}
+
+function mergeToolCall(
+  current: WorkerToolCallView | undefined,
+  incoming: WorkerToolCallView,
+): WorkerToolCallView {
+  if (!current) return { ...incoming }
+  return {
+    ...current,
+    ...incoming,
+    title: incoming.title || current.title,
+    locations: incoming.locations ?? current.locations,
+    detail: incoming.detail ?? current.detail,
+  }
+}
+
+function isToolActivityActive(toolCall: WorkerToolCallView): boolean {
+  return toolCall.status !== 'completed' && toolCall.status !== 'failed'
+}
+
+function appendThoughtActivity(
+  state: WorkerRunState,
+  sequence: number,
+  delta: string,
+): Pick<WorkerRunState, 'activityItems' | 'activeActivityItemId'> {
+  const activityItems = activityItemsForState(state)
+  const last = activityItems[activityItems.length - 1]
+
+  if (last?.type === 'thought' && state.activeActivityItemId === last.id) {
+    return {
+      activityItems: activityItems.map((item) =>
+        item === last ? { ...item, text: item.text + delta } : item,
+      ),
+      activeActivityItemId: last.id,
+    }
+  }
+
+  const id = `thought:${sequence}`
+  return {
+    activityItems: [...activityItems, { id, type: 'thought', sequence, text: delta }],
+    activeActivityItemId: id,
+  }
+}
+
+function upsertToolActivity(
+  state: WorkerRunState,
+  sequence: number,
+  incoming: WorkerToolCallView,
+): Pick<WorkerRunState, 'activityItems' | 'activeActivityItemId'> {
+  const activityItems = activityItemsForState(state)
+  const id = `tool:${incoming.toolCallId}`
+  const index = activityItems.findIndex(
+    (item) => item.type === 'tool' && item.toolCall.toolCallId === incoming.toolCallId,
+  )
+  const current = index >= 0 ? activityItems[index] : undefined
+  const toolCall = mergeToolCall(current?.type === 'tool' ? current.toolCall : undefined, incoming)
+  const nextItems =
+    index < 0
+      ? [...activityItems, { id, type: 'tool' as const, sequence, toolCall }]
+      : activityItems.map((item, itemIndex) =>
+          itemIndex === index && item.type === 'tool' ? { ...item, toolCall } : item,
+        )
+
+  return {
+    activityItems: nextItems,
+    activeActivityItemId: isToolActivityActive(toolCall)
+      ? id
+      : state.activeActivityItemId === id
+        ? undefined
+        : state.activeActivityItemId,
+  }
 }
 
 function cursorForApproval(approval: ApprovalItem): ApprovalCursor {
@@ -213,7 +308,12 @@ export function workerRunReducer(
     }
     case 'delta': {
       const prev = state.get(event.jobId)
-      if (prev && isActiveWorkerStatus(prev.status) && prev.sequence < event.sequence) {
+      if (
+        prev &&
+        isActiveWorkerStatus(prev.status) &&
+        prev.sequence < event.sequence &&
+        (event.delta.length > 0 || prev.activeActivityItemId !== undefined)
+      ) {
         changed = true
       }
       break
@@ -251,7 +351,8 @@ export function workerRunReducer(
           prev.output !== event.output ||
           prev.status !== 'completed' ||
           prev.truncated !== event.truncated ||
-          prev.teamMemberName !== event.teamMemberName
+          prev.teamMemberName !== event.teamMemberName ||
+          prev.activeActivityItemId !== undefined
         ) {
           changed = true
         }
@@ -271,7 +372,8 @@ export function workerRunReducer(
           prev.status !== event.type ||
           prev.truncated !== event.truncated ||
           prev.error !== event.error ||
-          prev.teamMemberName !== event.teamMemberName
+          prev.teamMemberName !== event.teamMemberName ||
+          prev.activeActivityItemId !== undefined
         ) {
           changed = true
         }
@@ -304,6 +406,7 @@ export function workerRunReducer(
         output: '',
         thought: '',
         toolCalls: [],
+        activityItems: [],
         planEntries: [],
         status: 'running',
         truncated: false,
@@ -320,6 +423,7 @@ export function workerRunReducer(
           ...prev,
           sequence: event.sequence,
           output: prev.output + event.delta,
+          activeActivityItemId: undefined,
           lastDeltaAt: Date.now(),
         })
       }
@@ -332,6 +436,7 @@ export function workerRunReducer(
           ...prev,
           sequence: event.sequence,
           thought: (prev.thought ?? '') + event.delta,
+          ...appendThoughtActivity(prev, event.sequence, event.delta),
           lastDeltaAt: Date.now(),
         })
       }
@@ -348,20 +453,14 @@ export function workerRunReducer(
         if (idx < 0) {
           toolCalls = [...existing, { ...incoming }]
         } else {
-          const current = existing[idx]!
-          const merged: WorkerToolCallView = {
-            ...current,
-            ...incoming,
-            title: incoming.title || current.title,
-            locations: incoming.locations ?? current.locations,
-            detail: incoming.detail ?? current.detail,
-          }
+          const merged = mergeToolCall(existing[idx], incoming)
           toolCalls = existing.map((item, i) => (i === idx ? merged : item))
         }
         next.set(event.jobId, {
           ...prev,
           sequence: event.sequence,
           toolCalls,
+          ...upsertToolActivity(prev, event.sequence, incoming),
           lastDeltaAt: Date.now(),
         })
       }
@@ -374,6 +473,7 @@ export function workerRunReducer(
           ...prev,
           sequence: event.sequence,
           planEntries: event.entries.map((entry) => ({ ...entry })),
+          activeActivityItemId: undefined,
           lastDeltaAt: Date.now(),
         })
       }
@@ -423,6 +523,7 @@ export function workerRunReducer(
           status: 'completed',
           truncated: event.truncated,
           reasoning: (event as { reasoning?: string }).reasoning ?? prev.reasoning,
+          activeActivityItemId: undefined,
           startedAt: times?.startedAt ?? prev.startedAt,
           lastDeltaAt: Math.max(end, times?.startedAt ?? prev.startedAt),
           pendingApprovals: [],
@@ -452,6 +553,7 @@ export function workerRunReducer(
           reusedSession: false,
           sequence: 0,
           output: event.output,
+          activityItems: [],
           status: 'completed',
           truncated: event.truncated,
           startedAt: t.startedAt,
@@ -477,6 +579,7 @@ export function workerRunReducer(
           error: event.error,
           errorCode: event.errorCode,
           reasoning: (event as any).reasoning ?? prev.reasoning,
+          activeActivityItemId: undefined,
           recoveryError: event.recoveryError,
           canResetAcpContext: event.canResetAcpContext,
           startedAt: times?.startedAt ?? prev.startedAt,
@@ -507,6 +610,7 @@ export function workerRunReducer(
           reusedSession: false,
           sequence: 0,
           output: event.output ?? '',
+          activityItems: [],
           status: event.type,
           truncated: event.truncated,
           error: event.error,
@@ -792,6 +896,7 @@ export function seedWorkerStatesFromSnapshot(
           errorCode,
           pendingApprovals: [],
           pendingApproval: undefined,
+          activeActivityItemId: undefined,
           snapshotHydrated: true,
           startedAt,
           lastDeltaAt,
@@ -829,6 +934,7 @@ export function seedWorkerStatesFromSnapshot(
       reusedSession: false,
       sequence: 0,
       output: job.output ?? '',
+      activityItems: [],
       status: job.status === 'pending_approval' ? 'pending_approval' : 'running',
       truncated: false,
       startedAt,
