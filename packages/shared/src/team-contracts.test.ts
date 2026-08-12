@@ -2,7 +2,13 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+const rootSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+const workerAcpSource = readFileSync(new URL('./contracts/worker-acp.ts', import.meta.url), 'utf8')
+const workerSource = readFileSync(new URL('./contracts/worker.ts', import.meta.url), 'utf8')
+const chatJobsSource = readFileSync(new URL('./contracts/chat-jobs.ts', import.meta.url), 'utf8')
+const teamSource = readFileSync(new URL('./contracts/team.ts', import.meta.url), 'utf8')
+const appSnapshotSource = readFileSync(new URL('./contracts/app-snapshot.ts', import.meta.url), 'utf8')
+const source = `${rootSource}\n${workerAcpSource}\n${workerSource}\n${chatJobsSource}\n${teamSource}\n${appSnapshotSource}`
 
 describe('Team shared contracts', () => {
   it('defines Team members and global Team templates', () => {

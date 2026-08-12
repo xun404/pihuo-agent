@@ -4,11 +4,12 @@ import { test } from 'node:test'
 
 const panel = readFileSync(new URL('./RightPanel.tsx', import.meta.url), 'utf8')
 const chatPanel = readFileSync(new URL('./ChatPanel.tsx', import.meta.url), 'utf8')
-const locales = readFileSync(new URL('../i18n/locales.ts', import.meta.url), 'utf8')
+const zhCatalog = readFileSync(new URL('../i18n/catalogs/zh.ts', import.meta.url), 'utf8')
+const enCatalog = readFileSync(new URL('../i18n/catalogs/en.ts', import.meta.url), 'utf8')
 
 test('crew inspector is a header bubble without role-copy behavior', () => {
-  assert.match(locales, /'right\.roles': '团队'/u)
-  assert.match(locales, /'right\.roles': 'Team'/u)
+  assert.match(zhCatalog, /'right\.roles': '团队'/u)
+  assert.match(enCatalog, /'right\.roles': 'Team'/u)
   assert.match(panel, /TeamTemplateManager/u)
   assert.match(panel, /onArchiveTeamMember/u)
   assert.match(panel, /roleDraftWithDefaultPrompt/u)

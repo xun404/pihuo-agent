@@ -19,6 +19,12 @@ describe('locale catalogs', () => {
     }
   })
 
+  it('keeps the hand-authored catalogs aligned', () => {
+    const zhKeys = Object.keys(catalogs.zh).sort()
+    const enKeys = Object.keys(catalogs.en).sort()
+    assert.deepEqual(enKeys, zhKeys)
+  })
+
   it('does not use npmmirror as the npm registry input placeholder', () => {
     for (const locale of ['zh', 'zh-TW', 'en'] as const) {
       const ph = catalogs[locale]['settings.runtime.npmRegistryPh']

@@ -1,0 +1,388 @@
+
+/* 审批操作：文本链接 */
+.approval-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 0;
+  border-top: none;
+  background: transparent;
+}
+.approval-row .btn {
+  display: inline;
+  align-items: baseline;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.approval-row .btn:hover:not(:disabled) {
+  background: none;
+  filter: none;
+  text-decoration: underline;
+  opacity: 0.88;
+}
+.approval-row .btn.primary {
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-weight: var(--fw-semibold);
+  text-decoration: underline;
+}
+.approval-row .btn.primary:hover:not(:disabled) {
+  filter: none;
+  text-decoration: underline;
+}
+.approval-row .btn.danger {
+  background: none;
+  border: none;
+  color: var(--danger);
+  text-decoration: underline;
+}
+.approval-row .btn.danger:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.approval-row .btn.btn-cancel {
+  color: var(--text-3);
+  font-weight: var(--fw-regular);
+  text-decoration: underline;
+}
+.approval-row .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  text-decoration: underline;
+}
+
+.chat-history-loading {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  padding: var(--sp-4);
+  text-align: center;
+}
+/* 对话错误卡（扁平 Leader 风格，无 Supervisor 旧卡片壳） */
+.chat-error-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--danger-soft) 88%, var(--bg-surface));
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.msg.leader > .chat-error-card,
+.msg.leader .sup-body > .chat-error-card {
+  align-self: stretch;
+}
+.msg-error-standalone {
+  width: 100%;
+  max-width: var(--messages-max);
+  margin-inline: auto;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+.chat-error-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.chat-error-card-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--danger);
+  line-height: var(--lh-snug);
+  min-width: 0;
+}
+.chat-error-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur-instant) ease,
+    background var(--dur-instant) ease;
+}
+.chat-error-copy:hover {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+}
+.chat-error-copy.is-copied {
+  color: var(--green, #2f9e64);
+}
+.chat-error-card-body {
+  font-size: var(--fs-sm);
+  color: color-mix(in srgb, var(--danger) 70%, var(--text-1));
+  line-height: var(--lh-snug);
+  min-width: 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* Original provider text (when different from the primary line) */
+.chat-error-card-detail {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 14%, var(--border-soft));
+  color: var(--text-2);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--fs-2xs);
+  line-height: var(--chat-process-line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-height: 12rem;
+  overflow: auto;
+  min-width: 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.chat-error-card,
+.chat-error-card * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.chat-error-copy,
+.chat-error-copy * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.chat-error-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+.chat-error-action {
+  margin-top: 0;
+  max-width: 100%;
+}
+
+/* 有消息时：composer 与消息列同宽、上移叠在对话底部，渐变衔接 */
+.composer-dock {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* 与 .messages 水平边距一致 */
+  padding: 0 var(--sp-6) var(--sp-4);
+  /* 上移叠入对话区 — 略加大，给更长的淡出带 */
+  margin-top: -56px;
+  position: relative;
+  z-index: 4;
+  /* Status-row popovers open upward above the dock */
+  overflow: visible;
+  /*
+   * 顶部透明 → 主底色：消息滚入时渐隐，避免与 status row 文字重叠。
+   * 在 status row 高度附近已接近不透明。
+   * padding-top 覆盖 status row 槽（28+6）+ 渐变带余量，高度稳定减少 CLS。
+   */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--bg-main) 28%, transparent) 18%,
+    color-mix(in srgb, var(--bg-main) 72%, transparent) 42%,
+    color-mix(in srgb, var(--bg-main) 94%, transparent) 62%,
+    var(--bg-main) 78%
+  );
+  padding-top: 44px;
+  box-sizing: border-box;
+  /* Contain horizontal shifts from chip label changes inside the dock */
+  contain: layout;
+}
+.composer-dock .composer-stack {
+  /* 与消息列同一 max 宽 */
+  width: min(var(--messages-max), 100%);
+  margin-top: 0;
+}
+.composer-dock .composer-card {
+  /* 叠在对话上时略加强 elevation，仍像同一面板延续 */
+  box-shadow: var(--shadow-composer);
+}
+.composer-dock .composer-card .ph {
+  min-height: 22px;
+  font-size: var(--fs-md);
+}
+
+/* ============ TurnNavigator · 左侧时间线 ============
+   设计线稿（icon-spec-v3 ④）：窄竖栏，每 query 一水平 tick，fisheye 缩放，
+   hover 预览，点击跳转。≥2 query 才渲染。全用 CSS 变量，三套主题自动适配。 */
+.turn-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 48px;
+  z-index: 15;
+  pointer-events: none; /* 轨道本身不挡消息；只让 tick 可点 */
+}
+.turn-nav-track {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  max-height: calc(100% - 6rem);
+  pointer-events: auto;
+}
+.turn-nav-tick {
+  width: 28px;
+  height: 7px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.turn-nav-tick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+.turn-nav-bar {
+  display: block;
+  height: 2px;
+  width: 8px;
+  background: var(--text-4);
+  border-radius: var(--r-pill);
+  transform-origin: left center;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+/* fisheye 等级（由 JS 设 transform/opacity，class 控制颜色）*/
+.turn-nav-tick.peak .turn-nav-bar {
+  background: var(--text-1);
+}
+.turn-nav-tick.near .turn-nav-bar,
+.turn-nav-tick.mid .turn-nav-bar,
+.turn-nav-tick.far .turn-nav-bar {
+  background: var(--text-4);
+}
+/* 进行中 tick：橙色 */
+.turn-nav-tick.running .turn-nav-bar {
+  background: var(--accent);
+}
+.turn-nav-tick:hover .turn-nav-bar {
+  background: var(--text-2);
+}
+
+/* hover 预览浮卡 */
+.turn-nav-preview {
+  position: absolute;
+  left: 36px;
+  /* top 由 inline style 按hoverIdx 计算；translateY 让 preview 中心对齐 tick */
+  transform: translateY(-50%);
+  width: 260px;
+  max-width: calc(100vw - 60px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  padding: 11px;
+  z-index: 25;
+  pointer-events: none;
+}
+.turn-nav-preview::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.turn-nav-preview-idx {
+  font-family: var(--mono);
+  font-size: var(--chat-preview-index-size);
+  color: var(--text-4);
+  margin-bottom: 6px;
+  letter-spacing: var(--chat-preview-index-spacing);
+}
+.turn-nav-preview-q {
+  font-size: var(--chat-preview-question-size);
+  font-weight: var(--fw-medium);
+  color: var(--text-1);
+  line-height: var(--chat-preview-line-height);
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.turn-nav-preview-a {
+  font-size: var(--chat-preview-answer-size);
+  color: var(--text-3);
+  line-height: var(--chat-preview-line-height);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.turn-nav-preview-running {
+  margin-top: 6px;
+  font-size: var(--chat-preview-running-size);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.turn-nav-preview-running-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* 窄窗隐藏 turn-nav（避免挤压消息）*/
+@media (max-width: 640px) {
+  .turn-nav {
+    display: none;
+  }
+}

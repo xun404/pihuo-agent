@@ -21,14 +21,11 @@ import {
   WorkerStoreConflictError,
 } from '@swarmdesk-agent/core'
 import {
-  AcpInstallError,
   buildEffectiveWorkerEnv,
-  downloadToFile,
   getAcpSessionManager,
   logoutSpawnedAgent,
   materializeWorkerLaunch,
   probeSpawnedAgent,
-  resolveAcpRegistryTarget,
   type CapabilityProbeResult,
   type SanitizedAuthMethod,
   type SpawnedAcpLogoutResult,
@@ -39,13 +36,9 @@ import {
   type WorkerReadiness,
   type AcpRegistryDistributionKind,
 } from '@swarmdesk-agent/shared'
-import { resolveRouterDataPaths } from '@swarmdesk-agent/core'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import {
   prepareRegistryWorker,
   registerRegistryWorker,
-  RegistryRegistrationError,
   type RegistryPrepareBody,
   type RegistryRegisterBody,
 } from './acp-worker-registration.js'
@@ -58,22 +51,15 @@ import {
 } from './acp-worker-readiness.js'
 import { reconcileWorkerRuntimeResources } from './acp-resource-lifecycle.js'
 import {
-  checkRegistryCatalogUpdate,
-  getRegistryCatalogForApi,
-  resolveLocalRegistryCatalog,
-  type ResolveCatalogResult,
-} from './acp-registry-service.js'
+  RegistryApiError,
+  registryApiPublicError as publicError,
+} from './acp-registry-errors.js'
 import {
   clearTerminalAuthProbeMethods,
-  isTerminalAuthFeatureEnabled,
   isPtyFeatureReady,
   recordTerminalAuthProbeMethods,
   snapshotTerminalAuthProbeMethods,
 } from './acp-auth-terminal.js'
-import {
-  projectRegistryPublicError,
-  unknownRegistryCatalogPublicError,
-} from './acp-registry-public-error.js'
 import {
   assertRegistryAuthMethodId,
   assertRegistryCandidateInput,
@@ -88,16 +74,17 @@ import {
   type RegistryOperationSnapshot,
 } from './acp-registry-operations.js'
 
-export class RegistryApiError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly httpStatus: number = 400,
-  ) {
-    super(message)
-    this.name = 'RegistryApiError'
-  }
-}
+export {
+  RegistryApiError,
+  registryApiPublicError,
+  registryCatalogApiPublicError,
+} from './acp-registry-errors.js'
+export {
+  apiCheckRegistryUpdate,
+  apiGetRegistryCatalog,
+  apiRegistryAgentIcon,
+  resolveLocalRegistryCatalog,
+} from './acp-registry-catalog-api.js'
 
 type WorkerContextManager = {
   deleteContextByWorker(workerId: string): void
@@ -566,135 +553,6 @@ function persistLogoutRepairState(
   )
 }
 
-function publicError(e: unknown): { error: string; code: string; status: number } {
-  if (e instanceof RegistryApiError) {
-    return projectRegistryPublicError({ message: e.message, code: e.code, status: e.httpStatus })
-  }
-  if (e instanceof RegistryRegistrationError) {
-    return projectRegistryPublicError({ message: e.message, code: e.code, status: e.httpStatus })
-  }
-  if (e instanceof AcpInstallError) {
-    return projectRegistryPublicError({
-      message: e.message,
-      code: e.code,
-      status: e.code === 'ACP_INSTALL_DIGEST_MISMATCH' ? 409 : 400,
-    })
-  }
-  return {
-    error: 'Registry operation failed',
-    code: 'ACP_INSTALL_FAILED',
-    status: 500,
-  }
-}
-
-export { publicError as registryApiPublicError }
-export { unknownRegistryCatalogPublicError as registryCatalogApiPublicError }
-
-// ── Catalog ──
-
-function projectRegistryCatalog(catalog: ResolveCatalogResult) {
-  const workers = store().listWorkers()
-  const target = resolveAcpRegistryTarget()
-  const agentsV2 = catalog.snapshot.agents.map((agent) => {
-    const related = workers.filter(
-      (w) => w.source?.type === 'registry' && w.source.registryId === agent.id,
-    )
-    return {
-      ...agent,
-      platformTarget: target,
-      relatedWorkers: related.map((w) => ({
-        id: w.id,
-        name: w.name,
-        readiness: w.readiness,
-        installationId: w.installationId,
-        registryVersion: w.source?.type === 'registry' ? w.source.registryVersion : undefined,
-      })),
-    }
-  })
-  return {
-    version: catalog.legacy.version,
-    agents: catalog.legacy.agents,
-    schemaVersion: catalog.snapshot.schemaVersion,
-    source: catalog.snapshot.source,
-    digest: catalog.snapshot.digest,
-    fetchedAt: catalog.snapshot.fetchedAt,
-    stale: catalog.stale,
-    updateRequired: catalog.updateRequired,
-    code: catalog.code,
-    message: catalog.message,
-    agentsV2,
-    terminalAuthEnabled: isTerminalAuthFeatureEnabled(),
-    ptyReady: isPtyFeatureReady(),
-  }
-}
-
-export async function apiGetRegistryCatalog() {
-  return projectRegistryCatalog(await getRegistryCatalogForApi())
-}
-
-/**
- * Return the cached registry icon SVG for an agent, downloading it on first
- * request. The browser renderer cannot fetch the remote CDN (CSP blocks it),
- * so this proxy serves the icon from `self`. Icons live in
- * `dataDir/icons/<agentId>.svg` (version-agnostic: an agent's brand icon is
- * stable across versions).
- *
- * Returns null when the agent has no icon, the URL is not https, or the
- * download fails — callers fall back to the generic mark.
- */
-export async function apiRegistryAgentIcon(
-  agentId: string,
-  opts: { fetchImpl?: typeof fetch; signal?: AbortSignal } = {},
-): Promise<{ svg: string } | null> {
-  const { snapshot } = resolveLocalRegistryCatalog()
-  const agent = snapshot.agents.find((a) => a.id === agentId)
-  const iconUrl = agent?.icon
-  if (!iconUrl) return null
-  let parsed: URL
-  try {
-    parsed = new URL(iconUrl)
-  } catch {
-    return null
-  }
-  if (parsed.protocol !== 'https:') return null
-
-  const iconsDir = join(resolveRouterDataPaths().dataDir, 'icons')
-  const dest = join(iconsDir, `${agentId}.svg`)
-  if (!existsSync(dest)) {
-    try {
-      mkdirSync(iconsDir, { recursive: true, mode: 0o700 })
-      await downloadToFile(iconUrl, dest, {
-        fetchImpl: opts.fetchImpl,
-        signal: opts.signal,
-        totalTimeoutMs: 15_000,
-        headerTimeoutMs: 8_000,
-        stallTimeoutMs: 10_000,
-        maxBytes: 256 * 1024,
-      })
-    } catch {
-      return null
-    }
-  }
-  try {
-    const svg = readFileSync(dest, 'utf8')
-    if (!svg || !/<svg[\s>]/i.test(svg)) return null
-    return { svg }
-  } catch {
-    return null
-  }
-}
-
-export async function apiCheckRegistryUpdate(
-  options: { fetchImpl?: typeof fetch; signal?: AbortSignal; timeoutMs?: number } = {},
-) {
-  const result = await checkRegistryCatalogUpdate(options)
-  return {
-    ...projectRegistryCatalog(result.catalog),
-    updateStatus: result.status,
-    agentCount: result.catalog.snapshot.agents.length,
-  }
-}
-
 // ── Prepare / Register ──
 
 export async function apiPrepareRegistry(
@@ -730,7 +588,15 @@ export async function apiPrepareRegistry(
   }
 }
 
-export async function apiRegisterRegistry(body: RegistryRegisterBody) {
+type RegistryRegisterDependencies = {
+  /** Optional seam for deterministic callers; production uses the ACP model refresher. */
+  refreshModels?: typeof refreshWorkerModels
+}
+
+export async function apiRegisterRegistry(
+  body: RegistryRegisterBody,
+  deps: RegistryRegisterDependencies = {},
+) {
   const worker = await registerRegistryWorker({
     body,
     existingWorkers: store().listWorkers(),
@@ -741,7 +607,8 @@ export async function apiRegisterRegistry(body: RegistryRegisterBody) {
   })
   // Fire-and-forget: populate availableModels so default-model pickers work
   // without waiting for the 15-minute health tick or opening the editor.
-  void refreshWorkerModels(saved.id, undefined, { force: true }).catch((e) => {
+  const refreshModels = deps.refreshModels ?? refreshWorkerModels
+  void refreshModels(saved.id, undefined, { force: true }).catch((e) => {
     console.warn(`[registry] model catalog refresh after register failed for ${saved.name}`, e)
   })
   return { worker: saved, snapshot: store().snapshot() }
@@ -778,6 +645,7 @@ export function apiStartPrepareRegistry(
     kind: 'prepare',
     run: async (signal, report) => {
       report({ stage: 'resolving', progress: 0.08 })
+      report({ stage: 'preparing', progress: 0.12 })
       return prepare(body, {
         signal,
         // Forward coarse stages so the settings progress UI moves during long installs.
@@ -1597,6 +1465,3 @@ export function workerFingerprintExtras(worker: WorkerRegistration): {
     workerSecretRevisionHmac: workerSecretsFingerprintHmac(worker.id),
   }
 }
-
-// re-export local catalog resolve for tests
-export { resolveLocalRegistryCatalog }

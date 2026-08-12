@@ -1,0 +1,617 @@
+
+/* Home empty: center content（composer 居中，不叠对话） */
+.home {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6) var(--sp-6) var(--sp-8);
+  gap: var(--sp-5);
+  /* Content must never drag the Electron window */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.home .composer-stack {
+  width: min(var(--messages-max), 100%);
+  margin-top: var(--sp-2);
+}
+/* Empty-state composer: same width as a real composer, consistent with the
+   "open project" button alignment. */
+.home .home-composer {
+  width: min(var(--messages-max), 100%);
+  margin-top: var(--sp-1);
+}
+
+/* ── Custom-CLI confirm dialog (preview → confirm before persist) ── */
+.confirm-add-cli {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.confirm-add-cli-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+.confirm-add-cli-subtitle,
+.confirm-add-cli-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.confirm-add-cli-warn {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  font-weight: var(--fw-medium);
+}
+/* Parameter card: the ACP identity from initialize */
+.confirm-add-cli-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg);
+}
+.confirm-add-cli-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.confirm-add-cli-agent {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+.confirm-add-cli-version {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.confirm-add-cli-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+.confirm-add-cli-field {
+  display: contents;
+}
+.confirm-add-cli-field > dt {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  align-self: start;
+  white-space: nowrap;
+}
+.confirm-add-cli-field > dd {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  word-break: break-all;
+}
+.confirm-add-cli-field > dd.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+}
+/* Readiness status coloring (raised specificity to win over .confirm-add-cli-field > dd) */
+.confirm-add-cli-field > dd.confirm-add-cli-status {
+  font-weight: var(--fw-medium);
+}
+.confirm-add-cli-field > dd.confirm-add-cli-status-ready {
+  color: var(--green);
+}
+.confirm-add-cli-field > dd.confirm-add-cli-status-auth_required,
+.confirm-add-cli-field > dd.confirm-add-cli-status-failed,
+.confirm-add-cli-field > dd.confirm-add-cli-status-incompatible {
+  color: var(--danger);
+}
+/* Auth-required block (state 4) */
+.confirm-add-cli-authrequired {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+/* Duplicate conflict chooser (state 2) */
+.confirm-add-cli-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.confirm-add-cli-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  cursor: pointer;
+}
+.confirm-add-cli-radio input[type='radio'] {
+  margin-top: 2px;
+}
+.confirm-add-cli-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.confirm-add-cli-conflict-name {
+  font-weight: var(--fw-medium);
+}
+.confirm-add-cli-conflict-cmd {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.confirm-add-cli-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+/* ── Generic confirmation dialog (replaces native OS confirms) ── */
+.confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.confirm-dialog-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+.confirm-dialog-message {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: var(--lh-snug);
+  white-space: pre-line;
+}
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+/* ── Workers tab (merged with crews): rail | main layout ── */
+
+/* Rail member-count badge (crews) */
+.settings-rail-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  flex: none;
+  min-width: 18px;
+  text-align: right;
+}
+
+/* Worker detail panel (right side when an agent is selected) */
+.worker-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 20px 24px;
+}
+.worker-detail .settings-provider-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.worker-detail-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.worker-detail-titles .settings-card-title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+.worker-detail-head-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.worker-detail-source {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+/* Worker detail: 2-column card grid */
+.worker-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 4px;
+}
+.worker-detail-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  padding: 14px 16px;
+}
+.worker-detail-card-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
+}
+.worker-detail-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.worker-detail-card-head .worker-detail-card-title {
+  margin: 0;
+}
+.worker-detail-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Manual registration — icon picker */
+.worker-icon-picker {
+  position: relative;
+}
+.worker-icon-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  min-height: 40px;
+}
+.worker-icon-picker-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.worker-icon-picker-preview {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+}
+.worker-icon-picker-preview .registry-agent-icon-inline,
+.worker-icon-picker-preview .worker-brand-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.worker-icon-picker-preview svg {
+  width: 18px;
+  height: 18px;
+}
+.worker-icon-picker-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+}
+.worker-icon-picker-hint {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.worker-icon-picker-caret {
+  color: var(--text-3);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.worker-icon-picker-list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% - 4px);
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 240px;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border-1, rgba(0, 0, 0, 0.08));
+  background: var(--surface-1, #fff);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+}
+.worker-icon-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+}
+.worker-icon-picker-option:hover {
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+}
+.worker-icon-picker-option.is-selected {
+  background: var(--accent-soft, rgba(59, 130, 246, 0.12));
+}
+/* Info rows (label: value) */
+.worker-info-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+.worker-info-row .worker-info-label {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.worker-info-row .worker-info-value {
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  word-break: break-all;
+}
+.worker-info-row .worker-info-value.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+}
+/* Command row: long commands stay on one line; when they overflow the default
+   state shows the tail (head scrolled out left with a fade), and hovering
+   scrolls the head back into view. */
+.worker-command-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+  word-break: normal;
+  text-align: right;
+}
+/* fade the left edge where overflow is clipped — only when overflowing */
+.worker-command-marquee.is-overflow {
+  mask-image: linear-gradient(to right, transparent 0, #000 16px);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16px);
+}
+.worker-command-text {
+  display: inline-block;
+  transition: transform 0.4s ease;
+  will-change: transform;
+}
+/* Right-align all values in the profile card */
+.worker-info-card .worker-info-value {
+  text-align: right;
+}
+/* Capability items */
+.worker-cap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Capability items in a single horizontal row */
+.worker-cap-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.worker-cap-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+}
+.worker-cap-item .worker-cap-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+}
+.worker-cap-item .worker-cap-check.on {
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+  color: var(--green);
+}
+.worker-cap-item .worker-cap-check.off {
+  background: var(--bg-hover);
+  color: var(--text-3);
+}
+/* Health status rows */
+.worker-health-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: var(--fs-sm);
+}
+.worker-health-row .worker-health-label {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+}
+.worker-health-row .worker-health-value {
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-xs);
+}
+.worker-health-value.ok {
+  color: var(--green);
+}
+.worker-health-value.warn {
+  color: var(--warning, var(--danger));
+}
+.worker-health-value.bad {
+  color: var(--danger);
+}
+/* Probe console: action head + code-styled log */
+.worker-probe-console-card {
+  margin-top: 16px;
+}
+.worker-probe-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.worker-probe-head .worker-detail-card-title {
+  margin: 0;
+}
+.worker-probe-run {
+  height: 26px;
+  padding: 0 12px;
+  font-size: var(--fs-xs);
+}
+.worker-probe-log {
+  background: var(--bg-input);
+  color: var(--text-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-relaxed, 1.5);
+}
+.worker-probe-log-empty {
+  margin: 0;
+  color: var(--text-3);
+  opacity: 0.7;
+}
+.worker-probe-log-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.worker-probe-log-ts {
+  flex: none;
+  color: var(--text-3);
+}
+.worker-probe-log-line.is-ok .worker-probe-log-text {
+  color: var(--green);
+}
+.worker-probe-log-line.is-warn .worker-probe-log-text {
+  color: var(--warning, var(--danger));
+}
+.worker-probe-log-line.is-err .worker-probe-log-text {
+  color: var(--danger);
+}
+.worker-probe-log-line.is-info .worker-probe-log-text {
+  color: var(--blue);
+}
+/* Auth actions (merged into identity card) */
+.worker-auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+/* Default-role picker (inline in the worker-detail header) */
+.worker-role-picker {
+  position: relative;
+}
+.worker-role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-hover);
+  color: var(--text-1);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+.worker-role-chip:hover {
+  background: var(--bg-active);
+  border-color: var(--border);
+}
+.worker-role-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.worker-role-chip-label {
+  color: var(--text-2);
+}
+.worker-role-chip-value {
+  font-weight: var(--fw-semibold);
+}
+.worker-role-chip-caret {
+  color: var(--text-3);
+  font-size: 10px;
+  margin-left: 2px;
+}
+/* Pop-menu of roles — reuse global .pop-menu / .pop-item, scope the position */
+.worker-role-menu {
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 160px;
+}
+.worker-role-menu .pop-item {
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  font-size: var(--fs-sm);
+}
+.worker-role-check {
+  color: var(--accent, var(--text-1));
+  font-size: 12px;
+}
+/* Capability card (inside the 2-column detail grid) */
+.worker-cap-card {
+}
+.worker-cap-card .worker-cap-row {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+/* Emphasize important identity values (command, path) */
+.worker-info-row .worker-info-value.is-emphasized {
+  color: var(--text-1);
+  font-weight: var(--fw-medium);
+}
+
+/* Registration panel (right side when "+ register" is selected) */
+.worker-register-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 20px 24px;
+}
+
+/* Empty state placeholder */
+.settings-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+}

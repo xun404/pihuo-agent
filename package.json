@@ -34,6 +34,7 @@
     "sync:acp-registry": "npm run sync:acp-registry -w @swarmdesk-agent/mastra-app --",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
+    "check:source-size": "node scripts/check-source-size.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

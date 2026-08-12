@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  DEFAULT_SESSION_TITLE,
   isValidSessionPermissionMode,
   permissionModeFromLegacyPolicy,
   isModelCacheFresh,
@@ -12,8 +13,75 @@ import {
   normalizeWorkerHealth,
   projectLegacyHealth,
   shouldSkipWorkerDispatch,
+  sortPendingApprovals,
+  WORKER_ROLES,
   workerHealthRank,
 } from './index.js'
+import type { AppSnapshot, ApprovalItem, WorkerRegistration } from './index.js'
+
+describe('Shared public facade', () => {
+  it('keeps representative values, helpers, and contracts at the root entry', () => {
+    assert.equal(DEFAULT_SESSION_TITLE, 'New session')
+    assert.deepEqual(WORKER_ROLES, ['plan', 'coder', 'review', 'test', 'research', 'general'])
+    const approvals: ApprovalItem[] = [
+      {
+        id: 'late',
+        status: 'pending',
+        title: 'Late',
+        options: [],
+        source: 'manual',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      },
+      {
+        id: 'first',
+        status: 'pending',
+        title: 'First',
+        options: [],
+        source: 'manual',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'resolved',
+        status: 'allowed',
+        title: 'Resolved',
+        options: [],
+        source: 'manual',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]
+    assert.deepEqual(sortPendingApprovals(approvals).map((approval) => approval.id), ['first', 'late'])
+
+    const worker: Pick<WorkerRegistration, 'id' | 'name' | 'kind' | 'roles' | 'defaultRoleType'> = {
+      id: 'worker-1',
+      name: 'Worker',
+      kind: 'custom',
+      roles: ['general'],
+      defaultRoleType: 'general',
+    }
+    const snapshot: Pick<
+      AppSnapshot,
+      | 'projects'
+      | 'sessions'
+      | 'workers'
+      | 'teamMembers'
+      | 'teamTemplates'
+      | 'approvals'
+      | 'activeProjectId'
+      | 'activeSessionId'
+    > = {
+      projects: [],
+      sessions: [],
+      workers: [],
+      teamMembers: [],
+      teamTemplates: [],
+      approvals: [],
+      activeProjectId: null,
+      activeSessionId: null,
+    }
+    assert.equal(worker.defaultRoleType, 'general')
+    assert.equal(snapshot.workers.length, 0)
+  })
+})
 
 describe('Session permission mode', () => {
   it('accepts only the two public permission modes', () => {

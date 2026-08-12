@@ -1,0 +1,231 @@
+
+/* Prompt defaults — Leader 主卡 + 角色一体手风琴卡（与 worker-card 同族） */
+.settings-prompts-page {
+  width: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.prompt-settings-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+  flex: 1;
+}
+.prompt-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.prompt-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 14px 16px 12px;
+}
+.prompt-card-head-static {
+  border-bottom: 1px solid var(--border-soft);
+}
+.prompt-card-titles {
+  min-width: 0;
+  flex: 1;
+}
+.prompt-card-titles h3 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+.prompt-card-titles p {
+  margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+}
+.prompt-card-head .settings-save-btn {
+  flex-shrink: 0;
+  margin-top: 0;
+  align-self: center;
+}
+.prompt-card-body {
+  padding: 12px 16px 14px;
+}
+.prompt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prompt-settings-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 112px;
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: var(--lh-relaxed);
+  white-space: normal;
+  font-family: var(--font);
+  overflow: auto;
+}
+.prompt-role-item .prompt-settings-textarea {
+  min-height: 96px;
+}
+/* 弱操作：输入框下方文本链接，不与主按钮抢视线 */
+.prompt-field-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 20px;
+}
+.prompt-reset-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  cursor: pointer;
+  text-decoration: none;
+}
+.prompt-reset-link:hover {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prompt-reset-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* 角色手风琴列表 */
+.prompt-role-list {
+  display: flex;
+  flex-direction: column;
+}
+.prompt-role-item {
+  border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-input) 55%, var(--bg-surface));
+  margin: 0;
+}
+.prompt-role-item:first-child {
+  border-top: none;
+}
+.prompt-role-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.prompt-role-summary::-webkit-details-marker {
+  display: none;
+}
+.prompt-role-label {
+  flex-shrink: 0;
+  min-width: 2.5em;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+}
+.prompt-role-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 相对打包默认有改动时的小圆点，提示可展开编辑 / 可恢复 */
+.prompt-role-dirty {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.prompt-role-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  position: relative;
+  color: var(--text-3);
+}
+.prompt-role-chevron::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.prompt-role-item.is-open .prompt-role-chevron::before,
+.prompt-role-item[open] .prompt-role-chevron::before {
+  top: 6px;
+  transform: rotate(225deg);
+}
+.prompt-role-item.is-open .prompt-role-summary,
+.prompt-role-item[open] .prompt-role-summary {
+  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+  border-bottom: 1px solid var(--border-soft);
+}
+.prompt-role-item.is-open .prompt-role-preview,
+.prompt-role-item[open] .prompt-role-preview {
+  color: var(--text-2);
+}
+button.prompt-role-summary {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+.prompt-role-body {
+  padding: 10px 16px 12px;
+  background: var(--bg-surface);
+}
+
+@media (max-width: 760px) {
+  .prompt-card-head {
+    align-items: flex-start;
+  }
+  .prompt-card-head .settings-save-btn {
+    align-self: flex-start;
+  }
+  .prompt-role-label {
+    min-width: 2em;
+  }
+}
+.approval-title {
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  font-family: var(--font);
+}
+.approval-detail,
+.approval-path,
+.approval-waiting-time {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  margin-top: 4px;
+}

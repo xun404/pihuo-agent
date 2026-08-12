@@ -13,6 +13,7 @@ export default tseslint.config(
       '**/dist-electron/**',
       '**/dist-runtime/**',
       '**/coverage/**',
+      '.worktrees/**',
       'release/**',
       'packages/mastra-app/.mastra/**',
       '**/*.min.js',

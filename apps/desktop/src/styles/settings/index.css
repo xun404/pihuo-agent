@@ -1,0 +1,9 @@
+/* Preserve the source order of the former 06-settings.css. */
+@import './00-shell-provider.css';
+@import './01-controls-models.css';
+@import './02-workers-registry.css';
+@import './03-general-danger.css';
+@import './04-models-forms.css';
+@import './05-inspector-overlays.css';
+@import './06-prompts.css';
+@import './07-tail.css';

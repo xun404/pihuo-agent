@@ -5,7 +5,7 @@
  * Usage: node --import tsx src/http-server.ts
  * Port: MASTRA_PORT or 4111
  */
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { basename, resolve as pathResolve } from 'node:path'
@@ -170,9 +170,11 @@ import {
   permissionModeFromLegacyPolicy,
   type WorkerRunEvent,
 } from '@swarmdesk-agent/shared'
-import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomBytes } from 'node:crypto'
 import { HttpJsonBodyError, readJsonBody as readJson } from './http-json-body.js'
+import { createOwnerRouteContext } from './http/owner-route-context.js'
+import { createResponseHelpers } from './http/response.js'
+import { match } from './http/route-match.js'
 import { resolveHttpPort, resolveMemoryLastMessages } from './runtime-config.js'
 import {
   CustomAcpRegistrationError,
@@ -208,7 +210,7 @@ const runtimeWorkspaceId = createHash('sha256').update(runtimeWorkspaceRoot).dig
 const studioApiToken =
   process.env.SWARMDESK_AGENT_STUDIO_TOKEN?.trim() || randomBytes(32).toString('hex')
 /** Request-scoped so every send()/CORS path echoes the correct Origin. */
-const requestAls = new AsyncLocalStorage<IncomingMessage>()
+const requestContext = createOwnerRouteContext(desktopCorsHeaders)
 
 // Owner runtime MUST be initialized before Store/Scheduler/createMastra.
 // Do not import ./mastra/index.js here — that entry is Studio client-only.
@@ -248,20 +250,7 @@ const runtimeDiscoveryPath =
   process.env.SWARMDESK_AGENT_RUNTIME_PATH ?? defaultRuntimeDiscoveryPath()
 const runtimeStartedAt = new Date().toISOString()
 
-function currentReq(): IncomingMessage | undefined {
-  return requestAls.getStore()
-}
-
-function corsFor(req?: IncomingMessage): Record<string, string> {
-  const r = req ?? currentReq()
-  if (r) return desktopCorsHeaders(r)
-  return {
-    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS,PUT,PATCH',
-    'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, X-SwarmDesk-Agent-Desktop-Token, Last-Event-ID',
-    Vary: 'Origin',
-  }
-}
+const { corsFor } = requestContext
 
 function authorizeInternalRuntime(req: IncomingMessage): boolean {
   if (!internalRuntimeToken) return false
@@ -270,56 +259,11 @@ function authorizeInternalRuntime(req: IncomingMessage): boolean {
   return tokenMatches(provided, internalRuntimeToken)
 }
 
-function sendAuthFailed(res: ServerResponse): void {
-  send(res, 401, { error: 'RUNTIME_AUTH_FAILED', code: 'RUNTIME_AUTH_FAILED' })
-}
-
-function send(res: ServerResponse, status: number, body: unknown): void {
-  const json = JSON.stringify(body)
-  res.writeHead(status, {
-    'Content-Type': 'application/json',
-    ...corsFor(),
-  })
-  res.end(json)
-}
-
-function sendUnexpectedFailure(res: ServerResponse, error: unknown, context: string): void {
-  console.error(`[http] ${context} failed`, error)
-  send(res, 500, { error: 'Internal server error', code: 'INTERNAL_ERROR' })
-}
-
-function sendAcpOrUnexpectedFailure(res: ServerResponse, error: unknown, context: string): void {
-  const failure = asAcpHttpFailure(error)
-  if (failure) {
-    send(res, failure.status, failure.body)
-    return
-  }
-  sendUnexpectedFailure(res, error, context)
-}
-
-function match(path: string, pattern: string): Record<string, string> | null {
-  const pp = pattern.split('/').filter(Boolean)
-  const sp = path.split('/').filter(Boolean)
-  if (pp.length !== sp.length) return null
-  const params: Record<string, string> = {}
-  for (let i = 0; i < pp.length; i++) {
-    const a = pp[i]!
-    const b = sp[i]!
-    if (a.startsWith(':')) {
-      try {
-        params[a.slice(1)] = decodeURIComponent(b)
-      } catch {
-        // A malformed percent escape is not a server failure and must not
-        // escape route matching as a 500 response.
-        return null
-      }
-    } else if (a !== b) return null
-  }
-  return params
-}
+const { send, sendAuthFailed, sendUnexpectedFailure, sendAcpOrUnexpectedFailure } =
+  createResponseHelpers({ corsFor, asAcpHttpFailure })
 
 const server = createServer(async (req, res) => {
-  await requestAls.run(req, async () => {
+  await requestContext.run(req, async () => {
     try {
       if (req.method === 'OPTIONS') {
         res.writeHead(204, corsFor())

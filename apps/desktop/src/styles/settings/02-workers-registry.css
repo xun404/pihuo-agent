@@ -1,0 +1,1133 @@
+
+/* AgentWorker 设置：列表 + 注册表单 */
+.worker-settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-width: 640px;
+  width: 100%;
+}
+.worker-list-card,
+.worker-register-card {
+  max-width: 640px;
+}
+.worker-list-card {
+  gap: var(--sp-3);
+}
+/* 注册卡：与 form-card 同节奏；overflow 可见保证 combobox 浮层不被裁切 */
+.settings-form-card.worker-register-card {
+  gap: var(--sp-3);
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+.worker-register-card .model-list-label {
+  margin-bottom: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+}
+.worker-register-card .settings-field {
+  position: relative;
+  margin-bottom: 0;
+  gap: 0;
+  overflow: visible;
+  z-index: 0;
+}
+/* 展开时抬高整块 Agent 字段 stacking context，避免后面的名称/命令表单盖住列表 */
+.worker-register-agent-field {
+  z-index: 1;
+}
+.settings-form-card.worker-register-card:has(.worker-registry-combobox.is-open)
+  .worker-register-agent-field {
+  z-index: 50;
+}
+.worker-register-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: 6px;
+  min-height: var(--h-sm);
+}
+.worker-register-field-head .field-label {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
+}
+/* 检查更新：弱文字链 */
+.worker-register-update-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  margin: 0;
+  height: auto;
+  min-height: 0;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.worker-register-update-link:hover:not(:disabled) {
+  color: var(--blue);
+}
+.worker-register-update-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.worker-register-card .settings-field-hint.mono {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+/* 自动 / 手动注册：强互斥分段，与 settings seg-control 统一 */
+.worker-register-mode-seg {
+  display: flex;
+  width: 100%;
+  height: var(--h-md, 36px);
+}
+.worker-register-mode-seg button {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.worker-register-mode-seg button:not(.active):hover {
+  color: var(--text-1);
+}
+.registry-prepare-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+}
+
+/* 一体 Worker 卡：上 Worker 元信息，下默认角色（同卡分区，不缩进另起岛） */
+.worker-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.worker-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+}
+.worker-card-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 52px;
+}
+.worker-card-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  /* Fade-in when a worker is disabled (the button is conditionally rendered then). */
+  animation: worker-card-delete-in var(--dur-fast) var(--ease-out);
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+@keyframes worker-card-delete-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.worker-card-delete:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+.worker-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.worker-card-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.worker-card-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+}
+.worker-card-version {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  font-weight: var(--fw-regular);
+  font-variant-numeric: tabular-nums;
+}
+/* Rail + detail logos: override the global .worker-logo svg 10px constraint.
+   NOTE: do NOT add a bare `.worker-card .worker-logo` rule here — `.worker-card`
+   is the chat WorkerRunCard (see WorkerRunCard.tsx), not a settings surface.
+   Such a rule leaks into chat and blows the logo up to 28px inside a 16px slot,
+   producing the stray orange brand-color square between message blocks. */
+.settings-rail-item .worker-logo svg {
+  width: 16px;
+  height: 16px;
+}
+.worker-detail .worker-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  flex: none;
+}
+.worker-detail .worker-logo svg {
+  width: 20px;
+  height: 20px;
+}
+.worker-card-source {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-card-main .switch,
+.worker-card-main .toggle {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+.worker-card-main .worker-settings-auth-actions {
+  flex-shrink: 0;
+}
+
+/* 默认角色 = 卡底分区：顶部分割线，与 Worker 主区同宽对齐 */
+.worker-card-role {
+  border-top: none;
+  background: transparent;
+  margin: 0;
+}
+.worker-card-role-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  min-height: 40px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.worker-card-role-summary::-webkit-details-marker {
+  display: none;
+}
+.worker-card-role-kicker {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-3);
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
+}
+.worker-card-role-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: var(--text-2);
+  overflow: hidden;
+}
+.worker-card-role-name {
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-card-role-sep {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.worker-card-role-type {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.worker-card-role-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  position: relative;
+  color: var(--text-3);
+}
+.worker-card-role-chevron::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.worker-card-role.is-open .worker-card-role-chevron::before,
+.worker-card-role[open] .worker-card-role-chevron::before {
+  top: 6px;
+  transform: rotate(225deg);
+}
+.worker-card-role.is-open .worker-card-role-summary,
+.worker-card-role[open] .worker-card-role-summary {
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+}
+.worker-card-role-summary {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+.worker-card-role-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+@media (max-width: 560px) {
+  .worker-card-role-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.worker-default-role-instructions {
+  min-height: 76px;
+  height: auto;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  resize: vertical;
+  white-space: normal;
+  line-height: var(--lh-relaxed);
+}
+.worker-card-role-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.worker-card-role-footer .settings-field-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 140px;
+}
+.worker-card-role-footer .settings-save-btn {
+  margin-left: auto;
+}
+/* Delete-worker link: hyperlinked text left of the Save button. Disabled (not hidden) when the
+ * worker is still enabled, with a tooltip explaining the prerequisite. */
+.worker-card-delete-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-xs);
+  color: var(--danger);
+  text-decoration: underline;
+  cursor: pointer;
+  flex: none;
+}
+.worker-card-delete-link:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.worker-card-delete-link:disabled {
+  color: var(--text-2);
+  text-decoration: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 兼容旧类名（若测试/快照仍引用） */
+.worker-settings-item {
+  display: flex;
+  flex-direction: column;
+}
+.worker-default-role-editor {
+  /* legacy alias — prefer .worker-card-role */
+  margin: 0;
+}
+.worker-default-role-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+/* combobox：输入框 flex 布局；列表 portal 到 body 避免被表单盖住 */
+.worker-registry-combobox {
+  position: relative;
+  width: 100%;
+}
+.worker-registry-input-wrap {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--h-lg);
+  min-height: var(--h-lg);
+  padding: 0 6px 0 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-input);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.worker-registry-input-wrap.open,
+.worker-registry-input-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--blue) 50%, var(--border));
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+/* 覆盖 .settings-input 单行样式；边框/焦点由 wrap 承担 */
+input.settings-input.worker-registry-input {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0 var(--sp-3);
+  border: 0 !important;
+  border-radius: var(--r-md);
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  line-height: var(--h-lg);
+  font-family: var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-items: unset;
+}
+.worker-registry-clear {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin: 0 4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.worker-registry-clear:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+/* 默认（SSR/无 portal）回退：相对 combobox 绝对定位 */
+.worker-registry-list {
+  position: absolute;
+  z-index: 50;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  width: 100%;
+  max-height: min(280px, 42vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 4px 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  box-sizing: border-box;
+}
+/* portal 到 body：fixed，坐标由 JS 写入 */
+.worker-registry-list-portal {
+  position: fixed;
+  z-index: 10000;
+  right: auto;
+  top: 0;
+  left: 0;
+  width: auto;
+}
+.worker-registry-option {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px var(--sp-3);
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font: inherit;
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.worker-registry-option-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.worker-registry-option-icon svg {
+  width: 100%;
+  height: 100%;
+}
+/* Inline registry icon span (used in combobox options and elsewhere). */
+.registry-agent-icon-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.registry-agent-icon-inline svg {
+  width: 100%;
+  height: 100%;
+}
+.worker-registry-option.highlighted,
+.worker-registry-option:hover {
+  background: var(--bg-hover);
+}
+.worker-registry-option.selected {
+  background: var(--blue-soft);
+}
+.worker-registry-option-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-registry-option-id {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 30%;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-registry-option-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.worker-registry-status {
+  padding: 10px var(--sp-3);
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+.worker-registry-status.error {
+  color: var(--danger);
+}
+/* Searchable select: reuse registry combobox chrome (execution config / reasoning). */
+.settings-search-combobox.is-disabled {
+  opacity: 0.65;
+  pointer-events: none;
+}
+/*
+ * List is portaled to body — scope styles on .settings-search-list itself,
+ * not under .settings-search-combobox.
+ * Layout: single id line by default; when a meaningful display name exists,
+ * stack name then full-width mono modelId (no side-by-side dual truncation).
+ */
+.settings-search-list .settings-search-option.worker-registry-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 3px;
+  min-height: 36px;
+  height: auto;
+  padding: 8px var(--sp-3);
+}
+.settings-search-list .settings-search-option.has-desc {
+  min-height: 54px;
+}
+.settings-search-list .settings-search-option-main {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+}
+.settings-search-list .settings-search-option-main .worker-registry-option-name {
+  flex: none;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-search-list .settings-search-option-main .worker-registry-option-name.is-id {
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+.settings-search-list .settings-search-option-main .worker-registry-option-id {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+}
+.settings-search-list .settings-search-option-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-normal);
+  line-height: 1.35;
+  word-break: break-word;
+  white-space: normal;
+  text-align: left;
+}
+/* Agent 详情：嵌套块，对齐 worker-card / settings 内嵌面板 */
+.registry-agent-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-input);
+}
+.registry-agent-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.registry-agent-detail-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.registry-agent-detail-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.registry-agent-detail-id {
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.registry-agent-detail-sep {
+  margin: 0 4px;
+  opacity: 0.7;
+}
+.registry-agent-detail-desc {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
+.registry-agent-generic-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+}
+.registry-agent-detail-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+}
+.registry-agent-detail-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.registry-agent-facts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 0;
+}
+.registry-agent-facts > div {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: start;
+  min-width: 0;
+}
+.registry-agent-facts dt {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+}
+.registry-agent-facts dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+}
+.registry-agent-facts a {
+  color: var(--blue);
+}
+/* 完整性：Manifest 全分发；声明/实测 SHA 仅 binary */
+.registry-agent-integrity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-surface) 70%, var(--bg-input));
+}
+.registry-agent-integrity-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
+}
+.registry-agent-integrity-facts {
+  gap: 6px;
+}
+.registry-agent-integrity-facts > div {
+  grid-template-columns: 108px minmax(0, 1fr);
+}
+.registry-digest {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-1);
+  letter-spacing: 0.01em;
+  word-break: break-all;
+  cursor: help;
+}
+.registry-digest-pending {
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+}
+.registry-digest-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.registry-digest-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  letter-spacing: var(--ls-label);
+}
+.registry-digest-badge.is-match {
+  color: color-mix(in srgb, var(--green, #1a7f4b) 90%, var(--text-1));
+  background: color-mix(in srgb, var(--green, #1a7f4b) 12%, transparent);
+}
+.registry-digest-badge.is-mismatch {
+  color: color-mix(in srgb, var(--danger) 90%, var(--text-1));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.registry-agent-dist-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+}
+.registry-agent-dist-field > label {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  margin-bottom: 6px;
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-snug);
+}
+.registry-agent-trust-warning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border-soft));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--danger) 6%, var(--bg-surface));
+  color: color-mix(in srgb, var(--danger) 85%, var(--text-1));
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+}
+/* 复选框与文案基线对齐 */
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.settings-check input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+.settings-check > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-top: 0;
+  line-height: var(--lh-snug);
+}
+.registry-agent-trust-warning .settings-check {
+  align-items: flex-start;
+}
+.registry-agent-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.registry-agent-notices p {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: var(--lh-snug);
+}
+.worker-prepare-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-top: var(--sp-2);
+}
+.worker-prepare-progress-head,
+.worker-prepare-progress-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.worker-prepare-progress-head {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+}
+.worker-prepare-progress-head code {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+/* Streaming stage log — replaces the coarse determinate progress bar. */
+.worker-prepare-log {
+  max-height: 160px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-input, var(--bg-elevated, rgba(0, 0, 0, 0.03)));
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+}
+.worker-prepare-log-line {
+  display: grid;
+  grid-template-columns: 4.5em 1fr;
+  gap: 10px;
+  align-items: baseline;
+  color: var(--text-2);
+}
+.worker-prepare-log-line + .worker-prepare-log-line {
+  margin-top: 4px;
+}
+.worker-prepare-log-time {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.worker-prepare-log-msg {
+  color: var(--text-1);
+  min-width: 0;
+  word-break: break-word;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.worker-prepare-log-line.is-done .worker-prepare-log-msg {
+  color: var(--text-2);
+}
+.worker-prepare-log-line.is-active .worker-prepare-log-msg {
+  color: var(--text-1);
+  font-weight: var(--fw-medium);
+}
+.worker-prepare-log-line.is-ok .worker-prepare-log-msg {
+  color: var(--green, #16a34a);
+}
+.worker-prepare-log-line.is-error .worker-prepare-log-msg {
+  color: var(--danger, #dc2626);
+}
+.worker-prepare-log-line.is-warn .worker-prepare-log-msg {
+  color: var(--text-2);
+}
+.worker-prepare-log-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent, #2563eb) 30%, transparent);
+  border-top-color: var(--accent, #2563eb);
+  animation: worker-prepare-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes worker-prepare-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.worker-settings-auth-btn {
+  flex-shrink: 0;
+}
+.worker-settings-auth-actions {
+  display: flex;
+  max-width: 190px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.worker-secret-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-input);
+}
+.worker-auth-terminal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  background: rgba(15, 12, 10, 0.52);
+}
+.worker-auth-terminal-modal {
+  display: flex;
+  width: min(760px, 100%);
+  max-height: min(620px, 90vh);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+.worker-auth-terminal-modal > header,
+.worker-auth-terminal-modal > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 10px var(--sp-3);
+}
+.worker-auth-terminal-modal > header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.worker-auth-terminal-modal > header span,
+.worker-auth-terminal-modal > footer span {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.worker-auth-terminal-host {
+  min-height: 360px;
+  padding: 8px;
+  background: #171411;
+}
+.worker-auth-terminal-host .xterm {
+  height: 100%;
+}
+.worker-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.worker-list-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.worker-list-row {
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border-soft) !important;
+  align-items: flex-start;
+  min-height: auto;
+  padding: 12px;
+}
+.worker-list-row .info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.worker-list-row .n {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.worker-list-row .toggle {
+  margin-top: 4px;
+}
+.worker-role-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.role-pill {
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: var(--bg-hover);
+  color: var(--text-3);
+  line-height: 1.3;
+}
+.role-pill.on {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.role-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--h-sm);
+  padding: 0 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-input);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  line-height: 1;
+  box-sizing: border-box;
+}
+.role-chip .box {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid var(--text-3);
+  flex-shrink: 0;
+  position: relative;
+}
+.role-chip.on {
+  border-color: color-mix(in srgb, var(--blue) 35%, var(--border));
+  background: var(--blue-soft);
+  color: var(--text-1);
+}
+.role-chip.on .box {
+  border-color: var(--blue);
+  background: var(--blue);
+}
+.role-chip.on .box::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 4px;
+  height: 7px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}

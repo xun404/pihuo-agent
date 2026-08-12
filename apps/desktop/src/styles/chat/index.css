@@ -1,0 +1,5 @@
+/* Preserve the source order of the former 04-chat.css. */
+@import './00-header.css';
+@import './01-messages-markdown.css';
+@import './02-process-worker.css';
+@import './03-approvals-errors-navigation.css';

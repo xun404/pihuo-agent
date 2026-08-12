@@ -1,0 +1,231 @@
+
+/* Jobs / git / files / approvals basics */
+.job-row,
+.approval-item,
+.file-row,
+.git-file {
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-soft);
+  margin-bottom: 6px;
+  background: var(--bg-surface);
+  font-size: var(--fs-sm);
+}
+.tree-item {
+  font-size: var(--fs-sm);
+  padding: 3px 0;
+  color: var(--text-2);
+}
+.tree-item.folder {
+  color: var(--text-1);
+  font-weight: var(--fw-medium);
+}
+
+/* generic md (non-chat contexts) */
+.md-content {
+  font-size: var(--fs-base);
+  line-height: var(--lh-relaxed);
+}
+.md-content p {
+  margin: 0 0 0.6em;
+}
+.md-content p:last-child {
+  margin-bottom: 0;
+}
+.md-content pre {
+  background: var(--bg-input);
+  padding: 10px;
+  border-radius: var(--r-md);
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
+.md-content code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.md-content .md-table-wrap {
+  overflow-x: auto;
+  margin: 0.5em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.md-content table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+.md-content th,
+.md-content td {
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.md-content th {
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  font-weight: var(--fw-semibold);
+}
+
+/* Pop menus as buttons */
+.pop-item,
+.pop-row {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+/* 选中态无常驻底色，见上方 .pop-row.on / .pop-item.on */
+
+.mode-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.spacer {
+  flex: 1;
+  min-width: 4px;
+}
+.mono {
+  font-family: var(--mono);
+}
+.mt-8 {
+  margin-top: 8px;
+}
+
+.app-banner {
+  padding: 8px 14px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-main));
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+/* Modals */
+.settings-overlay,
+.text-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above turn-nav (15) / preview (25) / composer dock (4) — portal to body */
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.modal,
+.text-prompt-modal,
+.open-project-modal {
+  width: min(440px, 100%);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 16px;
+}
+.modal h2,
+.text-prompt-modal h2,
+.open-project-modal h2 {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  margin: 0 0 12px;
+}
+.modal-foot,
+.text-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* Electron drag — 侧栏顶栏可拖；交互控件不拖 */
+.sidebar-top {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.sidebar button,
+.sidebar a,
+.sidebar [role='button'],
+.sidebar input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Icons */
+.i {
+  width: var(--icon);
+  height: var(--icon);
+  display: block;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* panel / inspector approval actions — 与 chat 一致：[标签] 超链接，默认下划线 */
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 8px;
+}
+.approval-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.approval-actions-btn {
+  height: auto;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.approval-actions-btn:hover:not(:disabled) {
+  text-decoration: underline;
+  opacity: 0.88;
+}
+.approval-actions-btn-allow {
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-weight: var(--fw-semibold);
+  text-decoration: underline;
+}
+.approval-actions-btn-deny {
+  background: none;
+  border: none;
+  color: var(--danger);
+  text-decoration: underline;
+}
+.approval-actions-btn-cancel {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  text-decoration: underline;
+}
+.approval-actions-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  text-decoration: underline;
+}
+.approval-block {
+  padding: 8px 0;
+}

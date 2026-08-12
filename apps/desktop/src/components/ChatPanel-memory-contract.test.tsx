@@ -5,7 +5,10 @@ import { describe, it } from 'node:test'
 const panel = readFileSync(new URL('./ChatPanel.tsx', import.meta.url), 'utf8')
 const rightPanel = readFileSync(new URL('./RightPanel.tsx', import.meta.url), 'utf8')
 const memoryPanel = readFileSync(new URL('./MemoryPanel.tsx', import.meta.url), 'utf8')
-const chatCss = readFileSync(new URL('../styles/04-chat.css', import.meta.url), 'utf8')
+const chatHeaderCss = readFileSync(
+  new URL('../styles/chat/00-header.css', import.meta.url),
+  'utf8',
+)
 const inspectorCss = readFileSync(
   new URL('../styles/05-worker-inspector.css', import.meta.url),
   'utf8',
@@ -26,7 +29,7 @@ describe('Chat project memory header contract', () => {
     assert.match(panel, /key="memory-off"/u)
     assert.match(panel, /<AnimatePresence initial=\{false\} mode="wait">/u)
     assert.match(panel, /reduceMotion/u)
-    assert.match(chatCss, /\.chat-head-tool-memory\.is-memory-on/u)
+    assert.match(chatHeaderCss, /\.chat-head-tool-memory\.is-memory-on/u)
     assert.match(inspectorCss, /html\[data-motion='reduce'\] \.memory-panel-switch-thumb/u)
   })
 

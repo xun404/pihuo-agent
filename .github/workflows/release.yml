@@ -36,6 +36,7 @@ jobs:
       - run: npm run verify:workflows
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run check:source-size
       - run: npm run format:check
       - run: npm run build
 

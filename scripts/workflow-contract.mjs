@@ -17,6 +17,23 @@ const NATIVE_PACKAGE_TARGETS = [
   },
 ]
 
+const REQUIRED_QUALITY_COMMANDS = [
+  'npm test',
+  'npm run typecheck',
+  'npm run check:source-size',
+  'npm run build',
+]
+
+function validateQualityCommands(job, label) {
+  assert(job, `${label} quality job is required`)
+  const commands = (job.steps ?? [])
+    .map((step) => (typeof step?.run === 'string' ? step.run : ''))
+    .join('\n')
+  for (const command of REQUIRED_QUALITY_COMMANDS) {
+    assert(commands.includes(command), `${label} quality job must run ${command}`)
+  }
+}
+
 function validateNativePackageJob(job, label) {
   const entries = job?.strategy?.matrix?.include
   assert(Array.isArray(entries), `${label} package matrix is required`)
@@ -49,19 +66,12 @@ export function validateCiWorkflow(workflow) {
   assert(Object.hasOwn(workflow?.on ?? {}, 'pull_request'), 'CI must run on pull_request')
   assert(workflow?.on?.push?.branches?.includes('main'), 'CI must run on pushes to main')
   assert(workflow?.permissions?.contents === 'read', 'CI workflow must use contents: read')
-  assert(workflow?.jobs?.quality, 'CI quality job is required')
+  validateQualityCommands(workflow?.jobs?.quality, 'CI')
   // Packaging is expensive and release-gated; PR/main CI is quality-only.
   assert(
     !workflow?.jobs?.package,
     'CI must not define a package job; desktop packaging runs only on release tags',
   )
-
-  const qualityCommands = (workflow.jobs.quality?.steps ?? [])
-    .map((step) => (typeof step?.run === 'string' ? step.run : ''))
-    .join('\n')
-  for (const command of ['npm test', 'npm run typecheck', 'npm run build']) {
-    assert(qualityCommands.includes(command), `CI quality job must run ${command}`)
-  }
 }
 
 export function validateReleaseWorkflow(workflow) {
@@ -74,6 +84,7 @@ export function validateReleaseWorkflow(workflow) {
     workflow?.permissions?.contents === 'read',
     'Release workflow must default to contents: read',
   )
+  validateQualityCommands(workflow?.jobs?.quality, 'Release')
   assert(workflow?.jobs?.package, 'Release package job is required')
   assert(workflow?.jobs?.release, 'Release aggregation job is required')
   assert(

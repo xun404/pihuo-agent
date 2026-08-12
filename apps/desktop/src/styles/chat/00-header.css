@@ -1,0 +1,247 @@
+/* —— Chat —— */
+.chat-head {
+  position: relative;
+  z-index: 1;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-4) 0 var(--sp-3);
+  flex-shrink: 0;
+  /* 会话标题条可拖拽窗口 */
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.chat-head button,
+.chat-head .icon-btn,
+.chat-head a,
+.chat-head input,
+.chat-head .title-input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* Title group: the visible <span> + hover-revealed edit affordance */
+.chat-head .title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(60%, 420px);
+}
+.chat-head .title {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-head .title.untitled {
+  color: var(--text-3);
+  font-weight: var(--fw-medium);
+  font-style: italic;
+}
+.chat-head .title-edit-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  opacity: 0;
+  transition:
+    opacity var(--dur-instant) ease,
+    color var(--dur-instant) ease,
+    background var(--dur-instant) ease;
+  cursor: pointer;
+}
+.chat-head:hover .title-edit-btn,
+.chat-head .title-edit-btn:focus-visible {
+  opacity: 1;
+}
+.chat-head .title-edit-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  opacity: 1;
+}
+/* Inline rename input — replaces the title span when editing.
+   Mirrors .settings-input focus treatment so it adapts to every palette
+   via the same --blue / --blue-soft tokens. */
+.chat-head .title-input {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  flex: 0 1 min(60%, 420px);
+  min-width: 80px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  outline: none;
+}
+.chat-head .title-input:focus {
+  border-color: color-mix(in srgb, var(--blue) 50%, var(--border));
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+.chat-head .spacer {
+  flex: 1;
+  min-width: 8px;
+}
+.chat-head .icon-btn {
+  flex-shrink: 0;
+}
+.chat-head-tools {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.chat-head-tool-btn {
+  position: relative;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.chat-head-tool-btn:active {
+  transform: scale(0.94);
+}
+.chat-head-tool-btn.is-active {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.chat-head-tool-memory {
+  color: var(--text-2);
+}
+.chat-head-tool-memory.is-memory-on,
+.chat-head-tool-memory.is-memory-off {
+  color: var(--text-2);
+}
+.chat-head-tool-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: var(--r-pill);
+  background: var(--blue);
+  color: var(--text-inv, #fff);
+  font-size: var(--chat-badge-size);
+  font-weight: var(--fw-semibold);
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 1.5px var(--bg-main);
+  animation: chat-head-badge-in 0.22s var(--ease-out) both;
+}
+.chat-head-tool-badge.is-warn {
+  background: var(--accent, var(--danger));
+}
+@keyframes chat-head-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.chat-inspector-bubble {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(72vh, 680px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform-origin: top right;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-popover, var(--shadow-composer, 0 12px 40px rgba(0, 0, 0, 0.18)));
+  will-change: opacity, transform;
+}
+.chat-inspector-bubble-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(72vh, 680px);
+  overflow: hidden;
+}
+.chat-inspector-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(72vh, 680px);
+  overflow: hidden;
+  background: transparent;
+}
+.chat-inspector-panel .drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  max-height: min(72vh, 680px);
+}
+/* Reduce-motion: skip badge pop and press scale */
+html[data-motion='reduce'] .chat-head-tool-badge {
+  animation: none;
+}
+html[data-motion='reduce'] .chat-head-tool-btn:active {
+  transform: none;
+}
+.badge {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+.badge.mode {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.badge.run {
+  background: var(--green-soft);
+  color: var(--green);
+  letter-spacing: 0.01em;
+}
+.badge.offline {
+  background: var(--danger-soft);
+  color: var(--danger);
+  letter-spacing: 0.01em;
+}
+.icon-btn {
+  width: var(--h-sm);
+  height: var(--h-sm);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  border: none;
+  background: transparent;
+}
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}

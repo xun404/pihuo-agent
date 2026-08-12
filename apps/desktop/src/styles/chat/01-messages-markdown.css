@@ -1,0 +1,800 @@
+
+/* =========================================================
+   对话 + Worker（线稿 wireframe-v2 §Chat 1:1）
+   消息列与 composer 同宽、底部重叠衔接
+   ========================================================= */
+
+/* 滚动容器铺满主栏，滚动条贴最右侧 */
+.messages-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: 100%;
+  /* 底部让出与 composer 重叠的可视区，避免末条被挡住 */
+  padding-bottom: 0;
+}
+.messages {
+  flex: 1;
+  /* 底 padding 加大：内容可滚进 composer 渐变带，末条不硬切 */
+  padding: var(--sp-4) var(--sp-6) calc(var(--sp-8) + 64px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5); /* 消息与消息：拉开视觉分段 */
+  max-width: var(--messages-max);
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* 同列对齐：用户/Leader 共用列宽；用户气泡右缘 = Leader 内容右缘 */
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0; /* 允许内部错误卡等收缩，避免撑破右缘 */
+  position: relative;
+}
+/* 轮次分隔：Leader 轮与下一轮之间用轻线（不打断首轮） */
+.msg.user + .msg.leader,
+.msg.leader + .msg.user {
+  margin-top: 2px;
+}
+/* ============ Context-compaction separator marker (/compact or popup button) ============
+   Layout: [line] — [icon] status text — [line], muted color, single row.
+   Status drives the text + motion: `running` gets a gradient sweep animation
+   (the only motion — no spinner); success/failed/skipped are static. */
+.compaction-marker {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-2);
+  width: 100%;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--ls-label);
+}
+.compaction-marker .cm-line {
+  flex: 1;
+  height: 1px;
+  min-width: var(--sp-8);
+  background: var(--border);
+}
+.compaction-marker .cm-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.compaction-marker .cm-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* running: gradient-sweep text (compression in progress), brand color but muted */
+.compaction-marker.is-running {
+  color: var(--accent);
+}
+.compaction-marker.is-running .cm-label {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 50%, transparent),
+    var(--accent),
+    color-mix(in srgb, var(--accent) 50%, transparent)
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: cm-sweep 1.6s linear infinite;
+  font-weight: var(--fw-medium);
+}
+@keyframes cm-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+.compaction-marker.is-success {
+  color: var(--text-3);
+}
+.compaction-marker.is-failed {
+  color: var(--danger);
+}
+.compaction-marker.is-skipped {
+  color: var(--text-4);
+}
+.msg.user {
+  align-items: flex-end;
+}
+/* Leader：过程块等距；整段消息块用内边距形成阅读岛 */
+/* ============================================================
+   Leader 扁平布局：.sup-body 仍为内容列容器（无 sup-card 卡片壳）。
+   旧 sup-card / sup-header / Supervisor 头像样式已移除。
+   ============================================================ */
+.sup-status .pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.sup-status {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.sup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sup-text {
+  font-size: var(--fs-md);
+  line-height: var(--chat-body-line-height);
+  color: var(--chat-assistant-message, var(--text-1));
+  padding: 2px 0;
+}
+.sup-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-top: var(--sp-1);
+  border-top: 1px solid var(--chat-divider, var(--border-soft));
+  font-size: var(--chat-meta-size);
+  color: var(--chat-timestamp, var(--text-3));
+}
+.sup-footer-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sup-footer-meta.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.sup-footer-sep {
+  opacity: 0.5;
+  user-select: none;
+}
+
+/* ============ Leader 扁平 footer（lead-footer）============
+   运行中：模型 · 当前动作；结束后：模型 · 思考强度 · 耗时 · 开始时间。 */
+.lead-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  margin-top: 8px;
+  font-size: var(--chat-meta-size);
+  color: var(--chat-timestamp, var(--text-3));
+  opacity: 0.6;
+}
+.lead-footer-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lead-footer-meta.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.lead-footer-meta svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+/* 仅供应商 icon：不参与 footer 灰化/降透，并略大一号 */
+.lead-footer-provider {
+  color: var(--text-1) !important;
+  flex-shrink: 0;
+  /* 抵消父级 opacity: 0.6，视觉恢复满透 */
+  opacity: calc(1 / 0.6);
+}
+.lead-footer-provider svg {
+  width: 14px;
+  height: 14px;
+  color: inherit;
+}
+.lead-footer-text {
+  min-width: 0;
+}
+.lead-footer-separator {
+  color: var(--text-4);
+  user-select: none;
+}
+.lead-footer-action {
+  color: var(--text-2);
+}
+/* Leader footer copy button: appended at the end, shown on message hover.
+   Revealed at calc(1/0.6) to offset the .lead-footer opacity: 0.6 parent
+   (same compensation as .lead-footer-provider). */
+.lead-footer-copy {
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast, 0.15s) ease,
+    color var(--dur-fast, 0.15s) ease,
+    background var(--dur-fast, 0.15s) ease;
+}
+.msg.leader:hover .lead-footer-copy,
+.msg.leader:focus-within .lead-footer-copy {
+  opacity: calc(1 / 0.6);
+  pointer-events: auto;
+}
+
+/* ============ TaskListCard（data-signal 任务列表）============
+   inline 渲染在 Leader 消息流里。线稿 icon-spec-v3 配色。
+   全用 CSS 变量，三套主题自动适配。 */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 1px 0;
+}
+.task-process-row {
+  width: 100%;
+  min-width: 0;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 8px 4px 1px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  transition: background var(--dur-fast) ease;
+}
+.task-row:hover {
+  background: color-mix(in srgb, var(--bg-hover) 62%, transparent);
+}
+.task-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.task-row-icon svg {
+  width: 14px;
+  height: 14px;
+}
+/* 状态样式 */
+.task-completed {
+  color: var(--text-3);
+}
+.task-completed .task-row-icon svg {
+  color: var(--green);
+}
+.task-in_progress {
+  color: var(--text-2);
+  font-weight: var(--fw-regular);
+}
+.task-in_progress .task-row-icon svg {
+  color: var(--text-3);
+}
+.task-pending .task-row-icon svg {
+  color: var(--text-4);
+}
+.task-row-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: var(--chat-process-summary-line-height);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.task-row-role-text {
+  color: inherit;
+  font: inherit;
+}
+.task-row-preview {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+}
+.task-row-collapse {
+  width: 100%;
+}
+.task-row-detail {
+  min-width: 0;
+  color: var(--text-3);
+  font-size: var(--chat-process-size);
+  font-weight: var(--fw-regular);
+  line-height: var(--chat-code-line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* leader 扁平消息间距 */
+.msg.leader {
+  align-items: stretch;
+  gap: 5px;
+  box-sizing: border-box;
+}
+.msg.leader + .msg.leader {
+  margin-top: 2px;
+}
+.msg.user + .msg.leader,
+.msg.leader + .msg.user {
+  margin-top: 2px;
+}
+.msg.user {
+  padding: 0 2px;
+}
+
+/* Leader / 默认气泡（用户见下） */
+.msg .bubble {
+  padding: var(--sp-3) 14px;
+  border-radius: var(--r-xl);
+  font-size: var(--fs-base);
+  line-height: var(--lh-relaxed);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-md);
+  max-width: min(520px, 85%);
+  color: var(--text-1);
+  box-sizing: border-box;
+}
+/* 用户：浅蓝、无描边阴影，右缘贴消息列 */
+.msg.user .bubble {
+  background: var(--chat-user-message-background, var(--blue-soft));
+  color: var(--chat-user-message, var(--text-1));
+  border-color: transparent;
+  box-shadow: none;
+  margin-right: 0;
+  margin-left: auto;
+  max-width: min(520px, 85%);
+  width: fit-content;
+  align-self: flex-end;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* 用户气泡悬浮操作：发送时间 + 复制，hover 消息时才显示。
+   visibility 保持 visible，仅用 opacity + pointer-events 隐藏：
+   按钮仍在 Tab 序中，键盘聚焦（:focus-within）即可显示并操作。 */
+.msg-user-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-end;
+  padding: 2px 4px 0;
+  font-size: var(--chat-micro-size);
+  color: var(--text-3);
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast, 0.15s) ease;
+}
+.msg.user:hover .msg-user-actions,
+.msg.user:focus-within .msg-user-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.msg-user-time {
+  font-variant-numeric: tabular-nums;
+}
+.msg-user-copy,
+.lead-footer-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md, 4px);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast, 0.15s) ease,
+    background var(--dur-fast, 0.15s) ease;
+}
+.msg-user-copy:hover,
+.lead-footer-copy:hover {
+  color: var(--text-1);
+  background: var(--bg-hover, var(--border-soft));
+}
+.msg-user-copy svg,
+.lead-footer-copy svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+/* Leader：无气泡壳；正文层级高于过程层（思考/工具） */
+.msg.leader .bubble {
+  background: var(--chat-assistant-message-background, transparent);
+  border: none;
+  box-shadow: none;
+  padding: 4px 0 2px;
+  font-size: var(--fs-md);
+  line-height: var(--chat-body-line-height);
+  width: auto;
+  max-width: none;
+  color: var(--chat-assistant-message, var(--text-1));
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  box-sizing: border-box;
+}
+
+/* —— Markdown 正文：主阅读层，对比过程旁注更清晰 —— */
+.msg.leader .md-content {
+  font-family: var(--font-prose, var(--font));
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  color: var(--chat-assistant-message, var(--text-1));
+  font-weight: var(--fw-regular);
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.msg.leader .md-content p {
+  margin: 0 0 0.65em;
+}
+.msg.leader .md-content p:last-child {
+  margin-bottom: 0;
+}
+.msg.leader .md-content strong {
+  font-weight: var(--fw-bold);
+  color: var(--markdown-bold, var(--chat-assistant-message, var(--text-1)));
+}
+/* 标题：em 相对尺寸 */
+.sup-text h1,
+.sup-text.md-content h1 {
+  font-family: var(--font-prose, var(--font));
+  font-size: var(--chat-heading-h1-size);
+  font-weight: var(--fw-semibold);
+  color: var(--markdown-heading-1, var(--text-1));
+  letter-spacing: var(--chat-heading-tight);
+  margin: 0.8em 0 0.35em;
+  line-height: var(--chat-heading-line-height);
+}
+.sup-text h2,
+.sup-text.md-content h2 {
+  font-family: var(--font-prose, var(--font));
+  font-size: var(--chat-heading-h2-size);
+  font-weight: var(--fw-semibold);
+  color: var(--markdown-heading-2, var(--text-1));
+  letter-spacing: var(--chat-heading-snug);
+  margin: 0.7em 0 0.3em;
+  line-height: var(--chat-heading-line-height);
+}
+.sup-text h3,
+.sup-text.md-content h3 {
+  font-family: var(--font-prose, var(--font));
+  font-size: 1em;
+  font-weight: var(--fw-semibold);
+  color: var(--markdown-heading-3, var(--text-1));
+  margin: 0.6em 0 0.25em;
+  line-height: var(--chat-heading-line-height);
+}
+.sup-text h4,
+.sup-text h5,
+.sup-text h6,
+.sup-text.md-content h4,
+.sup-text.md-content h5,
+.sup-text.md-content h6 {
+  font-family: var(--font-prose, var(--font));
+  font-size: 1em;
+  font-weight: var(--fw-semibold);
+  color: var(--markdown-heading-4, var(--text-1));
+  margin: 0.5em 0 0.2em;
+  line-height: var(--chat-heading-line-height);
+}
+.msg.leader .md-content h1:first-child,
+.msg.leader .md-content h2:first-child,
+.msg.leader .md-content h3:first-child,
+.msg.leader .md-content h4:first-child {
+  margin-top: 0.15em;
+}
+.msg.leader .md-content pre,
+.sup-text pre,
+.sup-text.md-content .md-pre {
+  background: var(--bg-input);
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: var(--chat-code-size);
+  color: var(--text-2);
+  line-height: var(--chat-code-line-height);
+  border: 1px solid var(--border-soft);
+  margin: 0.4em 0;
+}
+/* —— Chat fenced code: header + line numbers + syntax —— */
+.md-code-block-wrap {
+  margin: 0.55em 0 0.7em;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-input);
+  overflow: hidden;
+  max-width: 100%;
+}
+.md-code-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-surface, var(--bg-main)) 55%, var(--bg-input));
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  user-select: none;
+}
+.md-code-block-lang {
+  font-family: var(--mono);
+  font-size: var(--chat-meta-size);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-2);
+  font-weight: var(--fw-medium);
+  min-width: 0;
+}
+.md-code-block-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.md-code-block-action,
+.md-code-block-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: var(--chat-meta-size);
+  cursor: pointer;
+  transition:
+    color var(--dur-instant) var(--ease-out),
+    background var(--dur-instant) var(--ease-out);
+}
+.md-code-block-action:hover,
+.md-code-block-copy:hover {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+}
+.md-code-block-action.is-on {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 8%, transparent);
+}
+.md-code-block-copy.is-copied {
+  color: var(--green, #1a9e5c);
+}
+.md-code-block-wrap > .md-code-block,
+.msg.leader .md-content .md-code-block-wrap > .md-code-block,
+.sup-text.md-content .md-code-block-wrap > .md-code-block {
+  margin: 0;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: var(--chat-code-size);
+  line-height: var(--chat-code-line-height);
+  color: var(--text-1);
+  max-width: 100%;
+}
+.md-code-line {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+.md-code-block.is-nowrap .md-code-line {
+  min-width: min-content;
+}
+.md-code-block.is-wrap .md-code-line {
+  min-width: 0;
+}
+.md-code-line:hover {
+  background: color-mix(in srgb, var(--text-1) 3.5%, transparent);
+}
+.md-code-ln {
+  flex: 0 0 auto;
+  width: calc(var(--md-gutter-ch, 2ch) + 1.6em);
+  padding: 0 10px 0 12px;
+  text-align: right;
+  color: var(--text-4, var(--text-3));
+  user-select: none;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--border-soft);
+}
+.md-code-src {
+  flex: 1 1 auto;
+  padding: 0 12px 0 12px;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: var(--fw-regular);
+  background: transparent !important;
+  color: inherit;
+  min-width: 0;
+}
+.md-code-block.is-nowrap .md-code-src {
+  white-space: pre;
+}
+.md-code-block.is-wrap .md-code-src {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+/* empty line still needs height */
+.md-code-src:empty::after {
+  content: ' ';
+  white-space: pre;
+}
+.msg.leader .md-content code,
+.sup-text code,
+.sup-text.md-content code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  font-weight: var(--fw-medium);
+}
+/* blockquote：左竖线 + 次级色（对齐线稿）*/
+.sup-text blockquote,
+.sup-text.md-content blockquote {
+  margin: 0.5em 0;
+  padding: 0.3em 0 0.3em 0.9em;
+  border-left: 2px solid var(--markdown-blockquote-border, var(--border));
+  color: var(--markdown-blockquote, var(--text-3));
+}
+.sup-text blockquote p,
+.sup-text.md-content blockquote p {
+  margin: 0;
+}
+/* Markdown 分隔线：覆盖浏览器默认的 inset 边框，跟随主题分隔线颜色。 */
+.sup-text hr,
+.sup-text.md-content hr {
+  height: 0;
+  margin: 0.9em 0;
+  border: 0;
+  border-top: 1px solid var(--chat-divider, var(--border-soft));
+  opacity: 0.7;
+}
+/* 链接：蓝（对齐线稿）*/
+.sup-text a,
+.sup-text.md-content a {
+  color: var(--markdown-link, var(--blue));
+  text-decoration: none;
+}
+.sup-text a:hover,
+.sup-text.md-content a:hover {
+  color: var(--markdown-link-hover, var(--blue));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* inline code：弱化底色（从 accent-soft 改为 bg-input）*/
+.sup-text .md-code-inline,
+.sup-text.md-content .md-code-inline {
+  color: var(--markdown-inline-code, var(--text-1));
+  background: var(--markdown-inline-code-background, var(--bg-input));
+  padding: 0.08em 0.35em;
+  border-radius: var(--r-xs);
+}
+.sup-text .md-code-block,
+.sup-text.md-content .md-code-block {
+  color: var(--markdown-inline-code, var(--text-1));
+}
+/* worker reply markdown reuses the same block chrome */
+.worker-action-markdown .md-code-block-wrap {
+  margin: 0.4em 0;
+}
+.sup-text strong code,
+.sup-text.md-content strong code {
+  color: inherit;
+}
+/* 列表：en-dash 标记替代原生 disc */
+.sup-text ul,
+.sup-text.md-content ul {
+  list-style: none;
+  padding-left: 1.4em;
+  margin: 0.3em 0 0.55em;
+}
+.sup-text ul > li,
+.sup-text.md-content ul > li {
+  position: relative;
+  margin: 0.1em 0;
+}
+.sup-text ul > li::before,
+.sup-text.md-content ul > li::before {
+  content: '\2013'; /* en-dash – */
+  position: absolute;
+  left: -1.1em;
+  color: var(--markdown-list-marker, var(--text-3));
+}
+.sup-text ol,
+.sup-text.md-content ol {
+  list-style: decimal;
+  list-style-position: outside;
+  padding-left: 1.6em;
+  margin: 0.3em 0 0.55em;
+}
+.sup-text ol > li,
+.sup-text.md-content ol > li {
+  margin: 0.1em 0;
+}
+
+/* —— 表格：明显的边框 + 表头底色 —— */
+.msg.leader .md-content .md-table-wrap {
+  overflow-x: auto;
+  margin: 0.5em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.msg.leader .md-content table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+}
+.msg.leader .md-content th,
+.msg.leader .md-content td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.msg.leader .md-content th {
+  background: color-mix(in srgb, var(--bg-input) 85%, transparent);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.msg.leader .md-content tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-input) 40%, transparent);
+}
+.msg.user .md-content {
+  font-size: inherit;
+  line-height: inherit;
+}
+.msg.user .bubble {
+  line-height: var(--lh-relaxed);
+}
+
+/*
+ * 过程层：思考 / 工具 —— 旁注芯片 + 左边线思考体；块与块等距
+ * 参考：折叠「思考」、工具行「图标 名称 0.1s 命令预览」、正文主阅读层
+ */
+/* 过程块竖向间距只靠 gap；勿用 margin:0 冲掉左右内缩 */
+.msg.leader > .chat-tool-worker-stack {
+  margin-top: 0;
+  margin-bottom: 0;
+}

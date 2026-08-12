@@ -116,6 +116,17 @@ describe('acp-registry-api', () => {
     saveAcpAgentInstallationIndex({ version: 1, installations: [] })
   }
 
+  const registryTestDependencies = {
+    // Model refresh is deliberately detached in production. Registry lifecycle
+    // tests instead use a no-op so a refresh from one fixture cannot write to
+    // a later fixture's freshly reset shared Store.
+    refreshModels: async () => undefined as never,
+  }
+
+  function registerRegistryForTest(body: Parameters<typeof apiRegisterRegistry>[0]) {
+    return apiRegisterRegistry(body, registryTestDependencies)
+  }
+
   async function registerSeededWorker(input: {
     installationId: string
     version?: string
@@ -126,7 +137,7 @@ describe('acp-registry-api', () => {
     const digest = input.digest ?? manifestDigest
     const prepared = await seedInstallation({ version, digest })
     return (
-      await apiRegisterRegistry({
+      await registerRegistryForTest({
         registryId: 'api-agent',
         version,
         distribution: 'npx',
@@ -142,7 +153,7 @@ describe('acp-registry-api', () => {
     resetSharedStoreForTests()
     const prepared = await seedInstallation({})
     const worker = (
-      await apiRegisterRegistry({
+      await registerRegistryForTest({
         registryId: 'api-agent',
         version: '1.0.0',
         distribution: 'npx',
@@ -285,7 +296,7 @@ describe('acp-registry-api', () => {
     )
     assert.ok(prepared.installationId)
 
-    const registered = await apiRegisterRegistry({
+    const registered = await registerRegistryForTest({
       registryId: 'api-agent',
       version: '1.0.0',
       distribution: 'npx',
@@ -335,7 +346,7 @@ describe('acp-registry-api', () => {
   it('blocks automatic and manual cleanup while a live or persisted Session references installation', async () => {
     resetInstallations()
     const prepared = await seedInstallation({})
-    const registered = await apiRegisterRegistry({
+    const registered = await registerRegistryForTest({
       registryId: 'api-agent',
       version: '1.0.0',
       distribution: 'npx',
@@ -420,7 +431,7 @@ describe('acp-registry-api', () => {
   it('still blocks deletion when the Worker has open jobs (WORKER_HAS_OPEN_JOBS)', async () => {
     resetInstallations()
     const prepared = await seedInstallation({})
-    const registered = await apiRegisterRegistry({
+    const registered = await registerRegistryForTest({
       registryId: 'api-agent',
       version: '1.0.0',
       distribution: 'npx',
@@ -471,7 +482,7 @@ describe('acp-registry-api', () => {
   it('maps legacy Session worker references to the current installation', async () => {
     resetInstallations()
     const prepared = await seedInstallation({})
-    const registered = await apiRegisterRegistry({
+    const registered = await registerRegistryForTest({
       registryId: 'api-agent',
       version: '1.0.0',
       distribution: 'npx',
@@ -1697,7 +1708,7 @@ describe('acp-registry-api', () => {
       digest: manifestDigestV2,
     })
     const blocker = (
-      await apiRegisterRegistry({
+      await registerRegistryForTest({
         registryId: 'api-agent',
         version: '2.0.0',
         distribution: 'npx',

@@ -15,6 +15,7 @@ describe('GitHub Actions workflow contract', () => {
               { run: 'npm test' },
               { run: 'npm run typecheck' },
               { run: 'npm run lint' },
+              { run: 'npm run check:source-size' },
               { run: 'npm run build' },
             ],
           },
@@ -31,7 +32,12 @@ describe('GitHub Actions workflow contract', () => {
           permissions: { contents: 'write' },
           jobs: {
             quality: {
-              steps: [{ run: 'npm test' }, { run: 'npm run typecheck' }, { run: 'npm run build' }],
+              steps: [
+                { run: 'npm test' },
+                { run: 'npm run typecheck' },
+                { run: 'npm run check:source-size' },
+                { run: 'npm run build' },
+              ],
             },
           },
         }),
@@ -47,7 +53,12 @@ describe('GitHub Actions workflow contract', () => {
           permissions: { contents: 'read' },
           jobs: {
             quality: {
-              steps: [{ run: 'npm test' }, { run: 'npm run typecheck' }, { run: 'npm run build' }],
+              steps: [
+                { run: 'npm test' },
+                { run: 'npm run typecheck' },
+                { run: 'npm run check:source-size' },
+                { run: 'npm run build' },
+              ],
             },
             package: {
               strategy: {
@@ -69,7 +80,7 @@ describe('GitHub Actions workflow contract', () => {
     )
   })
 
-  it('requires CI quality to run tests, typecheck, and build', () => {
+  it('requires CI quality to run tests, typecheck, source-size policy, and build', () => {
     assert.throws(
       () =>
         validateCiWorkflow({
@@ -81,7 +92,23 @@ describe('GitHub Actions workflow contract', () => {
             },
           },
         }),
-      /npm test|typecheck|build/,
+      /npm test|typecheck|check:source-size|build/,
+    )
+  })
+
+  it('rejects CI workflows that omit the source-size policy', () => {
+    assert.throws(
+      () =>
+        validateCiWorkflow({
+          on: { pull_request: null, push: { branches: ['main'] } },
+          permissions: { contents: 'read' },
+          jobs: {
+            quality: {
+              steps: [{ run: 'npm test' }, { run: 'npm run typecheck' }, { run: 'npm run build' }],
+            },
+          },
+        }),
+      /check:source-size/,
     )
   })
 
@@ -94,6 +121,14 @@ describe('GitHub Actions workflow contract', () => {
         },
         permissions: { contents: 'read' },
         jobs: {
+          quality: {
+            steps: [
+              { run: 'npm test' },
+              { run: 'npm run typecheck' },
+              { run: 'npm run check:source-size' },
+              { run: 'npm run build' },
+            ],
+          },
           package: {
             strategy: {
               matrix: {

@@ -48,25 +48,18 @@ import { useSendShortcut } from '../hooks/useSendShortcut'
 import type { SendShortcut } from '../lib/send-shortcut'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import type { MotionPreference } from '../lib/motion-preference'
-import { BrandLogo } from './BrandLogo'
-import { OpenSourceCredits } from './OpenSourceCredits'
 import { SettingsSelect } from './SettingsSelect'
 import { Expandable } from './ui/Expandable'
 
 const SETTINGS_TAB_EASE = [0.4, 0, 0.2, 1] as const
 
 import {
-  IconChevronLeft,
-  IconCpu,
   IconCrew,
-  IconInfo,
-  IconFileEdit,
-  IconSettings,
-  IconTrash,
-  IconWorkers,
   resolveWorkerIconAgentId,
   WorkerBrandLogo,
 } from './Icons'
+import { SettingsAboutTab } from './settings/SettingsAboutTab'
+import { type SettingsTabId, SettingsNavigation } from './settings/SettingsNavigation'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
 import type { Locale } from '../i18n/locales'
 import { formatContextWindow, parseContextWindow } from '../lib/context-window'
@@ -105,7 +98,7 @@ import {
   type DangerZoneStats,
 } from './settings-danger-zone'
 
-type TabId = 'general' | 'model' | 'prompts' | 'workers' | 'about'
+type TabId = SettingsTabId
 
 interface Props {
   onClose: () => void
@@ -3766,78 +3759,21 @@ export function SettingsPanel({
         </div>
       )}
 
-      {data && !loading && tab === 'about' && (
-        <div className="settings-about">
-          <h2 className="settings-page-title">{t('settings.navAbout')}</h2>
-          <p className="settings-page-desc">{t('settings.descAbout')}</p>
-          <div className="settings-form-card about-card">
-            <BrandLogo className="about-logo" size={56} title={t('app.title')} />
-            <div className="app-name">{t('app.title')}</div>
-            <div className="ver">Desktop · 0.1.0</div>
-            <p>{t('settings.aboutBody')}</p>
-            <p className="settings-muted" style={{ marginTop: 12 }}>
-              {t('settings.securityHint', {
-                storage: data.storage,
-                platform:
-                  data.platform ?? (typeof navigator !== 'undefined' ? navigator.platform : 'os'),
-              })}
-            </p>
-            {data.storagePaths && (
-              <div className="settings-mono" style={{ marginTop: 8 }}>
-                <div>
-                  {t('settings.storageRoot')}: {data.storagePaths.root}
-                </div>
-                <div>
-                  {t('settings.storageData')}: {data.storagePaths.data}
-                </div>
-                <div>
-                  {t('settings.storageCache')}: {data.storagePaths.cache}
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="settings-form-card about-oss-card">
-            <OpenSourceCredits />
-          </div>
-        </div>
-      )}
+      {data && !loading && tab === 'about' && <SettingsAboutTab data={data} t={t} />}
     </div>
   )
-
-  const navIcon = (id: TabId) => {
-    if (id === 'general') return <IconSettings size={16} />
-    if (id === 'model') return <IconCpu size={16} />
-    if (id === 'prompts') return <IconFileEdit size={16} />
-    if (id === 'workers') return <IconWorkers size={16} />
-    return <IconInfo size={16} />
-  }
 
   // 线稿 settings-shell：左侧 settings-nav（返回+四项），右侧 settings-main；无顶部大标题栏
   return (
     <div className="settings-shell">
-      <aside className="settings-nav" aria-label={t('settings.title')}>
-        {/* 系统 traffic lights 占位 + 拖拽区 */}
-        <div className="sidebar-top" aria-hidden />
-        <button type="button" className="settings-back" onClick={onClose}>
-          <IconChevronLeft size={14} />
-          {t('settings.back')}
-        </button>
-        <nav className="settings-nav-list">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`settings-nav-item${tab === item.id ? ' on' : ''}`}
-              onClick={() => setTab(item.id)}
-            >
-              <span className="glyph" aria-hidden>
-                {navIcon(item.id)}
-              </span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+      <SettingsNavigation
+        ariaLabel={t('settings.title')}
+        backLabel={t('settings.back')}
+        items={navItems}
+        onClose={onClose}
+        onTabChange={setTab}
+        tab={tab}
+      />
       <div className="settings-main">
         {/* Absolute titleband — does not push page title/desc down */}
         <div className="window-drag-top window-drag-top--overlay" aria-hidden />

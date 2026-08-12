@@ -5,7 +5,15 @@ import test from 'node:test'
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 const tokens = read('../styles/00-tokens.css')
-const chat = read('../styles/04-chat.css')
+const chatEntry = read('../styles/04-chat.css')
+const chat = [
+  '../styles/chat/00-header.css',
+  '../styles/chat/01-messages-markdown.css',
+  '../styles/chat/02-process-worker.css',
+  '../styles/chat/03-approvals-errors-navigation.css',
+]
+  .map(read)
+  .join('\n')
 const composer = read('../styles/03-composer.css')
 const inspector = read('../styles/05-worker-inspector.css')
 const shell = read('../styles/08-product-shell.css')
@@ -17,6 +25,7 @@ test('keeps text smoothing in the shared token layer', () => {
 })
 
 test('chat prose and process typography use semantic variables', () => {
+  assert.match(chatEntry, /@import '\.\/chat\/index\.css';/u)
   assert.match(chat, /font-size:\s*var\(--chat-body-size\)/u)
   assert.match(chat, /font-family:\s*var\(--font-prose/u)
   assert.match(chat, /font-size:\s*var\(--chat-process-size\)/u)
