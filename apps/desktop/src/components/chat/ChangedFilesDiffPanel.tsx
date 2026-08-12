@@ -5,7 +5,6 @@
  * - Unified / side-by-side, wrap, full-file context
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
 import {
   Check,
   ChevronDown,
@@ -24,6 +23,8 @@ import { gitStatusLetter, splitDisplayPath } from '../../lib/composer-status-hel
 import {
   countScopes,
   filterFilesByScope,
+  isStagedChange,
+  isWorkingChange,
   type DiffFileScope,
   type GitFileRow,
 } from '../../lib/git-file-scope'
@@ -53,6 +54,24 @@ type FileDiffState = {
   isBinary: boolean
   insertions: number
   deletions: number
+}
+
+/**
+ * The compact changed-files popover can open the viewer for one particular
+ * file. Prefer its working-tree diff when it has one; otherwise reveal it in
+ * the staged scope.
+ */
+export function scopeForInitialPath(
+  files: GitFileRow[],
+  initialPath: string | null | undefined,
+): DiffFileScope {
+  const file = initialPath ? files.find((candidate) => candidate.path === initialPath) : undefined
+  if (file && !isWorkingChange(file) && isStagedChange(file)) return 'staged'
+  return 'working'
+}
+
+export function expandedPathsForInitialPath(initialPath: string | null | undefined): Set<string> {
+  return initialPath ? new Set([initialPath]) : new Set()
 }
 
 /**
@@ -401,52 +420,72 @@ function FileDiffBlock({
   )
 }
 
-export function ChangedFilesDiffPanel({ open, onClose, projectId, files }: Props) {
+export function ChangedFilesDiffPanel({ open, onClose, projectId, files, initialPath }: Props) {
   const { t } = useI18n()
-  const [scope, setScope] = useState<DiffFileScope>('working')
+  const allFiles = files as GitFileRow[]
+  const [scope, setScope] = useState<DiffFileScope>(() =>
+    scopeForInitialPath(allFiles, initialPath),
+  )
   const [scopeOpen, setScopeOpen] = useState(false)
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [expanded, setExpanded] = useState<Set<string>>(() =>
+    expandedPathsForInitialPath(initialPath),
+  )
   const [layout, setLayout] = useState<DiffLayout>('unified')
   const [wrap, setWrap] = useState(false)
   const [fullFile, setFullFile] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const scopeMenuRef = useRef<HTMLDivElement>(null)
 
-  const allFiles = files as GitFileRow[]
   // Stable path signature — parent re-polls status and creates new array refs often.
   const filesSig = useMemo(() => allFiles.map((f) => f.path).join('\n'), [allFiles])
   const counts = useMemo(() => countScopes(allFiles), [allFiles])
   const visibleFiles = useMemo(() => filterFilesByScope(allFiles, scope), [allFiles, scope])
 
   const wasOpenRef = useRef(false)
-  const prevScopeRef = useRef(scope)
+  // Opening can move from a previously selected scope to the clicked file's
+  // scope. Hold the target until that state update has committed so the
+  // stale-scope cleanup below cannot remove the requested expansion first.
+  const openingScopeRef = useRef<DiffFileScope | null>(null)
 
-  // Every open: reset to defaults (no wrap, unified, not full-file, all collapsed).
+  // Every open: reset view options and reveal the file picked in the compact list.
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current
     wasOpenRef.current = open
     if (!justOpened) return
-    setScope('working')
-    prevScopeRef.current = 'working'
+    const initialScope = scopeForInitialPath(allFiles, initialPath)
+    openingScopeRef.current = initialScope
+    setScope(initialScope)
     setLayout('unified')
     setWrap(false)
     setFullFile(false)
-    setExpanded(new Set())
+    setExpanded(expandedPathsForInitialPath(initialPath))
     setScopeOpen(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open edge
-  }, [open])
+  }, [allFiles, initialPath, open])
 
-  // Scope switch: collapse all (user expands what they need).
+  const selectScope = useCallback(
+    (nextScope: DiffFileScope) => {
+      if (nextScope === scope) return
+      // Only an explicit scope change collapses rows. Opening a staged-only
+      // file also changes scope, but must preserve its requested expansion.
+      setScope(nextScope)
+      setExpanded(new Set())
+    },
+    [scope],
+  )
+
+  // Scope changes initiated from the menu collapse all rows; choosing a file
+  // from the compact list is handled separately above so it stays expanded.
+  const closeScopeMenuAfterSelection = (nextScope: DiffFileScope) => {
+    selectScope(nextScope)
+    setScopeOpen(false)
+  }
+
+  // `visibleFiles` can shrink after a status refresh. Keep an expanded path
+  // only while it is still visible in its current scope.
   useEffect(() => {
     if (!open) return
-    if (prevScopeRef.current === scope) return
-    prevScopeRef.current = scope
-    setExpanded(new Set())
-  }, [scope, open])
-
-  // Drop expand keys for paths that disappeared from the list (don't reset others).
-  useEffect(() => {
-    if (!open) return
+    if (openingScopeRef.current != null && scope !== openingScopeRef.current) return
+    openingScopeRef.current = null
     const valid = new Set(visibleFiles.map((f) => f.path))
     setExpanded((prev) => {
       let changed = false
@@ -457,7 +496,7 @@ export function ChangedFilesDiffPanel({ open, onClose, projectId, files }: Props
       }
       return changed ? next : prev
     })
-  }, [filesSig, open, visibleFiles])
+  }, [filesSig, open, scope, visibleFiles])
 
   useEffect(() => {
     if (!scopeOpen) return
@@ -537,8 +576,7 @@ export function ChangedFilesDiffPanel({ open, onClose, projectId, files }: Props
                       className={`diff-scope-option${scope === opt.id ? ' is-on' : ''}${disabled ? ' is-disabled' : ''}`}
                       onClick={() => {
                         if (disabled) return
-                        setScope(opt.id)
-                        setScopeOpen(false)
+                        closeScopeMenuAfterSelection(opt.id)
                       }}
                       title={disabled ? t('chat.diff.scope.turnHint') : undefined}
                     >

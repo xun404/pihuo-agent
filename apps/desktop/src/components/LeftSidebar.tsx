@@ -24,7 +24,6 @@ import {
   Folder,
   FolderOpen,
 } from './Icons'
-import { BrandLogo } from './BrandLogo'
 import { Modal } from './ui/Modal'
 import { Expandable } from './ui/Expandable'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
@@ -218,10 +217,14 @@ export function LeftSidebar({
       <div className="sidebar-top" aria-hidden />
 
       <div className="brand">
-        <span className="mark" aria-hidden>
-          <BrandLogo size={30} />
+        <span className="brand-name" aria-label={t('sidebar.brand')}>
+          <span className="brand-name-swarm" aria-hidden>
+            Swarm
+          </span>
+          <span className="brand-name-desk" aria-hidden>
+            Desk
+          </span>
         </span>
-        <span className="brand-name">{t('sidebar.brand')}</span>
       </div>
 
       <div className="nav-actions">

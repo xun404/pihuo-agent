@@ -2,12 +2,12 @@
   "version": 1,
   "source": "bundled",
   "mastraPackageVersion": "models.dev",
-  "generatedAt": "2026-08-03T11:55:59.685Z",
+  "generatedAt": "2026-08-11T10:07:41.344Z",
   "providers": [
     {
       "id": "openai",
       "name": "OpenAI",
-      "apiKeyEnvVar": "OPENAI_API_KEY",
+      "apiKeyEnvVar": "",
       "models": [
         {
           "id": "openai/gpt-image-2",
@@ -557,7 +557,7 @@
     {
       "id": "anthropic",
       "name": "Anthropic",
-      "apiKeyEnvVar": "ANTHROPIC_API_KEY",
+      "apiKeyEnvVar": "",
       "models": [
         {
           "id": "anthropic/claude-sonnet-4-6",
@@ -627,19 +627,6 @@
             "medium",
             "high",
             "xhigh",
-            "max"
-          ]
-        },
-        {
-          "id": "anthropic/claude-opus-4-1",
-          "label": "Claude Opus 4.1 (latest)",
-          "contextWindow": 200000,
-          "toolCall": true,
-          "multimodal": true,
-          "thinkingIntensities": [
-            "off",
-            "medium",
-            "high",
             "max"
           ]
         },
@@ -752,26 +739,13 @@
             "xhigh",
             "max"
           ]
-        },
-        {
-          "id": "anthropic/claude-opus-4-1-20250805",
-          "label": "Claude Opus 4.1",
-          "contextWindow": 200000,
-          "toolCall": true,
-          "multimodal": true,
-          "thinkingIntensities": [
-            "off",
-            "medium",
-            "high",
-            "max"
-          ]
         }
       ]
     },
     {
       "id": "google",
       "name": "Google",
-      "apiKeyEnvVar": "GOOGLE_API_KEY",
+      "apiKeyEnvVar": "",
       "models": [
         {
           "id": "google/gemini-2.5-computer-use-preview-10-2025",
@@ -1051,16 +1025,6 @@
           ]
         },
         {
-          "id": "google/gemini-2.0-flash",
-          "label": "Gemini 2.0 Flash",
-          "contextWindow": 1048576,
-          "toolCall": true,
-          "multimodal": true,
-          "thinkingIntensities": [
-            "off"
-          ]
-        },
-        {
           "id": "google/gemini-3.6-flash",
           "label": "Gemini 3.6 Flash",
           "contextWindow": 1048576,
@@ -1191,18 +1155,6 @@
           ]
         },
         {
-          "id": "google/gemini-3-pro-preview",
-          "label": "Gemini 3 Pro Preview",
-          "contextWindow": 1048576,
-          "toolCall": true,
-          "multimodal": true,
-          "thinkingIntensities": [
-            "off",
-            "low",
-            "high"
-          ]
-        },
-        {
           "id": "google/gemini-2.5-flash-lite",
           "label": "Gemini 2.5 Flash-Lite",
           "contextWindow": 1048576,
@@ -1219,16 +1171,6 @@
           "id": "google/gemini-2.5-pro-preview-tts",
           "label": "Gemini 2.5 Pro Preview TTS",
           "contextWindow": 8192,
-          "multimodal": true,
-          "thinkingIntensities": [
-            "off"
-          ]
-        },
-        {
-          "id": "google/gemini-2.0-flash-lite",
-          "label": "Gemini 2.0 Flash-Lite",
-          "contextWindow": 1048576,
-          "toolCall": true,
           "multimodal": true,
           "thinkingIntensities": [
             "off"
@@ -1252,7 +1194,7 @@
     {
       "id": "xai",
       "name": "xAI",
-      "apiKeyEnvVar": "XAI_API_KEY",
+      "apiKeyEnvVar": "",
       "models": [
         {
           "id": "xai/grok-imagine-video",
@@ -1370,7 +1312,7 @@
     {
       "id": "deepseek",
       "name": "DeepSeek",
-      "apiKeyEnvVar": "DEEPSEEK_API_KEY",
+      "apiKeyEnvVar": "",
       "models": [
         {
           "id": "deepseek/deepseek-v4-flash",
@@ -1379,6 +1321,7 @@
           "toolCall": true,
           "thinkingIntensities": [
             "off",
+            "low",
             "high",
             "max"
           ]
@@ -1420,7 +1363,7 @@
     {
       "id": "opencode-go",
       "name": "OpenCode Go",
-      "apiKeyEnvVar": "OPENCODE_API_KEY",
+      "apiKeyEnvVar": "",
       "models": [
         {
           "id": "opencode-go/qwen3.7-plus",
@@ -1487,11 +1430,12 @@
         },
         {
           "id": "opencode-go/deepseek-v4-flash",
-          "label": "DeepSeek V4 Flash (New)",
+          "label": "DeepSeek V4 Flash (2x usage)",
           "contextWindow": 1000000,
           "toolCall": true,
           "thinkingIntensities": [
             "off",
+            "low",
             "high",
             "max"
           ]

@@ -6,6 +6,18 @@ const sidebar = readFileSync(new URL('./LeftSidebar.tsx', import.meta.url), 'utf
 const settings = readFileSync(new URL('./SettingsPanel.tsx', import.meta.url), 'utf8')
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
 const library = readFileSync(new URL('./TeamTemplateLibrary.tsx', import.meta.url), 'utf8')
+const shellStyles = readFileSync(new URL('../styles/01-shell.css', import.meta.url), 'utf8')
+
+test('sidebar brand keeps the animated wordmark without an app icon', () => {
+  assert.match(sidebar, /className="brand-name"/u)
+  assert.match(sidebar, /brand-name-swarm/u)
+  assert.match(sidebar, /brand-name-desk/u)
+  assert.doesNotMatch(sidebar, /BrandLogo/u)
+  assert.doesNotMatch(sidebar, /className="mark"/u)
+  assert.match(shellStyles, /brand-swarm-flow/u)
+  assert.match(shellStyles, /brand-desk-flow/u)
+  assert.doesNotMatch(shellStyles, /brand-route-flow/u)
+})
 
 test('left sidebar exposes a Crews section under Agent Worker', () => {
   assert.match(sidebar, /settings\.navWorkers/u)

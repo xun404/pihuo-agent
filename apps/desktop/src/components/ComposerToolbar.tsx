@@ -4,13 +4,16 @@ import type { SessionPermissionMode } from '@swarmdesk-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   THINKING_INTENSITY_OPTIONS,
-  defaultThinkingFor,
   saveThinkingIntensity,
   type ThinkingIntensity,
 } from '../lib/settings'
+import {
+  rememberModelThinkingIntensity,
+  resolveModelThinkingIntensity,
+} from '../lib/model-thinking-memory'
 import { ProviderLogo } from '../lib/provider-icons'
 import { formatTokenCountDisplay } from '../lib/context-window'
-import { ContextRing, IconCheck } from './Icons'
+import { ContextRing, IconCheck, Zap, ZapOff } from './Icons'
 import type { Locale } from '../i18n/locales'
 import { PermissionModeAction } from './PermissionModeAction'
 
@@ -60,6 +63,184 @@ const THINK_LABEL_KEY: Record<
   max: 'chat.think.max',
 }
 
+const THINKING_INTENSITY_RANK: Record<ThinkingIntensity, number> = {
+  off: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  xhigh: 4,
+  max: 5,
+}
+
+type ThinkingParticle = Readonly<{
+  top: string
+  size: number
+  duration: string
+  delay: string
+  drift: string
+  opacity: number
+}>
+
+// A deliberately uneven constellation: distinct lanes, sizes, phases, and
+// durations prevent the MAX treatment from reading as a marching dotted line.
+// Negative delays make the field feel populated the instant MAX is selected.
+const MAX_THINKING_PARTICLES: readonly ThinkingParticle[] = [
+  { top: '18%', size: 2.4, duration: '1.06s', delay: '-0.12s', drift: '-2px', opacity: 0.92 },
+  { top: '68%', size: 1.6, duration: '1.74s', delay: '-0.68s', drift: '2px', opacity: 0.64 },
+  { top: '36%', size: 2.8, duration: '1.31s', delay: '-0.41s', drift: '1px', opacity: 0.98 },
+  { top: '82%', size: 1.3, duration: '2.08s', delay: '-1.36s', drift: '-2px', opacity: 0.56 },
+  { top: '52%', size: 2.1, duration: '1.48s', delay: '-0.93s', drift: '3px', opacity: 0.82 },
+  { top: '12%', size: 1.4, duration: '1.91s', delay: '-0.25s', drift: '2px', opacity: 0.68 },
+  { top: '74%', size: 2.5, duration: '1.19s', delay: '-0.79s', drift: '-1px', opacity: 0.88 },
+  { top: '44%', size: 1.7, duration: '2.26s', delay: '-1.82s', drift: '-3px', opacity: 0.62 },
+  { top: '26%', size: 2.2, duration: '1.57s', delay: '-1.14s', drift: '2px', opacity: 0.78 },
+  { top: '88%', size: 1.2, duration: '1.38s', delay: '-0.52s', drift: '-2px', opacity: 0.52 },
+] as const
+
+/** `max` is the current top of the thinking ladder; later higher levels opt in by rank. */
+export function hasMaxThinkingAnimation(intensity: ThinkingIntensity): boolean {
+  return THINKING_INTENSITY_RANK[intensity] >= THINKING_INTENSITY_RANK.max
+}
+
+/** Map the model's sparse, supported thinking levels onto contiguous slider steps. */
+export function thinkingSliderIndex(
+  levels: ThinkingIntensity[],
+  intensity: ThinkingIntensity,
+): number {
+  const index = levels.indexOf(intensity)
+  return index >= 0 ? index : 0
+}
+
+/** Resolve a native range input value back into a supported thinking level. */
+export function thinkingIntensityForSliderIndex(
+  levels: ThinkingIntensity[],
+  index: number,
+): ThinkingIntensity | null {
+  if (levels.length === 0) return null
+  const clamped = Math.min(levels.length - 1, Math.max(0, Math.round(index)))
+  return levels[clamped] ?? null
+}
+
+function ThinkingIntensitySlider({
+  levels,
+  intensity,
+  intensityLabel,
+  ariaLabel,
+  onChange,
+}: {
+  levels: ThinkingIntensity[]
+  intensity: ThinkingIntensity
+  intensityLabel: string
+  ariaLabel: string
+  onChange: (level: ThinkingIntensity) => void
+}) {
+  const max = Math.max(0, levels.length - 1)
+  const index = thinkingSliderIndex(levels, intensity)
+  const progress = max > 0 ? (index / max) * 100 : 0
+  // The visual positioner is inset by one thumb radius. It keeps a selected
+  // dot and its thumb on the same center while keeping both inside the rail.
+  // Keep the fill itself at a fixed, pill-shaped size and animate only its
+  // clipping edge. Resizing a zero-width rounded element can briefly paint a
+  // square edge in Chromium before the radius is rasterized.
+  const remainingProgress = 100 - progress
+  const fillClipPath =
+    index === 0
+      ? 'inset(0 100% 0 0)'
+      : index === max
+        ? 'inset(0)'
+        : `inset(0 calc(${remainingProgress}% - ${(14 * remainingProgress) / 100}px) 0 0)`
+  const isOff = intensity === 'off'
+  const isBoosted = hasMaxThinkingAnimation(intensity)
+
+  return (
+    <div className={`thinking-slider-content${isBoosted ? ' is-boosted' : ''}`}>
+      <span className="thinking-slider-name">{ariaLabel}</span>
+      <div className="thinking-slider-control">
+        <div className="thinking-slider-track" aria-hidden>
+          <span className="thinking-slider-positioner">
+            <span className="thinking-slider-fill" style={{ clipPath: fillClipPath }}>
+              {isBoosted && (
+                <span className="thinking-slider-particles" aria-hidden>
+                  {MAX_THINKING_PARTICLES.map((particle) => (
+                    <span
+                      className="thinking-slider-particle"
+                      key={particle.delay}
+                      style={
+                        {
+                          '--thinking-slider-particle-top': particle.top,
+                          '--thinking-slider-particle-size': `${particle.size}px`,
+                          '--thinking-slider-particle-duration': particle.duration,
+                          '--thinking-slider-particle-delay': particle.delay,
+                          '--thinking-slider-particle-drift': particle.drift,
+                          '--thinking-slider-particle-opacity': String(particle.opacity),
+                          '--thinking-slider-particle-fade-opacity': String(
+                            particle.opacity * 0.74,
+                          ),
+                        } as React.CSSProperties
+                      }
+                    />
+                  ))}
+                </span>
+              )}
+            </span>
+            <span className="thinking-slider-marks">
+              {levels.map((level, levelIndex) => {
+                const position = max > 0 ? (levelIndex / max) * 100 : 0
+                return (
+                  <span
+                    className={`thinking-slider-mark${levelIndex <= index ? ' is-active' : ''}${
+                      levelIndex === index ? ' is-current' : ''
+                    }`}
+                    key={level}
+                    style={{ left: `${position}%` }}
+                  />
+                )
+              })}
+            </span>
+            {!isBoosted && (
+              <span
+                key={intensity}
+                className="thinking-slider-step-pulse"
+                style={{ left: `${progress}%` }}
+              />
+            )}
+            <span className="thinking-slider-thumb" style={{ left: `${progress}%` }} />
+          </span>
+        </div>
+        <input
+          className="thinking-slider-input"
+          type="range"
+          min={0}
+          max={max}
+          step={1}
+          value={index}
+          aria-label={ariaLabel}
+          aria-valuetext={intensityLabel}
+          onChange={(event) => {
+            const next = thinkingIntensityForSliderIndex(levels, Number(event.currentTarget.value))
+            if (next) onChange(next)
+          }}
+        />
+      </div>
+      {isOff ? (
+        <ZapOff
+          className="thinking-slider-status-icon is-off"
+          size={17}
+          strokeWidth={1.75}
+          aria-hidden
+        />
+      ) : (
+        <Zap
+          className={`thinking-slider-status-icon${isBoosted ? ' is-boosted' : ''}`}
+          size={17}
+          strokeWidth={1.75}
+          aria-hidden
+        />
+      )}
+    </div>
+  )
+}
+
 export interface ComposerToolbarProps {
   /** Current Session permission mode (controlled). */
   permissionMode: SessionPermissionMode
@@ -96,10 +277,10 @@ export interface ComposerToolbarProps {
   onCompressContext?: () => void | Promise<void | boolean>
   /** Locale for number formatting. */
   locale: Locale
-  /** Persist thinking selection to settings (no-op in empty state). */
+  /** Persist the global fallback setting (per-model memory is always recorded). */
   persistThinking?: boolean
   onPermissionModeChange: (mode: SessionPermissionMode) => void | Promise<void>
-  /** Fired when model / thinking selection changes. */
+  /** Model selection only; the toolbar restores its paired thinking tier. */
   onModelChange: (modelId: string) => void
   onThinkingChange: (intensity: ThinkingIntensity) => void
   /** Open settings (for "manage models" / no-model-configured). */
@@ -140,12 +321,11 @@ export function ComposerToolbar({
   const [teamMenuOpen, setTeamMenuOpen] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [modelSideOpen, setModelSideOpen] = useState(false)
-  const [thinkMenuOpen, setThinkMenuOpen] = useState(false)
   const [ctxTipOpen, setCtxTipOpen] = useState(false)
   const [compressing, setCompressing] = useState(false)
   const teamWrapRef = useRef<HTMLDivElement>(null)
   const modelWrapRef = useRef<HTMLDivElement>(null)
-  const thinkWrapRef = useRef<HTMLDivElement>(null)
+  const modelSideRef = useRef<HTMLDivElement>(null)
   const modelMenuRef = useRef<HTMLDivElement>(null)
   const [sideMaxHeight, setSideMaxHeight] = useState(360)
 
@@ -153,14 +333,17 @@ export function ComposerToolbar({
   // height to the space actually available above it so long model lists stay
   // fully reachable regardless of window size / composer height.
   useEffect(() => {
-    if (!modelSideOpen && !thinkMenuOpen) return
+    if (!modelSideOpen) return
     const el = modelMenuRef.current
     if (!el) return
     const bottom = el.getBoundingClientRect().bottom
     setSideMaxHeight(Math.max(120, Math.min(360, Math.round(bottom - 16))))
-  }, [modelSideOpen, thinkMenuOpen])
+  }, [modelSideOpen])
 
   const selectThinking = (level: ThinkingIntensity) => {
+    // This is the only explicit thinking action, so it is the only path that
+    // writes per-model memory. Automatic fallbacks remain non-sticky.
+    rememberModelThinkingIntensity(selectedModel, level)
     onThinkingChange(level)
     // Keep the model/thinking cascade open so the user can tweak both without
     // reopening the menu after every click.
@@ -169,6 +352,15 @@ export function ComposerToolbar({
         console.warn('[ComposerToolbar] save thinkingIntensity failed', e)
       })
     }
+  }
+
+  const selectModel = (model: ModelOption) => {
+    onModelChange(model.id)
+    // A model change applies its saved level when compatible, otherwise the
+    // shared tier calculator. Do not route this through selectThinking: a
+    // fallback should not overwrite the model's last explicit preference.
+    const nextThink = resolveModelThinkingIntensity(model.id, model.thinkingIntensities)
+    if (nextThink !== thinkingIntensity) onThinkingChange(nextThink)
   }
 
   // —— derived: model / thinking chip labels ——
@@ -243,17 +435,6 @@ export function ComposerToolbar({
     ? selectedMeta.thinkingIntensities
     : ([...THINKING_INTENSITY_OPTIONS] as ThinkingIntensity[])
 
-  // When model changes, refresh thinking to the linked default for that model
-  // (中 → 高 → strongest; never 关 when another level exists).
-  useEffect(() => {
-    if (!selectedMeta) return
-    const next = defaultThinkingFor(selectedMeta.thinkingIntensities)
-    if (next !== thinkingIntensity) {
-      onThinkingChange(next)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModel])
-
   const byProvider = useMemo(() => {
     const map = new Map<string, { name: string; models: ModelOption[] }>()
     for (const m of models) {
@@ -275,7 +456,7 @@ export function ComposerToolbar({
   // Mirrors the original ChatPanel logic, but uses ComposerToolbar's own
   // state/refs (ChatPanel's copy became dead code after extraction).
   useEffect(() => {
-    if (!teamMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen) return
+    if (!teamMenuOpen && !modelMenuOpen && !ctxTipOpen) return
     const onDoc = (e: MouseEvent) => {
       if (teamMenuOpen && teamWrapRef.current && !teamWrapRef.current.contains(e.target as Node)) {
         setTeamMenuOpen(false)
@@ -283,33 +464,31 @@ export function ComposerToolbar({
       // model menu + its sub-panels + ctx tip all live inside model-wrap:
       // close them all when clicking outside model-wrap
       if (
-        (modelMenuOpen || thinkMenuOpen || ctxTipOpen || modelSideOpen) &&
+        (modelMenuOpen || ctxTipOpen || modelSideOpen) &&
         modelWrapRef.current &&
         !modelWrapRef.current.contains(e.target as Node)
       ) {
         setModelMenuOpen(false)
         setModelSideOpen(false)
-        setThinkMenuOpen(false)
         setCtxTipOpen(false)
       }
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [teamMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
+  }, [teamMenuOpen, modelMenuOpen, modelSideOpen, ctxTipOpen])
 
   // —— Close all popovers when the window loses focus (Alt-Tab / app switch) ——
   useEffect(() => {
-    if (!teamMenuOpen && !modelMenuOpen && !thinkMenuOpen && !ctxTipOpen && !modelSideOpen) return
+    if (!teamMenuOpen && !modelMenuOpen && !ctxTipOpen && !modelSideOpen) return
     const onBlur = () => {
       setTeamMenuOpen(false)
       setModelMenuOpen(false)
       setModelSideOpen(false)
-      setThinkMenuOpen(false)
       setCtxTipOpen(false)
     }
     window.addEventListener('blur', onBlur)
     return () => window.removeEventListener('blur', onBlur)
-  }, [teamMenuOpen, modelMenuOpen, modelSideOpen, thinkMenuOpen, ctxTipOpen])
+  }, [teamMenuOpen, modelMenuOpen, modelSideOpen, ctxTipOpen])
 
   return (
     <>
@@ -333,7 +512,6 @@ export function ComposerToolbar({
             onClick={() => {
               setTeamMenuOpen((v) => !v)
               setModelMenuOpen(false)
-              setThinkMenuOpen(false)
             }}
           >
             {selectedTeamLabel}
@@ -411,7 +589,6 @@ export function ComposerToolbar({
             setCtxTipOpen((v) => !v)
             setModelMenuOpen(false)
             setModelSideOpen(false)
-            setThinkMenuOpen(false)
           }}
         >
           <ContextRing
@@ -495,7 +672,12 @@ export function ComposerToolbar({
             ) : (
               <span className="chip-label">
                 <span className="chip-model">{modelShort}</span>
-                {thinkShort ? <span className="chip-sep" aria-hidden> · </span> : null}
+                {thinkShort ? (
+                  <span className="chip-sep" aria-hidden>
+                    {' '}
+                    ·{' '}
+                  </span>
+                ) : null}
                 {thinkShort ? <span className="chip-think">{thinkShort}</span> : null}
               </span>
             )}
@@ -507,7 +689,9 @@ export function ComposerToolbar({
           {modelMenuOpen && models.length > 0 && (
             <motion.div
               ref={modelMenuRef}
-              className="pop-menu model-menu"
+              className={`pop-menu model-menu${
+                supportedThinking.length > 0 ? ' has-thinking-slider' : ''
+              }`}
               role="menu"
               aria-label={t('chat.model')}
               initial={{ opacity: 0, y: 4 }}
@@ -521,7 +705,6 @@ export function ComposerToolbar({
                 role="menuitem"
                 onClick={() => {
                   setModelSideOpen((v) => !v)
-                  setThinkMenuOpen(false)
                 }}
               >
                 {t('chat.model')}
@@ -531,21 +714,15 @@ export function ComposerToolbar({
                 </span>
               </button>
               {supportedThinking.length > 0 && (
-                <button
-                  type="button"
-                  className="pop-row"
-                  role="menuitem"
-                  onClick={() => {
-                    setThinkMenuOpen((v) => !v)
-                    setModelSideOpen(false)
-                  }}
-                >
-                  {t('chat.think.label')}
-                  <span className="val">
-                    {thinkShort}
-                    <span className="arrow">‹</span>
-                  </span>
-                </button>
+                <section className="thinking-slider-inline" aria-label={t('chat.think.label')}>
+                  <ThinkingIntensitySlider
+                    levels={supportedThinking}
+                    intensity={thinkingIntensity}
+                    intensityLabel={thinkShort}
+                    ariaLabel={t('chat.think.label')}
+                    onChange={selectThinking}
+                  />
+                </section>
               )}
               <div className="pop-manage">
                 <button
@@ -554,7 +731,6 @@ export function ComposerToolbar({
                   onClick={() => {
                     setModelMenuOpen(false)
                     setModelSideOpen(false)
-                    setThinkMenuOpen(false)
                     window.dispatchEvent(
                       new CustomEvent('swarmdesk-agent:open-settings', {
                         detail: { tab: 'model' },
@@ -566,41 +742,10 @@ export function ComposerToolbar({
                 </button>
               </div>
               <AnimatePresence>
-                {thinkMenuOpen && supportedThinking.length > 0 && (
-                  <motion.div
-                    className="pop-side pop-side-cascade"
-                    ref={thinkWrapRef}
-                    style={{ maxHeight: sideMaxHeight }}
-                    role="menu"
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.14, ease: [0.32, 0.72, 0, 1] }}
-                  >
-                    {supportedThinking.map((level) => (
-                      <button
-                        key={level}
-                        type="button"
-                        className={`pop-row${thinkingIntensity === level ? ' on' : ''}`}
-                        role="menuitem"
-                        onClick={() => selectThinking(level)}
-                      >
-                        <span className="pop-label">{t(THINK_LABEL_KEY[level])}</span>
-                        {thinkingIntensity === level && (
-                          <span className="check">
-                            <IconCheck size={14} />
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <AnimatePresence>
                 {modelSideOpen && (
                   <motion.div
                     className="pop-side pop-side-cascade pop-side-models"
-                    ref={thinkWrapRef}
+                    ref={modelSideRef}
                     style={{ maxHeight: sideMaxHeight }}
                     role="menu"
                     initial={{ opacity: 0, x: -8 }}
@@ -624,9 +769,7 @@ export function ComposerToolbar({
                             role="menuitemradio"
                             aria-checked={selectedModel === m.id}
                             onClick={() => {
-                              onModelChange(m.id)
-                              const nextThink = defaultThinkingFor(m.thinkingIntensities)
-                              if (nextThink !== thinkingIntensity) onThinkingChange(nextThink)
+                              selectModel(m)
                               // Leave the cascade open: model + thinking are often
                               // adjusted together; only outside-click / Esc closes.
                             }}

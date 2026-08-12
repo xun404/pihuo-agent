@@ -119,81 +119,114 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: var(--sp-1) var(--sp-2) var(--sp-4);
-  font-size: 20px;
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-  color: var(--text-1);
+  padding: var(--sp-1) var(--sp-2) var(--sp-3);
 }
-.brand .mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  line-height: 0;
-  overflow: hidden;
-  /* Final mark already includes plate + continuous corner */
-  background: transparent;
-  border: none;
-  box-shadow: none;
-}
-.brand .mark .brand-logo {
-  width: 30px;
-  height: 30px;
-  display: block;
-  object-fit: cover;
-  border-radius: 9px;
-}
-/* Slow marquee color gradient on product name */
+/* The sidebar uses a wordmark rather than a separate app icon. The two words
+   move on separate colour rhythms while remaining one compact lockup. */
 .brand .brand-name {
-  font-size: 20px;
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-  color: var(--text-1);
-  background-image: linear-gradient(
-    90deg,
-    var(--text-1) 0%,
-    var(--text-1) 12%,
-    color-mix(in srgb, var(--blue) 85%, #fff) 28%,
-    color-mix(in srgb, var(--accent, #e8890c) 90%, #fff) 42%,
-    color-mix(in srgb, var(--purple, #7c5cfc) 80%, #fff) 56%,
-    color-mix(in srgb, var(--blue) 85%, #fff) 70%,
-    var(--text-1) 88%,
-    var(--text-1) 100%
-  );
-  background-size: 280% 100%;
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  isolation: isolate;
+  font-family:
+    ui-rounded,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 23px;
+  font-weight: 760;
+  letter-spacing: -0.07em;
+  line-height: 1;
+  font-variant-ligatures: common-ligatures;
+}
+.brand .brand-name-swarm,
+.brand .brand-name-desk {
+  display: inline-block;
   background-repeat: no-repeat;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: brand-name-marquee 28s linear infinite;
+  will-change: background-position, filter;
+}
+.brand .brand-name-swarm {
+  color: var(--text-1);
+  background-image: linear-gradient(
+    112deg,
+    color-mix(in srgb, var(--text-1) 88%, var(--blue)) 0%,
+    color-mix(in srgb, var(--text-1) 74%, var(--blue)) 28%,
+    color-mix(in srgb, var(--blue) 82%, var(--purple, #7c5cfc)) 52%,
+    color-mix(in srgb, var(--purple, #7c5cfc) 72%, var(--blue)) 68%,
+    color-mix(in srgb, var(--text-1) 80%, var(--blue)) 88%,
+    color-mix(in srgb, var(--text-1) 88%, var(--blue)) 100%
+  );
+  background-size: 260% 100%;
+  animation: brand-swarm-flow 7.6s cubic-bezier(0.42, 0, 0.3, 1) infinite;
+}
+.brand .brand-name-desk {
+  color: var(--blue);
+  font-weight: 690;
+  background-image: linear-gradient(
+    106deg,
+    color-mix(in srgb, var(--blue) 86%, var(--text-1)) 0%,
+    color-mix(in srgb, var(--blue) 78%, var(--purple, #7c5cfc)) 27%,
+    color-mix(in srgb, var(--purple, #7c5cfc) 78%, var(--blue)) 51%,
+    color-mix(in srgb, var(--blue) 82%, var(--purple, #7c5cfc)) 74%,
+    color-mix(in srgb, var(--blue) 86%, var(--text-1)) 100%
+  );
+  background-size: 220% 100%;
+  animation: brand-desk-flow 5.8s cubic-bezier(0.32, 0.72, 0, 1) -1.8s infinite;
 }
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .brand .brand-name {
+  .brand .brand-name-swarm,
+  .brand .brand-name-desk {
     color: transparent;
   }
 }
-@keyframes brand-name-marquee {
-  0% {
-    background-position: 0% 50%;
-  }
+@keyframes brand-swarm-flow {
+  0%,
   100% {
-    background-position: 100% 50%;
+    background-position: 4% 50%;
+    filter: saturate(1) brightness(1);
+  }
+  26% {
+    background-position: 42% 46%;
+    filter: saturate(1.07) brightness(1.02);
+  }
+  55% {
+    background-position: 100% 56%;
+    filter: saturate(1.13) brightness(1.035);
+  }
+  78% {
+    background-position: 58% 50%;
+    filter: saturate(1.04) brightness(1.015);
   }
 }
-:root[data-motion='reduce'] .brand .brand-name {
+@keyframes brand-desk-flow {
+  0%,
+  100% {
+    background-position: 12% 50%;
+    filter: saturate(1.04) brightness(1);
+  }
+  34% {
+    background-position: 94% 43%;
+    filter: saturate(1.16) brightness(1.06);
+  }
+  67% {
+    background-position: 48% 58%;
+    filter: saturate(1.1) brightness(1.02);
+  }
+}
+:root[data-motion='reduce'] .brand .brand-name-swarm,
+:root[data-motion='reduce'] .brand .brand-name-desk {
   animation: none;
-  background-position: 40% 50%;
+  background-position: 44% 50%;
 }
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion='full']) .brand .brand-name {
+  :root:not([data-motion='full']) .brand .brand-name-swarm,
+  :root:not([data-motion='full']) .brand .brand-name-desk {
     animation: none;
-    background-position: 40% 50%;
+    background-position: 44% 50%;
   }
 }
 

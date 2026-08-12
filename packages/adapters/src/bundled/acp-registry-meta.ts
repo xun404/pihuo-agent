@@ -4,8 +4,8 @@
  */
 export const BUNDLED_ACP_REGISTRY_META = {
   "sourceUrl": "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json",
-  "syncedAt": "2026-08-09T02:29:38.548Z",
+  "syncedAt": "2026-08-11T10:07:43.755Z",
   "schemaVersion": "1.0.0",
-  "digest": "sha256:870f2ad06fbe3c53cf0e6dea5207dbe4f1c2bd12198105e5cf2ef86180a71abb",
+  "digest": "sha256:85a2eba3a24e5f18c47339268daca0c6f2dd454bf5392e390bf2cbc1ae1a506d",
   "agentCount": 38
 } as const

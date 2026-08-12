@@ -1871,7 +1871,8 @@ html[data-motion='reduce'] .chat-head-tool-btn:active {
   font-family: var(--font-prose, var(--font-sans, var(--font)));
   color: var(--markdown-list-marker, var(--text-3));
 }
-.worker-action-markdown .md-content strong {
+.msg.leader .worker-action-markdown .md-content strong,
+.msg.leader .worker-action-markdown .md-content b {
   color: inherit;
 }
 .worker-action-markdown .md-content pre,

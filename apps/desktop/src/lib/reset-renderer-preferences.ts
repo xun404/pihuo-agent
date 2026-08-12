@@ -6,6 +6,7 @@ import {
 } from '../theme/ThemeProvider'
 import { MOTION_PREFERENCE_STORAGE_KEY } from './motion-preference'
 import { SEND_SHORTCUT_STORAGE_KEY } from './send-shortcut'
+import { MODEL_THINKING_MEMORY_STORAGE_KEY } from './model-thinking-memory'
 
 /** Renderer-only preferences owned by SwarmDesk (theme files are not storage). */
 export const RENDERER_PREFERENCE_KEYS = [
@@ -16,6 +17,7 @@ export const RENDERER_PREFERENCE_KEYS = [
   DARK_THEME_KEY,
   SEND_SHORTCUT_STORAGE_KEY,
   MOTION_PREFERENCE_STORAGE_KEY,
+  MODEL_THINKING_MEMORY_STORAGE_KEY,
   'swarmdesk-agent.sidebar-w',
   'swarmdesk-agent.drawer-w',
 ] as const

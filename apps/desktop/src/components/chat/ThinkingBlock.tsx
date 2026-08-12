@@ -45,6 +45,11 @@ function useThinkingElapsedMs(streaming: boolean, persistKey?: string): number |
   const frozenMsRef = useRef<number | null>(
     persistKey != null ? (frozenElapsedByKey.get(persistKey) ?? null) : null,
   )
+  // Keep the frozen value in state as well as the ref.  Freezing happens in an
+  // effect after the parent has rendered `streaming={false}`; a ref-only update
+  // would otherwise leave the completed summary on its no-duration label until
+  // some unrelated render happens.
+  const [frozenElapsedMs, setFrozenElapsedMs] = useState<number | null>(() => frozenMsRef.current)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -52,6 +57,7 @@ function useThinkingElapsedMs(streaming: boolean, persistKey?: string): number |
       if (startedAtRef.current == null) {
         startedAtRef.current = Date.now()
         frozenMsRef.current = null
+        setFrozenElapsedMs(null)
         if (persistKey) frozenElapsedByKey.delete(persistKey)
       }
       setNow(Date.now())
@@ -62,13 +68,16 @@ function useThinkingElapsedMs(streaming: boolean, persistKey?: string): number |
     if (startedAtRef.current != null && frozenMsRef.current == null) {
       const ms = Math.max(0, Date.now() - startedAtRef.current)
       frozenMsRef.current = ms
+      setFrozenElapsedMs(ms)
       if (persistKey) frozenElapsedByKey.set(persistKey, ms)
     } else if (
       frozenMsRef.current == null &&
       persistKey != null &&
       frozenElapsedByKey.has(persistKey)
     ) {
-      frozenMsRef.current = frozenElapsedByKey.get(persistKey)!
+      const ms = frozenElapsedByKey.get(persistKey)!
+      frozenMsRef.current = ms
+      setFrozenElapsedMs(ms)
     }
   }, [streaming, persistKey])
 
@@ -76,9 +85,37 @@ function useThinkingElapsedMs(streaming: boolean, persistKey?: string): number |
     if (startedAtRef.current == null) return null
     return Math.max(0, now - startedAtRef.current)
   }
-  if (frozenMsRef.current != null) return frozenMsRef.current
+  if (frozenElapsedMs != null) return frozenElapsedMs
   if (persistKey != null) return frozenElapsedByKey.get(persistKey) ?? null
   return null
+}
+
+type ThinkingSummaryLabelOptions = Pick<
+  Props,
+  'streaming' | 'streamingLabel' | 'doneLabel' | 'doneLabelFor' | 'locale'
+> & {
+  elapsedMs: number | null
+}
+
+/**
+ * Keeps the completed-label rule explicit: display every measured duration,
+ * including sub-second work.  A null value means this block was restored from
+ * history without a local timing interval, so we intentionally do not invent
+ * a duration for it.
+ */
+export function getThinkingSummaryLabel({
+  streaming,
+  elapsedMs,
+  streamingLabel,
+  doneLabel,
+  doneLabelFor,
+  locale = 'zh',
+}: ThinkingSummaryLabelOptions): string {
+  if (streaming) return streamingLabel
+  if (elapsedMs != null) {
+    return doneLabelFor(formatElapsedHms(elapsedMs / 1000, locale))
+  }
+  return doneLabel
 }
 
 function ChevronIcon() {
@@ -120,13 +157,14 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   // If a height cap is reintroduced later, keep the live body pinned to the tail.
   const bodyScrollRef = useStickScrollBottom(streaming && isOpen, text.length)
 
-  const summaryLabel = (() => {
-    if (streaming) return streamingLabel
-    if (elapsedMs != null && elapsedMs >= 1000) {
-      return doneLabelFor(formatElapsedHms(elapsedMs / 1000, locale))
-    }
-    return doneLabel
-  })()
+  const summaryLabel = getThinkingSummaryLabel({
+    streaming,
+    elapsedMs,
+    streamingLabel,
+    doneLabel,
+    doneLabelFor,
+    locale,
+  })
 
   const toggle = useCallback(() => onToggle(!isOpen), [isOpen, onToggle])
   const onKeyDown = useCallback(
@@ -170,10 +208,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
               transition: 'opacity 180ms ease-out, transform 180ms ease-out',
             }}
           >
-            <div
-              ref={bodyScrollRef}
-              className={`thinking-block-body${streaming ? ' live' : ''}`}
-            >
+            <div ref={bodyScrollRef} className={`thinking-block-body${streaming ? ' live' : ''}`}>
               {text || '…'}
             </div>
           </div>

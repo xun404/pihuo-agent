@@ -23,16 +23,24 @@ describe('ChatWorkspace home model presets', () => {
     assert.match(workspaceSource, /leaderChanged && current/)
     assert.match(workspaceSource, /Home tracks the app default model/)
   })
+
+  it('restores the remembered intensity for the new-session model', () => {
+    assert.match(workspaceSource, /resolveModelThinkingIntensity/u)
+    assert.match(workspaceSource, /handlePresetModelChange/u)
+    assert.match(workspaceSource, /Chat 1 → New Chat immediately reflects/u)
+    assert.match(workspaceSource, /Chat 1 uses the linked tier calculator/u)
+    assert.match(workspaceSource, /pendingNewSession != null/u)
+  })
 })
 
 describe('Settings default model persistence', () => {
   it('persists pickModel via saveSettings and does not clobber default when browsing providers', () => {
-    assert.match(settingsSource, /const pickModel = \(id: string\) => \{[\s\S]*saveSettings\(\{\s*leaderModel: id/)
-    assert.match(settingsSource, /dispatchLeaderModelChanged/)
     assert.match(
       settingsSource,
-      /Browsing a provider must NOT change the persisted default model/,
+      /const pickModel = \(id: string\) => \{[\s\S]*saveSettings\(\{\s*leaderModel: id/,
     )
+    assert.match(settingsSource, /dispatchLeaderModelChanged/)
+    assert.match(settingsSource, /Browsing a provider must NOT change the persisted default model/)
     assert.doesNotMatch(
       settingsSource,
       /const pickProvider = \(p: SettingsProvider\) => \{[\s\S]*setLeaderModel\(next\)/,
@@ -46,11 +54,12 @@ describe('Composer model menu stay-open', () => {
     assert.match(toolbarSource, /Keep the model\/thinking cascade open/)
     // Model pick no longer closes menus (only outside-click / Esc should).
     const modelPick = toolbarSource.match(
-      /onClick=\{\(\) => \{\s*onModelChange\(m\.id\)[\s\S]*?\}\s*\}/,
+      /const selectModel = \(model: ModelOption\) => \{[\s\S]*?onThinkingChange\(nextThink\)/,
     )
-    assert.ok(modelPick, 'model pick handler present')
+    assert.ok(modelPick, 'model selection helper present')
     assert.doesNotMatch(modelPick[0], /setModelMenuOpen\(false\)/)
     assert.doesNotMatch(modelPick[0], /setModelSideOpen\(false\)/)
+    assert.match(toolbarSource, /onClick=\{\(\) => \{\s*selectModel\(m\)/)
   })
 })
 

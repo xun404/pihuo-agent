@@ -29,11 +29,8 @@ import {
 } from '../lib/api'
 import { ThrottledChat } from '../lib/throttled-chat'
 import { useI18n } from '../i18n/I18nProvider'
-import {
-  THINKING_INTENSITY_OPTIONS,
-  defaultThinkingFor,
-  type ThinkingIntensity,
-} from '../lib/settings'
+import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
+import { resolveModelThinkingIntensity } from '../lib/model-thinking-memory'
 import { formatChatError, serializeChatErrorForSticky } from '../lib/chat-errors'
 import { enrichLastUserMessageForWire, parseRouterUserMessage } from '../lib/user-message-display'
 import { MarkdownContent } from './MarkdownContent'
@@ -598,7 +595,13 @@ export function ChatPanel({
       // Only re-seed thinking when model is first chosen or changed — do not
       // overwrite a manual intensity pick on settings reload.
       if (modelChanged || !thinkingIntensityRef.current) {
-        const nextThink = initialThinking ?? defaultThinkingFor(meta?.thinkingIntensities ?? [])
+        const nextThink = resolveModelThinkingIntensity(
+          nextModel,
+          meta?.thinkingIntensities ?? [],
+          {
+            preferred: initialThinking,
+          },
+        )
         setThinkingIntensity(nextThink)
         thinkingIntensityRef.current = nextThink
       }
@@ -1350,19 +1353,6 @@ export function ChatPanel({
       el.removeEventListener('scroll', onScroll)
     }
   }, [hasMessages, session.id])
-
-  // When the model changes, refresh thinking to the linked default (中 → 高 →
-  // strongest; never 关 when another level exists). NOT dependent on
-  // `thinkingIntensity` — a manual level pick is only overridden by a model
-  // switch, never by re-renders.
-  useEffect(() => {
-    if (!selectedMeta) return
-    const next = defaultThinkingFor(selectedMeta.thinkingIntensities)
-    if (next !== thinkingIntensityRef.current) {
-      setThinkingIntensity(next)
-      thinkingIntensityRef.current = next
-    }
-  }, [selectedModel, selectedMeta])
 
   const errorCopy = useMemo(
     () => ({

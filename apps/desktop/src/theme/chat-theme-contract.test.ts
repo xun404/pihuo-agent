@@ -35,7 +35,17 @@ test('chat source color namespaces are consumed and composer bypasses are remove
 
 test('markdown bold uses the theme token and thinking blocks de-bold', () => {
   assert.match(chat, /\.msg\.leader \.md-content strong\s*\{[\s\S]*?var\(--markdown-bold/u)
-  assert.match(chat, /\.thinking-block-body strong,[\s\S]*\.thinking-block-body b\s*\{[\s\S]*font-weight:\s*inherit/u)
+  assert.match(
+    chat,
+    /\.thinking-block-body strong,[\s\S]*\.thinking-block-body b\s*\{[\s\S]*font-weight:\s*inherit/u,
+  )
+})
+
+test('worker Markdown emphasis inherits the process gray instead of prose black', () => {
+  assert.match(
+    chat,
+    /\.msg\.leader \.worker-action-markdown \.md-content strong,\s*\.msg\.leader \.worker-action-markdown \.md-content b\s*\{[\s\S]*?color:\s*inherit;/u,
+  )
 })
 
 test('completed process summaries keep the divider without striking the label', () => {

@@ -23,7 +23,8 @@ import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar, type ModelOption, type TeamTemplateOption } from './ComposerToolbar'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
-import { THINKING_INTENSITY_OPTIONS, defaultThinkingFor, type ThinkingIntensity } from '../lib/settings'
+import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
+import { resolveModelThinkingIntensity } from '../lib/model-thinking-memory'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
@@ -240,10 +241,10 @@ export function ChatWorkspace({
       }
       setPresetModel(nextModel)
       presetModelRef.current = nextModel
-      // Linked default for new sessions: 中 → 高 → strongest; never 关 unless
-      // it's the only supported level.
+      // Chat 1 uses the linked tier calculator; later chats restore a manual
+      // level only when this exact model has one in memory.
       const meta = list.find((m) => m.id === nextModel) ?? list[0]
-      setPresetThinking(defaultThinkingFor(meta?.thinkingIntensities ?? []))
+      setPresetThinking(resolveModelThinkingIntensity(nextModel, meta?.thinkingIntensities ?? []))
     } catch (e) {
       console.warn('[ChatWorkspace] load preset models failed', e)
     } finally {
@@ -254,6 +255,11 @@ export function ChatWorkspace({
   useEffect(() => {
     void loadPresetModels()
   }, [loadPresetModels])
+
+  const handlePresetModelChange = useCallback((modelId: string) => {
+    setPresetModel(modelId)
+    presetModelRef.current = modelId
+  }, [])
 
   // Home empty-state owns its own model list (not ChatPanel). Re-fetch after
   // settings close or an immediate “设为默认” so the draft composer tracks
@@ -309,9 +315,17 @@ export function ChatWorkspace({
   const prevSessionIdRef = useRef<string | null>(session?.id ?? null)
   useEffect(() => {
     const currentSessionId = session?.id ?? null
-    const enteredEmpty = currentSessionId === null
-    if (enteredEmpty) {
+    // Sidebar “new task” first creates a local draft while the previous
+    // ChatPanel remains mounted, so `session` is not necessarily null yet.
+    // Both routes render Home and must restore the remembered preset.
+    const showingHome = currentSessionId === null || pendingNewSession != null
+    if (showingHome) {
       setSelectedTeamTemplateId('')
+      // Home stays mounted while a chat is active. Re-read the remembered
+      // level when returning here so Chat 1 → New Chat immediately reflects
+      // the explicit choice made for the default model in Chat 1.
+      const meta = presetModels.find((model) => model.id === presetModel)
+      setPresetThinking(resolveModelThinkingIntensity(presetModel, meta?.thinkingIntensities ?? []))
       // pick a random index != lastHintIdxRef (when pool > 1)
       let next = lastHintIdxRef.current
       if (EMPTY_HINT_KEYS.length > 1) {
@@ -323,7 +337,7 @@ export function ChatWorkspace({
       setHintKey(EMPTY_HINT_KEYS[next]!)
     }
     prevSessionIdRef.current = currentSessionId
-  }, [session?.id])
+  }, [pendingNewSession, presetModel, presetModels, session?.id])
 
   useEffect(() => {
     if (!session?.id) return
@@ -519,7 +533,7 @@ export function ChatWorkspace({
                         locale={locale}
                         persistThinking={false}
                         onPermissionModeChange={setPresetPermissionMode}
-                        onModelChange={setPresetModel}
+                        onModelChange={handlePresetModelChange}
                         onThinkingChange={setPresetThinking}
                         onOpenSettings={onOpenSettings}
                         teamTemplateOptions={teamTemplateOptions}

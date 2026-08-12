@@ -44,17 +44,17 @@ describe('Leader instructions', () => {
     assert.match(instructions, /保持简洁。/u)
   })
 
-  it('uses task tools proactively for trackable work without requiring them for one dispatch', () => {
+  it('skips task management for simple one- or two-deliverable work', () => {
     const instructions = buildLeaderInstructions({})
 
     assert.match(instructions, /## Coordination & ordered task list/u)
-    assert.match(instructions, /Prefer the task tools proactively/u)
-    assert.match(instructions, /two or more role stages/u)
-    assert.match(instructions, /work that benefits from visible progress tracking/u)
     assert.match(
       instructions,
-      /A simple request that needs only one dispatch may skip the task list/u,
+      /Do not use task management for a simple request with only one or two task-level deliverables/u,
     )
+    assert.match(instructions, /three or more role stages/u)
+    assert.match(instructions, /materially benefits from visible progress tracking/u)
+    assert.doesNotMatch(instructions, /two or more role stages/u)
     assert.match(instructions, /task_write/u)
     assert.match(instructions, /task_complete/u)
     assert.match(instructions, /task_check/u)

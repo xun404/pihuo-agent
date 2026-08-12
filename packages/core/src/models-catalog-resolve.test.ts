@@ -21,7 +21,9 @@ const OPENAI_FIXTURE: ModelsDevProviderRaw = {
       id: 'gpt-5.6',
       name: 'GPT-5.6',
       reasoning: true,
-      reasoning_options: [{ type: 'effort', values: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] }],
+      reasoning_options: [
+        { type: 'effort', values: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] },
+      ],
       limit: { context: 1050000 },
       tool_call: true,
       modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
@@ -92,7 +94,11 @@ const OPENAI_FIXTURE: ModelsDevProviderRaw = {
   },
 }
 
-const FRESH_FETCHED_AT = '2026-08-08T06:40:49.006Z'
+// This fixture only exercises timestamp ordering. Keep it safely beyond a
+// regenerated bundled snapshot so routine catalog refreshes do not turn a
+// semantic resolver test into a dated release-calendar test.
+const FRESH_FETCHED_AT = '2099-01-01T00:00:00.000Z'
+const FRESH_GENERATED_AT = '2099-01-02T00:00:00.000Z'
 
 function writeModelsDevDir(
   dir: string,
@@ -112,7 +118,12 @@ function writeModelsDevDir(
     }),
     'utf8',
   )
-  return { dir, apiJsonPath: join(dir, 'api.json'), metaPath: join(dir, 'meta.json'), logoCacheDir: join(dir, 'logos') }
+  return {
+    dir,
+    apiJsonPath: join(dir, 'api.json'),
+    metaPath: join(dir, 'meta.json'),
+    logoCacheDir: join(dir, 'logos'),
+  }
 }
 
 describe('resolveBuiltinProviders', () => {
@@ -141,7 +152,10 @@ describe('resolveBuiltinProviders', () => {
     assert.equal(openai.models[0]?.id, 'openai/gpt-5.6')
     assert.equal(openai.models.length, 8)
     // Same source data as bundled snapshot must yield identical curated list.
-    assert.deepEqual(openai, MASTRA_PROVIDERS.find((p) => p.id === 'openai'))
+    assert.deepEqual(
+      openai,
+      MASTRA_PROVIDERS.find((p) => p.id === 'openai'),
+    )
   })
 
   it('newer model in the external catalog is picked up at runtime', () => {
@@ -168,13 +182,19 @@ describe('resolveBuiltinProviders', () => {
     assert.ok(openai, 'openai should be curated from the external catalog')
     assert.equal(openai.models[0]?.id, 'openai/gpt-5.9', 'newest external model must lead')
     assert.ok(
-      !MASTRA_PROVIDERS.find((p) => p.id === 'openai')!.models.some((m) => m.id === 'openai/gpt-5.9'),
+      !MASTRA_PROVIDERS.find((p) => p.id === 'openai')!.models.some(
+        (m) => m.id === 'openai/gpt-5.9',
+      ),
       'gpt-5.9 must not exist in the bundled snapshot',
     )
   })
 
   it('external catalog older than bundled → bundled wins', () => {
-    paths = writeModelsDevDir(dir, { openai: OPENAI_FIXTURE }, { fetchedAt: '2020-01-01T00:00:00.000Z' })
+    paths = writeModelsDevDir(
+      dir,
+      { openai: OPENAI_FIXTURE },
+      { fetchedAt: '2020-01-01T00:00:00.000Z' },
+    )
     const res = resolveBuiltinProviders({ paths })
     assert.equal(res.source, 'bundled')
     assert.deepEqual(res.providers, MASTRA_PROVIDERS)
@@ -200,11 +220,11 @@ describe('resolveBuiltinProviders', () => {
     paths = writeModelsDevDir(
       dir,
       { openai: OPENAI_FIXTURE },
-      { fetchedAt: '2020-01-01T00:00:00.000Z', generatedAt: '2026-08-07T00:00:00.000Z' },
+      { fetchedAt: '2020-01-01T00:00:00.000Z', generatedAt: FRESH_GENERATED_AT },
     )
     const res = resolveBuiltinProviders({ paths })
     assert.equal(res.source, 'external')
-    assert.equal(res.generatedAt, '2026-08-07T00:00:00.000Z')
+    assert.equal(res.generatedAt, FRESH_GENERATED_AT)
   })
 
   it('fallback constant is structurally compatible with MASTRA_PROVIDERS', () => {
@@ -250,7 +270,8 @@ describe('resolveBuiltinProviders bundled snapshot', () => {
       }
       const res = resolveBuiltinProviders({ paths: emptyPaths })
       assert.ok(!Number.isNaN(Date.parse(res.generatedAt)), `generatedAt=${res.generatedAt}`)
-      // Bundled snapshot must predate any legitimately fresh external refresh.
+      // The far-future fixture stands for an external refresh newer than any
+      // bundled snapshot generated during the repository's supported lifetime.
       assert.ok(Date.parse(res.generatedAt) < Date.parse(FRESH_FETCHED_AT))
       assert.equal(res.source, 'bundled')
     } finally {

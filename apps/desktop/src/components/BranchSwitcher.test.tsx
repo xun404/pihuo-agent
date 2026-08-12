@@ -14,9 +14,20 @@
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+const composerStyles = readFileSync(
+  fileURLToPath(new URL('../styles/03-composer.css', import.meta.url)),
+  'utf8',
+)
 
 describe('BranchSwitcher', () => {
   it('defers to packages/core/src/git-branches.test.ts for backend coverage', () => {
     assert.ok(true)
+  })
+
+  it('vertically centers the smaller dirty-file hint beside the branch name', () => {
+    assert.match(composerStyles, /\.branch-item\s*\{[^}]*align-items:\s*center;/su)
   })
 })

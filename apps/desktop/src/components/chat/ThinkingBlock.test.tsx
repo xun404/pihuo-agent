@@ -3,11 +3,38 @@ import { describe, it } from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { ThinkingBlock } from './ThinkingBlock.js'
+import { getThinkingSummaryLabel, ThinkingBlock } from './ThinkingBlock.js'
 
 ;(globalThis as typeof globalThis & { React: typeof React }).React = React
 
 describe('ThinkingBlock summary', () => {
+  it('shows every measured completed duration, including sub-second work', () => {
+    const doneLabelFor = (time: string) => `已思考 ${time}`
+
+    assert.equal(
+      getThinkingSummaryLabel({
+        streaming: false,
+        elapsedMs: 500,
+        streamingLabel: '思考中',
+        doneLabel: '已思考',
+        doneLabelFor,
+        locale: 'zh',
+      }),
+      '已思考 0.5秒',
+    )
+    assert.equal(
+      getThinkingSummaryLabel({
+        streaming: false,
+        elapsedMs: null,
+        streamingLabel: '思考中',
+        doneLabel: '已思考',
+        doneLabelFor,
+        locale: 'zh',
+      }),
+      '已思考',
+    )
+  })
+
   it('shows live label while streaming and keeps body expanded hooks', () => {
     const html = renderToStaticMarkup(
       <ThinkingBlock

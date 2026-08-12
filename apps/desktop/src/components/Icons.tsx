@@ -17,8 +17,10 @@ import {
   CircleCheck,
   FileBraces,
   FilePen,
+  ListVideo,
   SquareTerminal,
   Shapes,
+  Toolbox,
 } from 'lucide-react'
 
 // re-export：新 UI 代码（footer / 思考块 / task 卡片）直接从本文件 import 这些名字，
@@ -718,6 +720,8 @@ export function getToolIcon(toolName: string): IconComponent {
   // router session tools（PascalCase → lowercase 后用 includes 匹配）
   if (name.includes('dispatch') && name.includes('worker')) return Shapes
   if (name.includes('list') && name.includes('worker')) return IconWorkers
+  if (name.includes('list') && name.includes('job')) return Toolbox
+  if (name.includes('active') && name.includes('context')) return ListVideo
   if (name.includes('context')) return IconInfo
   if (name.includes('list') && name.includes('project')) return IconFolder
   if (name.includes('job')) return LucideClock

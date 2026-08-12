@@ -15,9 +15,18 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { defaultThinkingFor } from '../lib/settings.js'
+import {
+  hasMaxThinkingAnimation,
+  thinkingIntensityForSliderIndex,
+  thinkingSliderIndex,
+} from './ComposerToolbar.js'
 
 const toolbarSource = readFileSync(new URL('./ComposerToolbar.tsx', import.meta.url), 'utf8')
 const chatPanelSource = readFileSync(new URL('./ChatPanel.tsx', import.meta.url), 'utf8')
+const composerStylesSource = readFileSync(
+  new URL('../styles/03-composer.css', import.meta.url),
+  'utf8',
+)
 
 describe('defaultThinkingFor', () => {
   it('returns "off" when supported is empty AND THINKING_INTENSITY_OPTIONS has no levels', () => {
@@ -75,5 +84,63 @@ describe('Composer toolbar permission contract', () => {
   it('normalizes the hidden Leader mode to build on the chat wire', () => {
     assert.match(chatPanelSource, /mode: 'build'/u)
     assert.doesNotMatch(chatPanelSource, /mode:\s*modeRef\.current/u)
+  })
+
+  it('delegates model-specific thinking restoration to the shared memory helper', () => {
+    assert.match(toolbarSource, /rememberModelThinkingIntensity/u)
+    assert.match(toolbarSource, /resolveModelThinkingIntensity/u)
+    assert.match(chatPanelSource, /resolveModelThinkingIntensity/u)
+  })
+
+  it('renders the thinking picker as an accessible native range slider', () => {
+    assert.match(toolbarSource, /className="thinking-slider-inline"/u)
+    assert.match(toolbarSource, /className="thinking-slider-name"/u)
+    assert.match(toolbarSource, /type="range"/u)
+    assert.match(toolbarSource, /aria-valuetext=\{intensityLabel\}/u)
+    assert.match(toolbarSource, /thinking-slider-step-pulse/u)
+    assert.match(toolbarSource, /is-current/u)
+    assert.match(toolbarSource, /<ZapOff/u)
+    assert.match(toolbarSource, /<Zap/u)
+    assert.doesNotMatch(
+      toolbarSource,
+      /thinking-slider-panel|setThinkMenuOpen|thinking-slider-summary|thinking-slider-value/u,
+    )
+  })
+})
+
+describe('thinking intensity slider mapping', () => {
+  const levels = ['off', 'low', 'high', 'max'] as const
+
+  it('uses contiguous slider positions for sparse model-supported levels', () => {
+    assert.equal(thinkingSliderIndex([...levels], 'off'), 0)
+    assert.equal(thinkingSliderIndex([...levels], 'high'), 2)
+    assert.equal(thinkingSliderIndex([...levels], 'max'), 3)
+  })
+
+  it('shares one inset coordinate system between the thumb and level dots', () => {
+    assert.match(toolbarSource, /thinking-slider-positioner/u)
+    assert.match(toolbarSource, /style=\{\{ clipPath: fillClipPath \}\}/u)
+    assert.match(toolbarSource, /levelIndex \/ max/u)
+  })
+
+  it('clamps native range values to a supported level', () => {
+    assert.equal(thinkingIntensityForSliderIndex([...levels], -1), 'off')
+    assert.equal(thinkingIntensityForSliderIndex([...levels], 2), 'high')
+    assert.equal(thinkingIntensityForSliderIndex([...levels], 99), 'max')
+  })
+
+  it('reserves the enhanced animation for MAX and any future stronger level', () => {
+    assert.equal(hasMaxThinkingAnimation('off'), false)
+    assert.equal(hasMaxThinkingAnimation('high'), false)
+    assert.equal(hasMaxThinkingAnimation('xhigh'), false)
+    assert.equal(hasMaxThinkingAnimation('max'), true)
+  })
+
+  it('uses a desynchronized particle field for the MAX treatment', () => {
+    assert.match(toolbarSource, /MAX_THINKING_PARTICLES/u)
+    assert.match(toolbarSource, /thinking-slider-particles/u)
+    assert.match(composerStylesSource, /thinking-slider-particle-run/u)
+    assert.match(composerStylesSource, /--thinking-slider-particle-duration/u)
+    assert.match(composerStylesSource, /--thinking-slider-particle-delay/u)
   })
 })

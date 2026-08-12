@@ -1805,6 +1805,275 @@
   color: var(--text-1);
   flex: 0 0 auto;
 }
+
+/* Discrete thinking slider replaces the old "Thinking ›" row in the model
+   menu. The native range input keeps drag, track-click, and keyboard support. */
+.model-wrap .pop-menu.model-menu.has-thinking-slider {
+  width: min(280px, calc(100vw - 32px));
+  min-width: 0;
+}
+.thinking-slider-inline {
+  padding: 3px 10px;
+}
+.thinking-slider-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+.thinking-slider-name {
+  /* Match the model row's text treatment exactly. */
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+}
+.thinking-slider-status-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.thinking-slider-status-icon.is-off {
+  color: var(--text-3);
+}
+.thinking-slider-status-icon.is-boosted {
+  animation: thinking-slider-zap-charge 1.15s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 62%, transparent));
+  transform-origin: center;
+}
+.thinking-slider-control {
+  position: relative;
+  flex: 1;
+  min-width: 72px;
+  height: 28px;
+  margin: 0;
+}
+.thinking-slider-track {
+  position: absolute;
+  /* The rail is full width; its positioner keeps stops inside by one thumb radius. */
+  inset: 5px 0;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-hover));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+.thinking-slider-positioner {
+  position: absolute;
+  inset: 0 14px;
+}
+.thinking-slider-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -14px;
+  right: 0;
+  display: block;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  overflow: hidden;
+  /* The element remains a full pill throughout the transition. Only the
+     right clipping edge moves, so Chromium never rasterizes a square
+     zero-width fill while the thumb starts moving. */
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: clip-path;
+}
+.thinking-slider-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.thinking-slider-particle {
+  position: absolute;
+  left: -12px;
+  top: var(--thinking-slider-particle-top);
+  width: var(--thinking-slider-particle-size);
+  height: var(--thinking-slider-particle-size);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 0 3px rgb(255 255 255 / 72%);
+  opacity: 0;
+  pointer-events: none;
+  will-change: left, transform, opacity;
+  animation: thinking-slider-particle-run var(--thinking-slider-particle-duration) ease-in-out
+    infinite;
+  animation-delay: var(--thinking-slider-particle-delay);
+}
+.thinking-slider-particle:nth-child(3n + 1) {
+  background: rgb(255 255 255 / 82%);
+}
+.thinking-slider-particle:nth-child(3n + 2) {
+  box-shadow: 0 0 4px rgb(255 255 255 / 84%);
+}
+.thinking-slider-particle:nth-child(4n) {
+  filter: blur(0.15px);
+}
+.thinking-slider-content.is-boosted .thinking-slider-particle {
+  animation-play-state: running;
+}
+@keyframes thinking-slider-particle-run {
+  0% {
+    left: -12px;
+    opacity: 0;
+    transform: translateY(0) scale(0.4);
+  }
+  12% {
+    opacity: var(--thinking-slider-particle-opacity);
+  }
+  48% {
+    opacity: var(--thinking-slider-particle-opacity);
+    transform: translateY(var(--thinking-slider-particle-drift)) scale(1);
+  }
+  82% {
+    opacity: var(--thinking-slider-particle-fade-opacity);
+  }
+  100% {
+    left: calc(100% + 12px);
+    opacity: 0;
+    transform: translateY(0) scale(0.65);
+  }
+}
+.thinking-slider-marks {
+  position: absolute;
+  inset: 0;
+}
+.thinking-slider-mark {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-inv) 30%, var(--accent));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-inv) 10%, transparent);
+  opacity: 0.78;
+  transform: translate(-50%, -50%);
+  transition:
+    background 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out),
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out);
+}
+.thinking-slider-mark:not(.is-active) {
+  background: color-mix(in srgb, var(--accent) 44%, var(--bg-hover));
+  box-shadow: none;
+  opacity: 0.56;
+}
+.thinking-slider-mark.is-current {
+  background: color-mix(in srgb, var(--text-inv) 52%, var(--accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-inv) 14%, transparent);
+  opacity: 1;
+  animation: thinking-slider-current-mark 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.thinking-slider-content.is-boosted .thinking-slider-mark {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.35);
+}
+.thinking-slider-step-pulse {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-inv) 72%, var(--accent));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-inv) 28%, var(--accent));
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.45);
+  animation: thinking-slider-step-pulse 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.thinking-slider-thumb {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-soft);
+  border-radius: 50%;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  transform: translate(-50%, -50%);
+  transition:
+    left 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow var(--dur-instant) ease;
+}
+.thinking-slider-input {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.thinking-slider-input::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+.thinking-slider-input::-webkit-slider-thumb {
+  width: 28px;
+  height: 28px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.thinking-slider-control:focus-within .thinking-slider-track {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.thinking-slider-control:focus-within .thinking-slider-thumb {
+  box-shadow: var(--shadow-md);
+}
+/* A slider should not make the whole composer look selected. */
+.composer-card:has(.thinking-slider-control:focus-within) {
+  border-color: var(--border-soft);
+  box-shadow: var(--shadow-composer);
+}
+@keyframes thinking-slider-zap-charge {
+  0%,
+  100% {
+    opacity: 0.86;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.14);
+  }
+}
+@keyframes thinking-slider-current-mark {
+  from {
+    transform: translate(-50%, -50%) scale(0.45);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes thinking-slider-step-pulse {
+  0% {
+    opacity: 0.82;
+    transform: translate(-50%, -50%) scale(0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.85);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-slider-particle,
+  .thinking-slider-status-icon.is-boosted,
+  .thinking-slider-mark.is-current,
+  .thinking-slider-step-pulse {
+    animation: none;
+  }
+}
+@media (max-width: 720px) {
+  .model-wrap .pop-menu.model-menu.has-thinking-slider {
+    width: min(264px, calc(100vw - 24px));
+  }
+}
 /* 模型侧栏：服务商分组 header + 缩进模型行 + 管理入口 */
 .pop-prov-header {
   display: flex;
@@ -1963,6 +2232,8 @@ html[data-theme='dark'] .send.stop {
 }
 
 .branch-item {
+  /* The current-branch dirty hint uses a smaller font than the branch name. */
+  align-items: center;
   gap: 8px;
   padding: 7px 10px;
   font-size: var(--fs-sm);
