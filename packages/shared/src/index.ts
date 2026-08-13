@@ -137,6 +137,27 @@ export {
 } from './contracts/chat-jobs.js'
 
 export type {
+  ChatRunAbortDecision,
+  ChatRunAbortIntent,
+  ChatRunAbortReason,
+  ChatRunPhase,
+  ChatRunStatus,
+  ChatRunTerminal,
+  FollowUpRequestMeta,
+  FollowUpSource,
+} from './contracts/chat-run.js'
+export {
+  CHAT_RUN_ABORT_INTENTS,
+  CHAT_RUN_PHASES,
+  CHAT_RUN_TERMINALS,
+  FOLLOW_UP_SOURCES,
+  isChatRunAbortIntent,
+  isChatRunIdentifier,
+  isFollowUpRequestMeta,
+  isFollowUpSource,
+} from './contracts/chat-run.js'
+
+export type {
   ApprovalDecision,
   ApprovalItem,
   ApprovalLocation,
@@ -156,10 +177,7 @@ export type {
   WorkerToolCallStatus,
   WorkerToolCallView,
 } from './contracts/worker-events.js'
-export {
-  isTerminalWorkerEvent,
-  LEADER_STEP_BUDGET_PART_TYPE,
-} from './contracts/worker-events.js'
+export { isTerminalWorkerEvent, LEADER_STEP_BUDGET_PART_TYPE } from './contracts/worker-events.js'
 
 export type {
   ApplyTeamTemplateInput,

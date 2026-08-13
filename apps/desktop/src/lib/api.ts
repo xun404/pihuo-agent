@@ -273,7 +273,7 @@ function boundedRequestSignal(
   return signal ? AbortSignal.any([signal, timeout]) : timeout
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   init?: RequestInit,
   retried = false,
@@ -677,9 +677,10 @@ export const api = {
       false,
       timeoutMs,
     ),
-  refreshModelsDevCatalog: (
-    opts?: { source?: 'models.dev' | 'npm-snapshot'; signal?: AbortSignal },
-  ) =>
+  refreshModelsDevCatalog: (opts?: {
+    source?: 'models.dev' | 'npm-snapshot'
+    signal?: AbortSignal
+  }) =>
     request<{
       ok: boolean
       via?: string
@@ -698,9 +699,7 @@ export const api = {
       '/api/models-dev/refresh',
       {
         method: 'POST',
-        body: JSON.stringify(
-          opts?.source === 'npm-snapshot' ? { source: 'npm-snapshot' } : {},
-        ),
+        body: JSON.stringify(opts?.source === 'npm-snapshot' ? { source: 'npm-snapshot' } : {}),
         signal: opts?.signal,
       },
       false,
@@ -1260,17 +1259,4 @@ export const api = {
 
 export function chatUrl(agentId = 'swarmdesk-leader'): string {
   return `${BASE}/chat/${encodePathSegment(agentId)}`
-}
-
-/**
- * Cancel an in-flight leader run for a thread. useChat's stop() only aborts the
- * local fetch; the server-side run keeps going unless explicitly aborted.
- */
-export function abortChatRun(threadId: string, agentId = 'swarmdesk-leader') {
-  return request<{ aborted: boolean }>(
-    `/chat/${encodePathSegment(agentId)}/${encodePathSegment(threadId)}/abort`,
-    { method: 'POST' },
-    false,
-    10_000,
-  )
 }

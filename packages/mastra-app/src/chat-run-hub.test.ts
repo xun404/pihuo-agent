@@ -5,7 +5,6 @@ import {
   registerChatRun,
   getChatRun,
   attachChatRunSubscriber,
-  abortChatRun,
   _resetChatRunHubsForTest,
 } from './chat-run-hub.js'
 
@@ -148,7 +147,7 @@ describe('chat-run-hub', () => {
     assert.equal(hub.done, true)
   })
 
-  it('abortChatRun aborts the controller and closes subscribers without an error chunk', async () => {
+  it('does not let a subscriber disconnect cancel the source controller', async () => {
     _resetChatRunHubsForTest()
     const controller = new AbortController()
     const state = { cancelled: false }
@@ -156,12 +155,10 @@ describe('chat-run-hub', () => {
     const hub = getChatRun('t4')!
     const res = new FakeResponse()
     attachChatRunSubscriber(hub, res as never)
-    assert.equal(abortChatRun('t4'), true)
-    assert.equal(controller.signal.aborted, true)
-    // Simulate the source honouring the abort by cancelling the reader.
-    // (Mastra cancels the underlying stream on abortSignal.)
+    res.destroy()
     await tick(20)
-    assert.equal(abortChatRun('nope'), false)
+    assert.equal(controller.signal.aborted, false)
+    assert.equal(state.cancelled, false)
   })
 
   it('emits an SSE error chunk before [DONE] when the source stream fails', async () => {
@@ -191,17 +188,19 @@ describe('chat-run-hub', () => {
     assert.equal(getChatRun('t6'), undefined)
   })
 
-  it('registering the same chatId twice aborts and replaces the previous run', async () => {
+  it('rejects duplicate live clientRunId registration without aborting the previous run', async () => {
     _resetChatRunHubsForTest()
     const first = new AbortController()
     registerChatRun('t7', neverEndingStream({ cancelled: false }), first, {
       gracePeriodMs: 5_000,
     })
-    registerChatRun('t7', streamFrom([{ type: 'finish' }]), new AbortController(), {
-      gracePeriodMs: 5_000,
-    })
-    assert.equal(first.signal.aborted, true)
-    await tick()
-    assert.equal(getChatRun('t7')!.done, true)
+    assert.throws(
+      () =>
+        registerChatRun('t7', streamFrom([{ type: 'finish' }]), new AbortController(), {
+          gracePeriodMs: 5_000,
+        }),
+      /CHAT_RUN_HUB_ALREADY_REGISTERED/,
+    )
+    assert.equal(first.signal.aborted, false)
   })
 })

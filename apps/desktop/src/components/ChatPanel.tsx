@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Copy, DatabaseCheck, DatabaseX } from 'lucide-react'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
 import type {
   ApprovalItem,
   CreateTeamMemberInput,
@@ -16,40 +15,23 @@ import type {
   WorkerJob,
   WorkerRegistration,
 } from '@swarmdesk-agent/shared'
-import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
+import { isJobOpen, isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
 import { shouldAnimateSessionTitleTransition } from '../lib/session-title-animation'
 import type { PendingNewSession } from '../hooks/useAppState'
-import {
-  api,
-  abortChatRun,
-  chatUrl,
-  clearDesktopToken,
-  ensureDesktopToken,
-  type ProjectMemorySnapshot,
-} from '../lib/api'
+import { api, type ProjectMemorySnapshot } from '../lib/api'
 import { ThrottledChat } from '../lib/throttled-chat'
+import type { FollowUpCoordinator } from '../lib/follow-up-coordinator'
 import { useI18n } from '../i18n/I18nProvider'
 import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
 import { resolveModelThinkingIntensity } from '../lib/model-thinking-memory'
 import { formatChatError, serializeChatErrorForSticky } from '../lib/chat-errors'
-import { enrichLastUserMessageForWire, parseRouterUserMessage } from '../lib/user-message-display'
-import { MarkdownContent } from './MarkdownContent'
+import { createLeaderChatTransport } from './chat/LeaderChatTransport'
 import { MessageItem } from './MessageItem'
-import { ToolCallRow } from './chat/ToolCallRow'
-import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkerRunCard } from './WorkerRunCard'
 import { ComposerStatusRow } from './chat/ComposerStatusRow'
 import { TurnNavigator } from './chat/TurnNavigator'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
-import {
-  IconApprovals,
-  IconArrowUp,
-  IconBolt,
-  IconClock,
-  IconCrew,
-  IconEdit,
-  IconFolder,
-} from './Icons'
+import { IconApprovals, IconArrowUp, IconCrew, IconEdit, IconFolder } from './Icons'
 import { RightPanel, type InspectorTab } from './RightPanel'
 import type { MemoryPanelError } from './MemoryPanel'
 import { BrandLogo } from './BrandLogo'
@@ -58,19 +40,17 @@ import { ComposerToolbar } from './ComposerToolbar'
 import { CompactionMarker, type CompactionMarkerData } from './CompactionMarker'
 import { useToast } from './Toast'
 import { useSendShortcut } from '../hooks/useSendShortcut'
+import { useFollowUpBehavior } from '../hooks/useFollowUpBehavior'
+import { useFollowUpCoordinator } from '../hooks/useFollowUpCoordinator'
 import { useComposing } from '../hooks/useComposing'
 import { isComposerSendKey } from '../lib/send-shortcut'
 import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-step-budget'
 import { findLatestTaskList } from '../lib/find-latest-task-list'
-import { formatElapsedHms } from '../lib/format-elapsed'
 import { formatTokenCountDisplay } from '../lib/context-window'
 import { approvalsForSession } from '../lib/session-approvals'
 import {
   findCurrentTurnAssistant,
-  formatClockTime,
   mergeDurableLeaderRunMeta,
-  resolveLeaderRunMeta,
-  shortModelId,
   type ClientTurnMeta,
 } from '../lib/leader-run-meta'
 import {
@@ -82,12 +62,12 @@ import {
 } from '../lib/worker-run-reducer'
 import {
   projectWorkerCardPlacements,
-  shouldRenderGenericToolShell,
   buildToolCallJobIdMap,
   type WorkerCardPlacement,
 } from '../lib/worker-card-placement'
 import { setRecordKey } from '../lib/chat-state'
 import type { WorkerRunEvent, WorkerRunState, LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
+import { QueueChips } from './chat/QueueChips'
 
 type ModelOption = {
   id: string
@@ -202,7 +182,7 @@ export function ChatPanel({
   onRenameSession,
   onOpenSettings,
   onRefreshSnapshot,
-  settingsOpen,
+  settingsOpen: _settingsOpen,
   onBusyChange,
   permissionMode,
   permissionFailureCount = 0,
@@ -232,6 +212,7 @@ export function ChatPanel({
   const { t, locale } = useI18n()
   const { reduceMotion } = useMotionPreference()
   const { sendShortcut } = useSendShortcut()
+  const { followUpBehavior } = useFollowUpBehavior()
   const { composing, onCompositionStart, onCompositionEnd } = useComposing()
   const [input, setInput] = useState('')
   /** Tracks the initialInput value already consumed, so we apply each text once. */
@@ -239,12 +220,16 @@ export function ChatPanel({
   /** When initialInput arrives with autoSendInitialInput, the text is staged
    *  here and fired by the autoSend effect once a model is selected. */
   const pendingAutoSendRef = useRef<string | null>(null)
+  /** Prevent repeated Settings popups while the staged initial prompt waits
+   * for a configured model. The text remains available in the composer. */
+  const pendingAutoSendModelPromptedRef = useRef(false)
   useEffect(() => {
     if (initialInput && initialInput !== consumedInitialInputRef.current) {
       consumedInitialInputRef.current = initialInput
       setInput(initialInput)
       if (autoSendInitialInput) {
         pendingAutoSendRef.current = initialInput
+        pendingAutoSendModelPromptedRef.current = false
       } else {
         onInitialInputConsumed?.()
       }
@@ -396,6 +381,9 @@ export function ChatPanel({
   const historyHydratedChat = useRef<object | null>(null)
   /** Bumped when an active empty pane needs another history attempt. */
   const [historyReloadToken, setHistoryReloadToken] = useState(0)
+  /** Transport is constructed before useChat, while the coordinator needs
+   * useChat's send/stop/resume callbacks. This ref bridges that safe cycle. */
+  const followUpCoordinatorRef = useRef<FollowUpCoordinator | null>(null)
   // Keep latest model / thinking for transport body (avoid stale closure)
   const selectedModelRef = useRef(selectedModel)
   selectedModelRef.current = selectedModel
@@ -637,93 +625,18 @@ export function ChatPanel({
 
   const transport = useMemo(
     () =>
-      new DefaultChatTransport({
-        api: chatUrl('swarmdesk-leader'),
-        // Mastra Memory already stores history — send only the latest user turn
-        // @see https://mastra.ai/docs/memory/message-history
-        // @see https://mastra.ai/guides/build-your-ui/ai-sdk-ui
-        // Desktop bearer attached here (async headers not always typed on DefaultChatTransport)
-        prepareSendMessagesRequest: async ({ messages: msgs }) => {
-          const last = msgs[msgs.length - 1]
-          const proj = projectRef.current
-          let sess = sessionRef.current
-          const pending = pendingNewSessionRef.current
-          const createSessionFn = createSessionRef.current
-          const clearPendingFn = clearPendingSessionRef.current
-
-          // Lazy session creation: if there's a pending session, create it on the server now
-          if (pending && createSessionFn) {
-            try {
-              const created = await createSessionFn(
-                undefined,
-                pending.mode,
-                pending.projectId,
-                pending.memoryThreadId,
-              )
-              sess = created
-              sessionRef.current = created
-              clearPendingFn?.()
-            } catch (e) {
-              console.error('[ChatPanel] lazy session creation failed', e)
-              throw e
-            }
-          }
-
-          // UI keeps clean user text; inject mode/context only on the wire
-          const wireLast = enrichLastUserMessageForWire(last as never, {
-            locale: localeRef.current,
-            mode: 'build',
-            projectName: proj?.name,
-            projectPath: proj?.rootPath,
-            sessionTitle: sess?.title,
-            model: selectedModelRef.current || undefined,
-            thinking: thinkingIntensityRef.current,
-          })
-          const tok = await ensureDesktopToken()
-          const headers: Record<string, string> = {}
-          if (tok) {
-            headers.Authorization = `Bearer ${tok}`
-            headers['X-SwarmDesk-Agent-Desktop-Token'] = tok
-          }
-          return {
-            headers,
-            body: {
-              messages: wireLast ? [wireLast] : [],
-              memory: {
-                thread: memoryThreadId,
-                resource: memoryResourceId,
-              },
-              model: selectedModelRef.current || undefined,
-              thinkingIntensity: thinkingIntensityRef.current,
-            },
-          }
-        },
-        // Auth headers for the resumeStream() reconnect GET (api defaults to
-        // `${api}/${chatId}/stream`, which the server implements).
-        prepareReconnectToStreamRequest: async () => {
-          const tok = await ensureDesktopToken()
-          const headers: Record<string, string> = {}
-          if (tok) {
-            headers.Authorization = `Bearer ${tok}`
-            headers['X-SwarmDesk-Agent-Desktop-Token'] = tok
-          }
-          return { headers }
-        },
-        // AI SDK 6: custom fetch so first 401 clears token, IPC re-fetch, replay once
-        fetch: async (input, init) => {
-          const doFetch = (headers: HeadersInit | undefined) =>
-            globalThis.fetch(input, { ...init, headers })
-          let res = await doFetch(init?.headers)
-          if (res.status !== 401) return res
-          clearDesktopToken()
-          const again = await ensureDesktopToken(true)
-          if (!again) return res
-          const headers = new Headers(init?.headers)
-          headers.set('Authorization', `Bearer ${again}`)
-          headers.set('X-SwarmDesk-Agent-Desktop-Token', again)
-          res = await doFetch(headers)
-          return res
-        },
+      createLeaderChatTransport({
+        threadId: memoryThreadId,
+        resourceId: memoryResourceId,
+        projectRef,
+        sessionRef,
+        pendingNewSessionRef,
+        createSessionRef,
+        clearPendingSessionRef,
+        selectedModelRef,
+        thinkingIntensityRef,
+        localeRef,
+        coordinatorRef: followUpCoordinatorRef,
       }),
     [memoryThreadId, memoryResourceId],
   )
@@ -774,29 +687,69 @@ export function ChatPanel({
 
   const busy = status === 'submitted' || status === 'streaming'
 
+  const refreshFollowUpHistory = useCallback(async () => {
+    const result = await api.getThreadMessages(memoryThreadId, memoryResourceId)
+    // Terminal confirmation makes a forceful replacement safe: this removes
+    // any local-only assistant partial without touching an older completed
+    // assistant turn.
+    setMessages(() => result.messages as never)
+  }, [memoryThreadId, memoryResourceId, setMessages])
+
+  // A failed history recall must not be treated as a bootstrap barrier that
+  // merely happened to finish. The coordinator waits for a successful hydrate
+  // (including an intentionally empty history) before any resume/dispatch.
+  const followUpHistoryReady = !historyLoading && historyHydratedChat.current === chat
+
+  const followUp = useFollowUpCoordinator({
+    threadId: memoryThreadId,
+    historyReady: followUpHistoryReady,
+    modelReady: Boolean(selectedModel && models.length > 0),
+    send: ({ id, text, followUp: meta }) => {
+      lastStatusPostRef.current = 'running'
+      if (error) clearError()
+      onSessionStatusChange?.('running', { lastChatError: null })
+      followTailRef.current = true
+      return sendMessage(
+        {
+          id,
+          role: 'user',
+          parts: [{ type: 'text', text }],
+        } as never,
+        { body: { followUp: meta } },
+      )
+    },
+    stopLocal: () => {
+      void stop()
+    },
+    resume: () => resumeStream(),
+    refreshHistory: refreshFollowUpHistory,
+    onModelRequired: () => onOpenSettings?.('model'),
+    onCapacityReached: () => toastError(t('chat.followUpQueueFull')),
+    coordinatorRef: followUpCoordinatorRef,
+  })
+
   // Auto-send the staged initial input once a model is available. Models load
-  // async after mount; sending before one is set would hit the no-model guard.
+  // async after mount; the coordinator also waits for history/run reconciliation.
   useEffect(() => {
     const pending = pendingAutoSendRef.current
-    if (!pending || busy || !selectedModel || models.length === 0) return
+    if (!pending || !followUp.snapshot.bootstrapped || modelsLoading) return
+    const modelReady = Boolean(selectedModel && models.length > 0)
+    if (!modelReady && pendingAutoSendModelPromptedRef.current) return
+    const result = followUp.submit(pending, {
+      behavior: followUpBehavior,
+      preferSteer: false,
+      source: 'direct',
+    })
+    if (result === 'wait') return
+    if (result === 'blocked_model') {
+      pendingAutoSendModelPromptedRef.current = true
+      return
+    }
     pendingAutoSendRef.current = null
-    lastStatusPostRef.current = 'running'
-    if (error) clearError()
-    onSessionStatusChange?.('running', { lastChatError: null })
-    followTailRef.current = true // user-initiated send re-engages tail follow
-    void sendMessage({ text: pending })
+    pendingAutoSendModelPromptedRef.current = false
     setInput('')
     onInitialInputConsumed?.()
-  }, [
-    selectedModel,
-    models,
-    busy,
-    error,
-    clearError,
-    sendMessage,
-    onSessionStatusChange,
-    onInitialInputConsumed,
-  ])
+  }, [selectedModel, models, modelsLoading, followUp, followUpBehavior, onInitialInputConsumed])
 
   // Load persisted history once per chat instance (survives refresh). Retries on
   // transient failure: memory.recall() can 500 under SQLite concurrency (e.g.
@@ -871,18 +824,6 @@ export function ChatPanel({
     historyHydratedChat.current = null
     setHistoryReloadToken((n) => n + 1)
   }, [isActive, historyLoading, messages.length])
-
-  // Resume an in-flight run after a reload: re-attach to the server-side stream
-  // (GET /chat/:agentId/:threadId/stream). MUST wait until history is loaded so
-  // the replayed chunks build on the persisted messages instead of racing
-  // setMessages. 204 = no active run → no-op. Once per chat instance.
-  const resumeAttemptedFor = useRef<object | null>(null)
-  useEffect(() => {
-    if (historyLoading) return
-    if (resumeAttemptedFor.current === chat) return
-    resumeAttemptedFor.current = chat
-    void resumeStream()
-  }, [historyLoading, chat, resumeStream])
 
   // Seed message history and the complete durable snapshot in one monotonic update.
   useEffect(() => {
@@ -971,7 +912,21 @@ export function ChatPanel({
     }
     return false
   }, [workerStates])
-  const effectiveBusy = busy || hasRunningWorker
+  const hasOpenWorkerJob = useMemo(
+    () => snapshotJobs.some((job) => job.sessionId === session.id && isJobOpen(job.status)),
+    [session.id, snapshotJobs],
+  )
+  const followUpLeaderBusy =
+    followUp.snapshot.serverStatus?.active === true ||
+    followUp.snapshot.phase === 'dispatching' ||
+    followUp.snapshot.phase === 'observing' ||
+    followUp.snapshot.phase === 'terminating'
+  const effectiveBusy =
+    busy ||
+    !followUp.snapshot.bootstrapped ||
+    followUpLeaderBusy ||
+    hasRunningWorker ||
+    hasOpenWorkerJob
   const hasMessages = messages.length > 0 || historyLoading
 
   useEffect(() => {
@@ -1294,16 +1249,6 @@ export function ChatPanel({
       ),
     [messages, ctxTotal],
   )
-  const ctxPctRaw = ctxTotal > 0 ? (approxTokens / ctxTotal) * 100 : 0
-  const ctxPct = Math.min(100, Math.round(ctxPctRaw * 10) / 10)
-  const ctxUsedLabel = formatTokenCountDisplay(approxTokens, locale)
-  const ctxTotalLabel = formatTokenCountDisplay(ctxTotal, locale)
-  const ctxPctLabel =
-    ctxPctRaw > 0 && ctxPctRaw < 0.1
-      ? ctxPctRaw.toFixed(2)
-      : ctxPct % 1 === 0
-        ? String(Math.round(ctxPct))
-        : ctxPct.toFixed(1)
   // Follow-mode event wiring:
   // - detach on explicit user scroll intent ONLY (wheel-up, touch drag-up,
   //   scrollbar-track mousedown). Content-height changes above the fold must
@@ -1558,26 +1503,13 @@ export function ChatPanel({
       void runCompressContext()
       return
     }
-    if (busy) return
-
-    // Soft client guard: no configured model/key — don't fire a raw stream error
-    if (!selectedModel || models.length === 0) {
-      console.error('[chat] blocked send: no configured model/API key', {
-        selectedModel,
-        models: models.length,
-      })
-      // useChat error state is server-driven; surface via temporary local message is harder.
-      // Prefer opening settings — user sees empty model chip already.
-      onOpenSettings?.('model')
-      return
-    }
-
-    // UI message = clean user text only; mode/context injected in prepareSendMessagesRequest
-    lastStatusPostRef.current = 'running'
-    if (error) clearError()
-    onSessionStatusChange?.('running', { lastChatError: null })
-    followTailRef.current = true // user-initiated send re-engages tail follow
-    void sendMessage({ text })
+    const nativeEvent = e.nativeEvent as unknown as { ctrlKey?: boolean; metaKey?: boolean }
+    const result = followUp.submit(text, {
+      behavior: followUpBehavior,
+      preferSteer: Boolean(nativeEvent.ctrlKey || nativeEvent.metaKey),
+      source: 'direct',
+    })
+    if (result === 'wait' || result === 'blocked_model') return
     setInput('')
   }
 
@@ -1649,16 +1581,21 @@ export function ChatPanel({
   ])
 
   const handleContinueBudget = useCallback(() => {
-    if (!activeBudgetEvent || busy) return
+    if (!activeBudgetEvent) return
     const saved = activeBudgetEvent
-    setCanContinueBudget(false)
     const prompt = buildContinuePrompt(locale)
-    followTailRef.current = true // user-initiated send re-engages tail follow
-    sendMessage({ text: prompt }).catch(() => {
+    const result = followUp.submit(prompt, {
+      behavior: followUpBehavior,
+      preferSteer: false,
+      source: 'budget_continue',
+    })
+    if (result === 'wait' || result === 'blocked_model') {
       setActiveBudgetEvent(saved)
       setCanContinueBudget(true)
-    })
-  }, [activeBudgetEvent, busy, locale, sendMessage])
+      return
+    }
+    setCanContinueBudget(false)
+  }, [activeBudgetEvent, followUp, followUpBehavior, locale])
 
   // —— Inline title editing (chat header) ——
   // Begin editing: seed the draft from the *raw* session title (not the
@@ -1743,8 +1680,6 @@ export function ChatPanel({
     setEditingTitle(false)
     setTitleDraft(session.title)
   }, [session.title])
-
-  const metaKey = (msgId: string, partIdx: number) => `${msgId}:${partIdx}`
 
   const isMetaOpen = useCallback(
     (key: string, autoOpen: boolean): boolean => {
@@ -1901,6 +1836,21 @@ export function ChatPanel({
     onRefreshGit?.()
   }, [onRefreshGit])
 
+  const returnQueuedMessageToInput = useCallback(
+    (deliveryId: string) => {
+      const item = followUp.remove(deliveryId)
+      if (!item) return
+      setInput((current) => (current.trim() ? current + '\n' + item.content : item.content))
+    },
+    [followUp],
+  )
+
+  const hasLeaderStopAction =
+    busy ||
+    followUp.snapshot.serverStatus?.active === true ||
+    followUp.snapshot.phase === 'dispatching' ||
+    followUp.snapshot.phase === 'terminating'
+
   const composerCard = (
     <div className="composer-stack">
       <ComposerStatusRow
@@ -1908,6 +1858,15 @@ export function ChatPanel({
         enabled={isActive}
         tasks={taskSnapshot}
         gitRefreshToken={gitRefreshToken}
+      />
+      <QueueChips
+        items={followUp.outbox}
+        phase={followUp.snapshot.phase}
+        onRemove={(deliveryId) => {
+          followUp.remove(deliveryId)
+        }}
+        onReturnToInput={returnQueuedMessageToInput}
+        onSendNow={followUp.sendNow}
       />
       <form className="composer-card" onSubmit={onSubmit}>
         <div className="context-bar">
@@ -1978,17 +1937,21 @@ export function ChatPanel({
             onOpenSettings={onOpenSettings}
           />
 
-          {busy ? (
+          {hasLeaderStopAction ? (
             <button
               className="send stop"
               type="button"
-              onClick={() => {
-                stop()
-                // stop() only aborts the local fetch — cancel the server run too.
-                void abortChatRun(memoryThreadId).catch(() => {})
-              }}
-              title={t('chat.stop')}
-              aria-label={t('chat.stop')}
+              onClick={() => void followUp.stop()}
+              title={
+                followUp.snapshot.phase === 'terminating'
+                  ? t('chat.followUpStopPending')
+                  : t('chat.stop')
+              }
+              aria-label={
+                followUp.snapshot.phase === 'terminating'
+                  ? t('chat.followUpStopPending')
+                  : t('chat.stop')
+              }
             />
           ) : (
             <button

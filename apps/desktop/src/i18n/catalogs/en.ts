@@ -50,6 +50,17 @@ export const en: Dict = {
   'approvals.unknownScope': 'Agent did not provide a verifiable path',
   'chat.budgetExhausted': '{used}/{max} step budget exhausted. Task may be incomplete.',
   'chat.continueTask': 'Continue',
+  'chat.followUpBlockedModel': 'Configure an available model first',
+  'chat.followUpQueue': 'Queued',
+  'chat.followUpQueueFull': 'This conversation can queue at most 20 messages.',
+  'chat.followUpReconcile': 'Checking server state',
+  'chat.followUpReconciling': 'Checking',
+  'chat.followUpRemove': 'Remove queued message',
+  'chat.followUpRetrying': 'Will retry automatically',
+  'chat.followUpReturnToInput': 'Return to composer',
+  'chat.followUpSendNow': 'Send now',
+  'chat.followUpStopPending': 'Waiting for a safe stop',
+  'chat.followUpWaiting': 'Waiting for current task to finish safely',
   'chat.compactDone': 'Context compressed',
   'chat.compactFailed': 'Context compression failed',
   'chat.compactFreed': 'freed {freed}',
@@ -401,7 +412,8 @@ export const en: Dict = {
   'settings.modelsDevAlreadyAdded': 'Added',
   'settings.modelsDevEmpty': 'No providers to add. Try refreshing the catalog or another query.',
   'settings.modelsDevImported': 'Added “{name}”',
-  'settings.modelsDevListTimeout': 'Catalog refresh in progress; the list request timed out. Please retry shortly.',
+  'settings.modelsDevListTimeout':
+    'Catalog refresh in progress; the list request timed out. Please retry shortly.',
   'settings.modelsDevRefreshFailed':
     'Could not download the models.dev catalog ({error}). Check your network and try again.',
   'settings.modelsDevRefreshFailedKeepLkg':
@@ -552,6 +564,10 @@ export const en: Dict = {
   'settings.sendShortcutDesc': 'Keyboard shortcut to send from the composer',
   'settings.sendShortcutEnter': 'Enter',
   'settings.sendShortcutModEnter': '⌘/Ctrl+Enter',
+  'settings.followUpBehavior': 'Follow-up messages',
+  'settings.followUpBehaviorDesc': 'How to handle a new message while this task is busy',
+  'settings.followUpBehaviorQueue': 'Queue',
+  'settings.followUpBehaviorSteer': 'Steer',
   'settings.motion': 'Animation',
   'settings.motionDesc': 'Panel transitions and decorative motion; turn off to reduce jank',
   'settings.motionSystem': 'System',
@@ -624,7 +640,8 @@ export const en: Dict = {
   'settings.notifications.onApproval': 'Notify when approval is needed',
   'settings.notifications.test': 'Send test notification',
   'settings.notifications.testBody': 'System notifications are ready',
-  'settings.notifications.testFailed': 'Test notification could not be shown: allow notifications for this app in system settings',
+  'settings.notifications.testFailed':
+    'Test notification could not be shown: allow notifications for this app in system settings',
   'settings.prompts.leader': 'Leader',
   'settings.prompts.leaderHint':
     'Appended after the protected protocol and tool contract; applies from the next turn.',
@@ -921,7 +938,8 @@ export const en: Dict = {
   'workers.runApproval': 'Approval',
   'workers.runAuthHint': '{name} ({identity}) must be authenticated before dispatch.',
   'workers.runError': 'Error',
-  'workers.runRuntimeRestarted': 'The worker runtime restarted before completion; manually rerun this task.',
+  'workers.runRuntimeRestarted':
+    'The worker runtime restarted before completion; manually rerun this task.',
   'workers.runInput': 'Input',
   'workers.runNoOutput': 'Completed (no output)',
   'workers.runOutput': 'Output',

@@ -4,6 +4,7 @@ import { describe, it } from 'node:test'
 
 const owner = readFileSync(new URL('./http-server.ts', import.meta.url), 'utf8')
 const studio = readFileSync(new URL('./routes/api.ts', import.meta.url), 'utf8')
+const chatRunHttp = readFileSync(new URL('./chat-run-http.ts', import.meta.url), 'utf8')
 
 describe('project memory route contract', () => {
   it('keeps GET/PATCH/working PUT routes present on both API surfaces', () => {
@@ -22,9 +23,11 @@ describe('project memory route contract', () => {
   })
 
   it('does not trust client resource ids for chat memory options', () => {
-    assert.match(owner, /const projectMemoryOptions = resolveProjectMemoryOptions/u)
+    assert.match(
+      chatRunHttp,
+      /projectMemoryOptions:\s*resolveProjectMemoryOptions\(isProjectMemoryEnabled\(routerProject\)\)/u,
+    )
     assert.match(owner, /options: projectMemoryOptions/u)
-    assert.match(owner, /isProjectMemoryEnabled\(routerProject\)/u)
     assert.match(owner, /persistUserTurnUpFront\(leaderMemory/u)
   })
 

@@ -116,14 +116,17 @@ import type {
   SessionPermissionMode,
   PermissionModeChangeSource,
 } from '@swarmdesk-agent/shared'
+import { isJobOpen } from '@swarmdesk-agent/shared'
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
+import { ChatRunCoordinator } from './chat-run-coordinator.js'
+import { startReservedChatRun } from './chat-run-routes.js'
 import {
-  registerChatRun,
-  getChatRun,
-  attachChatRunSubscriber,
-  abortChatRun,
-} from './chat-run-hub.js'
+  createResolveLeaderChatScope,
+  finishChatRunStart,
+  followUpFromParams,
+  handleChatRunProtocolRoute,
+} from './chat-run-http.js'
 import { buildLeaderRunMetaDbMessage, persistUserTurnUpFront } from './persist-user-turn.js'
 import { coalesceAssistantTurns } from './coalesce-assistant-turns.js'
 import { RequestContext } from '@mastra/core/request-context'
@@ -184,10 +187,8 @@ import {
 import { shouldMarkRoleReviewPrompted } from './role-review-prompt.js'
 import { getTeamTemplateService, TeamTemplateServiceError } from './team-template-service.js'
 import {
-  isProjectMemoryEnabled,
   readProjectMemory,
   resolveProjectMemoryContext,
-  resolveProjectMemoryOptions,
   updateProjectWorkingMemory,
 } from './project-memory.js'
 
@@ -251,6 +252,21 @@ const runtimeDiscoveryPath =
 const runtimeStartedAt = new Date().toISOString()
 
 const { corsFor } = requestContext
+
+const chatRunCoordinator = new ChatRunCoordinator({
+  getOpenWorkerJobCount: (sessionId) =>
+    getWorkerScheduler()
+      .listJobs({ sessionId, limit: 500 })
+      .filter((job) => isJobOpen(job.status)).length,
+})
+
+const CHAT_ABORT_WAIT_MS = 1_500
+
+const resolveLeaderChatScope = createResolveLeaderChatScope({
+  getActive: () => store.getActive(),
+  listSessions: () => store.listSessions(),
+  listProjects: () => store.listProjects(),
+})
 
 function authorizeInternalRuntime(req: IncomingMessage): boolean {
   if (!internalRuntimeToken) return false
@@ -760,25 +776,21 @@ const server = createServer(async (req, res) => {
         }
       }
 
-      // Resume an in-flight chat stream (AI SDK useChat resume contract):
-      // 204 = no active run for this chat; 200 = SSE replay + live tail.
-      const chatStreamMatch = match(path, '/chat/:agentId/:chatId/stream')
-      if (method === 'GET' && chatStreamMatch) {
-        const hub = getChatRun(chatStreamMatch.chatId!)
-        if (!hub) {
-          res.writeHead(204, corsFor())
-          res.end()
-          return
-        }
-        attachChatRunSubscriber(hub, res, corsFor())
-        return
-      }
-
-      // Explicit stop for a running chat turn. useChat stop() only disconnects
-      // the local fetch — the server run keeps going unless aborted here.
-      const chatAbortMatch = match(path, '/chat/:agentId/:chatId/abort')
-      if (method === 'POST' && chatAbortMatch) {
-        send(res, 200, { aborted: abortChatRun(chatAbortMatch.chatId!) })
+      if (
+        await handleChatRunProtocolRoute({
+          method,
+          path,
+          url,
+          req,
+          res,
+          coordinator: chatRunCoordinator,
+          resolveScope: resolveLeaderChatScope,
+          corsFor,
+          send,
+          readJson: (request) => readJson(request),
+          abortWaitMs: CHAT_ABORT_WAIT_MS,
+        })
+      ) {
         return
       }
 
@@ -788,57 +800,28 @@ const server = createServer(async (req, res) => {
         const agentId = chatMatch.agentId!
         const params = (await readJson(req)) as Record<string, unknown>
         try {
-          // Goals + Memory processors require an active resourceId + threadId on every run.
-          // Prefer client-provided memory (session-scoped); fall back to active project/session.
-          const active = store.getActive()
-          const clientMemory = (params.memory ?? null) as {
-            thread?: string | { id?: string }
-            resource?: string
-          } | null
-          const threadFromClient =
-            typeof clientMemory?.thread === 'string'
-              ? clientMemory.thread
-              : clientMemory?.thread && typeof clientMemory.thread === 'object'
-                ? clientMemory.thread.id
-                : undefined
-          const resourceFromClient =
-            typeof clientMemory?.resource === 'string' ? clientMemory.resource : undefined
-
-          // Resolve session from memoryThreadId first — never trust client resourceId alone.
-          const threadId =
-            threadFromClient ||
-            active.session?.memoryThreadId ||
-            active.session?.id ||
-            'router-default-thread'
-          const sessionByThread =
-            store.listSessions().find((s) => s.memoryThreadId === threadId || s.id === threadId) ??
-            (active.session?.memoryThreadId === threadId || active.session?.id === threadId
-              ? active.session
-              : undefined)
-          const boundProjectId =
-            sessionByThread?.projectId ||
-            active.project?.id ||
-            active.session?.projectId ||
-            'router-default-resource'
-          if (resourceFromClient && resourceFromClient !== boundProjectId) {
-            send(res, 403, {
-              error: 'resourceId does not match session project',
-              code: 'SWARMDESK_AGENT_RESOURCE_MISMATCH',
+          const scope = resolveLeaderChatScope(params)
+          if (!scope.ok) {
+            send(res, scope.status, { error: scope.error, code: scope.code })
+            return
+          }
+          const followUpResult = followUpFromParams(params)
+          if (!followUpResult.ok) {
+            send(res, 400, {
+              error: followUpResult.error,
+              code: followUpResult.code,
             })
             return
           }
-          const resourceId = boundProjectId
-
-          // Resolve the persisted Router tuple before applying any memory
-          // options. The browser may request a thread, but it cannot choose a
-          // different Project resource or override this project's switch.
-          const routerSession = sessionByThread ?? null
-          const routerProject = routerSession
-            ? (store.listProjects().find((p) => p.id === routerSession.projectId) ?? null)
-            : (active.project ?? null)
-          const projectMemoryOptions = resolveProjectMemoryOptions(
-            isProjectMemoryEnabled(routerProject),
-          )
+          const {
+            threadId,
+            resourceId,
+            sessionId,
+            routerSession,
+            routerProject,
+            projectMemoryOptions,
+          } = scope
+          const followUp = followUpResult.followUp
 
           // Per-chat model from UI picker (provider/model), else settings leaderModel
           const settings = loadSettings()
@@ -916,16 +899,12 @@ const server = createServer(async (req, res) => {
             requestContext.set('memoryThreadId', threadId)
           }
 
-          // One controller per run: the chat-run-hub holds it so the explicit
-          // abort endpoint (and same-thread re-registration) can cancel the
-          // Mastra run. Client disconnects never abort — reload must not kill it.
-          const abortController = new AbortController()
-
           // Ensure params carry memory even if client omitted it (goal-state processor)
-          const paramsWithMemory = {
-            ...params,
+          const { followUp: _followUp, ...paramsWithoutFollowUp } = params
+          const paramsWithMemory = (lease: { abortSignal: AbortSignal }) => ({
+            ...paramsWithoutFollowUp,
             maxSteps: leaderMaxSteps,
-            abortSignal: abortController.signal,
+            abortSignal: lease.abortSignal,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -933,15 +912,6 @@ const server = createServer(async (req, res) => {
             },
             requestContext,
             providerOptions,
-          }
-
-          globalActivityLog.append('chat', `Chat → ${agentId}`, {
-            agentId,
-            threadId,
-            resourceId,
-            model: leaderModel,
-            thinkingIntensity,
-            messageCount: Array.isArray(params.messages) ? params.messages.length : 0,
           })
           const leaderRunStartedAt = new Date()
           const leaderRunMarkerId = randomUUID()
@@ -949,165 +919,181 @@ const server = createServer(async (req, res) => {
           // untilIdle keeps the stream open across background tool tasks
           // @see https://mastra.ai/docs/long-running-agents/background-tasks
 
-          // Persist the user turn up front: Mastra only saves input+output at
-          // run finish, so a mid-run reload would otherwise drop the in-flight
-          // user message from the chat UI until the run ends. Ids match the
-          // client's UIMessages → the finish-save upserts, never duplicates.
-          // Best-effort: a pre-save failure must not break the chat flow.
-          try {
-            await persistUserTurnUpFront(leaderMemory as never, {
-              messages: params.messages,
-              threadId,
-              resourceId,
-            })
-          } catch (err) {
-            console.error('[chat] user-turn pre-save failed (non-fatal)', err)
-          }
+          const startResult = await startReservedChatRun({
+            registry: chatRunCoordinator,
+            threadId,
+            sessionId,
+            followUp,
+            // Persist only after admission. This is intentionally fatal for a
+            // reserved follow-up: allowing the agent to run without a durable
+            // user turn would make reload/Steer reconciliation unsafe.
+            persistUserTurn: async () => {
+              globalActivityLog.append('chat', `Chat → ${agentId}`, {
+                agentId,
+                threadId,
+                resourceId,
+                model: leaderModel,
+                thinkingIntensity,
+                messageCount: Array.isArray(params.messages) ? params.messages.length : 0,
+              })
+              await persistUserTurnUpFront(leaderMemory as never, {
+                messages: params.messages,
+                threadId,
+                resourceId,
+              })
+            },
+            createStream: async (lease) => {
+              let streamBudgetEvent: LeaderStepBudgetEvent | null = null
+              return handleChatStream({
+                mastra,
+                agentId,
+                version: 'v6',
+                params: {
+                  ...paramsWithMemory(lease),
+                  untilIdle: true,
+                  onFinish: async (onFinishEvent: {
+                    steps?: readonly {
+                      usage?: {
+                        inputTokens?: number
+                        cachedInputTokens?: number
+                        outputTokens?: number
+                      }
+                    }[]
+                    finishReason?: string
+                    runId?: string
+                  }) => {
+                    if (!onFinishEvent.finishReason) return
 
-          let streamBudgetEvent: LeaderStepBudgetEvent | null = null
-
-          const stream = await handleChatStream({
-            mastra,
-            agentId,
-            version: 'v6',
-            params: {
-              ...paramsWithMemory,
-              untilIdle: true,
-              onFinish: async (onFinishEvent: {
-                steps?: readonly {
-                  usage?: {
-                    inputTokens?: number
-                    cachedInputTokens?: number
-                    outputTokens?: number
-                  }
-                }[]
-                finishReason?: string
-                runId?: string
-              }) => {
-                if (!onFinishEvent.finishReason) return
-
-                if (!leaderRunMetaPersisted) {
-                  leaderRunMetaPersisted = true
-                  const completedAt = new Date()
-                  try {
-                    const marker = buildLeaderRunMetaDbMessage({
-                      runId: onFinishEvent.runId ?? leaderRunMarkerId,
-                      threadId,
-                      resourceId,
-                      model: leaderModel,
-                      thinking: thinkingIntensity,
-                      startedAt: leaderRunStartedAt,
-                      completedAt,
-                    })
-                    await leaderMemory.saveMessages({ messages: [marker as never] })
-                  } catch (err) {
-                    console.error('[leader-run-meta] Failed to persist run metadata:', {
-                      threadId,
-                      error: String(err),
-                    })
-                  }
-                }
-
-                // Stamp the reply time so the sidebar can show "last reply X ago"
-                // instead of the noisy session.updatedAt (which mode/rename/activate
-                // also bump). No-op if the session was deleted mid-stream.
-                if (routerSession) {
-                  store.markSessionReply(routerSession.id)
-                  if (
-                    shouldMarkRoleReviewPrompted({
-                      roleReviewPending,
-                      finishReason: onFinishEvent.finishReason,
-                    })
-                  ) {
-                    store.markSessionRoleReviewPrompted(routerSession.id)
-                  }
-                }
-
-                // —— Cumulative token usage ——
-                // Sum real model-reported usage across all steps of this turn and
-                // accumulate into the session (for the context popup's cache-hit
-                // rate + context size). Failures are swallowed: usage stats must
-                // never break the chat flow (same contract as session-title).
-                if (routerSession && onFinishEvent.steps?.length) {
-                  try {
-                    // Cumulative totals (for cache-hit-rate): sum across steps.
-                    let inputTokens = 0
-                    let cachedInputTokens = 0
-                    let outputTokens = 0
-                    // Track the LAST step's input separately: in a multi-step
-                    // agentic loop, each step's inputTokens already includes all
-                    // prior context (system + user + prior step outputs), so
-                    // summing them double-counts. The last step's input is the
-                    // best proxy for "current context occupancy" — it reflects
-                    // the full prompt the model just saw.
-                    let lastStepInputTokens = 0
-                    for (const step of onFinishEvent.steps) {
-                      const u = step?.usage
-                      if (!u) continue
-                      const stepInput = Math.max(0, Math.floor(u.inputTokens ?? 0))
-                      inputTokens += stepInput
-                      cachedInputTokens += Math.max(0, Math.floor(u.cachedInputTokens ?? 0))
-                      outputTokens += Math.max(0, Math.floor(u.outputTokens ?? 0))
-                      if (stepInput > 0) lastStepInputTokens = stepInput
+                    if (!leaderRunMetaPersisted) {
+                      leaderRunMetaPersisted = true
+                      const completedAt = new Date()
+                      try {
+                        const marker = buildLeaderRunMetaDbMessage({
+                          runId: onFinishEvent.runId ?? leaderRunMarkerId,
+                          threadId,
+                          resourceId,
+                          model: leaderModel,
+                          thinking: thinkingIntensity,
+                          startedAt: leaderRunStartedAt,
+                          completedAt,
+                        })
+                        await leaderMemory.saveMessages({ messages: [marker as never] })
+                      } catch (err) {
+                        console.error('[leader-run-meta] Failed to persist run metadata:', {
+                          threadId,
+                          error: String(err),
+                        })
+                      }
                     }
-                    store.markSessionUsage(routerSession.id, {
-                      inputTokens,
-                      cachedInputTokens,
-                      outputTokens,
-                      lastInputTokens: lastStepInputTokens,
-                    })
-                  } catch (err) {
-                    console.error(
-                      '[session-usage] onFinish usage accumulation failed',
-                      err instanceof Error ? err.message : err,
-                    )
-                  }
-                }
 
-                const event = detectLeaderStepBudgetExhaustion({
+                    // Stamp the reply time so the sidebar can show "last reply X ago"
+                    // instead of the noisy session.updatedAt (which mode/rename/activate
+                    // also bump). No-op if the session was deleted mid-stream.
+                    if (routerSession) {
+                      store.markSessionReply(routerSession.id)
+                      if (
+                        shouldMarkRoleReviewPrompted({
+                          roleReviewPending,
+                          finishReason: onFinishEvent.finishReason,
+                        })
+                      ) {
+                        store.markSessionRoleReviewPrompted(routerSession.id)
+                      }
+                    }
+
+                    // —— Cumulative token usage ——
+                    // Sum real model-reported usage across all steps of this turn and
+                    // accumulate into the session (for the context popup's cache-hit
+                    // rate + context size). Failures are swallowed: usage stats must
+                    // never break the chat flow (same contract as session-title).
+                    if (routerSession && onFinishEvent.steps?.length) {
+                      try {
+                        // Cumulative totals (for cache-hit-rate): sum across steps.
+                        let inputTokens = 0
+                        let cachedInputTokens = 0
+                        let outputTokens = 0
+                        // Track the LAST step's input separately: in a multi-step
+                        // agentic loop, each step's inputTokens already includes all
+                        // prior context (system + user + prior step outputs), so
+                        // summing them double-counts. The last step's input is the
+                        // best proxy for "current context occupancy" — it reflects
+                        // the full prompt the model just saw.
+                        let lastStepInputTokens = 0
+                        for (const step of onFinishEvent.steps) {
+                          const u = step?.usage
+                          if (!u) continue
+                          const stepInput = Math.max(0, Math.floor(u.inputTokens ?? 0))
+                          inputTokens += stepInput
+                          cachedInputTokens += Math.max(0, Math.floor(u.cachedInputTokens ?? 0))
+                          outputTokens += Math.max(0, Math.floor(u.outputTokens ?? 0))
+                          if (stepInput > 0) lastStepInputTokens = stepInput
+                        }
+                        store.markSessionUsage(routerSession.id, {
+                          inputTokens,
+                          cachedInputTokens,
+                          outputTokens,
+                          lastInputTokens: lastStepInputTokens,
+                        })
+                      } catch (err) {
+                        console.error(
+                          '[session-usage] onFinish usage accumulation failed',
+                          err instanceof Error ? err.message : err,
+                        )
+                      }
+                    }
+
+                    const event = detectLeaderStepBudgetExhaustion({
+                      maxSteps: leaderMaxSteps,
+                      steps: onFinishEvent.steps ?? [],
+                      finishReason: onFinishEvent.finishReason,
+                      runId: onFinishEvent.runId ?? `${threadId}/${Date.now()}`,
+                    })
+                    if (!event) return
+                    streamBudgetEvent = event
+                    try {
+                      const marker = createBudgetMarkerMessage({
+                        threadId,
+                        resourceId,
+                        event,
+                      })
+                      await leaderMemory.saveMessages({ messages: [marker as never] })
+                    } catch (err) {
+                      console.error('[step-budget] Failed to persist budget marker:', {
+                        threadId,
+                        runId: event.data.runId,
+                        error: String(err),
+                      })
+                    }
+                  },
+                } as never,
+                sendReasoning: true,
+                messageMetadata: () =>
+                  streamBudgetEvent ? { leaderStepBudget: streamBudgetEvent.data } : undefined,
+                defaultOptions: {
                   maxSteps: leaderMaxSteps,
-                  steps: onFinishEvent.steps ?? [],
-                  finishReason: onFinishEvent.finishReason,
-                  runId: onFinishEvent.runId ?? `${threadId}/${Date.now()}`,
-                })
-                if (!event) return
-                streamBudgetEvent = event
-                try {
-                  const marker = createBudgetMarkerMessage({
-                    threadId,
-                    resourceId,
-                    event,
-                  })
-                  await leaderMemory.saveMessages({ messages: [marker as never] })
-                } catch (err) {
-                  console.error('[step-budget] Failed to persist budget marker:', {
-                    threadId,
-                    runId: event.data.runId,
-                    error: String(err),
-                  })
-                }
-              },
-            } as never,
-            sendReasoning: true,
-            messageMetadata: () =>
-              streamBudgetEvent ? { leaderStepBudget: streamBudgetEvent.data } : undefined,
-            defaultOptions: {
-              maxSteps: leaderMaxSteps,
-              abortSignal: abortController.signal,
-              memory: {
-                thread: threadId,
-                resource: resourceId,
-                options: projectMemoryOptions,
-              },
-              requestContext,
-              providerOptions,
-              untilIdle: true,
-            } as never,
+                  abortSignal: lease.abortSignal,
+                  memory: {
+                    thread: threadId,
+                    resource: resourceId,
+                    options: projectMemoryOptions,
+                  },
+                  requestContext,
+                  providerOptions,
+                  untilIdle: true,
+                } as never,
+              })
+            },
           })
-          // The hub drains the stream regardless of this response's lifetime and
-          // buffers it for resume replay; this response is just the first subscriber.
-          const hub = registerChatRun(threadId, stream, abortController)
-          attachChatRunSubscriber(hub, res, corsFor())
+
+          await finishChatRunStart({
+            result: startResult,
+            coordinator: chatRunCoordinator,
+            threadId,
+            followUp,
+            response: res,
+            corsFor,
+            send,
+          })
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           const stack = e instanceof Error ? e.stack : undefined
@@ -3105,7 +3091,10 @@ const server = createServer(async (req, res) => {
       }
 
       function providersPayload(status: ReturnType<typeof getSecretsStatus>) {
-        const merged = mergeProvidersWithCustom(resolveBuiltinProviders().providers, status.settings.customProviders)
+        const merged = mergeProvidersWithCustom(
+          resolveBuiltinProviders().providers,
+          status.settings.customProviders,
+        )
         const secretKeys = [...SECRET_ENV_KEYS, ...merged.map((p) => p.apiKeyEnv)]
         const configured = getSecretsStatus([...new Set(secretKeys)]).configuredKeys
         const disabled = new Set(status.settings.disabledProviderIds ?? [])
@@ -3116,8 +3105,7 @@ const server = createServer(async (req, res) => {
             .thinkingIntensities
           // Single source of truth for the enable switch: disabledProviderIds
           // (customProviders.enabled still respected if explicitly false for legacy)
-          const enabled =
-            !disabled.has(p.id) && (isCustom ? customEntry?.enabled !== false : true)
+          const enabled = !disabled.has(p.id) && (isCustom ? customEntry?.enabled !== false : true)
           return {
             id: p.id,
             name: p.name,
@@ -3256,9 +3244,7 @@ const server = createServer(async (req, res) => {
           } catch (e) {
             send(res, 502, {
               error:
-                e instanceof Error
-                  ? e.message
-                  : 'Failed to install @opencode-ai/models snapshot',
+                e instanceof Error ? e.message : 'Failed to install @opencode-ai/models snapshot',
               code: 'MODELS_DEV_NPM_SNAPSHOT_FAILED',
               npmSnapshotSuggested: true,
             })

@@ -1,0 +1,106 @@
+/* Per-thread follow-up outbox. It stays outside the form card so a persisted
+   retry or termination barrier is visible even with an empty composer input. */
+.follow-up-queue {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+  margin: 0 2px 7px;
+  color: var(--text-2);
+}
+.follow-up-queue-label {
+  flex: 0 0 auto;
+  padding: 4px 0;
+  font-size: var(--fs-xs);
+  line-height: 20px;
+  color: var(--text-3);
+}
+.follow-up-queue-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+.follow-up-queue-chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(100%, 34rem);
+  min-height: 28px;
+  padding: 3px 4px 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--border-soft) 82%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-surface) 82%, var(--bg-hover));
+  box-shadow: var(--shadow-xs);
+}
+.follow-up-queue-index {
+  flex: 0 0 auto;
+  margin-right: 5px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.follow-up-queue-content {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+}
+.follow-up-queue-state {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.follow-up-queue-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 23px;
+  height: 23px;
+  margin-left: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color var(--dur-instant) ease,
+    background var(--dur-instant) ease;
+}
+.follow-up-queue-action:hover:not(:disabled),
+.follow-up-queue-action:focus-visible:not(:disabled) {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+.follow-up-queue-action.is-remove:hover:not(:disabled),
+.follow-up-queue-action.is-remove:focus-visible:not(:disabled) {
+  color: var(--danger);
+}
+.follow-up-queue-action:disabled {
+  cursor: wait;
+  opacity: 0.48;
+}
+
+@media (max-width: 720px) {
+  .follow-up-queue {
+    gap: 5px;
+    margin-inline: 0;
+  }
+  .follow-up-queue-label {
+    padding-top: 3px;
+    font-size: var(--fs-2xs);
+  }
+  .follow-up-queue-chip {
+    max-width: 100%;
+  }
+  .follow-up-queue-content {
+    max-width: min(38vw, 13rem);
+  }
+}

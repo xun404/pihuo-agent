@@ -16,6 +16,8 @@ describe('renderer preference reset boundary', () => {
       'LIGHT_THEME_KEY',
       'DARK_THEME_KEY',
       'SEND_SHORTCUT_STORAGE_KEY',
+      'FOLLOW_UP_BEHAVIOR_STORAGE_KEY',
+      'FOLLOW_UP_OUTBOX_STORAGE_KEY',
       'MOTION_PREFERENCE_STORAGE_KEY',
       'MODEL_THINKING_MEMORY_STORAGE_KEY',
       'swarmdesk-agent.sidebar-w',

@@ -1,28 +1,25 @@
 import type { ServerResponse } from 'node:http'
+import type { ChatRunTerminal } from '@swarmdesk-agent/shared'
 
 /**
- * In-memory per-thread chat run hub.
+ * Buffered SSE fan-out for one already-admitted chat run.
  *
- * Decouples the Mastra UI-message stream from any single HTTP connection:
- * the hub drains the agent stream unconditionally (so a run always completes
- * even if every client disconnects), buffers SSE-encoded chunks, and fans out
- * to any number of attached subscribers. A reloaded frontend re-attaches via
- * GET /chat/:agentId/:chatId/stream and receives a full replay followed by
- * live chunks — this is the server half of the AI SDK `resumeStream()` flow.
- *
- * Hub lifetime: created when a run starts, kept for a short grace period after
- * the stream ends (so a client that disconnected right before the finish can
- * still replay the tail), then evicted. Single-process desktop server only —
- * nothing here survives an API restart (neither does the in-process run).
+ * Admission and ownership live in chat-run-coordinator.ts. This module is
+ * deliberately ignorant of thread ids: its key is the immutable clientRunId.
+ * In particular, registering a second live stream under a key is an error;
+ * it must never abort and replace a different run.
  */
 
 export interface ChatRunHub {
+  /** Historical name retained for callers/tests; value is the clientRunId. */
   readonly chatId: string
-  /** True once the source stream ended (normally, errored, or aborted). */
   readonly done: boolean
-  /** Number of buffered SSE lines (including the trailing [DONE] when done). */
   readonly bufferedLines: number
-  abort(): void
+}
+
+export type ChatRunHubDone = {
+  terminal: ChatRunTerminal
+  error?: unknown
 }
 
 interface HubState {
@@ -32,6 +29,8 @@ interface HubState {
   subscribers: Set<ServerResponse>
   abortController: AbortController
   evictTimer: ReturnType<typeof setTimeout> | null
+  onChunk?: (chunk: unknown) => void
+  onDone?: (result: ChatRunHubDone) => void
 }
 
 const hubs = new Map<string, HubState>()
@@ -52,11 +51,11 @@ function safeWrite(res: ServerResponse, line: string): void {
   try {
     res.write(line)
   } catch {
-    // Socket died between close event and write — the close listener detaches it.
+    // Socket died between close event and write — close listener detaches it.
   }
 }
 
-function finalize(state: HubState, gracePeriodMs: number): void {
+function finalize(state: HubState, gracePeriodMs: number, result: ChatRunHubDone): void {
   if (state.done) return
   state.done = true
   state.lines.push(DONE_LINE)
@@ -72,24 +71,42 @@ function finalize(state: HubState, gracePeriodMs: number): void {
   state.evictTimer = setTimeout(() => {
     if (hubs.get(state.chatId) === state) hubs.delete(state.chatId)
   }, gracePeriodMs)
-  // Never hold the process (or a unit test) open for an eviction timer.
   state.evictTimer.unref?.()
+  try {
+    state.onDone?.(result)
+  } catch (err) {
+    // Lifecycle accounting must never turn a completed stream into an
+    // unhandled exception. The coordinator owns error reporting.
+    console.error('[chat-run-hub] onDone callback failed', err)
+  }
 }
 
-async function drain(state: HubState, stream: ReadableStream<unknown>, gracePeriodMs: number) {
+async function drain(
+  state: HubState,
+  stream: ReadableStream<unknown>,
+  gracePeriodMs: number,
+): Promise<void> {
   const reader = stream.getReader()
+  let terminal: ChatRunTerminal = 'completed'
+  let failure: unknown
   try {
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
+      try {
+        state.onChunk?.(value)
+      } catch (err) {
+        // A phase observer is advisory. Keep draining the leader stream even
+        // if it has a bug, rather than leaving a reserved run hung forever.
+        console.error('[chat-run-hub] onChunk callback failed', err)
+      }
       const line = `data: ${JSON.stringify(value)}\n\n`
       state.lines.push(line)
       for (const res of state.subscribers) safeWrite(res, line)
     }
   } catch (err) {
-    // User-initiated abort ends the run quietly; genuine failures surface as an
-    // SSE error chunk so attached clients take their onError path instead of
-    // hanging on a silent stream end.
+    failure = err
+    terminal = state.abortController.signal.aborted ? 'aborted' : 'failed'
     if (!state.abortController.signal.aborted) {
       const errorText = err instanceof Error ? err.message : String(err)
       const line = `data: ${JSON.stringify({ type: 'error', errorText })}\n\n`
@@ -98,74 +115,65 @@ async function drain(state: HubState, stream: ReadableStream<unknown>, gracePeri
     }
   } finally {
     reader.releaseLock()
-    finalize(state, gracePeriodMs)
+    if (state.abortController.signal.aborted) terminal = 'aborted'
+    finalize(state, gracePeriodMs, {
+      terminal,
+      ...(failure === undefined ? {} : { error: failure }),
+    })
   }
 }
 
-/**
- * Register a freshly-started agent stream under `chatId` and begin draining it
- * immediately (independent of any attached HTTP client). Re-registering the
- * same chatId aborts and replaces the previous run (defensive — the UI blocks
- * concurrent sends on one thread).
- */
 export function registerChatRun(
-  chatId: string,
+  clientRunId: string,
   stream: ReadableStream<unknown>,
   abortController: AbortController,
-  opts?: { gracePeriodMs?: number },
+  opts?: {
+    gracePeriodMs?: number
+    onChunk?: (chunk: unknown) => void
+    onDone?: (result: ChatRunHubDone) => void
+  },
 ): ChatRunHub {
   const gracePeriodMs = opts?.gracePeriodMs ?? DEFAULT_GRACE_PERIOD_MS
-  const previous = hubs.get(chatId)
-  if (previous && !previous.done) previous.abortController.abort()
+  const previous = hubs.get(clientRunId)
+  if (previous && !previous.done) {
+    throw new Error(`CHAT_RUN_HUB_ALREADY_REGISTERED:${clientRunId}`)
+  }
+  if (previous?.evictTimer) clearTimeout(previous.evictTimer)
   const state: HubState = {
-    chatId,
+    chatId: clientRunId,
     lines: [],
     done: false,
     subscribers: new Set(),
     abortController,
     evictTimer: null,
+    onChunk: opts?.onChunk,
+    onDone: opts?.onDone,
   }
-  hubs.set(chatId, state)
+  hubs.set(clientRunId, state)
   void drain(state, stream, gracePeriodMs)
+  return makeHub(state)
+}
+
+function makeHub(state: HubState): ChatRunHub {
   return {
-    chatId,
+    chatId: state.chatId,
     get done() {
       return state.done
     },
     get bufferedLines() {
       return state.lines.length
-    },
-    abort() {
-      state.abortController.abort()
     },
   }
 }
 
-export function getChatRun(chatId: string): ChatRunHub | undefined {
-  const state = hubs.get(chatId)
-  if (!state) return undefined
-  return {
-    chatId,
-    get done() {
-      return state.done
-    },
-    get bufferedLines() {
-      return state.lines.length
-    },
-    abort() {
-      state.abortController.abort()
-    },
-  }
+export function getChatRun(clientRunId: string): ChatRunHub | undefined {
+  const state = hubs.get(clientRunId)
+  return state ? makeHub(state) : undefined
 }
 
 /**
- * Attach an HTTP response to the hub: write SSE headers, replay the buffer,
- * then stream live chunks. A finished hub still attaches (replay ends with
- * [DONE] and the response closes) — this covers the race where the run ends
- * between the client's history load and its resume request.
- *
- * `res.on('close')` only detaches the subscriber; it NEVER cancels the source
- * stream — a page reload must not kill the run.
+ * Attach an HTTP response to a token-specific run. Client disconnects detach
+ * only this subscriber and never cancel the source stream.
  */
 export function attachChatRunSubscriber(
   hub: ChatRunHub,
@@ -192,14 +200,6 @@ export function attachChatRunSubscriber(
   res.on('close', () => {
     state.subscribers.delete(res)
   })
-}
-
-/** Signal the run's AbortController. Returns false when no such run exists. */
-export function abortChatRun(chatId: string): boolean {
-  const state = hubs.get(chatId)
-  if (!state) return false
-  state.abortController.abort()
-  return true
 }
 
 export function _resetChatRunHubsForTest(): void {

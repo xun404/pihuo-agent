@@ -23,6 +23,10 @@ import {
 
 const toolbarSource = readFileSync(new URL('./ComposerToolbar.tsx', import.meta.url), 'utf8')
 const chatPanelSource = readFileSync(new URL('./ChatPanel.tsx', import.meta.url), 'utf8')
+const leaderTransportSource = readFileSync(
+  new URL('./chat/LeaderChatTransport.ts', import.meta.url),
+  'utf8',
+)
 const composerStylesSource = readFileSync(
   new URL('../styles/03-composer.css', import.meta.url),
   'utf8',
@@ -82,8 +86,8 @@ describe('Composer toolbar permission contract', () => {
   })
 
   it('normalizes the hidden Leader mode to build on the chat wire', () => {
-    assert.match(chatPanelSource, /mode: 'build'/u)
-    assert.doesNotMatch(chatPanelSource, /mode:\s*modeRef\.current/u)
+    assert.match(leaderTransportSource, /mode: 'build'/u)
+    assert.doesNotMatch(leaderTransportSource, /mode:\s*modeRef\.current/u)
   })
 
   it('delegates model-specific thinking restoration to the shared memory helper', () => {

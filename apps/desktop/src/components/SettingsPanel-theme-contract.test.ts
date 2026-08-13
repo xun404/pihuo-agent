@@ -5,6 +5,10 @@ import { SETTINGS_SELECT_MIN_WIDTH } from './SettingsSelect'
 
 const source = readFileSync(new URL('./SettingsPanel.tsx', import.meta.url), 'utf8')
 const selectSource = readFileSync(new URL('./SettingsSelect.tsx', import.meta.url), 'utf8')
+const followUpSource = readFileSync(
+  new URL('./FollowUpBehaviorSetting.tsx', import.meta.url),
+  'utf8',
+)
 
 describe('SettingsPanel color theme controls', () => {
   it('keeps color mode and light/dark theme controls separate', () => {
@@ -19,7 +23,12 @@ describe('SettingsPanel color theme controls', () => {
 
   it('uses one shared width contract for every general-page selector', () => {
     assert.equal(SETTINGS_SELECT_MIN_WIDTH, 148)
-    assert.equal((source.match(/<SettingsSelect\b/gu) ?? []).length, 6)
+    assert.match(followUpSource, /settings\.followUpBehavior/u)
+    assert.equal(
+      (source.match(/<SettingsSelect\b/gu) ?? []).length +
+        (followUpSource.match(/<SettingsSelect\b/gu) ?? []).length,
+      7,
+    )
     assert.doesNotMatch(source, /minWidth=\{\d+\}/u)
     assert.match(selectSource, /minWidth = SETTINGS_SELECT_MIN_WIDTH/u)
     assert.match(selectSource, /Math\.max\(\s*r\.width,\s*SETTINGS_SELECT_MIN_WIDTH\s*\)/u)

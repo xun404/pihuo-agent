@@ -49,15 +49,12 @@ import type { SendShortcut } from '../lib/send-shortcut'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import type { MotionPreference } from '../lib/motion-preference'
 import { SettingsSelect } from './SettingsSelect'
+import { FollowUpBehaviorSetting } from './FollowUpBehaviorSetting'
 import { Expandable } from './ui/Expandable'
 
 const SETTINGS_TAB_EASE = [0.4, 0, 0.2, 1] as const
 
-import {
-  IconCrew,
-  resolveWorkerIconAgentId,
-  WorkerBrandLogo,
-} from './Icons'
+import { IconCrew, resolveWorkerIconAgentId, WorkerBrandLogo } from './Icons'
 import { SettingsAboutTab } from './settings/SettingsAboutTab'
 import { type SettingsTabId, SettingsNavigation } from './settings/SettingsNavigation'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
@@ -515,15 +512,13 @@ export function SettingsPanel({
   const isHandCustomProvider = (p: SettingsProvider | undefined) => {
     if (!p?.custom) return false
     // Prefer payload source; fall back to customProviders list (IPC may omit on providers[])
-    const source =
-      p.source ?? customProviders.find((c) => c.id === p.id)?.source
+    const source = p.source ?? customProviders.find((c) => c.id === p.id)?.source
     return source !== 'models.dev'
   }
 
   const isModelsDevProvider = (p: SettingsProvider | undefined) => {
     if (!p) return false
-    const source =
-      p.source ?? customProviders.find((c) => c.id === p.id)?.source
+    const source = p.source ?? customProviders.find((c) => c.id === p.id)?.source
     return source === 'models.dev'
   }
 
@@ -1918,6 +1913,7 @@ export function SettingsPanel({
                 ]}
               />
             </div>
+            <FollowUpBehaviorSetting />
             <div className="settings-row card-row">
               <div className="lbl-block">
                 <div className="lbl">{t('settings.motion')}</div>
@@ -2406,7 +2402,11 @@ export function SettingsPanel({
                         >
                           {t('settings.cancelEdit')}
                         </button>
-                        <button type="button" className="settings-save-btn" onClick={saveCustomForm}>
+                        <button
+                          type="button"
+                          className="settings-save-btn"
+                          onClick={saveCustomForm}
+                        >
                           {t('settings.addToList')}
                         </button>
                       </div>
@@ -2415,9 +2415,7 @@ export function SettingsPanel({
                 </>
               ) : isHandCustomProvider(selectedProvider) ||
                 (editingId &&
-                  customProviders.some(
-                    (c) => c.id === editingId && c.source !== 'models.dev',
-                  )) ? (
+                  customProviders.some((c) => c.id === editingId && c.source !== 'models.dev')) ? (
                 <>
                   <div className="settings-provider-head">
                     <div className="pname">
@@ -2571,151 +2569,151 @@ export function SettingsPanel({
                             (m as { thinkingIntensities?: ThinkingIntensity[] })
                               .thinkingIntensities ?? DEFAULT_CUSTOM_THINKING_SUPPORT
                           return (
+                            <div
+                              key={m.id}
+                              className={`model-card${active ? ' is-default' : ''}${isEditing ? ' editing' : ''}`}
+                            >
                               <div
-                                key={m.id}
-                                className={`model-card${active ? ' is-default' : ''}${isEditing ? ' editing' : ''}`}
+                                className="model-card-head"
+                                onClick={() => {
+                                  // 点击卡片只切换编辑态；设默认走独立按钮，避免与编辑选中混淆
+                                  if (isEditing) cancelEditModel()
+                                  else beginEditModel(m)
+                                }}
                               >
-                                <div
-                                  className="model-card-head"
-                                  onClick={() => {
-                                    // 点击卡片只切换编辑态；设默认走独立按钮，避免与编辑选中混淆
-                                    if (isEditing) cancelEditModel()
-                                    else beginEditModel(m)
-                                  }}
-                                >
-                                  <span className="m-mid">
-                                    <span className="m-name">
-                                      {m.id.includes('/')
-                                        ? m.id.split('/').slice(1).join('/')
-                                        : m.label}
+                                <span className="m-mid">
+                                  <span className="m-name">
+                                    {m.id.includes('/')
+                                      ? m.id.split('/').slice(1).join('/')
+                                      : m.label}
+                                  </span>
+                                  <span className="m-id">{m.id}</span>
+                                </span>
+                                <span className="meta">
+                                  {(m as { toolCall?: boolean }).toolCall && (
+                                    <span className="model-tag">{t('settings.modelTagTools')}</span>
+                                  )}
+                                  {(m as { multimodal?: boolean }).multimodal && (
+                                    <span className="model-tag">
+                                      {t('settings.modelTagMultimodal')}
                                     </span>
-                                    <span className="m-id">{m.id}</span>
-                                  </span>
-                                  <span className="meta">
-                                    {(m as { toolCall?: boolean }).toolCall && (
-                                      <span className="model-tag">{t('settings.modelTagTools')}</span>
-                                    )}
-                                    {(m as { multimodal?: boolean }).multimodal && (
-                                      <span className="model-tag">
-                                        {t('settings.modelTagMultimodal')}
-                                      </span>
-                                    )}
-                                    {ctx && <span className="ctx">{ctx}</span>}
-                                    {thinks.length > 0 && (
-                                      <span className="think-tags">
-                                        {thinks.slice(0, 4).map((lv) => (
-                                          <span key={lv} className={lv === 'off' ? 'off' : ''}>
-                                            {lv}
-                                          </span>
-                                        ))}
-                                      </span>
-                                    )}
-                                  </span>
-                                  {isEditing ? (
-                                    <div
-                                      className="edit-actions"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <button
-                                        type="button"
-                                        className="btn-ghost btn-sm"
-                                        disabled={saving}
-                                        onClick={cancelEditModel}
-                                      >
-                                        {t('settings.cancelEdit')}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="settings-save-btn btn-sm"
-                                        disabled={saving}
-                                        onClick={() => void updateModelInActiveProvider()}
-                                      >
-                                        {saving ? t('app.loading') : t('settings.save')}
-                                      </button>
-                                    </div>
-                                  ) : (
+                                  )}
+                                  {ctx && <span className="ctx">{ctx}</span>}
+                                  {thinks.length > 0 && (
+                                    <span className="think-tags">
+                                      {thinks.slice(0, 4).map((lv) => (
+                                        <span key={lv} className={lv === 'off' ? 'off' : ''}>
+                                          {lv}
+                                        </span>
+                                      ))}
+                                    </span>
+                                  )}
+                                </span>
+                                {isEditing ? (
+                                  <div
+                                    className="edit-actions"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     <button
                                       type="button"
-                                      className="remove-btn"
-                                      title={t('settings.removeModel')}
-                                      aria-label={t('settings.removeModel')}
-                                      disabled={saving || models.length <= 1}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        void removeModelFromActiveProvider(m.id)
-                                      }}
+                                      className="btn-ghost btn-sm"
+                                      disabled={saving}
+                                      onClick={cancelEditModel}
                                     >
-                                      ✕
+                                      {t('settings.cancelEdit')}
                                     </button>
-                                  )}
-                                </div>
-                                {!active && !isEditing && (
+                                    <button
+                                      type="button"
+                                      className="settings-save-btn btn-sm"
+                                      disabled={saving}
+                                      onClick={() => void updateModelInActiveProvider()}
+                                    >
+                                      {saving ? t('app.loading') : t('settings.save')}
+                                    </button>
+                                  </div>
+                                ) : (
                                   <button
                                     type="button"
-                                    className="set-default-btn"
-                                    disabled={saving}
-                                    onClick={() => pickModel(m.id)}
+                                    className="remove-btn"
+                                    title={t('settings.removeModel')}
+                                    aria-label={t('settings.removeModel')}
+                                    disabled={saving || models.length <= 1}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void removeModelFromActiveProvider(m.id)
+                                    }}
                                   >
-                                    {t('settings.setDefaultModel')}
+                                    ✕
                                   </button>
                                 )}
-                                <Expandable open={isEditing} contentClassName="model-card-body">
-                                  <div>
-                                    <div className="field-label">{t('settings.ctxWindow')}</div>
-                                    <input
-                                      className="settings-input mono"
-                                      value={editModelForm.contextWindow}
-                                      onChange={(e) =>
-                                        setEditModelForm((f) => ({
-                                          ...f,
-                                          contextWindow: e.target.value,
-                                        }))
-                                      }
-                                      placeholder={t('settings.ctxWindowPh')}
-                                    />
-                                  </div>
-                                  <div>
-                                    <div className="field-label">
-                                      {t('settings.perModelThinking')}
-                                    </div>
-                                    <div className="think-support-grid" role="group">
-                                      {THINKING_INTENSITY_OPTIONS.map((level) => {
-                                        const checked =
-                                          editModelForm.thinkingIntensities.includes(level)
-                                        return (
-                                          <button
-                                            key={level}
-                                            type="button"
-                                            className={`think-support-chip${checked ? ' on' : ''}`}
-                                            aria-pressed={checked}
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              setEditModelForm((f) => {
-                                                const set = new Set(f.thinkingIntensities)
-                                                if (set.has(level)) set.delete(level)
-                                                else set.add(level)
-                                                const next = THINKING_INTENSITY_OPTIONS.filter(
-                                                  (l) => set.has(l),
-                                                )
-                                                return {
-                                                  ...f,
-                                                  thinkingIntensities:
-                                                    next.length > 0
-                                                      ? next
-                                                      : (['off'] as ThinkingIntensity[]),
-                                                }
-                                              })
-                                            }}
-                                          >
-                                            <span className="box" aria-hidden />
-                                            {level}
-                                          </button>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                </Expandable>
                               </div>
+                              {!active && !isEditing && (
+                                <button
+                                  type="button"
+                                  className="set-default-btn"
+                                  disabled={saving}
+                                  onClick={() => pickModel(m.id)}
+                                >
+                                  {t('settings.setDefaultModel')}
+                                </button>
+                              )}
+                              <Expandable open={isEditing} contentClassName="model-card-body">
+                                <div>
+                                  <div className="field-label">{t('settings.ctxWindow')}</div>
+                                  <input
+                                    className="settings-input mono"
+                                    value={editModelForm.contextWindow}
+                                    onChange={(e) =>
+                                      setEditModelForm((f) => ({
+                                        ...f,
+                                        contextWindow: e.target.value,
+                                      }))
+                                    }
+                                    placeholder={t('settings.ctxWindowPh')}
+                                  />
+                                </div>
+                                <div>
+                                  <div className="field-label">
+                                    {t('settings.perModelThinking')}
+                                  </div>
+                                  <div className="think-support-grid" role="group">
+                                    {THINKING_INTENSITY_OPTIONS.map((level) => {
+                                      const checked =
+                                        editModelForm.thinkingIntensities.includes(level)
+                                      return (
+                                        <button
+                                          key={level}
+                                          type="button"
+                                          className={`think-support-chip${checked ? ' on' : ''}`}
+                                          aria-pressed={checked}
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setEditModelForm((f) => {
+                                              const set = new Set(f.thinkingIntensities)
+                                              if (set.has(level)) set.delete(level)
+                                              else set.add(level)
+                                              const next = THINKING_INTENSITY_OPTIONS.filter((l) =>
+                                                set.has(l),
+                                              )
+                                              return {
+                                                ...f,
+                                                thinkingIntensities:
+                                                  next.length > 0
+                                                    ? next
+                                                    : (['off'] as ThinkingIntensity[]),
+                                              }
+                                            })
+                                          }}
+                                        >
+                                          <span className="box" aria-hidden />
+                                          {level}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              </Expandable>
+                            </div>
                           )
                         })
                       })()}
@@ -2859,8 +2857,7 @@ export function SettingsPanel({
                       }`}
                       role="switch"
                       aria-checked={
-                        selectedProvider?.enabled !== false &&
-                        Boolean(selectedProvider?.configured)
+                        selectedProvider?.enabled !== false && Boolean(selectedProvider?.configured)
                       }
                       title={
                         selectedProvider && !selectedProvider.configured
@@ -2962,7 +2959,8 @@ export function SettingsPanel({
                           toolCall?: boolean
                           multimodal?: boolean
                         }
-                        const thinks = meta.thinkingIntensities ?? selectedProvider?.thinkingIntensities
+                        const thinks =
+                          meta.thinkingIntensities ?? selectedProvider?.thinkingIntensities
                         return (
                           <div key={m.id} className={`model-card${active ? ' is-default' : ''}`}>
                             <div className="model-card-head">

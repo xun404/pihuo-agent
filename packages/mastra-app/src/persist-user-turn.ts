@@ -85,7 +85,8 @@ export function buildLeaderRunMetaDbMessage(input: {
 /**
  * Ensure the memory thread exists, then persist the user turn.
  * Returns how many user messages were saved. Throws on storage failure —
- * callers should treat pre-save as best-effort and never break the chat flow.
+ * callers choose the failure policy. Follow-up run admission treats a failure
+ * as a terminal startup error, so it never runs an unpersisted delivery.
  */
 export async function persistUserTurnUpFront(
   memory: UserTurnMemoryStore,
