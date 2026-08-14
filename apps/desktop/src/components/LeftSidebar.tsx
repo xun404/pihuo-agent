@@ -218,7 +218,7 @@ export function LeftSidebar({
       <div className="sidebar-top" aria-hidden />
 
       <div className="brand">
-        <BrandLockup className="brand-lockup" label={t('sidebar.brand')} />
+        <BrandLockup className="brand-lockup" size={32} label={t('sidebar.brand')} />
       </div>
 
       <div className="nav-actions">
