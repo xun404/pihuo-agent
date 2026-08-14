@@ -58,7 +58,7 @@ function loadCatalogModule() {
 function desktopToken() {
   const runtimePath = join(
     process.env.HOME || '',
-    '.config/swarmdesk-agent/data/runtime.json',
+    '.config/pihuo-agent/data/runtime.json',
   )
   if (!existsSync(runtimePath)) return null
   try {
@@ -230,7 +230,7 @@ async function runApiLive(providerId) {
   if (!tok) return { ok: false, error: 'no desktop token' }
   const cachePath = join(
     process.env.HOME || '',
-    '.config/swarmdesk-agent/cache/provider-logos',
+    '.config/pihuo-agent/cache/provider-logos',
     `${providerId.replace(/[^a-zA-Z0-9._-]/g, '_')}.svg`,
   )
   // force re-fetch path through API by removing cache entry
@@ -242,7 +242,7 @@ async function runApiLive(providerId) {
   const res = await fetch(`http://127.0.0.1:4111/api/provider-logos/${encodeURIComponent(providerId)}`, {
     headers: {
       Authorization: `Bearer ${tok}`,
-      'X-SwarmDesk-Agent-Desktop-Token': tok,
+      'X-PiHuo-Agent-Desktop-Token': tok,
     },
   })
   const text = await res.text()
@@ -258,11 +258,11 @@ async function runApiLive(providerId) {
 async function runCdpUi(providerId) {
   // Open settings model tab and models-dev import if possible; probe logo API from renderer
   const prep = await cdpEval(`(async () => {
-    window.dispatchEvent(new CustomEvent('swarmdesk-agent:open-settings', { detail: { tab: 'model' } }));
+    window.dispatchEvent(new CustomEvent('pihuo-agent:open-settings', { detail: { tab: 'model' } }));
     await new Promise(r => setTimeout(r, 600));
     const tok = await window.routerAgents?.getDesktopToken?.();
     const base = window.routerAgents?.apiBase || 'http://127.0.0.1:4111';
-    const h = { Authorization: 'Bearer ' + tok, 'X-SwarmDesk-Agent-Desktop-Token': tok };
+    const h = { Authorization: 'Bearer ' + tok, 'X-PiHuo-Agent-Desktop-Token': tok };
     const logoRes = await fetch(base + '/api/provider-logos/${providerId}', { headers: h });
     const logoText = await logoRes.text();
     // list providers (may be empty fixture)

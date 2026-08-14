@@ -3,8 +3,8 @@
  * Persisted in localStorage so resize survives restarts.
  */
 
-const SIDEBAR_KEY = 'swarmdesk-agent.sidebar-w'
-const DRAWER_KEY = 'swarmdesk-agent.drawer-w'
+const SIDEBAR_KEY = 'pihuo-agent.sidebar-w'
+const DRAWER_KEY = 'pihuo-agent.drawer-w'
 
 export const SIDEBAR_W_DEFAULT = 232
 export const SIDEBAR_W_MIN = 180

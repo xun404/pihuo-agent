@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Normalize the SwarmDesk Dock / app icon:
+Normalize the PiHuo Dock / app icon:
 
 macOS applies its own squircle mask. Source art that is a pre-rounded plate on an
 opaque white canvas therefore shows a white halo/border in the Dock.
@@ -173,7 +173,7 @@ def build_icns(png: Path, icns: Path) -> None:
     if sys.platform != "darwin":
         print("skip icns (not macOS)")
         return
-    with tempfile.TemporaryDirectory(prefix="swarmdesk-iconset-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="pihuo-iconset-") as tmp:
         iconset = Path(tmp) / "AppIcon.iconset"
         iconset.mkdir()
         sizes = [

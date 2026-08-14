@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { DEFAULT_PROMPT_SETTINGS, normalizePromptSettings } from '@swarmdesk-agent/shared'
+import { DEFAULT_PROMPT_SETTINGS, normalizePromptSettings } from '@pihuo-agent/shared'
 import { I18nProvider } from '../i18n/I18nProvider.js'
 import { PromptSettingsEditor } from './PromptSettingsEditor.js'
 

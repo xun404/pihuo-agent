@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CustomAcpPreview } from '@swarmdesk-agent/shared'
+import type { CustomAcpPreview } from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { Modal } from './ui/Modal'
 

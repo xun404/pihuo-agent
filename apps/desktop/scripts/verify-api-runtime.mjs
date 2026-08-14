@@ -96,7 +96,7 @@ if (
 if (importSpecifiers.some((specifier) => extname(specifier) === '.ts')) {
   throw new Error('Desktop API runtime contains a TypeScript import')
 }
-if (importSpecifiers.some((specifier) => specifier.startsWith('@swarmdesk-agent/'))) {
+if (importSpecifiers.some((specifier) => specifier.startsWith('@pihuo-agent/'))) {
   throw new Error('Desktop API runtime contains a source workspace import')
 }
 

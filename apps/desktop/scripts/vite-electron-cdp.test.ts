@@ -13,7 +13,7 @@ test('development launcher enables loopback CDP on the project default port', ()
   assert.match(launcherSource, /const DEFAULT_DEV_CDP_PORT = '8315'/u)
   assert.match(
     launcherSource,
-    /SWARMDESK_AGENT_CDP_PORT:\s*process\.env\.SWARMDESK_AGENT_CDP_PORT \?\? DEFAULT_DEV_CDP_PORT/u,
+    /PIHUO_AGENT_CDP_PORT:\s*process\.env\.PIHUO_AGENT_CDP_PORT \?\? DEFAULT_DEV_CDP_PORT/u,
   )
   assert.match(mainSource, /appendSwitch\('remote-debugging-address', '127\.0\.0\.1'\)/u)
   assert.match(checkerSource, /const CDP_PORT = process\.env\.CDP_PORT \|\| '8315'/u)

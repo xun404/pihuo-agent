@@ -1,14 +1,14 @@
 <h1 align="center">
-  <a href="https://github.com/xun404/swarmdesk-agent">
-    <img src="../assets/icon.png" alt="SwarmDesk" width="64" valign="middle" />
+  <a href="https://github.com/xun404/pihuo-agent">
+    <img src="../assets/icon.png" alt="Pi活儿" width="64" valign="middle" />
   </a>
-  SwarmDesk
+  Pi活儿
 </h1>
 
 <p align="center">
-  <a href="https://github.com/xun404/swarmdesk-agent/stargazers"><img src="https://img.shields.io/github/stars/xun404/swarmdesk-agent?style=flat&label=%E2%98%85" alt="GitHub stars" /></a>
-  <a href="https://github.com/xun404/swarmdesk-agent/releases"><img src="https://img.shields.io/github/v/release/xun404/swarmdesk-agent?label=release" alt="Latest release" /></a>
-  <a href="https://github.com/xun404/swarmdesk-agent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/xun404/swarmdesk-agent" alt="License" /></a>
+  <a href="https://github.com/xun404/pihuo-agent/stargazers"><img src="https://img.shields.io/github/stars/xun404/pihuo-agent?style=flat&label=%E2%98%85" alt="GitHub stars" /></a>
+  <a href="https://github.com/xun404/pihuo-agent/releases"><img src="https://img.shields.io/github/v/release/xun404/pihuo-agent?label=release" alt="Latest release" /></a>
+  <a href="https://github.com/xun404/pihuo-agent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/xun404/pihuo-agent" alt="License" /></a>
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="macOS · Windows · Linux" />
 </p>
 
@@ -17,14 +17,13 @@
 </p>
 
 <p align="center">
-  <strong>本机多智能体指挥台（ACP）。</strong><br/>
-  Mastra Supervisor（Leader）负责规划与委派；Claude Code、Codex、OpenCode 与 Registry Agent 在本地执行，统一在桌面应用中跟踪。
+  <strong>Pi活儿：你说要干什么，Pi 拆开派出去，本机 Worker 接着干。</strong>
 </p>
 
-<h3 align="center"><a href="https://github.com/xun404/swarmdesk-agent/releases/latest"><ins>下载 SwarmDesk</ins></a></h3>
+<h3 align="center"><a href="https://github.com/xun404/pihuo-agent/releases/latest"><ins>下载 Pi活儿</ins></a></h3>
 
 <p align="center">
-  <img src="../assets/zh/readme-hero.png" alt="SwarmDesk 桌面界面" width="960" />
+  <img src="../assets/zh/readme-hero.png" alt="Pi活儿 桌面界面" width="960" />
 </p>
 
 ## 功能
@@ -61,7 +60,7 @@
 
 ACP 权限请求出现在 Chat 与侧栏。read、项目内 edit 等直通操作优先由被调用 Agent 自己的权限策略处理，Router 不替它们生成或自动确认 ACP 审批。每个 Session 使用二态盾牌按钮：**权限自动接受：关**时，Agent 实际发出的 `requestPermission` 进入人工审批；**权限自动接受：开**时，这些请求仍经过同一套持久化审批链路，但会立即自动通过，优先选择 Agent 提供的 `allow_once`（只有没有该选项时才回退到 `allow_always`）。开关仅作用于当前 Session，不会推广到项目或全局，并会立即处理当前已等待的审批。
 
-权限仅属于当前 Session，不存在项目级默认。开启警告色盾牌时，服务端立即批量允许该 Session 当前所有待审批请求，返回结果会区分已放行项和失败项；之后的新 ACP 请求也实时自动接受。部分失败不会回滚 `auto`，盾牌提示和审批面板按当前 Session 显示剩余 pending/失败数量并允许重试。关闭后，下一次请求立即恢复默认审批。审批没有自动超时，会一直等待人工处理、开启自动接受、显式取消或 Job 终止；等待审批时暂停 Job 的 active timer，但 pending Job 仍占用 ACP 容量。`allow_always` 是 Agent 的选项，范围和有效期由 Agent 决定（Claude ACP 可能只在 ACP Session 内有效）；SwarmDesk 不保证永久授权，关闭盾牌也不能通用撤销 Agent 已记住的授权，也不会写入 Claude 的 `permissions.allow`。如果运行时重启，待审批会被取消，任务标记为 `RUNTIME_RESTARTED`，需要手动重新运行。
+权限仅属于当前 Session，不存在项目级默认。开启警告色盾牌时，服务端立即批量允许该 Session 当前所有待审批请求，返回结果会区分已放行项和失败项；之后的新 ACP 请求也实时自动接受。部分失败不会回滚 `auto`，盾牌提示和审批面板按当前 Session 显示剩余 pending/失败数量并允许重试。关闭后，下一次请求立即恢复默认审批。审批没有自动超时，会一直等待人工处理、开启自动接受、显式取消或 Job 终止；等待审批时暂停 Job 的 active timer，但 pending Job 仍占用 ACP 容量。`allow_always` 是 Agent 的选项，范围和有效期由 Agent 决定（Claude ACP 可能只在 ACP Session 内有效）；Pi活儿 不保证永久授权，关闭盾牌也不能通用撤销 Agent 已记住的授权，也不会写入 Claude 的 `permissions.allow`。如果运行时重启，待审批会被取消，任务标记为 `RUNTIME_RESTARTED`，需要手动重新运行。
 
 该策略是应用层 ACP 审批边界，不是操作系统沙箱，也不能拦截 Agent 进程绕过 ACP 发起的系统调用。
 
@@ -113,7 +112,7 @@ ACP 权限请求出现在 Chat 与侧栏。read、项目内 edit 等直通操作
 - **i18n** — 标题栏中文 / English
 - **Git 与文件** — 真实 `git status` 与有界目录树
 - **步骤预算** — 可配置 Leader 最大步数，耗尽后可在同 thread 继续
-- **本地优先** — 数据在 `~/.config/swarmdesk-agent/`
+- **本地优先** — 数据在 `~/.config/pihuo-agent/`
 - **ACP 推理强度** — 从 Agent `configOptions` 发现原始推理档位（如 Codex 的 `reasoning_effort`、Claude 的 `effort`）。三级继承：TeamMember 覆盖 → Worker 默认 → ACP Agent 默认。Worker 或模型未声明推理 selector 时，未配置推理的角色正常运行；显式配置值在不支持时 fail closed，不会静默降级。
 
 ---
@@ -156,8 +155,8 @@ Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Co
 
 ### 桌面 — macOS / Windows / Linux
 
-- **[下载最新 Release](https://github.com/xun404/swarmdesk-agent/releases/latest)**
-- 安装包命名：`SwarmDesk-Agent-${version}-…`
+- **[下载最新 Release](https://github.com/xun404/pihuo-agent/releases/latest)**
+- 安装包命名：`PiHuo-${version}-…`
 
 | 系统    | 架构                   | 格式          |
 | ------- | ---------------------- | ------------- |
@@ -170,7 +169,7 @@ Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Co
 shasum -a 256 -c SHA256SUMS
 
 # Windows PowerShell
-Get-FileHash .\SwarmDesk-Agent-0.1.0-win-x64.exe -Algorithm SHA256
+Get-FileHash .\PiHuo-0.1.0-win-x64.exe -Algorithm SHA256
 ```
 
 > 当前安装包**未签名 / 未 notarize**。请仅从本仓库 Releases 下载。
@@ -181,11 +180,11 @@ Get-FileHash .\SwarmDesk-Agent-0.1.0-win-x64.exe -Algorithm SHA256
 
 ## 社区与支持
 
-- **问题与建议：** [Issues](https://github.com/xun404/swarmdesk-agent/issues)
-- **支持项目：** [Star](https://github.com/xun404/swarmdesk-agent) 本仓库
+- **问题与建议：** [Issues](https://github.com/xun404/pihuo-agent/issues)
+- **支持项目：** [Star](https://github.com/xun404/pihuo-agent) 本仓库
 - **贡献 / 交接：** [CONTRIBUTING.md](../../CONTRIBUTING.md) · [HANDOVER](../HANDOVER.md)
 
-本地数据：`~/.config/swarmdesk-agent/`
+本地数据：`~/.config/pihuo-agent/`
 
 ---
 

@@ -21,13 +21,14 @@ import type {
   WorkerRole,
   PromptSettings,
   WorkerTimeoutSettings,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import type { WorkerRegistryCatalog } from './worker-registry'
 
 // Prefer 127.0.0.1 over localhost: on macOS, localhost often resolves to ::1,
 // and another process may already own *:4111 (IPv6), shadowing our IPv4 server.
 const BASE =
   (typeof window !== 'undefined' && window.routerAgents?.apiBase) ||
+  import.meta.env?.VITE_API_URL ||
   import.meta.env?.VITE_MASTRA_URL ||
   'http://127.0.0.1:4111'
 
@@ -171,13 +172,9 @@ export interface SessionPermissionModeMutationResponse {
 export type RegistryOperationStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 export interface ThreadMessagesResult {
-  messages: Array<{
-    id: string
-    role: string
-    parts: Array<{ type: string; [k: string]: unknown }>
-  }>
+  messages: import('@pihuo-agent/shared').LeaderChatMessage[]
   threadId: string
-  resourceId: string | null
+  resourceId?: string | null
   count?: number
   error?: string
 }
@@ -286,7 +283,7 @@ export async function request<T>(
   const tok = await ensureDesktopToken()
   if (tok) {
     headers.Authorization = `Bearer ${tok}`
-    headers['X-SwarmDesk-Agent-Desktop-Token'] = tok
+    headers['X-PiHuo-Agent-Desktop-Token'] = tok
   }
   const res = await fetch(`${BASE}${path}`, {
     ...init,
@@ -340,7 +337,7 @@ async function requestText(path: string, signal?: AbortSignal): Promise<string |
   const tok = await ensureDesktopToken()
   if (tok) {
     headers.Authorization = `Bearer ${tok}`
-    headers['X-SwarmDesk-Agent-Desktop-Token'] = tok
+    headers['X-PiHuo-Agent-Desktop-Token'] = tok
   }
   const res = await fetch(`${BASE}${path}`, {
     headers,
@@ -412,7 +409,7 @@ export const api = {
     ),
   setSessionStatus: (
     id: string,
-    status: import('@swarmdesk-agent/shared').Session['status'],
+    status: import('@pihuo-agent/shared').Session['status'],
     opts?: { lastChatError?: string | null },
   ) =>
     request<{ session: Session; snapshot: AppSnapshot }>(
@@ -535,7 +532,7 @@ export const api = {
     templateId: string,
     mappings: TeamTemplateMemberMapping[] = [],
   ) =>
-    request<import('@swarmdesk-agent/shared').TeamTemplateApplicationPreview>(
+    request<import('@pihuo-agent/shared').TeamTemplateApplicationPreview>(
       `/api/sessions/${encodePathSegment(sessionId)}/team/preview-template`,
       { method: 'POST', body: JSON.stringify({ templateId, mappings }) },
     ),
@@ -1194,36 +1191,36 @@ export const api = {
     if (opts?.limit) q.set('limit', String(opts.limit))
     const qs = q.toString()
     return request<{
-      jobs: import('@swarmdesk-agent/shared').WorkerJob[]
+      jobs: import('@pihuo-agent/shared').WorkerJob[]
       busyWorkerIds: string[]
     }>(`/api/jobs${qs ? `?${qs}` : ''}`)
   },
   createJob: (body: {
     task: string
     teamMemberId?: string
-    role?: import('@swarmdesk-agent/shared').WorkerRole
+    role?: import('@pihuo-agent/shared').WorkerRole
     workerIdOrKind?: string
     cwd?: string
     sessionId?: string
     wait?: boolean
   }) =>
     request<{
-      job: import('@swarmdesk-agent/shared').WorkerJob
+      job: import('@pihuo-agent/shared').WorkerJob
       output?: string
       snapshot?: AppSnapshot
     }>('/api/jobs', { method: 'POST', body: JSON.stringify(body) }, false, 600_000),
   getJob: (id: string) =>
-    request<{ job: import('@swarmdesk-agent/shared').WorkerJob }>(
+    request<{ job: import('@pihuo-agent/shared').WorkerJob }>(
       `/api/jobs/${encodePathSegment(id)}`,
     ),
   cancelJob: (id: string) =>
-    request<{ job: import('@swarmdesk-agent/shared').WorkerJob; snapshot?: AppSnapshot }>(
+    request<{ job: import('@pihuo-agent/shared').WorkerJob; snapshot?: AppSnapshot }>(
       `/api/jobs/${encodePathSegment(id)}/cancel`,
       { method: 'POST' },
     ),
   retryJob: (id: string, wait?: boolean) =>
     request<{
-      job: import('@swarmdesk-agent/shared').WorkerJob
+      job: import('@pihuo-agent/shared').WorkerJob
       output?: string
       snapshot?: AppSnapshot
     }>(
@@ -1235,7 +1232,7 @@ export const api = {
       false,
       600_000,
     ),
-  /** Load Mastra Memory history as AI SDK UI messages for a session thread */
+  /** Load persisted Leader JSONL history for a session thread */
   getThreadMessages: (() => {
     // In-flight de-duplication: React StrictMode double-mounts effects in dev,
     // and multiple ChatPanels may recall the same thread concurrently. SQLite
@@ -1248,7 +1245,7 @@ export const api = {
       const key = q.toString()
       const existing = inflight.get(key)
       if (existing) return existing
-      const p = request<ThreadMessagesResult>(`/api/memory/messages?${key}`).finally(() => {
+      const p = request<ThreadMessagesResult>(`/api/sessions/${encodePathSegment(threadId)}/messages`).finally(() => {
         inflight.delete(key)
       })
       inflight.set(key, p)
@@ -1257,6 +1254,6 @@ export const api = {
   })(),
 }
 
-export function chatUrl(agentId = 'swarmdesk-leader'): string {
+export function chatUrl(agentId = 'leader'): string {
   return `${BASE}/chat/${encodePathSegment(agentId)}`
 }

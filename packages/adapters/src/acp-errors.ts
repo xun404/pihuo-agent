@@ -21,8 +21,8 @@ export type PublicErrorCode =
   | 'MODEL_NOT_IN_CANDIDATES'
   | 'MODEL_OPENROUTER_SEARCH_ONLY'
   | 'RUNTIME_OWNER_EXISTS'
-  | 'SWARMDESK_AGENT_RUNTIME_UNAVAILABLE'
-  | 'SWARMDESK_AGENT_SESSION_BINDING_REQUIRED'
+  | 'PIHUO_AGENT_RUNTIME_UNAVAILABLE'
+  | 'PIHUO_AGENT_SESSION_BINDING_REQUIRED'
   | 'RUNTIME_AUTH_FAILED'
   | 'ACP_REASONING_UNSUPPORTED'
   | 'ACP_REASONING_VALUE_UNAVAILABLE'
@@ -61,13 +61,13 @@ const PUBLIC_ERROR_MESSAGES: Record<PublicErrorCode, { zh: string; en: string }>
     zh: '运行时已被其他进程占用',
     en: 'Runtime is already owned by another process',
   },
-  SWARMDESK_AGENT_RUNTIME_UNAVAILABLE: {
-    zh: 'SwarmDesk 运行时不可用',
-    en: 'SwarmDesk runtime is unavailable',
+  PIHUO_AGENT_RUNTIME_UNAVAILABLE: {
+    zh: 'Pi活儿 运行时不可用',
+    en: 'PiHuo runtime is unavailable',
   },
-  SWARMDESK_AGENT_SESSION_BINDING_REQUIRED: {
-    zh: '需要绑定 SwarmDesk 会话后才能继续',
-    en: 'SwarmDesk session binding is required',
+  PIHUO_AGENT_SESSION_BINDING_REQUIRED: {
+    zh: '需要绑定 Pi活儿 会话后才能继续',
+    en: 'PiHuo session binding is required',
   },
   RUNTIME_AUTH_FAILED: {
     zh: '运行时鉴权失败，请检查密钥配置',

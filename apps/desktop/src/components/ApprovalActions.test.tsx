@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { ApprovalItem } from '@swarmdesk-agent/shared'
+import type { ApprovalItem } from '@pihuo-agent/shared'
 
 import { I18nProvider } from '../i18n/I18nProvider.js'
 import { ApprovalActions } from './ApprovalActions.js'

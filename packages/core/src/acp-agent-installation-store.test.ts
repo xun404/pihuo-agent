@@ -22,20 +22,20 @@ describe('acp-agent-installation-store', () => {
   let dir: string
   let path: string
   const prev = process.env.ACP_AGENT_INSTALLATIONS_PATH
-  const prevData = process.env.SWARMDESK_AGENT_DATA_DIR
+  const prevData = process.env.PIHUO_AGENT_DATA_DIR
 
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'acp-inst-'))
     path = join(dir, 'acp-agent-installations.json')
     process.env.ACP_AGENT_INSTALLATIONS_PATH = path
-    process.env.SWARMDESK_AGENT_DATA_DIR = dir
+    process.env.PIHUO_AGENT_DATA_DIR = dir
   })
 
   after(() => {
     if (prev === undefined) delete process.env.ACP_AGENT_INSTALLATIONS_PATH
     else process.env.ACP_AGENT_INSTALLATIONS_PATH = prev
-    if (prevData === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
-    else process.env.SWARMDESK_AGENT_DATA_DIR = prevData
+    if (prevData === undefined) delete process.env.PIHUO_AGENT_DATA_DIR
+    else process.env.PIHUO_AGENT_DATA_DIR = prevData
     rmSync(dir, { recursive: true, force: true })
   })
 

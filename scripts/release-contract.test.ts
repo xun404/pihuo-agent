@@ -13,12 +13,12 @@ import {
 // Enabled package matrix: mac arm64 + linux x64 (Windows matrix currently disabled).
 // Names match electron-builder ${arch} mapping: AppImage x86_64, deb amd64.
 const requiredAssets = [
-  'SwarmDesk-Agent-0.1.0-mac-arm64.dmg',
-  'SwarmDesk-Agent-0.1.0-mac-arm64.zip',
-  'SwarmDesk-Agent-0.1.0-linux-x86_64.AppImage',
-  'SwarmDesk-Agent-0.1.0-linux-amd64.deb',
+  'PiHuo-0.1.0-mac-arm64.dmg',
+  'PiHuo-0.1.0-mac-arm64.zip',
+  'PiHuo-0.1.0-linux-x86_64.AppImage',
+  'PiHuo-0.1.0-linux-amd64.deb',
 ]
-const completeAssets = [...requiredAssets, 'SwarmDesk-Agent-0.1.0-win-x64.exe']
+const completeAssets = [...requiredAssets, 'PiHuo-0.1.0-win-x64.exe']
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 describe('desktop release contract', () => {
@@ -53,10 +53,10 @@ describe('desktop release contract', () => {
     })
     assert.doesNotThrow(() =>
       verifyReleaseAssets([
-        'SwarmDesk-Agent-0.1.0-mac-arm64.dmg',
-        'SwarmDesk-Agent-0.1.0-mac-arm64.zip',
-        'SwarmDesk-Agent-0.1.0-linux-x64.AppImage',
-        'SwarmDesk-Agent-0.1.0-linux-x64.deb',
+        'PiHuo-0.1.0-mac-arm64.dmg',
+        'PiHuo-0.1.0-mac-arm64.zip',
+        'PiHuo-0.1.0-linux-x64.AppImage',
+        'PiHuo-0.1.0-linux-x64.deb',
       ]),
     )
   })
@@ -68,7 +68,7 @@ describe('desktop release contract', () => {
         'latest-mac.yml',
         'latest.yml',
         'latest-linux.yml',
-        'SwarmDesk-Agent-0.1.0-mac-arm64.zip.blockmap',
+        'PiHuo-0.1.0-mac-arm64.zip.blockmap',
       ]),
     )
   })
@@ -83,7 +83,7 @@ describe('desktop release contract', () => {
       /Duplicate release asset: macDmg/,
     )
     assert.throws(
-      () => verifyReleaseAssets([...requiredAssets, 'SwarmDesk-Agent-0.1.0-mac-x64.dmg']),
+      () => verifyReleaseAssets([...requiredAssets, 'PiHuo-0.1.0-mac-x64.dmg']),
       /Unexpected primary release asset/,
     )
   })
@@ -131,7 +131,7 @@ describe('desktop release contract', () => {
       () =>
         verifyRuntimeManifestContract({
           ...manifest,
-          bundledRegistryExternalImports: ['@swarmdesk-agent/adapters'],
+          bundledRegistryExternalImports: ['@pihuo-agent/adapters'],
         }),
       /source imports/i,
     )

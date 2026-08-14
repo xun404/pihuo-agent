@@ -1,4 +1,4 @@
-import type { WorkerHealthReport, WorkerRegistration, WorkerRole } from '@swarmdesk-agent/shared'
+import type { WorkerHealthReport, WorkerRegistration, WorkerRole } from '@pihuo-agent/shared'
 import { buildAcpSpawnConfig, type AcpSpawnConfig } from './acp-config.js'
 import { selectWorkerByRole } from './select-worker.js'
 

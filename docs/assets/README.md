@@ -10,14 +10,14 @@ Referenced by root `README.md` (English) and `docs/readme/README.zh-CN.md` (Chin
 
 ## Refresh screenshots (CDP)
 
-Demo project: `docs/demo/swarmdesk-showcase`
+Demo project: `docs/demo/pihuo-showcase`
 
 ```bash
 # Terminal A — desktop with CDP
 npm run desktop
 
 # Terminal B — API healthy on :4111 (Electron-spawned, or):
-#   MASTRA_PORT=4111 SWARMDESK_AGENT_DESKTOP_AUTH=0 node --import tsx packages/mastra-app/src/http-server.ts
+#   MASTRA_PORT=4111 PIHUO_AGENT_DESKTOP_AUTH=0 node --import tsx packages/pi-runtime/src/http-server.ts
 
 # English (default) → docs/assets/
 npm run capture:readme -- --locale en

@@ -137,7 +137,7 @@ export async function installAndApplyModelsDevNpmSnapshot(
       marker,
       JSON.stringify(
         {
-          name: 'swarmdesk-models-dev-npm-cache',
+          name: 'pihuo-agent-models-dev-npm-cache',
           private: true,
           description: 'Hot-install cache for @opencode-ai/models snapshot (models.dev official)',
         },

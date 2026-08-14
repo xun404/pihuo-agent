@@ -1,10 +1,10 @@
 import { api, clearDesktopToken, ensureDesktopToken, type DangerZoneAction } from './api'
-import type { AppSnapshot } from '@swarmdesk-agent/shared'
-import type { PromptSettings, WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
+import type { AppSnapshot } from '@pihuo-agent/shared'
+import type { PromptSettings, WorkerTimeoutSettings } from '@pihuo-agent/shared'
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   type NotificationSettings,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 export type ApiStyle = 'openai' | 'anthropic' | 'google'
 

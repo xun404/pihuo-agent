@@ -40,7 +40,7 @@ class MemoryStorage implements Storage {
 ;(globalThis as Record<string, unknown>).localStorage = new MemoryStorage()
 
 test('watermark persistence round-trips through localStorage', () => {
-  const key = 'swarmdesk:notification-watermarks'
+  const key = 'pihuo-agent:notification-watermarks'
   localStorage.removeItem(key)
   assert.deepEqual(getWatermarks(), {})
   setWatermarks({ s1: '2026-08-08T10:00:00.000Z' })
@@ -49,7 +49,7 @@ test('watermark persistence round-trips through localStorage', () => {
 })
 
 test('notified approval ids round-trip through localStorage', () => {
-  const key = 'swarmdesk:notification-approvals'
+  const key = 'pihuo-agent:notification-approvals'
   localStorage.removeItem(key)
   assert.deepEqual(getNotifiedApprovalIds(), [])
   setNotifiedApprovalIds(['a1', 'a2'])

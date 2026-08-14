@@ -34,7 +34,7 @@ export const en: Dict = {
   'app.bannerCmd': 'npm run dev',
   'app.bannerOffline': 'Cannot reach service ({error}). In another terminal run:',
   'app.loading': 'loading…',
-  'app.title': 'SwarmDesk',
+  'app.title': 'PiHuo',
   'approvals.cancel': 'Cancel',
   'approvals.empty': 'No pending permissions. ACP permission requests enqueue here.',
   'approvals.noOptions': 'Agent provided no options',
@@ -90,10 +90,10 @@ export const en: Dict = {
   'chat.errorOpenLink': 'View details',
   'chat.errorCopy': 'Copy',
   'chat.errorCopied': 'Copied',
-  'chat.greeting': 'What should we build in {project}?',
-  'chat.greetingNoProject': 'What should we build?',
+  'chat.greeting': 'What work should we dispatch in {project}?',
+  'chat.greetingNoProject': 'What work should we dispatch?',
   'chat.subhead':
-    'Dispatch multiple Agent Workers to collaborate on coding, review, and planning. Leader orchestrates, Workers each play their part.',
+    'Dispatch multiple Agent Workers to collaborate on coding, review, and planning. PiHuo orchestrates, workers each play their part.',
   // Empty-state hint pool (rotates randomly on each entry, 4 total incl. subhead)
   'chat.hint.compose':
     'Describe a task — Leader will break it down and dispatch to the right Workers.',
@@ -393,7 +393,7 @@ export const en: Dict = {
   'role.review': 'Reviewer',
   'role.test': 'Tester',
   'settings.aboutBody':
-    'SwarmDesk is a local multi-agent command center for ACP workers. A Mastra Supervisor (Leader) plans and delegates — Claude Code, Codex, OpenCode, and Registry agents run on your machine and are tracked in one desktop app. Available on macOS, Windows, and Linux.',
+    'PiHuo: you name the job, Pi breaks it up and hands it out, local workers finish it. Available on macOS, Windows, and Linux.',
   'settings.ossTitle': 'Open source',
   'settings.ossIntro':
     'Major open-source projects this app depends on directly (not a full transitive list).',
@@ -487,9 +487,9 @@ export const en: Dict = {
   'settings.danger.clearWorkersButton': 'Clear Workers & crews',
   'settings.danger.clearSessionsTitle': 'Delete all chat Sessions',
   'settings.danger.clearSessionsDesc':
-    'Delete chat Sessions, Mastra history, ACP contexts, linked Worker session members, and job history; projects and Workers remain.',
+    'Delete chat Sessions, Leader history, ACP contexts, linked Worker session members, and job history; projects and Workers remain.',
   'settings.danger.clearSessionsConfirm':
-    'All chat Sessions, Mastra conversation history, ACP contexts, linked Worker session members, approvals, and job history will be deleted. Projects, Workers, and crew templates remain.',
+    'All chat Sessions, Leader conversation history, ACP contexts, linked Worker session members, approvals, and job history will be deleted. Projects, Workers, and crew templates remain.',
   'settings.danger.clearSessionsButton': 'Delete chat Sessions',
   'settings.danger.clearCacheTitle': 'Clear cache',
   'settings.danger.clearCacheDesc':
@@ -652,8 +652,6 @@ export const en: Dict = {
   'settings.prompts.save': 'Save',
   'settings.prompts.saved': 'Prompts saved for future team members and the next Leader turn.',
   'settings.storageRoot': 'Config',
-  'settings.storageData': 'Data',
-  'settings.storageCache': 'Cache',
   'settings.save': 'Save',
   'settings.saved': 'Saved. Keys encrypted; model applies to new chats.',
   'settings.security': 'Secure storage',
@@ -668,7 +666,9 @@ export const en: Dict = {
   'settings.updateCustom': 'Update',
   'settings.updateKey': 'Replace key',
   'settings.version': 'Version',
-  'sidebar.brand': 'SwarmDesk',
+  'sidebar.brand': 'PiHuo',
+  'sidebar.brandLead': 'Pi',
+  'sidebar.brandTail': 'Huo',
   'sidebar.confirmDeleteProject':
     'Delete project "{name}" and all its sessions? This cannot be undone.',
   'sidebar.confirmDeleteSession': 'Delete session "{title}"? This cannot be undone.',

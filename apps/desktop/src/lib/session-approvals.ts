@@ -1,4 +1,4 @@
-import type { ApprovalItem, WorkerJob } from '@swarmdesk-agent/shared'
+import type { ApprovalItem, WorkerJob } from '@pihuo-agent/shared'
 
 /**
  * Return only approvals belonging to one Chat Session.

@@ -7,8 +7,8 @@
 export type FollowUpBehavior = 'queue' | 'steer'
 
 export const DEFAULT_FOLLOW_UP_BEHAVIOR: FollowUpBehavior = 'queue'
-export const FOLLOW_UP_BEHAVIOR_STORAGE_KEY = 'swarmdesk-agent.followUpBehavior'
-export const FOLLOW_UP_BEHAVIOR_EVENT = 'swarmdesk-agent:follow-up-behavior'
+export const FOLLOW_UP_BEHAVIOR_STORAGE_KEY = 'pihuo-agent.followUpBehavior'
+export const FOLLOW_UP_BEHAVIOR_EVENT = 'pihuo-agent:follow-up-behavior'
 
 export function isFollowUpBehavior(value: unknown): value is FollowUpBehavior {
   return value === 'queue' || value === 'steer'

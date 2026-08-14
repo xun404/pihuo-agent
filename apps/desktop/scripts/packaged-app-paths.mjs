@@ -14,7 +14,7 @@ export function resolvePackagedExecutable(input) {
     return path.win32.resolve(input.releaseDir, 'win-unpacked', `${input.productName}.exe`)
   }
   if (input.platform === 'linux') {
-    return path.posix.resolve(input.releaseDir, 'linux-unpacked', 'swarmdesk-agent')
+    return path.posix.resolve(input.releaseDir, 'linux-unpacked', 'pihuo')
   }
   throw new Error(`Unsupported packaged smoke platform: ${input.platform}`)
 }

@@ -9,7 +9,7 @@ import {
 
 const sample = `Respond in Chinese. [mode=build] Prefer role=coder then role=test/review as needed. hey
 
-[context] project=swarmdesk-agent path=/Users/xun/workspace/github/swarmdesk-agent session=新任务 locale=zh mode=build model=opencode-go/deepseek-v4-flash thinking=max`
+[context] project=pihuo-agent path=/Users/xun/workspace/github/pihuo-agent session=新任务 locale=zh mode=build model=opencode-go/deepseek-v4-flash thinking=max`
 
 describe('user-message-display', () => {
   it('strips chrome and keeps user text', () => {
@@ -20,7 +20,7 @@ describe('user-message-display', () => {
     const { text, meta } = parseRouterUserMessage(sample)
     assert.equal(text, 'hey')
     assert.equal(meta.mode, 'build')
-    assert.equal(meta.project, 'swarmdesk-agent')
+    assert.equal(meta.project, 'pihuo-agent')
     assert.equal(meta.model, 'opencode-go/deepseek-v4-flash')
     assert.equal(meta.thinking, 'max')
   })

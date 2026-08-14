@@ -1,6 +1,6 @@
 # Custom themes
 
-SwarmDesk loads user color themes from OpenChamber-compatible JSON files. A
+PiHuo loads user color themes from OpenChamber-compatible JSON files. A
 custom theme is added to the built-in theme list after it passes the same
 normalizer used by the bundled themes. The built-in source files are kept in
 [`apps/desktop/src/theme/themes`](../apps/desktop/src/theme/themes) for
@@ -13,10 +13,10 @@ configuration root:
 
 | Platform or setting          | Directory                                                                                                            |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| macOS / Linux (default)      | `$XDG_CONFIG_HOME/swarmdesk-agent/themes`, or `$HOME/.config/swarmdesk-agent/themes` when `XDG_CONFIG_HOME` is unset |
-| Windows (default)            | `%APPDATA%\swarmdesk-agent\themes`                                                                                   |
-| `SWARMDESK_AGENT_DATA_DIR`   | `$SWARMDESK_AGENT_DATA_DIR/themes`                                                                                   |
-| `SWARMDESK_AGENT_AGENTS_DIR` | `$SWARMDESK_AGENT_AGENTS_DIR/themes` (alias for `SWARMDESK_AGENT_DATA_DIR`)                                          |
+| macOS / Linux (default)      | `$XDG_CONFIG_HOME/pihuo-agent/themes`, or `$HOME/.config/pihuo-agent/themes` when `XDG_CONFIG_HOME` is unset |
+| Windows (default)            | `%APPDATA%\pihuo-agent\themes`                                                                                   |
+| `PIHUO_AGENT_DATA_DIR`   | `$PIHUO_AGENT_DATA_DIR/themes`                                                                                   |
+| `PIHUO_AGENT_AGENTS_DIR` | `$PIHUO_AGENT_AGENTS_DIR/themes` (alias for `PIHUO_AGENT_DATA_DIR`)                                          |
 
 The data-directory environment variables override the platform default. The
 app does not choose a different theme directory from the Settings UI; use an
@@ -97,7 +97,7 @@ Theme-owned fonts are the supported appearance override. Add an optional
 
 `sans` and `mono` must both be non-empty for the override to apply. They become
 the active `--font` and `--mono` CSS variables, so the selected theme applies
-these fonts throughout the desktop UI. SwarmDesk does not download or install
+these fonts throughout the desktop UI. PiHuo does not download or install
 font files; include fallbacks in each family list. `heading` is accepted in
 `config.fonts` but is not currently mapped to a separate desktop CSS variable.
 
@@ -172,7 +172,7 @@ optional color groups:
 
 1. Create the directory above if it does not exist.
 2. Save one or more `.json` files there.
-3. Open SwarmDesk and go to **Settings → General**.
+3. Open PiHuo and go to **Settings → General**.
 4. Click **Reload themes**. The directory path is shown beside the reload
    description after the desktop bridge responds.
 5. Choose the new theme in the **Light theme** or **Dark theme** selector.
@@ -192,7 +192,7 @@ not override it. If multiple custom files normalize to the same variant and
 ID, the first custom file in the loader's filename order wins.
 
 Removing a selected custom theme and then completing a successful reload makes
-that ID unavailable; SwarmDesk falls back to the built-in default for the
+that ID unavailable; PiHuo falls back to the built-in default for the
 corresponding variant (`mono-plus-light` or `mono-plus-dark`).
 
 ## Troubleshooting

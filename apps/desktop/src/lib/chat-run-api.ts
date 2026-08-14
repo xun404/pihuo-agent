@@ -2,7 +2,7 @@ import type {
   ChatRunAbortDecision,
   ChatRunAbortIntent,
   ChatRunStatus,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { chatUrl, encodePathSegment, request } from './api'
 
 export function getChatRunStatus(
@@ -13,7 +13,7 @@ export function getChatRunStatus(
   if (opts?.clientRunId) query.set('clientRunId', opts.clientRunId)
   const suffix = query.size > 0 ? `?${query.toString()}` : ''
   return request<ChatRunStatus>(
-    `/chat/${encodePathSegment(opts?.agentId ?? 'swarmdesk-leader')}/${encodePathSegment(threadId)}/run${suffix}`,
+    `/chat/${encodePathSegment(opts?.agentId ?? 'leader')}/${encodePathSegment(threadId)}/run${suffix}`,
     { signal: opts?.signal },
     false,
     10_000,
@@ -23,7 +23,7 @@ export function getChatRunStatus(
 export function chatRunStreamUrl(
   threadId: string,
   clientRunId: string,
-  agentId = 'swarmdesk-leader',
+  agentId = 'leader',
 ): string {
   const query = new URLSearchParams({ clientRunId })
   return `${chatUrl(agentId)}/${encodePathSegment(threadId)}/stream?${query.toString()}`
@@ -34,7 +34,7 @@ export function abortChatRun(
   threadId: string,
   clientRunId: string,
   intent: ChatRunAbortIntent = 'stop',
-  agentId = 'swarmdesk-leader',
+  agentId = 'leader',
 ): Promise<ChatRunAbortDecision> {
   return request<ChatRunAbortDecision>(
     `/chat/${encodePathSegment(agentId)}/${encodePathSegment(threadId)}/abort`,

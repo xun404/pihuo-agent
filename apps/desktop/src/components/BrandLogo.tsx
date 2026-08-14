@@ -21,7 +21,7 @@ function brandIconUrl(file: 'icon.png' | 'icon-glyph.png'): string {
 }
 
 /**
- * SwarmDesk final brand mark (PNG).
+ * PiHuo final brand mark (PNG).
  * Single source: public `icon.png` (app plate) or `icon-glyph.png` (no black plate).
  */
 export function BrandLogo({ className, size = 88, title, variant = 'app' }: BrandLogoProps) {

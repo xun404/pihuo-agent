@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { AppSnapshot } from '@swarmdesk-agent/shared'
+import type { AppSnapshot } from '@pihuo-agent/shared'
 import {
   evaluateApprovalNotifications,
   evaluateSessionNotifications,
@@ -22,8 +22,8 @@ import {
  * already announced. Both are best-effort (try/catch) because storage can be
  * unavailable in embedded/preview contexts.
  */
-const WATERMARKS_KEY = 'swarmdesk:notification-watermarks'
-const APPROVALS_KEY = 'swarmdesk:notification-approvals'
+const WATERMARKS_KEY = 'pihuo-agent:notification-watermarks'
+const APPROVALS_KEY = 'pihuo-agent:notification-approvals'
 
 /** Last-notified ISO timestamp per session id; {} when nothing stored yet. */
 export function getWatermarks(): Record<string, string> {

@@ -9,7 +9,7 @@ import type {
   SessionApprovalPolicy,
   SessionPermissionMode,
   WorkerJob,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 const VALID_POLICIES: SessionApprovalPolicy[] = [
   'manual',

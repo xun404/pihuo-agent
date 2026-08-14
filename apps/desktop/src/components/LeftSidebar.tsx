@@ -5,13 +5,13 @@ import type {
   SessionLampClass,
   TeamTemplate,
   WorkerRegistration,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import {
   SESSION_LAMP_ERROR_GRACE_MS,
   isPlaceholderSessionTitle,
   sessionLampClass,
   sessionLampTimes,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales'
 import {
@@ -24,6 +24,7 @@ import {
   Folder,
   FolderOpen,
 } from './Icons'
+import { BrandLockup } from './BrandLockup'
 import { Modal } from './ui/Modal'
 import { Expandable } from './ui/Expandable'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
@@ -217,14 +218,7 @@ export function LeftSidebar({
       <div className="sidebar-top" aria-hidden />
 
       <div className="brand">
-        <span className="brand-name" aria-label={t('sidebar.brand')}>
-          <span className="brand-name-swarm" aria-hidden>
-            Swarm
-          </span>
-          <span className="brand-name-desk" aria-hidden>
-            Desk
-          </span>
-        </span>
+        <BrandLockup className="brand-lockup" label={t('sidebar.brand')} />
       </div>
 
       <div className="nav-actions">

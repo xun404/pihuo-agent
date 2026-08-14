@@ -1,4 +1,4 @@
-import type { ApprovalItem, ApprovalOptionKind } from '@swarmdesk-agent/shared'
+import type { ApprovalItem, ApprovalOptionKind } from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/locales.js'
 

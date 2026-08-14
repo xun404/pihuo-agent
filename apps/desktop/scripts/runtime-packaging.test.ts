@@ -131,13 +131,13 @@ describe('desktop runtime native packages', () => {
           // Execute the real child script via the same node, but drive PTY IO with a fake.
           // Here we only assert the Windows success marker contract via a mock that
           // mirrors parent protocol (READY → resize+write → OK + exit 0).
-          assert.match(args.join(' '), /SWARMDESK_AGENT_PTY_OK/)
+          assert.match(args.join(' '), /PIHUO_AGENT_PTY_OK/)
           assert.doesNotMatch(args.join(' '), /stdout\.columns/)
           const handlers: {
             data?: (chunk: string) => void
             exit?: (info: { exitCode: number }) => void
           } = {}
-          queueMicrotask(() => handlers.data?.('SWARMDESK_AGENT_PTY_READY\n'))
+          queueMicrotask(() => handlers.data?.('PIHUO_AGENT_PTY_READY\n'))
           return {
             kill() {},
             resize() {
@@ -146,7 +146,7 @@ describe('desktop runtime native packages', () => {
             write(chunk: string) {
               wrote += chunk
               queueMicrotask(() => {
-                handlers.data?.('SWARMDESK_AGENT_PTY_OK\n')
+                handlers.data?.('PIHUO_AGENT_PTY_OK\n')
                 handlers.exit?.({ exitCode: 0 })
               })
             },

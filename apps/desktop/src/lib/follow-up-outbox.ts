@@ -1,4 +1,4 @@
-import { isChatRunIdentifier, type FollowUpSource } from '@swarmdesk-agent/shared'
+import { isChatRunIdentifier, type FollowUpSource } from '@pihuo-agent/shared'
 
 export type FollowUpOutboxItemState = 'queued' | 'dispatching' | 'unknown' | 'retry_wait'
 
@@ -13,7 +13,7 @@ export type FollowUpOutboxItem = {
   state: FollowUpOutboxItemState
 }
 
-export const FOLLOW_UP_OUTBOX_STORAGE_KEY = 'swarmdesk-agent.followUpOutbox.v2'
+export const FOLLOW_UP_OUTBOX_STORAGE_KEY = 'pihuo-agent.followUpOutbox.v2'
 export const FOLLOW_UP_OUTBOX_PER_THREAD_LIMIT = 20
 
 type PersistedOutbox = Record<string, FollowUpOutboxItem[]>

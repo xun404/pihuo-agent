@@ -18,9 +18,9 @@ import {
 } from './secure-secrets.js'
 import type { CustomProviderSettings } from './secure-secrets.js'
 import { normalizeNotificationSettings } from './secure-secrets.js'
-import { DEFAULT_PROMPT_SETTINGS } from '@swarmdesk-agent/shared'
-import type { NotificationSettings } from '@swarmdesk-agent/shared'
-import { DEFAULT_NOTIFICATION_SETTINGS } from '@swarmdesk-agent/shared'
+import { DEFAULT_PROMPT_SETTINGS } from '@pihuo-agent/shared'
+import type { NotificationSettings } from '@pihuo-agent/shared'
+import { DEFAULT_NOTIFICATION_SETTINGS } from '@pihuo-agent/shared'
 
 const TEST_KEY = 'RA_TEST_ONLY_API_KEY'
 
@@ -31,10 +31,10 @@ describe('secure-secrets', () => {
 
   before(() => {
     dataDir = mkdtempSync(join(tmpdir(), 'router-secure-secrets-'))
-    prevDataDir = process.env.SWARMDESK_AGENT_DATA_DIR
-    prevSecret = process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET
-    process.env.SWARMDESK_AGENT_DATA_DIR = dataDir
-    process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET = 'secure-secrets-test-key'
+    prevDataDir = process.env.PIHUO_AGENT_DATA_DIR
+    prevSecret = process.env.PIHUO_AGENT_CREDENTIAL_SECRET
+    process.env.PIHUO_AGENT_DATA_DIR = dataDir
+    process.env.PIHUO_AGENT_CREDENTIAL_SECRET = 'secure-secrets-test-key'
   })
 
   after(() => {
@@ -43,10 +43,10 @@ describe('secure-secrets', () => {
     } catch {
       /* ignore */
     }
-    if (prevDataDir === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
-    else process.env.SWARMDESK_AGENT_DATA_DIR = prevDataDir
-    if (prevSecret === undefined) delete process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET
-    else process.env.SWARMDESK_AGENT_CREDENTIAL_SECRET = prevSecret
+    if (prevDataDir === undefined) delete process.env.PIHUO_AGENT_DATA_DIR
+    else process.env.PIHUO_AGENT_DATA_DIR = prevDataDir
+    if (prevSecret === undefined) delete process.env.PIHUO_AGENT_CREDENTIAL_SECRET
+    else process.env.PIHUO_AGENT_CREDENTIAL_SECRET = prevSecret
     try {
       rmSync(dataDir, { recursive: true, force: true })
     } catch {
@@ -74,8 +74,8 @@ describe('secure-secrets', () => {
 
   it('rejects runtime and process-control names as provider secret keys', () => {
     for (const key of [
-      'SWARMDESK_AGENT_INTERNAL_TOKEN',
-      'SWARMDESK_AGENT_STUDIO_TOKEN',
+      'PIHUO_AGENT_INTERNAL_TOKEN',
+      'PIHUO_AGENT_STUDIO_TOKEN',
       'MASTRA_API_TOKEN',
       'NODE_OPTIONS',
       'ELECTRON_RUN_AS_NODE',
@@ -101,7 +101,7 @@ describe('secure-secrets', () => {
             {
               id: 'unsafe-provider',
               name: 'Unsafe',
-              apiKeyEnv: 'SWARMDESK_AGENT_STUDIO_TOKEN',
+              apiKeyEnv: 'PIHUO_AGENT_STUDIO_TOKEN',
               models: [{ id: 'unsafe-provider/model', label: 'Model' }],
             },
           ],

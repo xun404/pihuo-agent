@@ -1,4 +1,4 @@
-import type { WorkerRole } from '@swarmdesk-agent/shared'
+import type { WorkerRole } from '@pihuo-agent/shared'
 import { en } from './catalogs/en.js'
 import { zh } from './catalogs/zh.js'
 import type { Dict, Locale, MessageKey } from './locale-types.js'

@@ -1,6 +1,6 @@
 import React, { useId, useState } from 'react'
 import { ShieldCheck, ShieldUser } from 'lucide-react'
-import type { SessionPermissionMode } from '@swarmdesk-agent/shared'
+import type { SessionPermissionMode } from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 
 export function nextPermissionMode(mode: SessionPermissionMode): SessionPermissionMode {

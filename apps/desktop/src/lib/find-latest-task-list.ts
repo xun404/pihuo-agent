@@ -11,10 +11,9 @@
  *
  * 模式参考：lib/leader-step-budget.ts 的 findLatestActionableBudget。
  */
-import type { UIMessage } from '@ai-sdk/react'
 import type { TaskItem } from '../components/chat/TaskListCard'
 
-type AnyMessage = UIMessage<any>
+type AnyMessage = { id?: string; role?: string; parts?: unknown[] }
 
 type DataSignalPart = {
   type: 'data-signal'
@@ -30,7 +29,7 @@ function tasksOf(part: unknown): TaskItem[] | null {
   const p = part as DataSignalPart
   if (!p || p.type !== 'data-signal') return null
   const tagName = p.data?.tagName
-  if (tagName !== 'task-list-update' && tagName !== 'current-task-list') return null
+  if (tagName && tagName !== 'task-list-update' && tagName !== 'current-task-list') return null
   const raw = p.data?.metadata?.value?.tasks ?? p.data?.value?.tasks
   if (!Array.isArray(raw) || raw.length === 0) return null
   return raw as TaskItem[]

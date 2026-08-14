@@ -1,6 +1,6 @@
 import { lstatSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { resolveRouterDataPaths } from '@swarmdesk-agent/core'
+import { resolveRouterDataPaths } from '@pihuo-agent/core'
 
 export const MAX_THEME_FILE_BYTES = 256 * 1024
 export const MAX_THEME_FILES = 100

@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, it } from 'node:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { WorkerRegistration } from '@swarmdesk-agent/shared'
-import { DEFAULT_PROMPT_SETTINGS } from '@swarmdesk-agent/shared'
+import type { WorkerRegistration } from '@pihuo-agent/shared'
+import { DEFAULT_PROMPT_SETTINGS } from '@pihuo-agent/shared'
 import { LocalStore } from './store.js'
 
 describe('Worker default role type Team bootstrap', () => {

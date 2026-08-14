@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ChatRunAbortIntent, FollowUpRequestMeta } from '@swarmdesk-agent/shared'
+import type { ChatRunAbortIntent, FollowUpRequestMeta } from '@pihuo-agent/shared'
 import { abortChatRun, getChatRunStatus } from '../lib/chat-run-api'
 import {
   FollowUpCoordinator,
@@ -29,7 +29,7 @@ export type UseFollowUpCoordinatorOptions = {
   modelReady: boolean
   send: SendLeaderMessage
   stopLocal: () => void
-  resume: () => Promise<void>
+  resume: (clientRunId?: string) => Promise<void>
   refreshHistory: () => Promise<void>
   onModelRequired: () => void
   onCapacityReached?: () => void

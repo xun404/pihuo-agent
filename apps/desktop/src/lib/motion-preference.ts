@@ -9,8 +9,8 @@ export type MotionPreference = 'system' | 'on' | 'off'
 
 export const DEFAULT_MOTION_PREFERENCE: MotionPreference = 'system'
 
-export const MOTION_PREFERENCE_STORAGE_KEY = 'swarmdesk-agent.motionPreference'
-export const MOTION_PREFERENCE_EVENT = 'swarmdesk-agent:motion-preference'
+export const MOTION_PREFERENCE_STORAGE_KEY = 'pihuo-agent.motionPreference'
+export const MOTION_PREFERENCE_EVENT = 'pihuo-agent:motion-preference'
 
 export function isMotionPreference(value: unknown): value is MotionPreference {
   return value === 'system' || value === 'on' || value === 'off'

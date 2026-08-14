@@ -14,10 +14,10 @@
  *   - 纯 CSS 变量，三套主题自动适配
  */
 import { memo, useMemo, useState } from 'react'
-import type { UIMessage } from '@ai-sdk/react'
 import { parseRouterUserMessage } from '../../lib/user-message-display'
+import type { LeaderViewMessage } from '../../lib/leader-chat-view'
 
-type AnyMessage = UIMessage<any>
+type AnyMessage = LeaderViewMessage
 
 interface QueryItem {
   id: string

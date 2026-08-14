@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { computeShortlistedModels } from './acp-model-shortlist.js'
-import type { WorkerModelOption } from '@swarmdesk-agent/shared'
+import type { WorkerModelOption } from '@pihuo-agent/shared'
 
 const ZEN_FREE = ['opencode/big-pickle', 'opencode/deepseek-v4-flash-free', 'opencode/hy3-free']
 

@@ -102,8 +102,8 @@ export async function verifyNodePtyRoundTrip(input) {
   }
   const platform = input.platform ?? process.platform
   const isWin = platform === 'win32'
-  const readyMarker = 'SWARMDESK_AGENT_PTY_READY'
-  const successMarker = isWin ? 'SWARMDESK_AGENT_PTY_OK' : 'SWARMDESK_AGENT_PTY_100x30'
+  const readyMarker = 'PIHUO_AGENT_PTY_READY'
+  const successMarker = isWin ? 'PIHUO_AGENT_PTY_OK' : 'PIHUO_AGENT_PTY_100x30'
   const script = isWin
     ? [
         "process.stdin.setEncoding('utf8')",

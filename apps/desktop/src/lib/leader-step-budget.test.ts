@@ -5,8 +5,8 @@ import {
   extractBudgetEvents,
   buildContinuePrompt,
 } from './leader-step-budget'
-import { LEADER_STEP_BUDGET_PART_TYPE } from '@swarmdesk-agent/shared'
-import type { LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
+import { LEADER_STEP_BUDGET_PART_TYPE } from '@pihuo-agent/shared'
+import type { LeaderStepBudgetEvent } from '@pihuo-agent/shared'
 
 type MsgParts = { type: string; data?: unknown }[]
 

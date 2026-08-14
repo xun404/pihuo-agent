@@ -28,7 +28,7 @@ const text = readFileSync(notesPath, 'utf8')
 const version = releaseTag.slice(1)
 
 const required = [
-  `# SwarmDesk ${releaseTag}`,
+  `# PiHuo ${releaseTag}`,
   '## English',
   '### Summary',
   '### Highlights',

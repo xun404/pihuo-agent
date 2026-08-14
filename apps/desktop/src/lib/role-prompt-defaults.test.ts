@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { DEFAULT_PROMPT_SETTINGS, type WorkerRegistration } from '@swarmdesk-agent/shared'
+import { DEFAULT_PROMPT_SETTINGS, type WorkerRegistration } from '@pihuo-agent/shared'
 import {
   roleDraftFromWorker,
   roleDraftWithDefaultPrompt,

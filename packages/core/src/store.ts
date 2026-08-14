@@ -20,6 +20,7 @@ import type {
   Session,
   WorkerRegistration,
   LeaderMode,
+  LeaderWorkMode,
   Locale,
   WorkerRole,
   ApprovalItem,
@@ -42,7 +43,7 @@ import type {
   CreateTeamTemplateInput,
   UpdateTeamTemplateInput,
   PromptSettings,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import {
   DEFAULT_PROMPT_SETTINGS,
   DEFAULT_SESSION_TITLE,
@@ -58,7 +59,7 @@ import {
   isValidSessionPermissionMode,
   isValidPermissionModeChangeSource,
   permissionModeFromLegacyPolicy,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { createId } from './id.js'
 import {
   enqueueApproval,
@@ -80,7 +81,7 @@ function now(): string {
   return new Date().toISOString()
 }
 
-// Title helpers live in @swarmdesk-agent/shared so the desktop renderer (which
+// Title helpers live in @pihuo-agent/shared so the desktop renderer (which
 // depends only on shared, not core) can import them too. Re-exported here for
 // back-compat with the http-server import path.
 export { DEFAULT_SESSION_TITLE, isPlaceholderSessionTitle }
@@ -316,7 +317,7 @@ export class LocalStore {
   private revision = 0
 
   constructor(
-    path = process.env.SWARMDESK_AGENT_AGENTS_STATE ?? defaultStatePath(),
+    path = process.env.PIHUO_AGENT_AGENTS_STATE ?? defaultStatePath(),
     opts?: { mode?: LocalStoreMode },
   ) {
     this.path = path
@@ -1215,6 +1216,7 @@ export class LocalStore {
     projectId: string
     title?: string
     mode?: LeaderMode
+    workMode?: LeaderWorkMode
     permissionMode?: SessionPermissionMode
     memoryThreadId?: string
     rolePrompts?: Readonly<PromptSettings['roles']>
@@ -1232,8 +1234,9 @@ export class LocalStore {
       const permissionMode = input.permissionMode ?? 'default'
       const providedTitle = input.title?.trim()
       const timestamp = now()
+      const sessionId = createId('sess')
       session = {
-        id: createId('sess'),
+        id: sessionId,
         projectId: input.projectId,
         // Empty/missing title → placeholder; Leader will auto-name on first task.
         title: providedTitle || DEFAULT_SESSION_TITLE,
@@ -1242,8 +1245,9 @@ export class LocalStore {
         titleSource: providedTitle ? 'user' : 'auto',
         status: 'idle',
         mode: 'build',
+        workMode: input.workMode ?? 'coordinate',
         activeWorkerIds: [...project.workerIds],
-        memoryThreadId: input.memoryThreadId || createId('thread'),
+        memoryThreadId: input.memoryThreadId || sessionId,
         approvalPolicy: permissionMode === 'auto' ? 'allow_always' : 'manual',
         permissionMode,
         teamRevision: 1,

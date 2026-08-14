@@ -225,7 +225,7 @@ function applyFeaturedTags(catalog: ModelProviderDef[]): ModelProviderDef[] {
  * NOTE: core package does not depend on @mastra/core. This is a best-effort
  * lookup for monorepo/dev only. Production runtime must use
  * loadRegistrySnapshot (persisted → bundled). Maintenance sync lives in
- * packages/mastra-app (see scripts/sync-model-registry.ts).
+ * packages/pi-runtime (see scripts/sync-model-registry.ts).
  */
 export function fetchMastraProviderRegistry(): ModelProviderDef[] {
   // Prefer explicit env path (set by maintenance command / CI)

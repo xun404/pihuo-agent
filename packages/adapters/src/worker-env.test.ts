@@ -17,12 +17,12 @@ describe('buildEffectiveWorkerEnv', () => {
     OPENAI_API_KEY: 'sk-openai-secret',
     ANTHROPIC_API_KEY: 'sk-anthropic-secret',
     XAI_API_KEY: 'xai-secret',
-    SWARMDESK_AGENT_INTERNAL_TOKEN: 'internal-tok',
-    SWARMDESK_AGENT_DESKTOP_TOKEN: 'desktop-tok',
-    SWARMDESK_AGENT_STUDIO_TOKEN: 'studio-tok',
-    SWARMDESK_AGENT_ACP_FINGERPRINT_KEY: 'fingerprint-key',
-    SWARMDESK_AGENT_WORKER_SECRETS_KEY: 'worker-secret-capability',
-    SWARMDESK_AGENT_SECRETS_PARENT_INJECTED: '1',
+    PIHUO_AGENT_INTERNAL_TOKEN: 'internal-tok',
+    PIHUO_AGENT_DESKTOP_TOKEN: 'desktop-tok',
+    PIHUO_AGENT_STUDIO_TOKEN: 'studio-tok',
+    PIHUO_AGENT_ACP_FINGERPRINT_KEY: 'fingerprint-key',
+    PIHUO_AGENT_WORKER_SECRETS_KEY: 'worker-secret-capability',
+    PIHUO_AGENT_SECRETS_PARENT_INJECTED: '1',
     ELECTRON_RUN_AS_NODE: '1',
     CUSTOM_JUNK: 'should-not-pass',
     NODE_ENV: 'test',
@@ -37,23 +37,23 @@ describe('buildEffectiveWorkerEnv', () => {
     assert.equal(env.CUSTOM_JUNK, undefined)
     assert.equal(env.OPENAI_API_KEY, undefined)
     assert.equal(env.ANTHROPIC_API_KEY, undefined)
-    assert.equal(env.SWARMDESK_AGENT_INTERNAL_TOKEN, undefined)
-    assert.equal(env.SWARMDESK_AGENT_DESKTOP_TOKEN, undefined)
-    assert.equal(env.SWARMDESK_AGENT_STUDIO_TOKEN, undefined)
-    assert.equal(env.SWARMDESK_AGENT_ACP_FINGERPRINT_KEY, undefined)
-    assert.equal(env.SWARMDESK_AGENT_WORKER_SECRETS_KEY, undefined)
-    assert.equal(env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED, undefined)
+    assert.equal(env.PIHUO_AGENT_INTERNAL_TOKEN, undefined)
+    assert.equal(env.PIHUO_AGENT_DESKTOP_TOKEN, undefined)
+    assert.equal(env.PIHUO_AGENT_STUDIO_TOKEN, undefined)
+    assert.equal(env.PIHUO_AGENT_ACP_FINGERPRINT_KEY, undefined)
+    assert.equal(env.PIHUO_AGENT_WORKER_SECRETS_KEY, undefined)
+    assert.equal(env.PIHUO_AGENT_SECRETS_PARENT_INJECTED, undefined)
     assert.equal(env.ELECTRON_RUN_AS_NODE, undefined)
   })
 
   it('never forwards owner-only runtime values through ambient or worker overrides', () => {
     const forbidden = [
-      'SWARMDESK_AGENT_INTERNAL_TOKEN',
-      'SWARMDESK_AGENT_DESKTOP_TOKEN',
-      'SWARMDESK_AGENT_STUDIO_TOKEN',
-      'SWARMDESK_AGENT_ACP_FINGERPRINT_KEY',
-      'SWARMDESK_AGENT_WORKER_SECRETS_KEY',
-      'SWARMDESK_AGENT_SECRETS_PARENT_INJECTED',
+      'PIHUO_AGENT_INTERNAL_TOKEN',
+      'PIHUO_AGENT_DESKTOP_TOKEN',
+      'PIHUO_AGENT_STUDIO_TOKEN',
+      'PIHUO_AGENT_ACP_FINGERPRINT_KEY',
+      'PIHUO_AGENT_WORKER_SECRETS_KEY',
+      'PIHUO_AGENT_SECRETS_PARENT_INJECTED',
       'MASTRA_API_TOKEN',
       'ELECTRON_RUN_AS_NODE',
       'ELECTRON_NO_ATTACH_CONSOLE',
@@ -71,7 +71,7 @@ describe('buildEffectiveWorkerEnv', () => {
   })
 
   it('cannot smuggle the worker-secret capability through any input layer', () => {
-    const key = 'SWARMDESK_AGENT_WORKER_SECRETS_KEY'
+    const key = 'PIHUO_AGENT_WORKER_SECRETS_KEY'
     const env = buildEffectiveWorkerEnv({
       ambientEnv: { [key]: 'ambient', PATH: '/bin' },
       workerEnv: { [key]: 'worker-env' },

@@ -4,7 +4,7 @@ import type {
   PermissionTargetScope,
   SessionApprovalPolicy,
   SessionPermissionMode,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 export type {
   AcpToolKind,

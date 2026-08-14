@@ -113,7 +113,7 @@ export function modelsDevCatalogPaths(
 
 // —— mapping helpers (shared with models-dev-registry-mapping) ——
 
-/** Re-exported for @swarmdesk-agent/core consumers (source in models-dev-registry-mapping). */
+/** Re-exported for @pihuo-agent/core consumers (source in models-dev-registry-mapping). */
 export { modelThinkingIntensitiesFromModelsDev } from './models-dev-registry-mapping.js'
 
 export function mapModelsDevModel(
@@ -285,7 +285,7 @@ export async function refreshModelsDevCatalog(opts?: {
       res = await fetchImpl(url, {
         headers: {
           accept: 'application/json',
-          'user-agent': 'swarmdesk-models-dev-catalog',
+          'user-agent': 'pihuo-agent-models-dev-catalog',
         },
         signal: controller.signal,
       })
@@ -511,7 +511,7 @@ export async function ensureProviderLogoCached(opts: {
     const timer = setTimeout(() => controller.abort(), perAttemptMs)
     try {
       const res = await fetchImpl(url, {
-        headers: { accept: 'image/svg+xml,*/*', 'user-agent': 'swarmdesk-models-dev-logo' },
+        headers: { accept: 'image/svg+xml,*/*', 'user-agent': 'pihuo-agent-models-dev-logo' },
         signal: controller.signal,
       })
       if (!res.ok) continue

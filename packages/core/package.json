@@ -1,5 +1,5 @@
 {
-  "name": "@swarmdesk-agent/core",
+  "name": "@pihuo-agent/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "@swarmdesk-agent/shared": "0.1.0"
+    "@pihuo-agent/shared": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

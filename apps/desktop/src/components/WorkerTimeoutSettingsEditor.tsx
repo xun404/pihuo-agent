@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import type { WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
+import type { WorkerTimeoutSettings } from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 
 type TimeoutDraft = {

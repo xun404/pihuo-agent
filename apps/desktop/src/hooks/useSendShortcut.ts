@@ -19,7 +19,7 @@ export function useSendShortcut() {
       else setSendShortcutState(loadSendShortcut())
     }
     const onStorage = (ev: StorageEvent) => {
-      if (ev.key === 'swarmdesk-agent.sendShortcut') setSendShortcutState(loadSendShortcut())
+      if (ev.key === 'pihuo-agent.sendShortcut') setSendShortcutState(loadSendShortcut())
     }
     window.addEventListener(SEND_SHORTCUT_EVENT, onChange)
     window.addEventListener('storage', onStorage)

@@ -16,7 +16,7 @@ const importSpecifiers = [...source.matchAll(/(?:from\s*|import\s*\()['"]([^'"]+
 )
 if (
   importSpecifiers.some(
-    (specifier) => specifier.startsWith('@swarmdesk-agent/') || specifier.endsWith('.ts'),
+    (specifier) => specifier.startsWith('@pihuo-agent/') || specifier.endsWith('.ts'),
   )
 ) {
   throw new Error('Electron main bundle contains a source-only workspace import')

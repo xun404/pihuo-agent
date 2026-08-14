@@ -4,8 +4,8 @@ import type {
   TeamTemplateMember,
   WorkerRegistration,
   WorkerRole,
-} from '@swarmdesk-agent/shared'
-import { WORKER_ROLES } from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
+import { WORKER_ROLES } from '@pihuo-agent/shared'
 import { api } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey } from '../i18n/locales'

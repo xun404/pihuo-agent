@@ -40,19 +40,19 @@ const GENERATED_FILES = new Set(['apps/desktop/src/i18n/zh-TW.catalog.ts'])
  * the file may shrink freely but must not grow until it is split.
  */
 const LEGACY_LINE_CEILINGS = new Map([
-  ['packages/mastra-app/src/http-server.ts', 3837],
+  ['packages/pi-runtime/src/http-server.ts', 3837],
   ['apps/desktop/src/components/SettingsPanel.tsx', 3799],
   ['packages/adapters/src/acp-session-manager.ts', 2336],
   ['apps/desktop/src/styles/03-composer.css', 2297],
   ['apps/desktop/src/components/ChatPanel.tsx', 2228],
   ['packages/core/src/store.ts', 2056],
-  ['packages/mastra-app/src/scheduler.ts', 2031],
+  ['packages/pi-runtime/src/scheduler.ts', 2031],
   ['apps/desktop/src/styles/05-worker-inspector.css', 1603],
-  ['packages/mastra-app/src/routes/api.ts', 1526],
-  ['packages/mastra-app/src/acp-registry-api.ts', 1467],
+  ['packages/pi-runtime/src/routes/api.ts', 1526],
+  ['packages/pi-runtime/src/acp-registry-api.ts', 1467],
   ['apps/desktop/src/lib/api.ts', 1276],
-  ['packages/mastra-app/src/tools/session-tools.ts', 1240],
-  ['packages/mastra-app/src/acp-auth-terminal.ts', 1202],
+  ['packages/pi-runtime/src/tools/session-tools.ts', 1240],
+  ['packages/pi-runtime/src/acp-auth-terminal.ts', 1202],
 ])
 
 function trackedAndUntrackedFiles() {

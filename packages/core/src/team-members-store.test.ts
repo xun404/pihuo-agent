@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { WorkerRegistration } from '@swarmdesk-agent/shared'
+import type { WorkerRegistration } from '@pihuo-agent/shared'
 import { LocalStore } from './store.js'
 
 describe('LocalStore Team members', () => {

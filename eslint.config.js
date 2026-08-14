@@ -15,7 +15,7 @@ export default tseslint.config(
       '**/coverage/**',
       '.worktrees/**',
       'release/**',
-      'packages/mastra-app/.mastra/**',
+      'packages/pi-runtime/.mastra/**',
       '**/*.min.js',
       // Bundled / generated snapshots
       'packages/adapters/src/bundled/**',

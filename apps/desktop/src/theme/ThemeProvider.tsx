@@ -25,10 +25,10 @@ import {
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type { ColorTheme, ColorThemeId, ColorThemeVariant } from './theme.config'
 
-export const THEME_MODE_KEY = 'swarmdesk-agent.theme'
-export const LEGACY_PALETTE_KEY = 'swarmdesk-agent.palette'
-export const LIGHT_THEME_KEY = 'swarmdesk-agent.light-theme'
-export const DARK_THEME_KEY = 'swarmdesk-agent.dark-theme'
+export const THEME_MODE_KEY = 'pihuo-agent.theme'
+export const LEGACY_PALETTE_KEY = 'pihuo-agent.palette'
+export const LIGHT_THEME_KEY = 'pihuo-agent.light-theme'
+export const DARK_THEME_KEY = 'pihuo-agent.dark-theme'
 
 export interface ThemeReloadSummary {
   ok: boolean

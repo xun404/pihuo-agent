@@ -5,7 +5,7 @@ import type {
   AcpRegistryTarget,
   WorkerKind,
   WorkerReadinessStatus,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 export type WorkerRegistryDistribution = 'binary' | 'npx' | 'uvx'
 

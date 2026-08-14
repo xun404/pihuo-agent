@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from 'node:fs'
 import { relative, sep } from 'node:path'
-import type { AppSnapshot } from '@swarmdesk-agent/shared'
+import type { AppSnapshot } from '@pihuo-agent/shared'
 import { resetSettingsToDefaults, clearAllSecrets, type AppSettings } from './secure-secrets.js'
 import { clearAllWorkerSecrets } from './worker-secrets.js'
 import {

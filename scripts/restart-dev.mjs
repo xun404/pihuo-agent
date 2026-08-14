@@ -4,7 +4,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 
-const OWNER_LOCK = resolve(homedir(), '.config/swarmdesk-agent/data/acp-sessions.json.owner')
+const OWNER_LOCK = resolve(homedir(), '.config/pihuo-agent/data/acp-sessions.json.owner')
 
 console.log('[restart] killing stale processes...')
 try {

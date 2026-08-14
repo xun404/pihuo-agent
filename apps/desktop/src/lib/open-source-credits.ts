@@ -1,5 +1,5 @@
 /**
- * Curated open-source projects used by SwarmDesk (runtime + primary UI stack).
+ * Curated open-source projects used by PiHuo (runtime + primary UI stack).
  * Plain English list — no i18n; maintain entries here only.
  */
 export type OpenSourceCredit = {
@@ -29,16 +29,10 @@ export const OPEN_SOURCE_CREDITS: OpenSourceCredit[] = [
     url: 'https://vitejs.dev/',
   },
   {
-    name: 'Mastra',
-    role: 'Agent runtime',
-    license: 'Apache-2.0',
-    url: 'https://mastra.ai/',
-  },
-  {
-    name: 'Vercel AI SDK',
-    role: 'Chat / streaming',
-    license: 'Apache-2.0',
-    url: 'https://sdk.vercel.ai/',
+    name: 'Pi Coding Agent',
+    role: 'Leader runtime',
+    license: 'MIT',
+    url: 'https://pi.dev/',
   },
   {
     name: 'Agent Client Protocol',

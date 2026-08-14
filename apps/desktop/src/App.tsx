@@ -12,12 +12,12 @@ import type {
   Session,
   SessionPermissionMode,
   WorkerJob,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import {
   SESSION_LAMP_ACTIVE_TTL_MS,
   sessionHasUnreadLamp,
   sessionLampTimes,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { SettingsLayer, openSettings, SETTINGS_CLOSED_EVENT } from './components/SettingsLayer'

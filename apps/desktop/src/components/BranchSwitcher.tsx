@@ -7,8 +7,8 @@ import { useToast } from './Toast'
 import { IconBranch, IconCheck, IconPlus } from './Icons'
 import { ConfirmDialog, type ConfirmDialogConfig } from './ui/ConfirmDialog'
 import type { BranchSwitchIssue, BranchSwitchIssueCode, BranchSwitchResult } from '../lib/api'
-import type { Project, WorkerJob, WorkerRegistration } from '@swarmdesk-agent/shared'
-import { isJobOpen } from '@swarmdesk-agent/shared'
+import type { Project, WorkerJob, WorkerRegistration } from '@pihuo-agent/shared'
+import { isJobOpen } from '@pihuo-agent/shared'
 
 interface Props {
   project: Project

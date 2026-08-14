@@ -70,7 +70,7 @@ export function matchesApiIdentity(input: {
   expectedChild?: ExpectedApiChild
 }): boolean {
   const { health, discovery, expectedPort, expectedChild, expectedWorkspaceRoot } = input
-  if (health.ok !== true || health.service !== 'swarmdesk-agent-api') return false
+  if (health.ok !== true || health.service !== 'pihuo-agent-api') return false
   if (!Number.isInteger(expectedPort) || expectedPort <= 0) return false
   if (health.port !== expectedPort || discovery.port !== expectedPort) return false
   if (!Number.isInteger(health.pid) || !Number.isInteger(discovery.pid)) return false
@@ -111,7 +111,7 @@ export function parseListenerPids(raw: string): number[] {
 }
 
 /**
- * Fail-safe boundary for retiring an incompatible SwarmDesk API left by an
+ * Fail-safe boundary for retiring an incompatible PiHuo API left by an
  * older development run. Never authorize terminating an unrelated listener.
  */
 export function isOwnedLegacyApiProcess(input: {
@@ -123,7 +123,7 @@ export function isOwnedLegacyApiProcess(input: {
   expectedPort: number
 }): boolean {
   const { health, listenerPid, command, cwd, expectedMastraRoot, expectedPort } = input
-  if (health.ok !== true || health.service !== 'swarmdesk-agent-api') return false
+  if (health.ok !== true || health.service !== 'pihuo-agent-api') return false
   if (!Number.isInteger(listenerPid) || listenerPid <= 0) return false
   if (health.pid !== undefined && health.pid !== listenerPid) return false
   if (health.port !== undefined && health.port !== expectedPort) return false

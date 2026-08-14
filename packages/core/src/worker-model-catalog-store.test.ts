@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'no
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { WorkerModelCatalogStore, workerModelCatalogsPath } from './worker-model-catalog-store.js'
-import type { WorkerModelCatalog } from '@swarmdesk-agent/shared'
+import type { WorkerModelCatalog } from '@pihuo-agent/shared'
 
 function makeCatalog(workerId: string, modelId: string): WorkerModelCatalog {
   const fetchedAt = new Date().toISOString()

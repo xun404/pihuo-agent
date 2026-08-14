@@ -22,7 +22,7 @@ describe('packaged desktop smoke mode', () => {
         temporaryDirectory: '/tmp',
         pid: 4242,
       }),
-      '/tmp/swarmdesk-agent-packaged-smoke-4242',
+      '/tmp/pihuo-agent-packaged-smoke-4242',
     )
     assert.equal(
       resolvePackagedSmokeUserDataPath({

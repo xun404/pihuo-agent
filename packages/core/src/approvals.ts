@@ -5,7 +5,7 @@ import type {
   ApprovalLocation,
   ApprovalStatus,
   AcpToolKind,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { createId } from './id.js'
 
 export interface EnqueueApprovalInput {

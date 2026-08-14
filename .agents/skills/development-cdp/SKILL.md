@@ -30,7 +30,7 @@ confusion:
   `lsof -nP -iTCP:4111 -sTCP:LISTEN` + `ps -p <pid> -o lstart` before
   debugging the renderer.
 - **Electron shell** (CDP `8315`): no hot-reload. CDP refused means it was
-  launched without `SWARMDESK_AGENT_CDP_PORT` — restart via
+  launched without `PIHUO_AGENT_CDP_PORT` — restart via
   `npm run desktop`; you cannot attach after the fact.
 
 A Chrome/Edge tab on `localhost:5173` is _not_ the app (no
@@ -58,11 +58,11 @@ curl -s http://127.0.0.1:8315/json/list       # all targets (pick the type=page 
 ## Override or disable the port
 
 ```bash
-SWARMDESK_AGENT_CDP_PORT=8415 npm run desktop      # change the listener port
+PIHUO_AGENT_CDP_PORT=8415 npm run desktop      # change the listener port
 CDP_PORT=8415 node scripts/cdp-check.mjs pageinfo  # checker honors CDP_PORT
 ```
 
-Setting `SWARMDESK_AGENT_CDP_PORT=` (empty) disables the dev default. Never
+Setting `PIHUO_AGENT_CDP_PORT=` (empty) disables the dev default. Never
 bind CDP to a non-loopback address: it has no application-level auth and can
 drive the renderer.
 
@@ -83,12 +83,12 @@ booted, which shell regions exist, and which locale is active.
 ## curl the API directly (no CDP needed)
 
 For pure backend checks, skip CDP: the desktop bearer token lives in
-`~/.config/swarmdesk-agent/data/runtime.json`. Send it as **both** headers:
+`~/.config/pihuo-agent/data/runtime.json`. Send it as **both** headers:
 
 ```bash
-TOK=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.HOME+'/.config/swarmdesk-agent/data/runtime.json','utf8')).desktopToken)")
+TOK=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.HOME+'/.config/pihuo-agent/data/runtime.json','utf8')).desktopToken)")
 curl -s http://127.0.0.1:4111/api/snapshot \
-  -H "Authorization: Bearer $TOK" -H "X-SwarmDesk-Agent-Desktop-Token: $TOK"
+  -H "Authorization: Bearer $TOK" -H "X-PiHuo-Agent-Desktop-Token: $TOK"
 ```
 
 `/health` is the only unauthenticated endpoint. Note some POSTs have side
@@ -152,7 +152,7 @@ node scripts/cdp-check.mjs eval "(async () => { \
   const tok = await window.routerAgents?.getDesktopToken?.(); \
   const base = window.routerAgents?.apiBase || 'http://127.0.0.1:4111'; \
   const r = await fetch(base + '/api/snapshot', { \
-    headers: { Authorization: 'Bearer ' + tok, 'X-SwarmDesk-Agent-Desktop-Token': tok } }); \
+    headers: { Authorization: 'Bearer ' + tok, 'X-PiHuo-Agent-Desktop-Token': tok } }); \
   const j = await r.json(); \
   return { activeSessionId: j.activeSessionId, activeProjectId: j.activeProjectId, \
            sessions: (j.sessions||[]).map(s => ({ id: s.id, title: s.title, status: s.status })) }; \
@@ -212,10 +212,9 @@ unrelated approvals and performs best-effort cleanup if a step fails.  Its
 polling budget only bounds this automation process; it does not impose or
 reintroduce a business timeout on an Approval.
 
-Owner and Studio expose the same permission mutation path:
-`POST /api/sessions/:id/permission-mode`.  Owner handles it in
-`packages/mastra-app/src/http-server.ts`; Studio registers the same path in
-`packages/mastra-app/src/routes/api.ts`.  Do not add a `/studio` prefix when
+The permission mutation path is
+`POST /api/sessions/:id/permission-mode` in
+`packages/pi-runtime/src/http-server.ts`.  Do not add a `/studio` prefix when
 probing the route; that URL is not registered and returns 404.  A successful
 mutation returns `session`, `approvals`, `failures`, and `snapshot`.
 

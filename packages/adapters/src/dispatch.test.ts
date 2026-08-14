@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import type { WorkerRegistration } from '@swarmdesk-agent/shared'
+import type { WorkerRegistration } from '@pihuo-agent/shared'
 import { selectWorkerByRole } from './select-worker.js'
 import { buildAcpSpawnConfig } from './acp-config.js'
 import { dispatchToWorker } from './dispatch.js'
@@ -131,8 +131,8 @@ describe('buildAcpSpawnConfig', () => {
   })
 
   it('does not copy Leader secrets into a worker spawn configuration', () => {
-    const previous = process.env.SWARMDESK_AGENT_INTERNAL_TOKEN
-    process.env.SWARMDESK_AGENT_INTERNAL_TOKEN = 'leader-only-secret'
+    const previous = process.env.PIHUO_AGENT_INTERNAL_TOKEN
+    process.env.PIHUO_AGENT_INTERNAL_TOKEN = 'leader-only-secret'
     try {
       const cfg = buildAcpSpawnConfig(
         worker({
@@ -145,11 +145,11 @@ describe('buildAcpSpawnConfig', () => {
         }),
         '/tmp/project',
       )
-      assert.equal(cfg.env.SWARMDESK_AGENT_INTERNAL_TOKEN, undefined)
+      assert.equal(cfg.env.PIHUO_AGENT_INTERNAL_TOKEN, undefined)
       assert.equal(cfg.env.WORKER_SETTING, 'ok')
     } finally {
-      if (previous === undefined) delete process.env.SWARMDESK_AGENT_INTERNAL_TOKEN
-      else process.env.SWARMDESK_AGENT_INTERNAL_TOKEN = previous
+      if (previous === undefined) delete process.env.PIHUO_AGENT_INTERNAL_TOKEN
+      else process.env.PIHUO_AGENT_INTERNAL_TOKEN = previous
     }
   })
 })

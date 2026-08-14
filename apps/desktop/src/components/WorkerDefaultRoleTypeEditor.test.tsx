@@ -2,7 +2,7 @@ import React from 'react'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { WorkerRegistration } from '@swarmdesk-agent/shared'
+import type { WorkerRegistration } from '@pihuo-agent/shared'
 import { I18nProvider } from '../i18n/I18nProvider.js'
 import { WorkerDefaultRoleTypeEditor } from './WorkerDefaultRoleTypeEditor.js'
 

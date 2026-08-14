@@ -6,7 +6,7 @@ import { describe, it } from 'node:test'
 import { loadCustomThemeFiles, MAX_THEME_FILE_BYTES, MAX_THEME_FILES } from './theme-loader.js'
 
 function tempDir(): string {
-  return mkdtempSync(join(tmpdir(), 'swarmdesk-themes-'))
+  return mkdtempSync(join(tmpdir(), 'pihuo-themes-'))
 }
 
 describe('custom theme loader', () => {

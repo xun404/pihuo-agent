@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly VITE_API_URL?: string
   readonly VITE_MASTRA_URL?: string
 }
 
@@ -39,8 +40,8 @@ interface Window {
       save: (payload: {
         leaderModel?: string
         thinkingIntensity?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
-        prompts?: import('@swarmdesk-agent/shared').PromptSettings
-        workerTimeouts?: import('@swarmdesk-agent/shared').WorkerTimeoutSettings
+        prompts?: import('@pihuo-agent/shared').PromptSettings
+        workerTimeouts?: import('@pihuo-agent/shared').WorkerTimeoutSettings
         npmRegistry?: string | null
         secrets?: Record<string, string | null>
         notifications?: {

@@ -8,7 +8,7 @@ describe('withAcpSession process boundary', () => {
       withAcpSession(
         {
           spawn: {
-            command: '__swarmdesk_agent_missing_acp_executable__',
+            command: '__pihuo_agent_missing_acp_executable__',
             args: [],
             cwd: process.cwd(),
             env: {},

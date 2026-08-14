@@ -7,7 +7,7 @@ import {
   type PromptLocale,
   type PromptSettings,
   type WorkerRole,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { roleMessageKey, type Locale } from '../i18n/locales'
 import { Expandable } from './ui/Expandable'

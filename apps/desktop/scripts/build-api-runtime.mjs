@@ -23,7 +23,7 @@ await rm(runtimeDir, { recursive: true, force: true })
 await mkdir(runtimeDir, { recursive: true })
 
 const buildResult = await build({
-  entryPoints: [resolve(repoRoot, 'packages/mastra-app/src/http-server.ts')],
+  entryPoints: [resolve(repoRoot, 'packages/pi-runtime/src/http-server.ts')],
   outfile: resolve(runtimeDir, 'http-server.mjs'),
   bundle: true,
   platform: 'node',

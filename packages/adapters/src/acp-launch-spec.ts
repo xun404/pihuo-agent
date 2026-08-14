@@ -7,7 +7,7 @@ import type {
   AcpRegistryPackageDistribution,
   AcpRegistryTarget,
   WorkerLaunchSpec,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 export function packageDistributionToLaunchSpec(
   dist: AcpRegistryPackageDistribution,

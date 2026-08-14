@@ -4,7 +4,7 @@ import type {
   ChatRunAbortDecision,
   ChatRunStatus,
   FollowUpRequestMeta,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import {
   FOLLOW_UP_RETRY_MAX_MS,
   FOLLOW_UP_TERMINATION_MAX_POLLS,

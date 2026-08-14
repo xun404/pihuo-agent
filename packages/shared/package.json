@@ -1,5 +1,5 @@
 {
-  "name": "@swarmdesk-agent/shared",
+  "name": "@pihuo-agent/shared",
   "version": "0.1.0",
   "private": true,
   "type": "module",

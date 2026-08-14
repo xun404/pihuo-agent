@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { evaluateTeamTemplateAvailability } from '@swarmdesk-agent/shared'
+import { evaluateTeamTemplateAvailability } from '@pihuo-agent/shared'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
 import type {
   ApprovalItem,
@@ -14,11 +14,11 @@ import type {
   UpdateTeamMemberInput,
   WorkerJob,
   WorkerRegistration,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import type { PendingNewSession } from '../hooks/useAppState'
 import { api } from '../lib/api'
 import { ChatPanel } from './ChatPanel'
-import { BrandLogo } from './BrandLogo'
+import { BrandLockup } from './BrandLockup'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar, type ModelOption, type TeamTemplateOption } from './ComposerToolbar'
 import { useI18n } from '../i18n/I18nProvider'
@@ -392,7 +392,7 @@ export function ChatWorkspace({
 
   // Show empty composer when no session is active OR when there's a pending new session.
   // IMPORTANT: we do NOT early-return here. Doing so would unmount all ChatPanels
-  // (the mounted.map below), destroying their useChat state mid-stream — when the
+  // (the mounted.map below), destroying their Leader chat store mid-stream — when the
   // panels remount, the in-flight messages can't be recovered from memory (not yet
   // persisted), so the chat shows an empty "home" placeholder forever. Instead we
   // render the panels hidden and overlay the empty composer on top.
@@ -447,8 +447,8 @@ export function ChatWorkspace({
             {/* Titleband only — content must not be window-drag */}
             <div className="window-drag-top" aria-hidden />
             <div className="home">
-              <div className="logo-cloud" aria-hidden>
-                <BrandLogo size={88} variant="glyph" />
+              <div className="logo-cloud">
+                <BrandLockup className="brand-lockup" size={40} label={t('sidebar.brand')} />
               </div>
               <h1 className="greeting">
                 {homeProject ? (
@@ -565,7 +565,7 @@ export function ChatWorkspace({
         )}
       </AnimatePresence>
       {mounted.map(({ session: s, project: p }) => {
-        // Keep panels MOUNTED under the home overlay so useChat state survives.
+        // Keep panels MOUNTED under the home overlay so Leader chat state survives.
         // Visual show/hide is opacity crossfade via .active (not display:none).
         const hidden = showEmptyComposer
         const isActive = !hidden && s.id === session.id

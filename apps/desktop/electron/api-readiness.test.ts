@@ -19,12 +19,12 @@ function validIdentity() {
   return {
     health: {
       ok: true,
-      service: 'swarmdesk-agent-api',
+      service: 'pihuo-agent-api',
       port: 4111,
       pid: 4242,
       startedAt,
       ownerEpoch,
-      workspaceId: workspaceIdentity('/repo/swarmdesk-agent'),
+      workspaceId: workspaceIdentity('/repo/pihuo-agent'),
     },
     discovery: {
       port: 4111,
@@ -32,10 +32,10 @@ function validIdentity() {
       startedAt,
       ownerEpoch,
       desktopToken: 'd'.repeat(32),
-      workspaceId: workspaceIdentity('/repo/swarmdesk-agent'),
+      workspaceId: workspaceIdentity('/repo/pihuo-agent'),
     },
     expectedPort: 4111,
-    expectedWorkspaceRoot: '/repo/swarmdesk-agent',
+    expectedWorkspaceRoot: '/repo/pihuo-agent',
   }
 }
 
@@ -98,14 +98,14 @@ describe('legacy API retirement boundary', () => {
     assert.deepEqual(parseListenerPids('81092\n81092\nnope\n42\n'), [81092, 42])
   })
 
-  it('accepts only a SwarmDesk listener owned by this workspace', () => {
+  it('accepts only a PiHuo listener owned by this workspace', () => {
     assert.equal(
       isOwnedLegacyApiProcess({
-        health: { ok: true, service: 'swarmdesk-agent-api' },
+        health: { ok: true, service: 'pihuo-agent-api' },
         listenerPid: 81092,
         command: 'node --import tsx src/http-server.ts',
-        cwd: '/repo/packages/mastra-app',
-        expectedMastraRoot: '/repo/packages/mastra-app',
+        cwd: '/repo/packages/pi-runtime',
+        expectedMastraRoot: '/repo/packages/pi-runtime',
         expectedPort: 4111,
       }),
       true,
@@ -114,11 +114,11 @@ describe('legacy API retirement boundary', () => {
 
   it('rejects unrelated, mismatched-pid, and other-workspace listeners', () => {
     const base = {
-      health: { ok: true, service: 'swarmdesk-agent-api', pid: 81092, port: 4111 },
+      health: { ok: true, service: 'pihuo-agent-api', pid: 81092, port: 4111 },
       listenerPid: 81092,
       command: 'node --import tsx src/http-server.ts',
-      cwd: '/repo/packages/mastra-app',
-      expectedMastraRoot: '/repo/packages/mastra-app',
+      cwd: '/repo/packages/pi-runtime',
+      expectedMastraRoot: '/repo/packages/pi-runtime',
       expectedPort: 4111,
     }
     assert.equal(
@@ -129,7 +129,7 @@ describe('legacy API retirement boundary', () => {
       false,
     )
     assert.equal(isOwnedLegacyApiProcess({ ...base, listenerPid: 999 }), false)
-    assert.equal(isOwnedLegacyApiProcess({ ...base, cwd: '/other/packages/mastra-app' }), false)
+    assert.equal(isOwnedLegacyApiProcess({ ...base, cwd: '/other/packages/pi-runtime' }), false)
     assert.equal(isOwnedLegacyApiProcess({ ...base, command: 'python server.py' }), false)
   })
 })

@@ -31,7 +31,7 @@ describe('verify-release-notes', () => {
     const path = join(dir, 'v9.9.9.md')
     writeFileSync(
       path,
-      `# SwarmDesk v9.9.9
+      `# PiHuo v9.9.9
 
 ## English
 

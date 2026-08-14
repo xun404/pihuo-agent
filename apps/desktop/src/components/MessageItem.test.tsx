@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { UIMessage } from '@ai-sdk/react'
+import type { LeaderViewPart } from '../lib/leader-chat-view.js'
 import { formatMessage } from '../i18n/locales.js'
 import {
   MessageItem,
@@ -34,7 +34,7 @@ const STRINGS: Partial<Record<string, string>> = {
 
 const t: MessageItemProps['t'] = (key, vars) => formatMessage(STRINGS[key] ?? key, vars)
 
-function renderLeader(options: { live: boolean; parts: UIMessage['parts'] }): string {
+function renderLeader(options: { live: boolean; parts: LeaderViewPart[] }): string {
   const messages = [
     {
       id: 'u1',
@@ -48,7 +48,7 @@ function renderLeader(options: { live: boolean; parts: UIMessage['parts'] }): st
       ],
     },
     { id: 'a1', role: 'assistant', parts: options.parts },
-  ] as UIMessage[]
+  ] as never
   const turnTiming = new Map([
     [
       'a1',
@@ -95,7 +95,7 @@ function renderLeader(options: { live: boolean; parts: UIMessage['parts'] }): st
   )
 }
 
-function renderUser(message: UIMessage, messages: UIMessage[]): string {
+function renderUser(message: { id: string; role: string; parts?: unknown[] }, messages: Array<{ id: string; role: string; parts?: unknown[] }>): string {
   return renderToStaticMarkup(
     <MessageItem
       message={message}
@@ -239,7 +239,7 @@ describe('MessageItem message actions', () => {
       role: 'user',
       parts: [{ type: 'text', text: 'hello **world**' }],
       metadata: { createdAt: '2026-08-07T04:00:00.000Z' },
-    } as UIMessage
+    } as never
     const markup = renderUser(message, [message])
 
     assert.match(markup, /class="msg user"/u)
@@ -252,7 +252,7 @@ describe('MessageItem message actions', () => {
   })
 
   it('hides the send time when the message has no timestamp but keeps the copy button', () => {
-    const message = { id: 'u3', role: 'user', parts: [{ type: 'text', text: 'hi' }] } as UIMessage
+    const message = { id: 'u3', role: 'user', parts: [{ type: 'text', text: 'hi' }] } as never
     const markup = renderUser(message, [message])
 
     assert.match(markup, /class="msg-user-actions"/u)

@@ -1,4 +1,4 @@
-import type { ApprovalItem, NotificationSettings, Session } from '@swarmdesk-agent/shared'
+import type { ApprovalItem, NotificationSettings, Session } from '@pihuo-agent/shared'
 
 /**
  * Pure decision logic for native OS notifications.
@@ -88,7 +88,7 @@ export function evaluateSessionNotifications(params: {
 
 /**
  * Detect pending approvals not yet notified. Each approval fires once per
- * lifecycle: ids are persisted by the hook in `swarmdesk:notification-approvals`
+ * lifecycle: ids are persisted by the hook in `pihuo-agent:notification-approvals`
  * and skipped on later polls. Like sessions, a focused window in `hidden-only`
  * mode suppresses the banner WITHOUT marking the approval as notified, so it
  * still fires after the user leaves the app.

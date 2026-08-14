@@ -1,4 +1,4 @@
-import type { WorkerRunState } from '@swarmdesk-agent/shared'
+import type { WorkerRunState } from '@pihuo-agent/shared'
 import { isActiveWorkerStatus } from './worker-run-reducer'
 
 export interface WorkerCardPlacement {

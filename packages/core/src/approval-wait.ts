@@ -1,4 +1,4 @@
-import type { ApprovalDecision } from '@swarmdesk-agent/shared'
+import type { ApprovalDecision } from '@pihuo-agent/shared'
 
 export type ApprovalWaitOutcome =
   | { outcome: 'selected'; decision: 'allow' | 'deny'; optionId?: string }

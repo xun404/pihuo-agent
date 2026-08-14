@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import type { WorkerModelOption } from '@swarmdesk-agent/shared'
+import type { WorkerModelOption } from '@pihuo-agent/shared'
 import {
   buildProviderEvidenceMap,
   buildShortlistAndSearchIndex,

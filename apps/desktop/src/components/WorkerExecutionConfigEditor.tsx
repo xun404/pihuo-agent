@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { WorkerRegistration } from '@swarmdesk-agent/shared'
+import type { WorkerRegistration } from '@pihuo-agent/shared'
 import { api } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import { toWorkerModelSearchOption } from '../lib/settings-search-combobox'

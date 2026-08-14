@@ -10,9 +10,9 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedExecutable({
         platform: 'darwin',
         releaseDir: '/repo/release',
-        productName: 'SwarmDesk',
+        productName: 'PiHuo',
       }),
-      '/repo/release/mac-arm64/SwarmDesk.app/Contents/MacOS/SwarmDesk',
+      '/repo/release/mac-arm64/PiHuo.app/Contents/MacOS/PiHuo',
     )
   })
 
@@ -21,9 +21,9 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedExecutable({
         platform: 'win32',
         releaseDir: String.raw`C:\repo\release`,
-        productName: 'SwarmDesk',
+        productName: 'PiHuo',
       }),
-      String.raw`C:\repo\release\win-unpacked\SwarmDesk.exe`,
+      String.raw`C:\repo\release\win-unpacked\PiHuo.exe`,
     )
   })
 
@@ -32,9 +32,9 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedExecutable({
         platform: 'linux',
         releaseDir: '/repo/release',
-        productName: 'SwarmDesk',
+        productName: 'PiHuo',
       }),
-      '/repo/release/linux-unpacked/swarmdesk-agent',
+      '/repo/release/linux-unpacked/pihuo',
     )
   })
 
@@ -43,15 +43,15 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedRuntimeDir({
         platform: 'darwin',
         releaseDir: '/repo/release',
-        productName: 'SwarmDesk',
+        productName: 'PiHuo',
       }),
-      '/repo/release/mac-arm64/SwarmDesk.app/Contents/Resources/runtime',
+      '/repo/release/mac-arm64/PiHuo.app/Contents/Resources/runtime',
     )
     assert.equal(
       resolvePackagedRuntimeDir({
         platform: 'win32',
         releaseDir: String.raw`C:\repo\release`,
-        productName: 'SwarmDesk',
+        productName: 'PiHuo',
       }),
       String.raw`C:\repo\release\win-unpacked\resources\runtime`,
     )
@@ -59,7 +59,7 @@ describe('packaged desktop executable paths', () => {
       resolvePackagedRuntimeDir({
         platform: 'linux',
         releaseDir: '/repo/release',
-        productName: 'SwarmDesk',
+        productName: 'PiHuo',
       }),
       '/repo/release/linux-unpacked/resources/runtime',
     )
@@ -71,7 +71,7 @@ describe('packaged desktop executable paths', () => {
         resolvePackagedExecutable({
           platform: 'freebsd',
           releaseDir: '/repo/release',
-          productName: 'SwarmDesk',
+          productName: 'PiHuo',
         }),
       /Unsupported packaged smoke platform/,
     )

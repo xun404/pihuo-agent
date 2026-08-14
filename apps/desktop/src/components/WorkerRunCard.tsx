@@ -6,8 +6,8 @@ import type {
   WorkerRole,
   ApprovalItem,
   AcpToolKind,
-} from '@swarmdesk-agent/shared'
-import { sortPendingApprovals } from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
+import { sortPendingApprovals } from '@pihuo-agent/shared'
 import { MarkdownContent } from './MarkdownContent'
 import { ApprovalActions } from './ApprovalActions'
 import { resolveWorkerBrand, WorkerBrandLogo } from './Icons'
@@ -472,7 +472,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                         className="worker-card-auth-btn"
                         onClick={() => {
                           window.dispatchEvent(
-                            new CustomEvent('swarmdesk-agent:open-settings', {
+                            new CustomEvent('pihuo-agent:open-settings', {
                               detail: {
                                 tab: 'workers',
                                 workerId: state.workerId,

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Copy, DatabaseCheck, DatabaseX } from 'lucide-react'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
-import { useChat } from '@ai-sdk/react'
+
 import type {
   ApprovalItem,
   CreateTeamMemberInput,
@@ -14,18 +14,18 @@ import type {
   UpdateTeamMemberInput,
   WorkerJob,
   WorkerRegistration,
-} from '@swarmdesk-agent/shared'
-import { isJobOpen, isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
+import { isJobOpen, isPlaceholderSessionTitle } from '@pihuo-agent/shared'
 import { shouldAnimateSessionTitleTransition } from '../lib/session-title-animation'
 import type { PendingNewSession } from '../hooks/useAppState'
 import { api, type ProjectMemorySnapshot } from '../lib/api'
-import { ThrottledChat } from '../lib/throttled-chat'
+import { useLeaderChat } from '../hooks/useLeaderChat'
 import type { FollowUpCoordinator } from '../lib/follow-up-coordinator'
 import { useI18n } from '../i18n/I18nProvider'
 import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/settings'
 import { resolveModelThinkingIntensity } from '../lib/model-thinking-memory'
 import { formatChatError, serializeChatErrorForSticky } from '../lib/chat-errors'
-import { createLeaderChatTransport } from './chat/LeaderChatTransport'
+
 import { MessageItem } from './MessageItem'
 import { WorkerRunCard } from './WorkerRunCard'
 import { ComposerStatusRow } from './chat/ComposerStatusRow'
@@ -34,7 +34,7 @@ import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
 import { IconApprovals, IconArrowUp, IconCrew, IconEdit, IconFolder } from './Icons'
 import { RightPanel, type InspectorTab } from './RightPanel'
 import type { MemoryPanelError } from './MemoryPanel'
-import { BrandLogo } from './BrandLogo'
+import { BrandLockup } from './BrandLockup'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
 import { CompactionMarker, type CompactionMarkerData } from './CompactionMarker'
@@ -50,7 +50,6 @@ import { formatTokenCountDisplay } from '../lib/context-window'
 import { approvalsForSession } from '../lib/session-approvals'
 import {
   findCurrentTurnAssistant,
-  mergeDurableLeaderRunMeta,
   type ClientTurnMeta,
 } from '../lib/leader-run-meta'
 import {
@@ -66,7 +65,7 @@ import {
   type WorkerCardPlacement,
 } from '../lib/worker-card-placement'
 import { setRecordKey } from '../lib/chat-state'
-import type { WorkerRunEvent, WorkerRunState, LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
+import type { WorkerRunEvent, WorkerRunState, LeaderStepBudgetEvent } from '@pihuo-agent/shared'
 import { QueueChips } from './chat/QueueChips'
 
 type ModelOption = {
@@ -374,15 +373,14 @@ export function ChatPanel({
   const messagesScrollRef = useRef<HTMLDivElement>(null)
   /**
    * Chat instance we've successfully hydrated from memory. Keyed by the
-   * ThrottledChat object (not thread id): when transport/chat is recreated the
-   * new instance starts empty, and a thread-id-only guard would skip reload and
-   * leave the keep-alive panel stuck on the empty "home" layout forever.
+   * Leader chat store thread (not a transport object): a remounted panel
+   * starts empty, and skipping reload leaves the keep-alive pane stuck on
+   * the empty "home" layout forever.
    */
-  const historyHydratedChat = useRef<object | null>(null)
+  const historyHydratedChat = useRef<string | null>(null)
   /** Bumped when an active empty pane needs another history attempt. */
   const [historyReloadToken, setHistoryReloadToken] = useState(0)
-  /** Transport is constructed before useChat, while the coordinator needs
-   * useChat's send/stop/resume callbacks. This ref bridges that safe cycle. */
+  /** Follow-up coordinator lives beside the Leader chat store. */
   const followUpCoordinatorRef = useRef<FollowUpCoordinator | null>(null)
   // Keep latest model / thinking for transport body (avoid stale closure)
   const selectedModelRef = useRef(selectedModel)
@@ -430,7 +428,7 @@ export function ChatPanel({
   const clearPendingSessionRef = useRef(clearPendingSession)
   clearPendingSessionRef.current = clearPendingSession
 
-  // Bind Mastra memory thread/resource so goal-state + working memory can run
+  // Bind Leader JSONL thread / project memory so working memory can run
   const memoryThreadId = session.memoryThreadId ?? session.id
   const projectId = project?.id
   const memoryResourceId = project?.id ?? session.projectId ?? 'default-resource'
@@ -619,27 +617,21 @@ export function ChatPanel({
     const onClosed = () => {
       void loadModels()
     }
-    window.addEventListener('swarmdesk-agent:settings-closed', onClosed)
-    return () => window.removeEventListener('swarmdesk-agent:settings-closed', onClosed)
+    window.addEventListener('pihuo-agent:settings-closed', onClosed)
+    return () => window.removeEventListener('pihuo-agent:settings-closed', onClosed)
   }, [loadModels, isActive])
 
-  const transport = useMemo(
-    () =>
-      createLeaderChatTransport({
-        threadId: memoryThreadId,
-        resourceId: memoryResourceId,
-        projectRef,
-        sessionRef,
-        pendingNewSessionRef,
-        createSessionRef,
-        clearPendingSessionRef,
-        selectedModelRef,
-        thinkingIntensityRef,
-        localeRef,
-        coordinatorRef: followUpCoordinatorRef,
-      }),
-    [memoryThreadId, memoryResourceId],
-  )
+  const {
+    messages,
+    status,
+    error,
+    send: sendLeader,
+    stop,
+    setMessages,
+    clearError,
+    resume,
+    store: leaderStore,
+  } = useLeaderChat(memoryThreadId)
 
   const onSessionStatusChangeRef = useRef(onSessionStatusChange)
   onSessionStatusChangeRef.current = onSessionStatusChange
@@ -669,59 +661,53 @@ export function ChatPanel({
     onSessionStatusChangeRef.current?.('error', { lastChatError: sticky })
   }, [])
 
-  // One ThrottledChat per memory thread (vercel/ai#6166 workaround: publish a
-  // stable messages snapshot at most once per 100ms instead of swapping the
-  // array per chunk, so React's tearing guard stops force-rerendering).
-  const chat = useMemo(
-    () =>
-      new ThrottledChat({
-        id: memoryThreadId,
-        transport,
-        onData: handleChatData,
-        onError: handleChatError,
-      }),
-    [memoryThreadId, transport, handleChatData, handleChatError],
-  )
-  const { messages, sendMessage, status, stop, error, setMessages, clearError, resumeStream } =
-    useChat({ chat })
-
   const busy = status === 'submitted' || status === 'streaming'
 
   const refreshFollowUpHistory = useCallback(async () => {
     const result = await api.getThreadMessages(memoryThreadId, memoryResourceId)
-    // Terminal confirmation makes a forceful replacement safe: this removes
-    // any local-only assistant partial without touching an older completed
-    // assistant turn.
-    setMessages(() => result.messages as never)
+    setMessages(result.messages)
   }, [memoryThreadId, memoryResourceId, setMessages])
 
-  // A failed history recall must not be treated as a bootstrap barrier that
-  // merely happened to finish. The coordinator waits for a successful hydrate
-  // (including an intentionally empty history) before any resume/dispatch.
-  const followUpHistoryReady = !historyLoading && historyHydratedChat.current === chat
+  const followUpHistoryReady = !historyLoading && historyHydratedChat.current === memoryThreadId
 
   const followUp = useFollowUpCoordinator({
     threadId: memoryThreadId,
     historyReady: followUpHistoryReady,
     modelReady: Boolean(selectedModel && models.length > 0),
-    send: ({ id, text, followUp: meta }) => {
+    send: async ({ id, text, followUp: meta }) => {
       lastStatusPostRef.current = 'running'
       if (error) clearError()
       onSessionStatusChange?.('running', { lastChatError: null })
       followTailRef.current = true
-      return sendMessage(
-        {
-          id,
-          role: 'user',
-          parts: [{ type: 'text', text }],
-        } as never,
-        { body: { followUp: meta } },
-      )
+      const pending = pendingNewSessionRef.current
+      const createSession = createSessionRef.current
+      if (pending && createSession) {
+        const created = await createSession(
+          undefined,
+          pending.mode,
+          pending.projectId,
+          pending.memoryThreadId,
+        )
+        sessionRef.current = created
+        clearPendingSessionRef.current?.()
+      }
+      await sendLeader({
+        text,
+        followUp: meta,
+        model: selectedModelRef.current,
+        thinking: thinkingIntensityRef.current,
+        workMode: sessionRef.current.workMode,
+        onAccepted: (accepted) => followUpCoordinatorRef.current?.transportAccepted(accepted),
+      })
+      void followUpCoordinatorRef.current?.reconcileAndDispatch()
+      void id
     },
     stopLocal: () => {
-      void stop()
+      stop()
     },
-    resume: () => resumeStream(),
+    resume: async (clientRunId) => {
+      if (clientRunId) await resume(clientRunId)
+    },
     refreshHistory: refreshFollowUpHistory,
     onModelRequired: () => onOpenSettings?.('model'),
     onCapacityReached: () => toastError(t('chat.followUpQueueFull')),
@@ -752,17 +738,15 @@ export function ChatPanel({
   }, [selectedModel, models, modelsLoading, followUp, followUpBehavior, onInitialInputConsumed])
 
   // Load persisted history once per chat instance (survives refresh). Retries on
-  // transient failure: memory.recall() can 500 under SQLite concurrency (e.g.
-  // while another session is streaming + React StrictMode double-mounts in dev).
-  // Without retry, the session would render the empty "home" state even though
-  // the messages exist on disk — looking like the chat "disappeared" until reload.
+  // transient failure while another session is streaming or React StrictMode
+  // double-mounts in dev. Without retry, the session would render the empty
+  // "home" state even though the messages exist on disk.
   //
-  // Guard is the ThrottledChat instance, not memoryThreadId: useChat's setMessages
-  // identity is stable across chat recreation, so a thread-id guard would skip
-  // re-hydration after transport/chat is rebuilt and leave messages empty forever
-  // (keep-alive ChatPanels never remount on re-select).
+  // Guard is the hydrated thread id: keep-alive ChatPanels never remount on
+  // re-select, so skipping reload after a failed first attempt leaves messages
+  // empty until a later retry token bump.
   useEffect(() => {
-    if (historyHydratedChat.current === chat) {
+    if (historyHydratedChat.current === memoryThreadId) {
       setHistoryLoading(false)
       return
     }
@@ -776,13 +760,10 @@ export function ChatPanel({
           try {
             const res = await api.getThreadMessages(memoryThreadId, memoryResourceId)
             if (cancelled) return
-            if (Array.isArray(res.messages) && res.messages.length > 0) {
-              // Don't clobber an in-flight / already-populated chat
-              setMessages((prev) => (prev.length > 0 ? prev : (res.messages as never)))
+            if (Array.isArray(res.messages) && res.messages.length > 0 && leaderStore.messages.length === 0) {
+              setMessages(res.messages)
             }
-            // Mark hydrated only after a successful recall (empty or non-empty).
-            // Failures leave the guard unset so activation can retry.
-            historyHydratedChat.current = chat
+            historyHydratedChat.current = memoryThreadId
             return
           } catch (e) {
             if (cancelled) return
@@ -795,22 +776,17 @@ export function ChatPanel({
               if (cancelled) return
             } else {
               console.warn('[ChatPanel] load history failed, giving up', e)
-              // Do NOT mark hydrated — keep-alive + re-select can retry via
-              // historyReloadToken when the pane becomes active again.
             }
           }
         }
       } finally {
-        // MUST clear loading on every exit path (success, give-up, or cancel)
-        // — otherwise hasMessages stays true via historyLoading and the chat
-        // is stuck in a perpetual "loading" state.
         if (!cancelled) setHistoryLoading(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [chat, memoryThreadId, memoryResourceId, setMessages, historyReloadToken])
+  }, [memoryThreadId, memoryResourceId, setMessages, historyReloadToken, leaderStore])
 
   // Keep-alive panels can sit forever on empty "home" after a failed recall or a
   // chat recreation that wiped messages. When this pane becomes active with no
@@ -1206,7 +1182,7 @@ export function ChatPanel({
         try {
           const result = await api.getThreadMessages(memoryThreadId, memoryResourceId)
           if (cancelled) return
-          setMessages((current) => mergeDurableLeaderRunMeta(current, result.messages) as never)
+          setMessages(result.messages)
         } catch {
           // History sync is best-effort; the client timing path remains active.
         }
@@ -1553,7 +1529,7 @@ export function ChatPanel({
         if (Array.isArray(res.messages) && res.messages.length >= 0) {
           // Content shrinks — keep following the tail across the reload.
           followTailRef.current = true
-          setMessages(() => res.messages as never)
+          setMessages(res.messages)
         }
       } catch (e) {
         // Non-fatal: marker + toast already shown; messages will refresh on next poll.
@@ -2139,8 +2115,8 @@ export function ChatPanel({
       {!hasMessages || (!historyLoading && messages.length === 0) ? (
         <div className="home" style={{ flex: 1 }}>
           {/* 线稿 home：logo-cloud（品牌标）→ 问候 → Composer */}
-          <div className="logo-cloud" aria-hidden>
-            <BrandLogo size={88} variant="glyph" />
+          <div className="logo-cloud">
+            <BrandLockup className="brand-lockup" size={40} label={t('sidebar.brand')} />
           </div>
           <h1 className="greeting">
             {project ? (

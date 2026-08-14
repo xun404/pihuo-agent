@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { SessionPermissionMode } from '@swarmdesk-agent/shared'
+import type { SessionPermissionMode } from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   THINKING_INTENSITY_OPTIONS,
@@ -732,7 +732,7 @@ export function ComposerToolbar({
                     setModelMenuOpen(false)
                     setModelSideOpen(false)
                     window.dispatchEvent(
-                      new CustomEvent('swarmdesk-agent:open-settings', {
+                      new CustomEvent('pihuo-agent:open-settings', {
                         detail: { tab: 'model' },
                       }),
                     )

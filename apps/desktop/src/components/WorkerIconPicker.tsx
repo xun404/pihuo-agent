@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { matchRegistryAgentForIcon } from '@swarmdesk-agent/shared'
+import { matchRegistryAgentForIcon } from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import { RegistryAgentIcon, WorkerBrandLogo } from './Icons'
 

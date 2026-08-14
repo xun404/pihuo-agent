@@ -139,18 +139,45 @@ export type ToolTerminalView = {
   outputFields: ToolField[]
 }
 
+function unwrapLeaderToolPayload(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        return JSON.parse(trimmed)
+      } catch {
+        return value
+      }
+    }
+    return value
+  }
+  if (!Array.isArray(value)) return value
+  const texts: string[] = []
+  for (const item of value) {
+    if (typeof item === 'string') texts.push(item)
+    else if (item && typeof item === 'object' && (item as { type?: unknown }).type === 'text') {
+      const text = (item as { text?: unknown }).text
+      if (typeof text === 'string') texts.push(text)
+    }
+  }
+  if (texts.length === 0) return value
+  return unwrapLeaderToolPayload(texts.join('\n'))
+}
+
 export function buildToolTerminalView(
   input: unknown,
   output: unknown,
   errorText: string | undefined,
 ): ToolTerminalView {
-  const command = toolCommandFull(input)
-  const stdout = toolOutputText(output)
+  const resolvedInput = unwrapLeaderToolPayload(input)
+  const resolvedOutput = unwrapLeaderToolPayload(output)
+  const command = toolCommandFull(resolvedInput)
+  const stdout = toolOutputText(resolvedOutput)
   return {
     command,
     stdout,
     stderr: errorText ?? '',
-    inputFields: command ? [] : toolStructuredFields(input),
-    outputFields: stdout ? [] : toolStructuredFields(output),
+    inputFields: command ? [] : toolStructuredFields(resolvedInput),
+    outputFields: stdout ? [] : toolStructuredFields(resolvedOutput),
   }
 }

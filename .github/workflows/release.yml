@@ -87,7 +87,7 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: |
-            release/SwarmDesk-Agent-*
+            release/PiHuo-*
             release/latest*.yml
           if-no-files-found: error
           retention-days: 7
@@ -123,7 +123,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           NOTES_FILE="docs/releases/${RELEASE_TAG}.md"
-          TITLE="SwarmDesk ${RELEASE_TAG}"
+          TITLE="PiHuo ${RELEASE_TAG}"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" release-assets/* --clobber
             gh release edit "$RELEASE_TAG" --title "$TITLE" --notes-file "$NOTES_FILE"

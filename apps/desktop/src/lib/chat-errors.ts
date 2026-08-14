@@ -203,7 +203,7 @@ export function formatChatError(
     return withDetail({ kind: 'network', message: copy.network }, original)
   }
 
-  if (/offline|server down|Mastra is offline|4111/i.test(hay)) {
+  if (/offline|server down|Mastra is offline|API is offline|4111/i.test(hay)) {
     return withDetail({ kind: 'offline', message: copy.offline }, original)
   }
 

@@ -17,7 +17,7 @@ import {
   type WorkerModelCatalog,
   type WorkerModelOption,
   type WorkerReasoningCatalogEntry,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { resolveRouterDataDir } from './router-data-paths.js'
 import { tryAcquireProcessFileLock } from './process-file-lock.js'
 

@@ -5,7 +5,7 @@ import {
   apiProbeWorker,
   apiRegisterRegistry,
   registryApiPublicError,
-} from '../packages/mastra-app/src/acp-registry-api.js'
+} from '../packages/pi-runtime/src/acp-registry-api.js'
 import { runRegistrySmoke, type SmokeSelection } from './acp-registry-smoke-runner-lib.js'
 
 const MAX_REQUEST_BYTES = 8 * 1024

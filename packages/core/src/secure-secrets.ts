@@ -49,7 +49,7 @@ import {
   normalizePromptSettings,
   type NotificationSettings,
   type PromptSettings,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 export type SecretsMap = Record<string, string>
 
@@ -178,7 +178,7 @@ export interface SecretsStatus {
 }
 
 const RESERVED_SECRET_ENV_PREFIXES = [
-  'SWARMDESK_AGENT_',
+  'PIHUO_AGENT_',
   'MASTRA_',
   'NODE_',
   'ELECTRON_',
@@ -322,17 +322,16 @@ function decryptJson(blob: Buffer, key: Buffer): SecretsMap {
 
 function loadSecretsStrict(): SecretsMap {
   if (!existsSync(secretsPath())) return {}
-  const key = getMasterKey()
   const blob = readFileSync(secretsPath())
-  return decryptJson(blob, key)
+  return decryptJson(blob, getMasterKey())
 }
 
 export function loadSecrets(): SecretsMap {
   try {
     // The trusted API child receives decrypted provider credentials through its
-    // environment (SWARMDESK_AGENT_SECRETS_PARENT_INJECTED). It must not re-read the
+    // environment (PIHUO_AGENT_SECRETS_PARENT_INJECTED). It must not re-read the
     // encrypted file — its derived master key may differ from the owner's.
-    if (process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED === '1') return {}
+    if (process.env.PIHUO_AGENT_SECRETS_PARENT_INJECTED === '1') return {}
     return loadSecretsStrict()
   } catch (e) {
     console.error('[secure-secrets] load failed', e)
@@ -374,7 +373,7 @@ export function setSecret(envKey: string, value: string): SecretsMap {
   assertConfigurableSecretEnvKey(envKey)
   // A tolerant read is appropriate for status/UI, but mutation must fail closed:
   // never replace an unreadable or OS-wrapped payload with a partial new map.
-  if (process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED === '1') {
+  if (process.env.PIHUO_AGENT_SECRETS_PARENT_INJECTED === '1') {
     throw new Error('Secret mutation is unavailable in the injected API child')
   }
   const all = loadSecretsStrict()
@@ -392,7 +391,7 @@ export function setSecret(envKey: string, value: string): SecretsMap {
 
 export function deleteSecret(envKey: string): SecretsMap {
   assertConfigurableSecretEnvKey(envKey)
-  if (process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED === '1') {
+  if (process.env.PIHUO_AGENT_SECRETS_PARENT_INJECTED === '1') {
     throw new Error('Secret mutation is unavailable in the injected API child')
   }
   const all = loadSecretsStrict()
@@ -856,9 +855,9 @@ export function secretsDir(): string {
 
 let _testMasterKey: Buffer | null = null
 const ACP_FINGERPRINT_DOMAIN = 'acp-session-fingerprint-v1'
-const ACP_FINGERPRINT_KEY_ENV = 'SWARMDESK_AGENT_ACP_FINGERPRINT_KEY'
+const ACP_FINGERPRINT_KEY_ENV = 'PIHUO_AGENT_ACP_FINGERPRINT_KEY'
 const WORKER_SECRETS_DOMAIN = 'worker-secrets-encryption-v1'
-const WORKER_SECRETS_KEY_ENV = 'SWARMDESK_AGENT_WORKER_SECRETS_KEY'
+const WORKER_SECRETS_KEY_ENV = 'PIHUO_AGENT_WORKER_SECRETS_KEY'
 
 export function setTestMasterKey(key: Buffer | null): void {
   _testMasterKey = key
@@ -902,7 +901,7 @@ function decodeInjectedKey(envName: string): Buffer {
 export function getWorkerSecretsEncryptionKeys(): {
   current: Buffer
 } {
-  if (process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED === '1') {
+  if (process.env.PIHUO_AGENT_SECRETS_PARENT_INJECTED === '1') {
     return { current: decodeInjectedKey(WORKER_SECRETS_KEY_ENV) }
   }
   const masterKey = _testMasterKey ?? getMasterKey()
@@ -918,7 +917,7 @@ export function getAcpFingerprintKeyForChild(): string {
 
 /** Domain-separated capability passed only to the trusted Node API child. */
 export function getWorkerSecretsKeyForChild(): string {
-  if (process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED === '1') {
+  if (process.env.PIHUO_AGENT_SECRETS_PARENT_INJECTED === '1') {
     throw new Error('Worker secret child capability can only be minted by the owner process')
   }
   return getWorkerSecretsEncryptionKeys().current.toString('base64')

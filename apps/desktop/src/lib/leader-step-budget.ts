@@ -1,5 +1,5 @@
-import type { LeaderStepBudgetEvent } from '@swarmdesk-agent/shared'
-import { LEADER_STEP_BUDGET_PART_TYPE } from '@swarmdesk-agent/shared'
+import type { LeaderStepBudgetEvent } from '@pihuo-agent/shared'
+import { LEADER_STEP_BUDGET_PART_TYPE } from '@pihuo-agent/shared'
 
 export function extractBudgetEvents(
   messages: Array<{ role: string; parts?: unknown[]; metadata?: unknown }>,

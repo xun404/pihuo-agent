@@ -1,25 +1,24 @@
 {
-  "name": "swarmdesk-agent",
+  "name": "pihuo-agent",
   "private": true,
   "type": "module",
   "version": "0.1.0",
-  "description": "Desktop multi-agent command center powered by Mastra and ACP",
+  "description": "PiHuo — you name the job, Pi breaks it up and hands it out",
   "workspaces": [
     "packages/*",
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @swarmdesk-agent/desktop",
-    "desktop": "npm run desktop -w @swarmdesk-agent/desktop",
-    "dev:electron": "npm run desktop -w @swarmdesk-agent/desktop",
-    "dev:mastra": "npm run dev:api -w @swarmdesk-agent/mastra-app",
-    "dev:mastra:studio": "npm run dev -w @swarmdesk-agent/mastra-app",
+    "dev": "npm run dev -w @pihuo-agent/desktop",
+    "desktop": "npm run desktop -w @pihuo-agent/desktop",
+    "dev:electron": "npm run desktop -w @pihuo-agent/desktop",
+    "dev:api": "npm run dev:api -w @pihuo-agent/pi-runtime",
     "dev:all": "npm run desktop",
     "test": "node --import tsx --test \"packages/**/*.test.ts\" \"apps/**/*.test.ts\" \"apps/**/*.test.tsx\" \"scripts/**/*.test.ts\"",
-    "build": "npm run build -w @swarmdesk-agent/shared && npm run build -w @swarmdesk-agent/core && npm run build -w @swarmdesk-agent/adapters && npm run build -w @swarmdesk-agent/mastra-app && npm run build -w @swarmdesk-agent/desktop",
+    "build": "npm run build -w @pihuo-agent/shared && npm run build -w @pihuo-agent/core && npm run build -w @pihuo-agent/adapters && npm run build -w @pihuo-agent/pi-runtime && npm run build -w @pihuo-agent/desktop",
     "build:runtime": "node apps/desktop/scripts/build-api-runtime.mjs",
     "verify:runtime": "node apps/desktop/scripts/verify-api-runtime.mjs",
-    "sync:model-registry": "npm run sync:model-registry -w @swarmdesk-agent/mastra-app",
+    "sync:model-registry": "npm run sync:model-registry -w @pihuo-agent/pi-runtime",
     "package:prepare": "npm run sync:model-registry && npm run sync:acp-registry && npm run build && npm run build:runtime && npm run verify:runtime",
     "package:dir": "npm run package:prepare && electron-builder --dir --publish never",
     "package:mac": "npm run package:prepare && electron-builder --mac --arm64 --publish never",
@@ -31,7 +30,7 @@
     "verify:release-assets": "node scripts/verify-release-assets.mjs",
     "verify:release-notes": "node scripts/verify-release-notes.mjs",
     "verify:workflows": "node scripts/validate-workflows.mjs",
-    "sync:acp-registry": "npm run sync:acp-registry -w @swarmdesk-agent/mastra-app --",
+    "sync:acp-registry": "npm run sync:acp-registry -w @pihuo-agent/pi-runtime --",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "check:source-size": "node scripts/check-source-size.mjs",
@@ -39,7 +38,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "restart": "node scripts/restart-dev.mjs",
-    "clean": "rm -rf dist-electron release apps/desktop/dist apps/desktop/dist-electron apps/desktop/dist-runtime packages/shared/dist packages/mastra-app/dist packages/mastra-app/.mastra",
+    "clean": "rm -rf dist-electron release apps/desktop/dist apps/desktop/dist-electron apps/desktop/dist-runtime packages/shared/dist packages/core/dist packages/adapters/dist packages/pi-runtime/dist",
     "test:acp-registry-contract": "node --import tsx --test scripts/acp-registry-contract.test.ts",
     "smoke:acp-registry": "node scripts/acp-registry-smoke.mjs",
     "capture:readme": "node scripts/capture-readme-shots.mjs",
@@ -55,13 +54,13 @@
     "name": "xun404",
     "email": "xun404@users.noreply.github.com"
   },
-  "homepage": "https://github.com/xun404/swarmdesk-agent#readme",
+  "homepage": "https://github.com/xun404/pihuo-agent#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xun404/swarmdesk-agent.git"
+    "url": "git+https://github.com/xun404/pihuo-agent.git"
   },
   "bugs": {
-    "url": "https://github.com/xun404/swarmdesk-agent/issues"
+    "url": "https://github.com/xun404/pihuo-agent/issues"
   },
   "license": "MIT",
   "devDependencies": {

@@ -1,4 +1,4 @@
-/** Stable public facade for domain contracts shared by desktop, core, and Mastra. */
+/** Stable public facade for domain contracts shared by desktop, core, and runtime. */
 
 export type {
   AcpPublicErrorCode,
@@ -156,6 +156,41 @@ export {
   isFollowUpRequestMeta,
   isFollowUpSource,
 } from './contracts/chat-run.js'
+
+export type {
+  LeaderChatCustom,
+  LeaderChatEvent,
+  LeaderChatMessage,
+  LeaderChatRole,
+  LeaderChatStartBody,
+  LeaderContentBlock,
+  LeaderCustomKind,
+  LeaderRunMeta,
+  LeaderTaskItem,
+  LeaderTaskStatus,
+  LeaderThinkingIntensity,
+  LeaderWorkMode,
+} from './contracts/leader-chat.js'
+export {
+  DEFAULT_LEADER_WORK_MODE,
+  LEADER_CHAT_EVENT_TYPES,
+  LEADER_CHAT_ROLES,
+  LEADER_CUSTOM_KINDS,
+  LEADER_TASK_STATUSES,
+  LEADER_THINKING_INTENSITIES,
+  LEADER_WORK_MODES,
+  isLeaderChatEvent,
+  isLeaderChatMessage,
+  isLeaderChatRole,
+  isLeaderContentBlock,
+  isLeaderCustomKind,
+  isLeaderTaskItem,
+  isLeaderThinkingIntensity,
+  isLeaderWorkMode,
+  normalizeLeaderWorkMode,
+  parseLeaderChatStartBody,
+  userTextFromLeaderMessage,
+} from './contracts/leader-chat.js'
 
 export type {
   ApprovalDecision,

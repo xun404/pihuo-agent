@@ -121,115 +121,95 @@
   align-items: center;
   padding: var(--sp-1) var(--sp-2) var(--sp-3);
 }
-/* The sidebar uses a wordmark rather than a separate app icon. The two words
-   move on separate colour rhythms while remaining one compact lockup. */
-.brand .brand-name {
-  position: relative;
+.brand-lockup {
+  --pi-size: 24px;
   display: inline-flex;
-  align-items: baseline;
-  isolation: isolate;
-  font-family:
-    ui-rounded,
-    ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
-  font-size: 23px;
-  font-weight: 760;
-  letter-spacing: -0.07em;
-  line-height: 1;
-  font-variant-ligatures: common-ligatures;
-}
-.brand .brand-name-swarm,
-.brand .brand-name-desk {
-  display: inline-block;
-  background-repeat: no-repeat;
-  -webkit-background-clip: text;
-  background-clip: text;
-  will-change: background-position, filter;
-}
-.brand .brand-name-swarm {
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-1);
-  background-image: linear-gradient(
-    112deg,
-    color-mix(in srgb, var(--text-1) 88%, var(--blue)) 0%,
-    color-mix(in srgb, var(--text-1) 74%, var(--blue)) 28%,
-    color-mix(in srgb, var(--blue) 82%, var(--purple, #7c5cfc)) 52%,
-    color-mix(in srgb, var(--purple, #7c5cfc) 72%, var(--blue)) 68%,
-    color-mix(in srgb, var(--text-1) 80%, var(--blue)) 88%,
-    color-mix(in srgb, var(--text-1) 88%, var(--blue)) 100%
-  );
-  background-size: 260% 100%;
-  animation: brand-swarm-flow 7.6s cubic-bezier(0.42, 0, 0.3, 1) infinite;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 0;
 }
-.brand .brand-name-desk {
-  color: var(--blue);
-  font-weight: 690;
-  background-image: linear-gradient(
-    106deg,
-    color-mix(in srgb, var(--blue) 86%, var(--text-1)) 0%,
-    color-mix(in srgb, var(--blue) 78%, var(--purple, #7c5cfc)) 27%,
-    color-mix(in srgb, var(--purple, #7c5cfc) 78%, var(--blue)) 51%,
-    color-mix(in srgb, var(--blue) 82%, var(--purple, #7c5cfc)) 74%,
-    color-mix(in srgb, var(--blue) 86%, var(--text-1)) 100%
-  );
-  background-size: 220% 100%;
-  animation: brand-desk-flow 5.8s cubic-bezier(0.32, 0.72, 0, 1) -1.8s infinite;
+.brand-lockup:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--text-1) 35%, transparent);
+  outline-offset: 3px;
 }
-@supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .brand .brand-name-swarm,
-  .brand .brand-name-desk {
-    color: transparent;
-  }
+.brand-lockup[data-phase='pi'] .brand-huo-word {
+  opacity: 0;
 }
-@keyframes brand-swarm-flow {
-  0%,
-  100% {
-    background-position: 4% 50%;
-    filter: saturate(1) brightness(1);
-  }
-  26% {
-    background-position: 42% 46%;
-    filter: saturate(1.07) brightness(1.02);
-  }
-  55% {
-    background-position: 100% 56%;
-    filter: saturate(1.13) brightness(1.035);
-  }
-  78% {
-    background-position: 58% 50%;
-    filter: saturate(1.04) brightness(1.015);
-  }
+.brand-pi-stage {
+  position: relative;
+  width: var(--pi-size);
+  height: var(--pi-size);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  flex-shrink: 0;
+  overflow: hidden;
+  isolation: isolate;
+  clip-path: inset(0);
 }
-@keyframes brand-desk-flow {
-  0%,
-  100% {
-    background-position: 12% 50%;
-    filter: saturate(1.04) brightness(1);
-  }
-  34% {
-    background-position: 94% 43%;
-    filter: saturate(1.16) brightness(1.06);
-  }
-  67% {
-    background-position: 48% 58%;
-    filter: saturate(1.1) brightness(1.02);
-  }
+.brand-pi-stage:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--text-1) 35%, transparent);
+  outline-offset: 3px;
 }
-:root[data-motion='reduce'] .brand .brand-name-swarm,
-:root[data-motion='reduce'] .brand .brand-name-desk {
-  animation: none;
-  background-position: 44% 50%;
+.brand-pi-stage-clip {
+  position: relative;
+  display: block;
+  width: var(--pi-size);
+  height: var(--pi-size);
+  overflow: hidden;
+  clip-path: inset(0);
 }
-@media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion='full']) .brand .brand-name-swarm,
-  :root:not([data-motion='full']) .brand .brand-name-desk {
-    animation: none;
-    background-position: 44% 50%;
-  }
+.brand-pi-stage-canvas {
+  position: absolute;
+  left: calc(var(--pi-size) * -2 / 4);
+  top: calc(var(--pi-size) * -3 / 4);
+  width: calc(var(--pi-size) * 8 / 4);
+  height: calc(var(--pi-size) * 9 / 4);
+  image-rendering: pixelated;
+  pointer-events: none;
+  opacity: 0;
 }
-
+.brand-pi-stage-canvas[data-playing='true'] {
+  opacity: 1;
+}
+.brand-pi-stage-mark {
+  position: relative;
+  display: block;
+  width: var(--pi-size);
+  height: var(--pi-size);
+  color: inherit;
+}
+.brand-pi-stage:has(.brand-pi-stage-canvas[data-playing='true']) .brand-pi-stage-mark {
+  opacity: 0;
+}
+.brand-huo-word {
+  display: block;
+  height: var(--pi-size);
+  width: auto;
+  margin-left: 1px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  flex-shrink: 0;
+  line-height: 0;
+  transition: opacity 0.12s ease;
+}
+.brand-huo-word:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--text-1) 35%, transparent);
+  outline-offset: 3px;
+}
+.brand-huo-word-canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
 .nav-actions {
   display: flex;
   flex-direction: column;

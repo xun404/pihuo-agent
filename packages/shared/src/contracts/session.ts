@@ -1,5 +1,6 @@
 import type { LeaderMode, SessionStatus } from './worker-acp.js'
 import type { SessionApprovalPolicy, SessionPermissionMode } from './permissions.js'
+import type { LeaderWorkMode } from './leader-chat.js'
 
 export type Locale = 'zh' | 'zh-TW' | 'en'
 
@@ -32,6 +33,8 @@ export interface Session {
   titleSource?: 'auto' | 'user'
   status: SessionStatus
   mode: LeaderMode
+  /** Tool-box mode. Missing on older snapshots → treated as coordinate. */
+  workMode?: LeaderWorkMode
   activeWorkerIds: string[]
   memoryThreadId: string
   approvalPolicy: SessionApprovalPolicy

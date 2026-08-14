@@ -29,7 +29,7 @@ export function resolveDesktopRuntimeLayout(input: {
     mode: 'development',
     identityRoot: repoRoot,
     rendererDist: path.resolve(input.moduleDir, '../dist'),
-    apiEntry: path.resolve(repoRoot, 'packages/mastra-app/src/http-server.ts'),
-    apiCwd: path.resolve(repoRoot, 'packages/mastra-app'),
+    apiEntry: path.resolve(repoRoot, 'packages/pi-runtime/src/http-server.ts'),
+    apiCwd: path.resolve(repoRoot, 'packages/pi-runtime'),
   }
 }

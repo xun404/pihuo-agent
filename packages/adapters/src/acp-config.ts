@@ -1,4 +1,4 @@
-import type { WorkerModelOption, WorkerRegistration } from '@swarmdesk-agent/shared'
+import type { WorkerModelOption, WorkerRegistration } from '@pihuo-agent/shared'
 import { resolveEligibilityCandidates } from './model-eligibility.js'
 import { resolveWorkerCwd } from './presets.js'
 

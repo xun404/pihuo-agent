@@ -8,15 +8,13 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
 const library = readFileSync(new URL('./TeamTemplateLibrary.tsx', import.meta.url), 'utf8')
 const shellStyles = readFileSync(new URL('../styles/01-shell.css', import.meta.url), 'utf8')
 
-test('sidebar brand keeps the animated wordmark without an app icon', () => {
-  assert.match(sidebar, /className="brand-name"/u)
-  assert.match(sidebar, /brand-name-swarm/u)
-  assert.match(sidebar, /brand-name-desk/u)
+test('sidebar and about use the official Pi mark plus Huo lockup', () => {
+  const about = readFileSync(new URL('./settings/SettingsAboutTab.tsx', import.meta.url), 'utf8')
+  assert.match(sidebar, /<BrandLockup/u)
+  assert.match(about, /<BrandLockup/u)
   assert.doesNotMatch(sidebar, /BrandLogo/u)
-  assert.doesNotMatch(sidebar, /className="mark"/u)
-  assert.match(shellStyles, /brand-swarm-flow/u)
-  assert.match(shellStyles, /brand-desk-flow/u)
-  assert.doesNotMatch(shellStyles, /brand-route-flow/u)
+  assert.match(shellStyles, /brand-pi-stage/u)
+  assert.match(shellStyles, /brand-huo-word/u)
 })
 
 test('left sidebar exposes a Crews section under Agent Worker', () => {

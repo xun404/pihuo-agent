@@ -99,6 +99,7 @@ export {
   type ProcessFileLockDeps,
 } from './process-file-lock.js'
 export {
+  APP_DATA_DIRNAME,
   resolveRouterDataDir,
   resolveRouterDataPaths,
   defaultRuntimeDiscoveryPath,

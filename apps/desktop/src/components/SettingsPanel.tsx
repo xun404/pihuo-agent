@@ -10,8 +10,8 @@ import type {
   WorkerTimeoutSettings,
   WorkerRegistration,
   WorkerRole,
-} from '@swarmdesk-agent/shared'
-import { normalizePromptSettings, DEFAULT_NOTIFICATION_SETTINGS } from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
+import { normalizePromptSettings, DEFAULT_NOTIFICATION_SETTINGS } from '@pihuo-agent/shared'
 import { useI18n } from '../i18n/I18nProvider'
 import {
   fetchSettings,

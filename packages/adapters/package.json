@@ -1,5 +1,5 @@
 {
-  "name": "@swarmdesk-agent/adapters",
+  "name": "@pihuo-agent/adapters",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.2.1",
-    "@swarmdesk-agent/shared": "0.1.0",
+    "@pihuo-agent/shared": "0.1.0",
     "ajv": "^8.20.0",
     "tar-stream": "^3.2.0",
     "unbzip2-stream": "^1.4.3",

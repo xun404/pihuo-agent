@@ -1,4 +1,4 @@
-import type { WorkerModelOption } from '@swarmdesk-agent/shared'
+import type { WorkerModelOption } from '@pihuo-agent/shared'
 
 export type ProviderEvidence = 'free' | 'authenticated' | 'disabled' | 'unknown'
 export type EligibilityPurpose = 'shortlist' | 'search' | 'pin' | 'execute'

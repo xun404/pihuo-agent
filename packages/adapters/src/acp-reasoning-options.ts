@@ -1,10 +1,10 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk'
-import type { WorkerReasoningSelector } from '@swarmdesk-agent/shared'
+import type { WorkerReasoningSelector } from '@pihuo-agent/shared'
 import { withAcpSession } from './acp-session.js'
 import { extractModelOptions } from './acp-model-options.js'
 import { buildEffectiveWorkerEnv } from './worker-env.js'
 import { resolveWorkerCwd } from './presets.js'
-import type { WorkerRegistration } from '@swarmdesk-agent/shared'
+import type { WorkerRegistration } from '@pihuo-agent/shared'
 
 const REASONING_CATEGORY = 'thought_level'
 

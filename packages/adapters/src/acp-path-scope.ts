@@ -1,6 +1,6 @@
 import { lstatSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import type { PermissionTargetScope } from '@swarmdesk-agent/shared'
+import type { PermissionTargetScope } from '@pihuo-agent/shared'
 
 export interface AcpFilePathClassification {
   scope: PermissionTargetScope

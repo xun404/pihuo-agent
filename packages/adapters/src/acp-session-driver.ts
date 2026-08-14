@@ -532,7 +532,7 @@ export class AcpSessionDriver {
       protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: AcpSessionDriver.buildClientCapabilities(opts),
       clientInfo: {
-        name: opts.clientName ?? 'swarmdesk-agent',
+        name: opts.clientName ?? 'pihuo',
         version: opts.clientVersion ?? '0.1.0',
       },
     })

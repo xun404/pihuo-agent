@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it } from 'node:test'
-import { matchRegistryAgentForIcon } from '@swarmdesk-agent/shared'
+import { matchRegistryAgentForIcon } from '@pihuo-agent/shared'
 
 const source = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), 'WorkerIconPicker.tsx'),

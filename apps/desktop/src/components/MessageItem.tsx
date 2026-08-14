@@ -26,8 +26,8 @@ import {
   type SetStateAction,
 } from 'react'
 import { Check, Copy } from 'lucide-react'
-import type { UIMessage } from '@ai-sdk/react'
-import type { WorkerRunEvent, WorkerRunState, ApprovalItem } from '@swarmdesk-agent/shared'
+import type { LeaderViewMessage } from '../lib/leader-chat-view'
+import type { WorkerRunEvent, WorkerRunState, ApprovalItem } from '@pihuo-agent/shared'
 import { MarkdownContent } from './MarkdownContent'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
@@ -58,8 +58,8 @@ import type { ThinkingIntensity } from '../lib/settings'
 // i18n: reuse the MessageKey union from locales, aligned with I18nProvider's t signature.
 type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string
 
-/** Message shape as consumed from useChat (UIMessage). parts include text / reasoning / tool-x / data-worker-run. */
-type AnyMessage = UIMessage<any>
+/** Render shape produced by LeaderChatStore (no AI SDK). */
+type AnyMessage = LeaderViewMessage & { parts: Array<Record<string, unknown> & { type: string }> }
 
 const THINK_LABEL_KEY: Record<
   ThinkingIntensity,
@@ -275,7 +275,7 @@ function MessageItemImpl({
       )
     }
 
-    if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') {
+    if (part.type.startsWith('tool-')) {
       const toolPart = part as {
         type: string
         state?: string
@@ -439,7 +439,7 @@ function MessageItemImpl({
         />
       )
     }
-    // data-signal: task-list snapshot pushed by Mastra's TaskSignalProvider.
+    // data-signal: task-list snapshot pushed by Leader task tools.
     // tagName='task-list-update' (incremental) / 'current-task-list' (snapshot);
     // the full tasks live in part.data.metadata.value.tasks.
     if (part.type === 'data-signal') {

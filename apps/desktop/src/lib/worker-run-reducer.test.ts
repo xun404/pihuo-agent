@@ -14,7 +14,7 @@ import type {
   ApprovalItem,
   WorkerJob,
   WorkerRegistration,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 function makeStarted(
   overrides: Partial<WorkerRunEvent & { type: 'started' }> = {},

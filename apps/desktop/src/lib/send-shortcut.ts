@@ -8,8 +8,8 @@ export type SendShortcut = 'enter' | 'mod-enter'
 
 export const DEFAULT_SEND_SHORTCUT: SendShortcut = 'enter'
 
-export const SEND_SHORTCUT_STORAGE_KEY = 'swarmdesk-agent.sendShortcut'
-export const SEND_SHORTCUT_EVENT = 'swarmdesk-agent:send-shortcut'
+export const SEND_SHORTCUT_STORAGE_KEY = 'pihuo-agent.sendShortcut'
+export const SEND_SHORTCUT_EVENT = 'pihuo-agent:send-shortcut'
 
 export function isSendShortcut(value: unknown): value is SendShortcut {
   return value === 'enter' || value === 'mod-enter'

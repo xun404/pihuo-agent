@@ -17,11 +17,11 @@ export default defineConfig({
               vite: {
                 resolve: {
                   alias: {
-                    '@swarmdesk-agent/core': path.join(
+                    '@pihuo-agent/core': path.join(
                       import.meta.dirname,
                       '../../packages/core/src/index.ts',
                     ),
-                    '@swarmdesk-agent/shared': path.join(
+                    '@pihuo-agent/shared': path.join(
                       import.meta.dirname,
                       '../../packages/shared/src/index.ts',
                     ),
@@ -48,15 +48,15 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.join(import.meta.dirname, 'src'),
-      '@swarmdesk-agent/shared': path.join(
+      '@pihuo-agent/shared': path.join(
         import.meta.dirname,
         '../../packages/shared/src/index.ts',
       ),
-      '@swarmdesk-agent/core': path.join(import.meta.dirname, '../../packages/core/src/index.ts'),
+      '@pihuo-agent/core': path.join(import.meta.dirname, '../../packages/core/src/index.ts'),
     },
   },
   // Avoid pre-bundling workspace TS packages incorrectly
   optimizeDeps: {
-    exclude: ['@swarmdesk-agent/shared', '@swarmdesk-agent/core'],
+    exclude: ['@pihuo-agent/shared', '@pihuo-agent/core'],
   },
 })

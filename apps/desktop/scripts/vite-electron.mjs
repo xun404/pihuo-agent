@@ -19,7 +19,7 @@ const result = spawnSync(process.execPath, [viteBin, ...args], {
   env: {
     ...process.env,
     ELECTRON: '1',
-    SWARMDESK_AGENT_CDP_PORT: process.env.SWARMDESK_AGENT_CDP_PORT ?? DEFAULT_DEV_CDP_PORT,
+    PIHUO_AGENT_CDP_PORT: process.env.PIHUO_AGENT_CDP_PORT ?? DEFAULT_DEV_CDP_PORT,
   },
   stdio: 'inherit',
 })

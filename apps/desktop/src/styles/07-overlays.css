@@ -403,11 +403,6 @@
   background: var(--bg-hover);
   color: var(--text-2);
 }
-.about-card .app-name {
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-tight);
-}
 .about-card .ver {
   font-size: var(--fs-sm);
   color: var(--text-2);

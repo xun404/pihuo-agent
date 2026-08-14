@@ -26,7 +26,7 @@ if (!installDir || !packageSpec) {
 }
 
 trace(`start:${mode}`)
-trace(`owner-secret:${process.env.SWARMDESK_AGENT_INTERNAL_TOKEN ? 'present' : 'absent'}`)
+trace(`owner-secret:${process.env.PIHUO_AGENT_INTERNAL_TOKEN ? 'present' : 'absent'}`)
 
 if (mode === 'tree-hang') {
   const descendant = spawn(

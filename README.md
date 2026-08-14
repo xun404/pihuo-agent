@@ -1,14 +1,14 @@
 <h1 align="center">
-  <a href="https://github.com/xun404/swarmdesk-agent">
-    <img src="docs/assets/icon.png" alt="SwarmDesk" width="64" valign="middle" />
+  <a href="https://github.com/xun404/pihuo-agent">
+    <img src="docs/assets/icon.png" alt="PiHuo" width="64" valign="middle" />
   </a>
-  SwarmDesk
+  PiHuo
 </h1>
 
 <p align="center">
-  <a href="https://github.com/xun404/swarmdesk-agent/stargazers"><img src="https://img.shields.io/github/stars/xun404/swarmdesk-agent?style=flat&label=%E2%98%85" alt="GitHub stars" /></a>
-  <a href="https://github.com/xun404/swarmdesk-agent/releases"><img src="https://img.shields.io/github/v/release/xun404/swarmdesk-agent?label=release" alt="Latest release" /></a>
-  <a href="https://github.com/xun404/swarmdesk-agent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/xun404/swarmdesk-agent" alt="License" /></a>
+  <a href="https://github.com/xun404/pihuo-agent/stargazers"><img src="https://img.shields.io/github/stars/xun404/pihuo-agent?style=flat&label=%E2%98%85" alt="GitHub stars" /></a>
+  <a href="https://github.com/xun404/pihuo-agent/releases"><img src="https://img.shields.io/github/v/release/xun404/pihuo-agent?label=release" alt="Latest release" /></a>
+  <a href="https://github.com/xun404/pihuo-agent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/xun404/pihuo-agent" alt="License" /></a>
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="Supported platforms: macOS, Windows, and Linux" />
 </p>
 
@@ -17,14 +17,13 @@
 </p>
 
 <p align="center">
-  <strong>Local multi-agent command center for ACP workers.</strong><br/>
-  A Mastra Supervisor <em>Leader</em> plans and delegates — Claude Code, Codex, OpenCode, and Registry agents run on your machine, tracked in one desktop app.
+  <strong>PiHuo: you name the job, Pi breaks it up and hands it out, local workers finish it.</strong>
 </p>
 
-<h3 align="center"><a href="https://github.com/xun404/swarmdesk-agent/releases/latest"><ins>Download SwarmDesk</ins></a></h3>
+<h3 align="center"><a href="https://github.com/xun404/pihuo-agent/releases/latest"><ins>Download PiHuo</ins></a></h3>
 
 <p align="center">
-  <img src="docs/assets/readme-hero.png" alt="SwarmDesk desktop — Leader chat, workers, and project context" width="960" />
+  <img src="docs/assets/readme-hero.png" alt="PiHuo desktop — Leader chat, workers, and project context" width="960" />
 </p>
 
 ## Features
@@ -61,7 +60,7 @@ Watch each job stream in place — tool calls, terminal output, and final status
 
 ACP permission requests surface in chat and the side panel. The called Agent remains responsible for its own direct operations, such as reads or project-local edits it already considers safe. Each Session has a two-state shield: **Default** leaves permission requests emitted by the Agent for manual approval; **Auto-accept** sends those requests through the same durable approval path and immediately selects an allow option. Changes apply immediately to running and pending work.
 
-Auto-accept applies only to the current Session and prefers the Agent's `allow_once` option. Enabling the warning-colored shield immediately accepts every currently pending permission in that Session and affects future ACP requests in real time; the mutation response also reports which items were resolved and which failed, and the shield/approval panel shows the current Session's remaining pending and failed counts, so a partial failure cannot look like a clean success. Disabling it affects the next request immediately. Permissions have no approval timeout and remain pending until the user responds, enables auto-accept, cancels them, or terminates the Job; the active Job timer pauses while approval is pending, while pending Jobs still consume ACP capacity. If an Agent offers `allow_always`, that Agent—not SwarmDesk—controls its scope and lifetime, and turning the shield off cannot generically revoke an Agent-side grant. If the runtime restarts, the pending approval is cancelled and the task is marked `RUNTIME_RESTARTED`; run the task again manually.
+Auto-accept applies only to the current Session and prefers the Agent's `allow_once` option. Enabling the warning-colored shield immediately accepts every currently pending permission in that Session and affects future ACP requests in real time; the mutation response also reports which items were resolved and which failed, and the shield/approval panel shows the current Session's remaining pending and failed counts, so a partial failure cannot look like a clean success. Disabling it affects the next request immediately. Permissions have no approval timeout and remain pending until the user responds, enables auto-accept, cancels them, or terminates the Job; the active Job timer pauses while approval is pending, while pending Jobs still consume ACP capacity. If an Agent offers `allow_always`, that Agent—not PiHuo—controls its scope and lifetime, and turning the shield off cannot generically revoke an Agent-side grant. If the runtime restarts, the pending approval is cancelled and the task is marked `RUNTIME_RESTARTED`; run the task again manually.
 
 This policy is an application-level ACP approval boundary, not an OS sandbox. It does not intercept direct system calls made by an Agent process.
 
@@ -113,7 +112,7 @@ Open a local project path, keep multiple chat sessions, rename from the header, 
 - **i18n** — Chinese / English in the title bar
 - **Git &amp; files** — real `git status` and bounded project tree in the UI
 - **Step budget** — configurable Leader max steps with continue-on-same-thread
-- **Local-first** — data under `~/.config/swarmdesk-agent/` (no cloud account required)
+- **Local-first** — data under `~/.config/pihuo-agent/` (no cloud account required)
 - **Custom themes** — load OpenChamber-compatible JSON themes with the [custom theme guide](./docs/custom-themes.md)
 - **ACP reasoning intensity** — per-agent raw reasoning values discovered from `configOptions` (e.g. `reasoning_effort` for Codex, `effort` for Claude). Three-level inheritance: TeamMember override → Worker default → ACP Agent default. When a Worker or model does not declare a reasoning selector, unconfigured roles continue normally; explicit reasoning values always fail closed instead of silently falling back.
 
@@ -156,7 +155,7 @@ Built-in presets plus **ACP Registry** agents. Registry availability depends on 
 
 ## Leader models &amp; providers
 
-Configure in **Settings** (encrypted on disk). Leader uses Mastra’s model router (`provider/model`).
+Configure in **Settings** (encrypted on disk). Leader uses `provider/model` ids.
 
 ### Built-in providers
 
@@ -183,8 +182,8 @@ Configure in **Settings** (encrypted on disk). Leader uses Mastra’s model rout
 
 ### Desktop — macOS, Windows, Linux
 
-- **[Download the latest release](https://github.com/xun404/swarmdesk-agent/releases/latest)**
-- Builds (names match `SwarmDesk-Agent-${version}-…`):
+- **[Download the latest release](https://github.com/xun404/pihuo-agent/releases/latest)**
+- Builds (names match `PiHuo-${version}-…`):
 
   | Platform | Arch                  | Package       |
   | -------- | --------------------- | ------------- |
@@ -199,7 +198,7 @@ Configure in **Settings** (encrypted on disk). Leader uses Mastra’s model rout
 shasum -a 256 -c SHA256SUMS
 
 # Windows PowerShell
-Get-FileHash .\SwarmDesk-Agent-0.1.0-win-x64.exe -Algorithm SHA256
+Get-FileHash .\PiHuo-0.1.0-win-x64.exe -Algorithm SHA256
 ```
 
 > Installers are currently **unsigned** (no macOS notarization / Windows code signing). Gatekeeper or SmartScreen may warn — download only from this repo’s Releases.
@@ -210,11 +209,11 @@ Get-FileHash .\SwarmDesk-Agent-0.1.0-win-x64.exe -Algorithm SHA256
 
 ## Community &amp; Support
 
-- **Issues &amp; ideas:** [Open an issue](https://github.com/xun404/swarmdesk-agent/issues)
-- **Show support:** [Star](https://github.com/xun404/swarmdesk-agent) the repo
+- **Issues &amp; ideas:** [Open an issue](https://github.com/xun404/pihuo-agent/issues)
+- **Show support:** [Star](https://github.com/xun404/pihuo-agent) the repo
 - **Maintainers:** [CONTRIBUTING.md](./CONTRIBUTING.md) · [docs/HANDOVER.md](./docs/HANDOVER.md)
 
-Local data lives under `~/.config/swarmdesk-agent/` (settings, encrypted secrets, sessions, registry LKG).
+Local data lives under `~/.config/pihuo-agent/` (settings, encrypted secrets, sessions, registry LKG).
 
 ---
 
@@ -226,4 +225,4 @@ Want to contribute or run from source? See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-SwarmDesk is free and open source under the [MIT License](./LICENSE).
+PiHuo is free and open source under the [MIT License](./LICENSE).

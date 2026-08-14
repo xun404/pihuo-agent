@@ -25,17 +25,17 @@ describe('models-catalog-sync', () => {
 
   beforeEach(() => {
     dataDir = mkdtempSync(join(tmpdir(), 'reg-sync-'))
-    prevDataDir = process.env.SWARMDESK_AGENT_DATA_DIR
+    prevDataDir = process.env.PIHUO_AGENT_DATA_DIR
     prevHome = process.env.HOME
     // Pin the entire app root to a temp dir; redirects HOME too so any
     // accidental write never lands in the login home.
-    process.env.SWARMDESK_AGENT_DATA_DIR = dataDir
+    process.env.PIHUO_AGENT_DATA_DIR = dataDir
     process.env.HOME = dataDir
   })
 
   afterEach(() => {
-    if (prevDataDir === undefined) delete process.env.SWARMDESK_AGENT_DATA_DIR
-    else process.env.SWARMDESK_AGENT_DATA_DIR = prevDataDir
+    if (prevDataDir === undefined) delete process.env.PIHUO_AGENT_DATA_DIR
+    else process.env.PIHUO_AGENT_DATA_DIR = prevDataDir
     if (prevHome === undefined) delete process.env.HOME
     else process.env.HOME = prevHome
     try {

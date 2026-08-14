@@ -33,17 +33,17 @@ describe('directoryPathFromFileList', () => {
   })
 
   it('uses resolveAbsPath when File.path is missing (webUtils path)', () => {
-    const files = [{ webkitRelativePath: 'swarmdesk-agent/README.md' } as ElectronFile]
+    const files = [{ webkitRelativePath: 'pihuo-agent/README.md' } as ElectronFile]
     const dir = directoryPathFromFileList(
       files,
-      () => '/Users/me/workspace/swarmdesk-agent/README.md',
+      () => '/Users/me/workspace/pihuo-agent/README.md',
     )
-    assert.equal(dir, '/Users/me/workspace/swarmdesk-agent')
+    assert.equal(dir, '/Users/me/workspace/pihuo-agent')
   })
 
   it('handles file directly under selected root', () => {
-    const files = [fakeFile('/Users/me/swarmdesk-agent/README.md', 'swarmdesk-agent/README.md')]
-    assert.equal(directoryPathFromFileList(files), '/Users/me/swarmdesk-agent')
+    const files = [fakeFile('/Users/me/pihuo-agent/README.md', 'pihuo-agent/README.md')]
+    assert.equal(directoryPathFromFileList(files), '/Users/me/pihuo-agent')
   })
 
   it('falls back to dirname when no relative path', () => {

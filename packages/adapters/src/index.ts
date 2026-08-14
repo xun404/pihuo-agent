@@ -83,7 +83,7 @@ export {
   verifyBundledAcpRegistryArtifacts,
   type BundledAcpRegistryVerification,
 } from './acp-registry-bundled.js'
-export type { AcpRegistryTarget, AcpRegistryDistributionKind } from '@swarmdesk-agent/shared'
+export type { AcpRegistryTarget, AcpRegistryDistributionKind } from '@pihuo-agent/shared'
 export {
   resolveAcpRunner,
   resolveNodeAbsolutePath,

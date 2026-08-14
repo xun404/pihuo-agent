@@ -1,7 +1,7 @@
 /**
  * TaskListCard —— 渲染 Leader 的任务列表（来自 data-signal / task-list-update）。
  *
- * 数据源：Mastra TaskSignalProvider 下发的 `data-signal` part，
+ * 数据源：Leader task tools 下发的 `data-signal` part，
  *   part.data.metadata.value.tasks = TaskItem[]（全量快照，每次更新都是当前完整列表）。
  *
  * 视觉（线稿 icon-spec-v3 / floating-process）：
@@ -16,7 +16,7 @@ import { ChevronRight, ListTodo } from 'lucide-react'
 import { useI18n } from '../../i18n/I18nProvider'
 import { useCollapsible } from './useCollapsible'
 
-/** Mastra TaskItem（本地结构类型，避免依赖 @mastra/core 内部 d.ts） */
+/** Leader task item rendered from the session task-list snapshot. */
 export type TaskItem = {
   id: string
   content: string

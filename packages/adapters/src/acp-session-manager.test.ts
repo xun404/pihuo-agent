@@ -2732,7 +2732,7 @@ describe('catalog recovery state machine', () => {
         assert.equal(error.canResetAcpContext, true)
         assert.doesNotMatch(
           error.publicMessage ?? error.message,
-          /private-agent-session-id|worker-a|sess-1|swarmdesk-agent/,
+          /private-agent-session-id|worker-a|sess-1|pihuo-agent/,
         )
         return true
       },
@@ -2753,7 +2753,7 @@ describe('catalog recovery state machine', () => {
       () => mgr.openAndBind(request()),
       (error: any) => {
         const publicText = error.publicMessage ?? error.message
-        assert.doesNotMatch(publicText, /private-agent-session-id|worker-a|sess-1|swarmdesk-agent/)
+        assert.doesNotMatch(publicText, /private-agent-session-id|worker-a|sess-1|pihuo-agent/)
         assert.equal(publicText.includes(computeKeyDigest(request().key)), false)
         assert.equal(error.canResetAcpContext, true)
         return true

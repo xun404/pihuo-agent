@@ -1,6 +1,6 @@
-appId: app.swarmdesk.agent
-productName: SwarmDesk
-artifactName: SwarmDesk-Agent-${version}-${os}-${arch}.${ext}
+appId: app.pihuo.desktop
+productName: PiHuo
+artifactName: PiHuo-${version}-${os}-${arch}.${ext}
 asar: true
 npmRebuild: false
 directories:
@@ -44,7 +44,7 @@ win:
         - x64
 linux:
   category: Development
-  executableName: swarmdesk-agent
+  executableName: pihuo
   target:
     - target: AppImage
       arch:
@@ -55,4 +55,4 @@ linux:
 publish:
   provider: github
   owner: xun404
-  repo: swarmdesk-agent
+  repo: pihuo-agent

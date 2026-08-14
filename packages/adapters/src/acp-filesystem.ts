@@ -1,6 +1,6 @@
 import { realpathSync, statSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname, isAbsolute } from 'node:path'
-import type { ApprovalOption } from '@swarmdesk-agent/shared'
+import type { ApprovalOption } from '@pihuo-agent/shared'
 import { classifyAcpFilePath } from './acp-path-scope.js'
 
 export const DEFAULT_MAX_FILE_BYTES = 1_000_000

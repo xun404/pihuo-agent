@@ -1,6 +1,6 @@
-import type { WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
+import type { WorkerTimeoutSettings } from '@pihuo-agent/shared'
 
-export type { WorkerTimeoutSettings } from '@swarmdesk-agent/shared'
+export type { WorkerTimeoutSettings } from '@pihuo-agent/shared'
 
 export const DEFAULT_WORKER_TIMEOUT_SETTINGS: WorkerTimeoutSettings = Object.freeze({
   jobTimeoutMs: 600_000,

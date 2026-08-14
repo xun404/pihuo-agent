@@ -7,8 +7,8 @@ import type {
   WorkerHealthStatus,
   WorkerKind,
   WorkerRegistration,
-} from '@swarmdesk-agent/shared'
-import { projectLegacyHealth } from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
+import { projectLegacyHealth } from '@pihuo-agent/shared'
 
 export type ProbeDepth = 'presence' | 'version' | 'acp'
 

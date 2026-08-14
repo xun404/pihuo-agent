@@ -1,0 +1,10 @@
+{
+  "name": "pihuo-showcase",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demo workspace for PiHuo README screenshots",
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts"
+  }
+}

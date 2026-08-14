@@ -3,7 +3,7 @@ import {
   type PromptSettings,
   type WorkerRegistration,
   type WorkerRole,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 export interface RolePromptDraft {
   name: string

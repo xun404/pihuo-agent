@@ -1,6 +1,6 @@
-# Contributing to SwarmDesk
+# Contributing to PiHuo
 
-Thanks for helping improve SwarmDesk.
+Thanks for helping improve PiHuo.
 
 ## Development setup
 

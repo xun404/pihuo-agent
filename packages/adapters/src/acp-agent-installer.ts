@@ -32,7 +32,7 @@ import type {
   AcpRegistryPackageDistribution,
   AcpRegistryTarget,
   WorkerLaunchSpec,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import {
   assertExecutableInsideStaging,
   detectArchiveKind,
@@ -67,7 +67,7 @@ export type PrepareRequest = {
   agent: AcpRegistryAgentMetadata
   distribution: AcpRegistryDistributionKind
   target: AcpRegistryTarget
-  /** Absolute agents root, e.g. ~/.swarmdesk-agent/agents */
+  /** Absolute agents root, e.g. ~/.config/pihuo-agent/data/agents */
   agentsRoot: string
   trust?: PrepareTrustDecision
   fetchImpl?: typeof fetch

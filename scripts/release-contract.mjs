@@ -1,15 +1,15 @@
 // Required for the currently enabled package matrix (mac arm64 + linux x64).
 // electron-builder maps ${arch} differently per target: AppImage → x86_64, deb → amd64.
 const REQUIRED_ASSET_PATTERNS = {
-  macDmg: /^SwarmDesk-Agent-.+-mac-arm64\.dmg$/,
-  macZip: /^SwarmDesk-Agent-.+-mac-arm64\.zip$/,
-  linuxAppImage: /^SwarmDesk-Agent-.+-linux-(?:x64|x86_64)\.AppImage$/,
-  linuxDeb: /^SwarmDesk-Agent-.+-linux-(?:x64|amd64)\.deb$/,
+  macDmg: /^PiHuo-.+-mac-arm64\.dmg$/,
+  macZip: /^PiHuo-.+-mac-arm64\.zip$/,
+  linuxAppImage: /^PiHuo-.+-linux-(?:x64|x86_64)\.AppImage$/,
+  linuxDeb: /^PiHuo-.+-linux-(?:x64|amd64)\.deb$/,
 }
 
 // Optional while the Windows package matrix entry is disabled (GHA smoke hang).
 const OPTIONAL_ASSET_PATTERNS = {
-  windowsNsis: /^SwarmDesk-Agent-.+-win-x64\.exe$/,
+  windowsNsis: /^PiHuo-.+-win-x64\.exe$/,
 }
 
 const PRIMARY_ASSET_PATTERNS = {

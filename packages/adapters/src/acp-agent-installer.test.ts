@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import type { AcpRegistryAgentMetadata } from '@swarmdesk-agent/shared'
+import type { AcpRegistryAgentMetadata } from '@pihuo-agent/shared'
 import { AcpInstallError, prepareRegistryAgent } from './acp-agent-installer.js'
 import { digestOfAgentEntry } from './acp-registry-schema.js'
 
@@ -237,7 +237,7 @@ describe('acp-agent-installer', () => {
       packageInstaller: FAKE_PACKAGE_INSTALLER,
       runnerEnv: {
         ...process.env,
-        SWARMDESK_AGENT_INTERNAL_TOKEN: 'owner-secret-must-not-reach-npm',
+        PIHUO_AGENT_INTERNAL_TOKEN: 'owner-secret-must-not-reach-npm',
         ACP_FAKE_NPM_TRACE_FILE: traceFile,
       },
     })

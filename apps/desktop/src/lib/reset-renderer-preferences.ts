@@ -10,9 +10,9 @@ import { MODEL_THINKING_MEMORY_STORAGE_KEY } from './model-thinking-memory'
 import { FOLLOW_UP_BEHAVIOR_STORAGE_KEY } from './follow-up-behavior'
 import { FOLLOW_UP_OUTBOX_STORAGE_KEY } from './follow-up-outbox'
 
-/** Renderer-only preferences owned by SwarmDesk (theme files are not storage). */
+/** Renderer-only preferences owned by PiHuo (theme files are not storage). */
 export const RENDERER_PREFERENCE_KEYS = [
-  'swarmdesk-agent.locale',
+  'pihuo-agent.locale',
   THEME_MODE_KEY,
   LEGACY_PALETTE_KEY,
   LIGHT_THEME_KEY,
@@ -22,8 +22,8 @@ export const RENDERER_PREFERENCE_KEYS = [
   FOLLOW_UP_OUTBOX_STORAGE_KEY,
   MOTION_PREFERENCE_STORAGE_KEY,
   MODEL_THINKING_MEMORY_STORAGE_KEY,
-  'swarmdesk-agent.sidebar-w',
-  'swarmdesk-agent.drawer-w',
+  'pihuo-agent.sidebar-w',
+  'pihuo-agent.drawer-w',
 ] as const
 
 export function resetRendererPreferences(): void {

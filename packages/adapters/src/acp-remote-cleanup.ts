@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { rmSync } from 'node:fs'
 import { Readable, Writable } from 'node:stream'
-import type { WorkerKind } from '@swarmdesk-agent/shared'
+import type { WorkerKind } from '@pihuo-agent/shared'
 import { AcpSessionDriver } from './acp-session-driver.js'
 import type { AcpSessionCatalogRecord } from './acp-session-catalog-port.js'
 import { prepareOpenCodeAcpEnv } from './opencode-acp-env.js'

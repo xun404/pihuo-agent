@@ -1,4 +1,4 @@
-import { isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
+import { isPlaceholderSessionTitle } from '@pihuo-agent/shared'
 
 export interface SessionTitleSnapshot {
   id: string

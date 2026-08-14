@@ -5,7 +5,7 @@ import type {
   TeamTemplateApplicationPreview,
   TeamTemplateMemberMapping,
   WorkerRegistration,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { api } from '../lib/api'
 import { useI18n } from '../i18n/I18nProvider'
 import { Modal } from './ui/Modal'

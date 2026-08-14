@@ -41,6 +41,19 @@ test('toolOutputText prefers common text fields', () => {
   assert.equal(toolOutputText(null), '')
 })
 
+test('buildToolTerminalView unwraps Leader text-block tool results', () => {
+  const view = buildToolTerminalView(
+    {},
+    [{ type: 'text', text: '{"teamRevision":1,"teamMembers":[]}' }],
+    undefined,
+  )
+  assert.equal(view.stdout, '')
+  assert.deepEqual(
+    view.outputFields.map((field) => field.key),
+    ['teamRevision', 'teamMembers'],
+  )
+})
+
 test('toolOutputText handles MCP-style content arrays', () => {
   const out = toolOutputText({
     content: [

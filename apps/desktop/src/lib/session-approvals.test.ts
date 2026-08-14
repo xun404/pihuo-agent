@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { ApprovalItem } from '@swarmdesk-agent/shared'
+import type { ApprovalItem } from '@pihuo-agent/shared'
 import { approvalsForSession } from './session-approvals.js'
 
 function approval(id: string, opts: Partial<ApprovalItem> = {}): ApprovalItem {

@@ -9,10 +9,10 @@ import {
   type ColorTheme,
 } from './theme/theme.config'
 
-const MODE_KEY = 'swarmdesk-agent.theme'
-const LEGACY_PALETTE_KEY = 'swarmdesk-agent.palette'
-const LIGHT_THEME_KEY = 'swarmdesk-agent.light-theme'
-const DARK_THEME_KEY = 'swarmdesk-agent.dark-theme'
+const MODE_KEY = 'pihuo-agent.theme'
+const LEGACY_PALETTE_KEY = 'pihuo-agent.palette'
+const LIGHT_THEME_KEY = 'pihuo-agent.light-theme'
+const DARK_THEME_KEY = 'pihuo-agent.dark-theme'
 
 function validThemeId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/u.test(value.trim())

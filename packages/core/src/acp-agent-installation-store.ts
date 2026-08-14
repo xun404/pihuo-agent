@@ -22,7 +22,7 @@ import type {
   AcpRegistryDistributionKind,
   AcpRegistryTarget,
   WorkerLaunchSpec,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { resolveRouterDataPaths } from './router-data-paths.js'
 
 export type AcpInstallationStatus =

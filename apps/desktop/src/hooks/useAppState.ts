@@ -9,7 +9,7 @@ import type {
   SessionPermissionMode,
   UpdateTeamMemberInput,
   WorkerRole,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import { api } from '../lib/api'
 
 const empty: AppSnapshot = {

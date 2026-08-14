@@ -1,6 +1,6 @@
 # Release notes contract
 
-GitHub Releases for SwarmDesk use a **checked-in, bilingual notes file** per tag. Do not rely on GitHub auto-generated notes alone.
+GitHub Releases for PiHuo use a **checked-in, bilingual notes file** per tag. Do not rely on GitHub auto-generated notes alone.
 
 ## File layout
 
@@ -21,7 +21,7 @@ Before cutting a tag:
 The body is **English first, then Chinese**. Heading levels and section titles must match exactly (CI verifies this).
 
 ```markdown
-# SwarmDesk vX.Y.Z
+# PiHuo vX.Y.Z
 
 ## English
 
@@ -44,7 +44,7 @@ One short paragraph: what this product is / what this tag delivers.
 
 | Platform | Artifact                  |
 | -------- | ------------------------- |
-| …        | `SwarmDesk-Agent-X.Y.Z-…` |
+| …        | `PiHuo-X.Y.Z-…` |
 
 ### Notes
 
@@ -68,7 +68,7 @@ One short paragraph: what this product is / what this tag delivers.
 
 | 平台 | 产物                      |
 | ---- | ------------------------- |
-| …    | `SwarmDesk-Agent-X.Y.Z-…` |
+| …    | `PiHuo-X.Y.Z-…` |
 
 ### 说明
 
@@ -78,7 +78,7 @@ One short paragraph: what this product is / what this tag delivers.
 Optional footer (not validated):
 
 ```markdown
-**Commits:** https://github.com/xun404/swarmdesk-agent/commits/vX.Y.Z
+**Commits:** https://github.com/xun404/pihuo-agent/commits/vX.Y.Z
 ```
 
 ## Rules
@@ -88,7 +88,7 @@ Optional footer (not validated):
 3. **User-facing first:** Highlights + Changes describe product/UX; CI-only work stays out unless it changes what users download.
 4. **Artifacts match matrix:** Downloads tables list only platforms actually published for this tag (today: macOS arm64 + Linux x64; Windows optional until re-enabled).
 5. **No secrets:** notes are public; never include keys, tokens, or internal URLs.
-6. **Title:** GitHub Release title is `SwarmDesk vX.Y.Z` (set by workflow).
+6. **Title:** GitHub Release title is `PiHuo vX.Y.Z` (set by workflow).
 
 ## Workflow integration
 

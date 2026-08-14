@@ -3,7 +3,7 @@ import { after, describe, it } from 'node:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { WorkerRegistration } from '@swarmdesk-agent/shared'
+import type { WorkerRegistration } from '@pihuo-agent/shared'
 import { DangerZoneBusyError, dangerZoneStats, performDangerZoneAction } from './danger-zone.js'
 import { LocalStore } from './store.js'
 
@@ -28,7 +28,7 @@ function worker(id: string): WorkerRegistration {
 }
 
 describe('danger zone service', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'swarmdesk-danger-zone-'))
+  const dir = mkdtempSync(join(tmpdir(), 'pihuo-agent-danger-zone-'))
   after(() => rmSync(dir, { recursive: true, force: true }))
 
   it('reports real Worker, Team assignment, crew, and chat counts', () => {

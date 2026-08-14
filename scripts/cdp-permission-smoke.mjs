@@ -117,7 +117,7 @@ const snapshotExpression = `
     const response = await fetch(base + '/api/snapshot', {
       headers: {
         Authorization: 'Bearer ' + token,
-        'X-SwarmDesk-Agent-Desktop-Token': token,
+        'X-PiHuo-Agent-Desktop-Token': token,
       },
     });
     const body = await response.json();
@@ -198,7 +198,7 @@ function cancelApprovalExpression(approvalId) {
         method: 'POST',
         headers: {
           Authorization: 'Bearer ' + token,
-          'X-SwarmDesk-Agent-Desktop-Token': token,
+          'X-PiHuo-Agent-Desktop-Token': token,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ decision: 'cancel', surface: 'chat' }),

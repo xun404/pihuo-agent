@@ -72,27 +72,54 @@ export function useCollapsible({ open, keepMounted = false }: CollapsibleOptions
     return () => window.clearTimeout(timer)
   }, [open, keepMounted, shouldRender])
 
+  const snapOpen = useCallback((el: HTMLElement) => {
+    el.style.height = 'auto'
+    el.style.overflow = 'visible'
+  }, [])
+
   const runExpand = useCallback((el: HTMLElement) => {
     if (prefersReducedMotion()) {
-      el.style.height = 'auto'
-      el.style.overflow = 'visible'
+      snapOpen(el)
       return
     }
     el.style.height = '0px'
     el.style.overflow = 'hidden'
     void el.offsetHeight // 强制 reflow 让起点 0px 生效
     const target = el.scrollHeight
+    if (target <= 0) {
+      requestAnimationFrame(() => {
+        const retry = el.scrollHeight
+        if (retry <= 0) {
+          snapOpen(el)
+          return
+        }
+        const a = animate(el, { height: retry }, TRANSITION)
+        animationRef.current = a
+        a.finished
+          .then(() => {
+            if (animationRef.current !== a) return
+            animationRef.current = null
+            snapOpen(el)
+          })
+          .catch(() => snapOpen(el))
+      })
+      return
+    }
     const a = animate(el, { height: target }, TRANSITION)
     animationRef.current = a
     a.finished
       .then(() => {
-        if (animationRef.current !== a) return
+        if (animationRef.current !== a) {
+          if (el.style.height === '0px') snapOpen(el)
+          return
+        }
         animationRef.current = null
-        el.style.height = 'auto'
-        el.style.overflow = 'visible'
+        snapOpen(el)
       })
-      .catch(() => undefined)
-  }, [])
+      .catch(() => {
+        snapOpen(el)
+      })
+  }, [snapOpen])
 
   const runCollapse = useCallback((el: HTMLElement) => {
     if (prefersReducedMotion()) {
@@ -133,8 +160,6 @@ export function useCollapsible({ open, keepMounted = false }: CollapsibleOptions
       return
     }
 
-    stop()
-
     // DOM 首次就绪：snap 到折叠起点。若 open，紧接着展开（首次展开也有动画）。
     if (!domReadyRef.current) {
       domReadyRef.current = true
@@ -148,10 +173,15 @@ export function useCollapsible({ open, keepMounted = false }: CollapsibleOptions
       return
     }
 
-    // open 没变（shouldRender 重跑）：不动
-    if (prev === open) return
+    // open 没变：进行中的展开不要打断；若动画已被卸掉且高度卡在 0，重跑展开。
+    if (prev === open) {
+      if (open && !animationRef.current && el.style.height === '0px') {
+        runExpand(el)
+      }
+      return
+    }
 
-    // 真实切换
+    stop()
     if (open) {
       runExpand(el)
     } else {

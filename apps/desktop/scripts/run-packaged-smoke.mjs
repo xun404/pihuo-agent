@@ -14,12 +14,12 @@ const releaseDir = resolve(repoRoot, 'release')
 const executable = resolvePackagedExecutable({
   platform: process.platform,
   releaseDir,
-  productName: 'SwarmDesk',
+  productName: 'PiHuo',
 })
 const runtimeDir = resolvePackagedRuntimeDir({
   platform: process.platform,
   releaseDir,
-  productName: 'SwarmDesk',
+  productName: 'PiHuo',
 })
 
 async function findFreePort() {

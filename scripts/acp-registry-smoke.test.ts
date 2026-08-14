@@ -82,8 +82,8 @@ describe('ACP Registry opt-in smoke control', () => {
       for (const key of [
         'HOME',
         'USERPROFILE',
-        'SWARMDESK_AGENT_DATA_DIR',
-        'SWARMDESK_AGENT_AGENTS_DIR',
+        'PIHUO_AGENT_DATA_DIR',
+        'PIHUO_AGENT_AGENTS_DIR',
         'XDG_CACHE_HOME',
         'XDG_CONFIG_HOME',
         'XDG_DATA_HOME',

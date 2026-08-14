@@ -75,27 +75,27 @@ import {
   type ThinkingIntensity,
   type WorkerTimeoutSettings,
   normalizeNotificationSettings,
-} from '@swarmdesk-agent/core'
+} from '@pihuo-agent/core'
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   isValidPromptSettings,
   normalizePromptSettings,
   type NotificationSettings,
   type PromptSettings,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Optional Chrome DevTools Protocol for headless inspection/debugging.
 // The development launcher defaults this to 8315; packaged apps remain off by default.
-// SWARMDESK_AGENT_CDP_PORT can override the port (loopback only).
+// PIHUO_AGENT_CDP_PORT can override the port (loopback only).
 // Optional escape hatch for broken GPU drivers (disables hardware acceleration).
-if (process.env.SWARMDESK_AGENT_DISABLE_GPU === '1') {
+if (process.env.PIHUO_AGENT_DISABLE_GPU === '1') {
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('disable-software-rasterizer')
 }
-if (process.env.SWARMDESK_AGENT_CDP_PORT) {
-  app.commandLine.appendSwitch('remote-debugging-port', process.env.SWARMDESK_AGENT_CDP_PORT)
+if (process.env.PIHUO_AGENT_CDP_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.PIHUO_AGENT_CDP_PORT)
   app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1')
 }
 
@@ -107,7 +107,7 @@ const PACKAGED_SMOKE_USER_DATA = resolvePackagedSmokeUserDataPath({
 })
 if (PACKAGED_SMOKE_USER_DATA) {
   app.setPath('userData', PACKAGED_SMOKE_USER_DATA)
-  process.env.SWARMDESK_AGENT_DATA_DIR = path.join(PACKAGED_SMOKE_USER_DATA, 'router-data')
+  process.env.PIHUO_AGENT_DATA_DIR = path.join(PACKAGED_SMOKE_USER_DATA, 'router-data')
 }
 const runtimeLayout = resolveDesktopRuntimeLayout({
   isPackaged: app.isPackaged,
@@ -120,10 +120,10 @@ const API_URL = `http://127.0.0.1:${API_PORT}`
 
 // This marker is minted only for the trusted API child. Never let an inherited
 // shell value suppress safeStorage decryption in the Electron owner process.
-delete process.env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
+delete process.env.PIHUO_AGENT_SECRETS_PARENT_INJECTED
 // Preload must never trust VITE_MASTRA_URL: the renderer attaches a bearer token
 // to this base URL. Mint the loopback URL in the owner process instead.
-process.env.SWARMDESK_AGENT_DESKTOP_API_URL = API_URL
+process.env.PIHUO_AGENT_DESKTOP_API_URL = API_URL
 
 process.env.DIST = runtimeLayout.rendererDist
 const DEV_SERVER_URL = resolveTrustedDevServerUrl(process.env.VITE_DEV_SERVER_URL)
@@ -145,21 +145,21 @@ const runApiLifecycleTask = createSerialTaskRunner()
 const isPrimaryInstance = app.requestSingleInstanceLock()
 if (!isPrimaryInstance) app.quit()
 
-// Menu / About labels use app.name; package name is scoped (@swarmdesk-agent/desktop).
-app.setName('SwarmDesk')
+// Menu / About labels use app.name; package name is scoped (@pihuo-agent/desktop).
+app.setName('PiHuo')
 
 function secretsEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     MASTRA_PORT: API_PORT,
-    SWARMDESK_AGENT_WORKSPACE_ROOT: runtimeLayout.identityRoot,
+    PIHUO_AGENT_WORKSPACE_ROOT: runtimeLayout.identityRoot,
   }
   // Drop shell-ambient provider keys before inject — otherwise fill-if-empty /
   // dual OPENCODE_* names keep a stale CLI key after the user saved a new one.
   for (const k of Object.keys(env)) {
     if (
       /_API_KEY$|_API_TOKEN$|_ACCESS_KEY$|_SECRET_KEY$/.test(k) &&
-      !k.startsWith('SWARMDESK_AGENT_')
+      !k.startsWith('PIHUO_AGENT_')
     ) {
       delete env[k]
     }
@@ -168,20 +168,20 @@ function secretsEnv(): NodeJS.ProcessEnv {
   // These capabilities are minted by the child and persisted mode 0600. Never
   // accept stored values or an auth bypass inherited from the shell. Scrub
   // after secret injection as a defense against legacy encrypted payloads.
-  delete env.SWARMDESK_AGENT_INTERNAL_TOKEN
-  delete env.SWARMDESK_AGENT_DESKTOP_TOKEN
-  delete env.SWARMDESK_AGENT_STUDIO_TOKEN
-  delete env.SWARMDESK_AGENT_DESKTOP_ORIGINS
-  delete env.SWARMDESK_AGENT_ACP_FINGERPRINT_KEY
-  delete env.SWARMDESK_AGENT_WORKER_SECRETS_KEY
-  delete env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED
-  env.SWARMDESK_AGENT_SECRETS_PARENT_INJECTED = '1'
-  env.SWARMDESK_AGENT_DESKTOP_AUTH = '1'
+  delete env.PIHUO_AGENT_INTERNAL_TOKEN
+  delete env.PIHUO_AGENT_DESKTOP_TOKEN
+  delete env.PIHUO_AGENT_STUDIO_TOKEN
+  delete env.PIHUO_AGENT_DESKTOP_ORIGINS
+  delete env.PIHUO_AGENT_ACP_FINGERPRINT_KEY
+  delete env.PIHUO_AGENT_WORKER_SECRETS_KEY
+  delete env.PIHUO_AGENT_SECRETS_PARENT_INJECTED
+  env.PIHUO_AGENT_SECRETS_PARENT_INJECTED = '1'
+  env.PIHUO_AGENT_DESKTOP_AUTH = '1'
   if (DEV_SERVER_URL) {
-    env.SWARMDESK_AGENT_DESKTOP_ORIGINS = new URL(DEV_SERVER_URL).origin
+    env.PIHUO_AGENT_DESKTOP_ORIGINS = new URL(DEV_SERVER_URL).origin
   }
-  env.SWARMDESK_AGENT_ACP_FINGERPRINT_KEY = getAcpFingerprintKeyForChild()
-  env.SWARMDESK_AGENT_WORKER_SECRETS_KEY = getWorkerSecretsKeyForChild()
+  env.PIHUO_AGENT_ACP_FINGERPRINT_KEY = getAcpFingerprintKeyForChild()
+  env.PIHUO_AGENT_WORKER_SECRETS_KEY = getWorkerSecretsKeyForChild()
   return env
 }
 
@@ -236,7 +236,7 @@ async function verifiedDesktopApiToken(expectedChild?: ExpectedApiChild): Promis
       signal: AbortSignal.timeout(2000),
       headers: {
         Authorization: `Bearer ${desktopTok}`,
-        'X-SwarmDesk-Agent-Desktop-Token': desktopTok,
+        'X-PiHuo-Agent-Desktop-Token': desktopTok,
       },
     })
     if (res.status === 401 || res.status === 403) return null
@@ -257,7 +257,7 @@ async function requestDangerZoneAction(action: DangerZoneAction) {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
-      'X-SwarmDesk-Agent-Desktop-Token': token,
+      'X-PiHuo-Agent-Desktop-Token': token,
     },
     body: JSON.stringify({ action }),
     signal: AbortSignal.timeout(30_000),
@@ -403,7 +403,7 @@ async function retireOwnedLegacyApi(): Promise<boolean> {
       }
     }
 
-    console.warn('[electron] retiring incompatible SwarmDesk API process', pid)
+    console.warn('[electron] retiring incompatible PiHuo API process', pid)
     try {
       process.kill(pid, 'SIGTERM')
     } catch {
@@ -473,7 +473,7 @@ async function startApiServer(): Promise<ExpectedApiChild | null> {
           cwd: runtimeLayout.apiCwd,
           env: secretsEnv(),
           stdio: 'pipe',
-          serviceName: 'SwarmDesk API',
+          serviceName: 'PiHuo API',
         }),
       )
     } else {

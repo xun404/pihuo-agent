@@ -4,7 +4,7 @@ import {
   evaluateApprovalNotifications,
   evaluateSessionNotifications,
 } from './notification-watcher.js'
-import { DEFAULT_NOTIFICATION_SETTINGS, type Session } from '@swarmdesk-agent/shared'
+import { DEFAULT_NOTIFICATION_SETTINGS, type Session } from '@pihuo-agent/shared'
 
 const session = (overrides: Partial<Session> = {}): Session => ({
   id: 's1',

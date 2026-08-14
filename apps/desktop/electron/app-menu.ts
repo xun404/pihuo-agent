@@ -1,5 +1,5 @@
 /**
- * Application menu bar for SwarmDesk.
+ * Application menu bar for PiHuo.
  * About / Settings route into the renderer settings panel (not the OS about box).
  */
 import { app, Menu, shell, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
@@ -54,9 +54,9 @@ function sendOpenSettings(
 }
 
 export function buildApplicationMenu(opts: AppMenuOptions): Menu {
-  const { openSettings, homepageUrl = 'https://github.com/xun404/swarmdesk-agent' } = opts
+  const { openSettings, homepageUrl = 'https://github.com/xun404/pihuo-agent' } = opts
   const isMac = process.platform === 'darwin'
-  const name = app.name || 'SwarmDesk'
+  const name = app.name || 'PiHuo'
 
   const openAbout = () => openSettings('about')
   const openGeneral = () => openSettings('general')

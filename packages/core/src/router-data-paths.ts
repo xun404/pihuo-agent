@@ -1,5 +1,5 @@
 /**
- * Single source of truth for SwarmDesk on-disk data locations.
+ * Single source of truth for PiHuo on-disk data locations.
  *
  * Layout (unified root with data/ and cache/ subdirs):
  *   <root>/                 ← config layer (settings.json, secrets.enc)
@@ -7,22 +7,25 @@
  *   <root>/cache/           ← cache layer (rebuildable caches)
  *
  * Root resolution (per-platform, XDG-style):
- *   - macOS / Linux: $XDG_CONFIG_HOME ?? $HOME/.config  →  /swarmdesk-agent
- *   - Windows:       %APPDATA%                          →  /swarmdesk-agent
+ *   - macOS / Linux: $XDG_CONFIG_HOME ?? $HOME/.config  →  /pihuo-agent
+ *   - Windows:       %APPDATA%                          →  /pihuo-agent
  *                   (%LOCALAPPDATA% used for the cache layer)
  *
  * Env overrides:
- *   - SWARMDESK_AGENT_DATA_DIR / SWARMDESK_AGENT_AGENTS_DIR → pin the entire <root>
- *   - Per-file overrides (SWARMDESK_AGENT_AGENTS_STATE, SWARMDESK_AGENT_RUNTIME_PATH,
- *     ACP_CATALOG_PATH, MASTRA_MEMORY_URL, ACP_REGISTRY_CATALOG_PATH,
+ *   - PIHUO_AGENT_DATA_DIR / PIHUO_AGENT_AGENTS_DIR → pin the entire <root>
+ *   - Per-file overrides (PIHUO_AGENT_AGENTS_STATE, PIHUO_AGENT_RUNTIME_PATH,
+ *     ACP_CATALOG_PATH, ACP_REGISTRY_CATALOG_PATH,
  *     ACP_AGENT_INSTALLATIONS_PATH) still win for individual files.
  */
 
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
+/** On-disk folder name under the platform config base. */
+export const APP_DATA_DIRNAME = 'pihuo-agent'
+
 export interface RouterDataPaths {
-  /** Unified root (e.g. ~/.config/swarmdesk-agent). Also the config layer. */
+  /** Unified root (e.g. ~/.config/pihuo-agent). Also the config layer. */
   rootDir: string
   /** Config layer (settings/secrets) — equals rootDir. */
   configDir: string
@@ -40,7 +43,12 @@ export interface RouterDataPaths {
   agentInstallationsPath: string
   /** Config layer directory (settings.json / secrets.enc live here). */
   secretsDir: string
-  memoryDbPath: string
+  /** Leader JSONL sessions. */
+  sessionsDir: string
+  /** Project-scoped markdown memory. */
+  projectMemoryDir: string
+  /** Isolated Pi agentDir (never ~/.pi). */
+  piAgentDir: string
   modelRegistryPath: string
   modelsCachePath: string
 }
@@ -66,38 +74,23 @@ function resolveConfigBase(): string {
 }
 
 /**
- * Resolve the cache base directory (Windows uses %LOCALAPPDATA%).
- */
-function resolveCacheBase(): string {
-  if (process.platform === 'win32') {
-    const localAppData = process.env.LOCALAPPDATA?.trim()
-    if (localAppData) return resolve(localAppData)
-    return resolve(join(homeBase(), 'AppData', 'Local'))
-  }
-  const xdgCache = process.env.XDG_CACHE_HOME?.trim()
-  if (xdgCache) return resolve(xdgCache)
-  return resolve(join(homeBase(), '.cache'))
-}
-
-/**
  * Resolve the unified root directory.
- * - SWARMDESK_AGENT_DATA_DIR / SWARMDESK_AGENT_AGENTS_DIR pin the entire root
+ * - PIHUO_AGENT_DATA_DIR / PIHUO_AGENT_AGENTS_DIR pin the entire root
  *   (config + data + cache all live beneath it).
- * - else <configBase>/swarmdesk-agent
+ * - else <configBase>/pihuo-agent
  */
 export function resolveRouterDataDir(): string {
   const explicit =
-    process.env.SWARMDESK_AGENT_DATA_DIR?.trim() || process.env.SWARMDESK_AGENT_AGENTS_DIR?.trim()
+    process.env.PIHUO_AGENT_DATA_DIR?.trim() || process.env.PIHUO_AGENT_AGENTS_DIR?.trim()
   if (explicit) return resolve(explicit)
-  return resolve(join(resolveConfigBase(), 'swarmdesk-agent'))
+  return resolve(join(resolveConfigBase(), APP_DATA_DIRNAME))
 }
 
 /**
  * Resolve all standard paths. Individual env overrides still win per-file:
- * - SWARMDESK_AGENT_AGENTS_STATE → state.json
- * - SWARMDESK_AGENT_RUNTIME_PATH → runtime.json
+ * - PIHUO_AGENT_AGENTS_STATE → state.json
+ * - PIHUO_AGENT_RUNTIME_PATH → runtime.json
  * - ACP_CATALOG_PATH → acp-sessions.json
- * - MASTRA_MEMORY_URL → memory (file: URL or path)
  */
 export function resolveRouterDataPaths(): RouterDataPaths {
   const rootDir = resolveRouterDataDir()
@@ -105,21 +98,15 @@ export function resolveRouterDataPaths(): RouterDataPaths {
   const dataDir = join(rootDir, 'data')
   const cacheDir = join(rootDir, 'cache')
 
-  const statePath = process.env.SWARMDESK_AGENT_AGENTS_STATE?.trim()
-    ? resolve(process.env.SWARMDESK_AGENT_AGENTS_STATE.trim())
+  const statePath = process.env.PIHUO_AGENT_AGENTS_STATE?.trim()
+    ? resolve(process.env.PIHUO_AGENT_AGENTS_STATE.trim())
     : join(dataDir, 'state.json')
-  const runtimePath = process.env.SWARMDESK_AGENT_RUNTIME_PATH?.trim()
-    ? resolve(process.env.SWARMDESK_AGENT_RUNTIME_PATH.trim())
+  const runtimePath = process.env.PIHUO_AGENT_RUNTIME_PATH?.trim()
+    ? resolve(process.env.PIHUO_AGENT_RUNTIME_PATH.trim())
     : join(dataDir, 'runtime.json')
   const catalogPath = process.env.ACP_CATALOG_PATH?.trim()
     ? resolve(process.env.ACP_CATALOG_PATH.trim())
     : join(dataDir, 'acp-sessions.json')
-  const memoryDbPath = (() => {
-    const raw = process.env.MASTRA_MEMORY_URL?.trim()
-    if (!raw) return join(dataDir, 'mastra-memory.db')
-    if (raw.startsWith('file:')) return resolve(raw.slice('file:'.length))
-    return resolve(raw)
-  })()
   const registryCatalogPath = process.env.ACP_REGISTRY_CATALOG_PATH?.trim()
     ? resolve(process.env.ACP_REGISTRY_CATALOG_PATH.trim())
     : join(dataDir, 'acp-registry.json')
@@ -137,8 +124,10 @@ export function resolveRouterDataPaths(): RouterDataPaths {
     registryCatalogPath,
     agentInstallationsPath,
     secretsDir: configDir,
-    memoryDbPath,
-    modelRegistryPath: join(dataDir, 'mastra-model-registry.json'),
+    sessionsDir: join(dataDir, 'sessions'),
+    projectMemoryDir: join(dataDir, 'project-memory'),
+    piAgentDir: join(dataDir, 'pi-agent'),
+    modelRegistryPath: join(dataDir, 'model-registry.json'),
     modelsCachePath: join(cacheDir, 'models-cache.json'),
   }
 }

@@ -18,7 +18,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { WorkerModelOption } from '@swarmdesk-agent/shared'
+import type { WorkerModelOption } from '@pihuo-agent/shared'
 import {
   evaluateModelEligibility,
   ModelEligibilityError,

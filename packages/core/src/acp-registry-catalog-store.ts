@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { AcpRegistryCatalogSnapshot } from '@swarmdesk-agent/shared'
+import type { AcpRegistryCatalogSnapshot } from '@pihuo-agent/shared'
 import { resolveRouterDataPaths } from './router-data-paths.js'
 
 export interface PersistedAcpRegistryCatalog {

@@ -10,7 +10,7 @@ export function resolvePackagedSmokeUserDataPath(input: {
   pid: number
 }): string | undefined {
   if (!input.packagedSmoke) return undefined
-  return path.resolve(input.temporaryDirectory, `swarmdesk-agent-packaged-smoke-${input.pid}`)
+  return path.resolve(input.temporaryDirectory, `pihuo-agent-packaged-smoke-${input.pid}`)
 }
 
 export function shouldCreateDesktopWindow(input: { packagedSmoke: boolean }): boolean {

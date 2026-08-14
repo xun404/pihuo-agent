@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Capture README / feature-wall screenshots from a running SwarmDesk desktop (CDP).
+ * Capture README / feature-wall screenshots from a running PiHuo desktop (CDP).
  *
  * Prerequisite:
  *   npm run desktop   # CDP :8315, API :4111
@@ -10,7 +10,7 @@
  *   node scripts/capture-readme-shots.mjs --locale zh --out docs/assets/zh
  *   node scripts/capture-readme-shots.mjs --out docs/assets
  *
- * Seeds docs/demo/swarmdesk-showcase via POST /api/demo/seed, then drives the UI.
+ * Seeds docs/demo/pihuo-showcase via POST /api/demo/seed, then drives the UI.
  * Default: locale=en → docs/assets ; locale=zh → docs/assets/zh
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -122,7 +122,7 @@ async function main() {
       const h = { 'Content-Type': 'application/json' };
       if (tok) {
         h.Authorization = 'Bearer ' + tok;
-        h['X-SwarmDesk-Agent-Desktop-Token'] = tok;
+        h['X-PiHuo-Agent-Desktop-Token'] = tok;
       }
       const r = await fetch(base + '/api/locale', {
         method: 'POST',
@@ -132,7 +132,7 @@ async function main() {
       const j = await r.json().catch(() => ({}));
       // Also flip client I18n if the provider is already mounted
       try {
-        localStorage.setItem('swarmdesk-agent.locale', ${JSON.stringify(LOCALE)});
+        localStorage.setItem('pihuo-agent.locale', ${JSON.stringify(LOCALE)});
       } catch {}
       return { status: r.status, locale: j.locale, err: j.error };
     })()`,
@@ -142,7 +142,7 @@ async function main() {
   await evalInPage(
     ws,
     `(() => {
-      try { localStorage.setItem('swarmdesk-agent.locale', ${JSON.stringify(LOCALE)}); } catch {}
+      try { localStorage.setItem('pihuo-agent.locale', ${JSON.stringify(LOCALE)}); } catch {}
       location.reload();
       return true;
     })()`,
@@ -158,7 +158,7 @@ async function main() {
       const h = { 'Content-Type': 'application/json' };
       if (tok) {
         h.Authorization = 'Bearer ' + tok;
-        h['X-SwarmDesk-Agent-Desktop-Token'] = tok;
+        h['X-PiHuo-Agent-Desktop-Token'] = tok;
       }
       // Ensure locale stuck after reload
       await fetch(base + '/api/locale', {
@@ -197,11 +197,11 @@ async function main() {
       const h = {};
       if (tok) {
         h.Authorization = 'Bearer ' + tok;
-        h['X-SwarmDesk-Agent-Desktop-Token'] = tok;
+        h['X-PiHuo-Agent-Desktop-Token'] = tok;
       }
       await fetch(base + '/api/sessions/${seed.sessionId}/activate', { method: 'POST', headers: h });
       // Nudge app to re-fetch snapshot (settings-closed is used after leaving settings)
-      window.dispatchEvent(new Event('swarmdesk-agent:settings-closed'));
+      window.dispatchEvent(new Event('pihuo-agent:settings-closed'));
       window.dispatchEvent(new Event('focus'));
       return true;
     })()`,
@@ -301,7 +301,7 @@ async function main() {
   await evalInPage(
     ws,
     `(() => {
-      window.dispatchEvent(new CustomEvent('swarmdesk-agent:open-settings', { detail: { tab: 'model' } }));
+      window.dispatchEvent(new CustomEvent('pihuo-agent:open-settings', { detail: { tab: 'model' } }));
       return true;
     })()`,
   )
@@ -312,7 +312,7 @@ async function main() {
   await evalInPage(
     ws,
     `(() => {
-      window.dispatchEvent(new CustomEvent('swarmdesk-agent:open-settings', { detail: { tab: 'workers' } }));
+      window.dispatchEvent(new CustomEvent('pihuo-agent:open-settings', { detail: { tab: 'workers' } }));
       return true;
     })()`,
   )

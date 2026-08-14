@@ -3,8 +3,8 @@
  * the binary is downloaded lazily on first require('electron')).
  *
  * Brands the local Electron runtime for macOS so Dock / menu bar / AltTab show
- * "SwarmDesk" instead of "Electron":
- *   - rename Electron.app → SwarmDesk.app
+ * "PiHuo" instead of "Electron":
+ *   - rename Electron.app → PiHuo.app
  *   - patch CFBundleName / CFBundleDisplayName
  *   - replace electron.icns with build/icon.icns
  *   - rewrite path.txt so require('electron') still resolves
@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
-const APP_NAME = 'SwarmDesk'
+const APP_NAME = 'PiHuo'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(__dirname, '../../..')
 
@@ -86,7 +86,7 @@ function setPlistString(plist, key, value) {
 
 /**
  * macOS Dock / menu bar / app switcher brand the *bundle*, not app.setName().
- * Rename Electron.app → SwarmDesk.app and rebrand Info.plist + icon.
+ * Rename Electron.app → PiHuo.app and rebrand Info.plist + icon.
  */
 function brandMacElectronApp() {
   if (process.platform !== 'darwin') return
@@ -94,25 +94,27 @@ function brandMacElectronApp() {
   const dist = distDir()
   if (!existsSync(dist)) return
 
-  const electronRoot = join(dist, 'Electron.app')
   const brandedRoot = join(dist, `${APP_NAME}.app`)
+  const renameSources = [join(dist, 'Electron.app')]
 
   /*
-   * Prefer a single SwarmDesk.app bundle:
+   * Prefer a single PiHuo.app bundle:
    * - Fresh install: Electron.app → rename
+   * - Previous brand: PiHuo.app → rename
    * - Reinstall while branded exists: drop old branded, rename new Electron.app
-   *   (npm may recreate Electron.app and reset path.txt)
    */
-  if (existsSync(electronRoot)) {
+  for (const source of renameSources) {
+    if (!existsSync(source) || source === brandedRoot) continue
     try {
       if (existsSync(brandedRoot)) {
         rmSync(brandedRoot, { recursive: true, force: true })
       }
-      renameSync(electronRoot, brandedRoot)
-      console.log(`[desktop] renamed Electron.app → ${APP_NAME}.app`)
+      renameSync(source, brandedRoot)
+      console.log(`[desktop] renamed ${source.split('/').pop()} → ${APP_NAME}.app`)
+      break
     } catch (e) {
       console.warn(
-        '[desktop] could not rename Electron.app (quit the desktop app first):',
+        `[desktop] could not rename ${source.split('/').pop()} (quit the desktop app first):`,
         e instanceof Error ? e.message : e,
       )
     }
@@ -120,7 +122,7 @@ function brandMacElectronApp() {
 
   const appRoot = resolveElectronAppRoot()
   if (!appRoot) {
-    console.warn('[desktop] no Electron/SwarmDesk.app found under electron/dist')
+    console.warn('[desktop] no Electron/PiHuo.app found under electron/dist')
     return
   }
 

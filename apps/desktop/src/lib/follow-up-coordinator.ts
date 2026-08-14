@@ -4,7 +4,7 @@ import type {
   ChatRunStatus,
   FollowUpRequestMeta,
   FollowUpSource,
-} from '@swarmdesk-agent/shared'
+} from '@pihuo-agent/shared'
 import type { FollowUpBehavior } from './follow-up-behavior'
 import type { FollowUpOutboxItem } from './follow-up-outbox'
 
@@ -50,7 +50,7 @@ export type FollowUpCoordinatorDependencies = {
   requestAbort: (clientRunId: string, intent: ChatRunAbortIntent) => Promise<ChatRunAbortDecision>
   send: (input: { id: string; text: string; followUp: FollowUpRequestMeta }) => Promise<void>
   stopLocal: () => void
-  resume: (clientRunId: string) => Promise<void>
+  resume: (clientRunId?: string) => Promise<void>
   refreshHistory: () => Promise<void>
   onModelRequired: () => void
   onCapacityReached?: () => void
@@ -437,7 +437,8 @@ export class FollowUpCoordinator {
       await this.reconcileAndDispatch()
       return
     }
-    await this.stop('steer')
+    this.deps.updateOutbox(deliveryId, { source: 'steer', state: 'queued' })
+    this.#dispatch(deliveryId)
   }
 
   async #afterTerminal(): Promise<void> {

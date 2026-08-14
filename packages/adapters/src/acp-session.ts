@@ -10,7 +10,7 @@ import {
   type ActiveSession,
   type SessionConfigOption,
 } from '@agentclientprotocol/sdk'
-import type { ApprovalOption, ApprovalOptionKind } from '@swarmdesk-agent/shared'
+import type { ApprovalOption, ApprovalOptionKind } from '@pihuo-agent/shared'
 import type { AcpSpawnConfig } from './acp-config.js'
 import { extractModelOptions, type ModelOptionsResult } from './acp-model-options.js'
 import { readAcpTextFile, writeAcpTextFileWithPermission } from './acp-filesystem.js'
@@ -308,7 +308,7 @@ export async function withAcpSession<T>(
     const stream = ndJsonStream(input, output)
 
     let activeSessionId: string | undefined
-    const app = client({ name: `swarmdesk-agent-${config.spawn.workerId}` })
+    const app = client({ name: `pihuo-agent-${config.spawn.workerId}` })
       .onRequest(methods.client.session.requestPermission, async (ctx) => {
         if (!callbacks.onPermissionRequest) {
           return { outcome: { outcome: 'cancelled' as const } }

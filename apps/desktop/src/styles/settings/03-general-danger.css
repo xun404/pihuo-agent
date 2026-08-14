@@ -323,15 +323,9 @@
 .about-card {
   max-width: 480px;
 }
-.about-card .about-logo {
-  display: block;
-  margin-bottom: var(--sp-3);
-  border-radius: 21%;
-}
-.about-card .app-name {
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-tight);
+.about-card .about-lockup {
+  display: inline-flex;
+  margin-bottom: var(--sp-2);
 }
 .about-card .ver {
   font-size: var(--fs-sm);

@@ -1,7 +1,7 @@
 import { THINKING_INTENSITY_OPTIONS, defaultThinkingFor, type ThinkingIntensity } from './settings'
 
 /** Per-model chat preference, kept in the renderer profile across app restarts. */
-export const MODEL_THINKING_MEMORY_STORAGE_KEY = 'swarmdesk-agent.model-thinking-memory'
+export const MODEL_THINKING_MEMORY_STORAGE_KEY = 'pihuo-agent.model-thinking-memory'
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { LocalStore } from './store.js'
-import { DEFAULT_SESSION_TITLE, isPlaceholderSessionTitle } from '@swarmdesk-agent/shared'
+import { DEFAULT_SESSION_TITLE, isPlaceholderSessionTitle } from '@pihuo-agent/shared'
 
 const dirs: string[] = []
 
