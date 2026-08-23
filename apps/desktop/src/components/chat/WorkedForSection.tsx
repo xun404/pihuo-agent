@@ -12,6 +12,8 @@ type Props = {
   label: string
   /** Process rows: thinking / tools / workers / task lists. */
   children: ReactNode
+  /** Keep live Worker content mounted so its expanding height cannot be reset by ticks. */
+  keepMounted?: boolean
 }
 
 function ChevronIcon() {
@@ -40,8 +42,9 @@ export const WorkedForSection = memo(function WorkedForSection({
   onToggle,
   label,
   children,
+  keepMounted = false,
 }: Props) {
-  const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: false })
+  const { shouldRender, contentRef } = useCollapsible({ open, keepMounted })
 
   const toggle = useCallback(() => onToggle(!open), [open, onToggle])
   const onKeyDown = useCallback(

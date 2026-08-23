@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { LeaderViewPart } from '../lib/leader-chat-view.js'
 import { formatMessage } from '../i18n/locales.js'
 import {
+  latestTaskListSignalIndex,
   MessageItem,
   RANGE_BOUNDARY_END_TO_END,
   RANGE_BOUNDARY_START_TO_START,
@@ -34,7 +35,12 @@ const STRINGS: Partial<Record<string, string>> = {
 
 const t: MessageItemProps['t'] = (key, vars) => formatMessage(STRINGS[key] ?? key, vars)
 
-function renderLeader(options: { live: boolean; parts: LeaderViewPart[] }): string {
+function renderLeader(options: {
+  live: boolean
+  parts: LeaderViewPart[]
+  placementByJobId?: MessageItemProps['placementByJobId']
+  discussionMode?: boolean
+}): string {
   const messages = [
     {
       id: 'u1',
@@ -80,22 +86,26 @@ function renderLeader(options: { live: boolean; parts: LeaderViewPart[] }): stri
       metaOpen={{}}
       setMetaOpen={() => undefined}
       tick={0}
-      placementByJobId={new Map()}
+      placementByJobId={options.placementByJobId ?? new Map()}
       toolCallJobIds={new Map()}
       hasRunningWorker={false}
       resolving={{}}
       registryIdentityFor={() => undefined}
-      isMetaOpen={() => false}
+      isMetaOpen={(_key, autoOpen) => autoOpen}
       errorBlock={null}
       timingEpoch={0}
       turnTimingRef={{ current: turnTiming }}
       toolStartTimes={{ current: new Map() }}
       toolDurations={{ current: new Map() }}
+      discussionMode={options.discussionMode}
     />,
   )
 }
 
-function renderUser(message: { id: string; role: string; parts?: unknown[] }, messages: Array<{ id: string; role: string; parts?: unknown[] }>): string {
+function renderUser(
+  message: { id: string; role: string; parts?: unknown[] },
+  messages: Array<{ id: string; role: string; parts?: unknown[] }>,
+): string {
   return renderToStaticMarkup(
     <MessageItem
       message={message}
@@ -229,6 +239,124 @@ describe('MessageItem Worked-for collapse', () => {
     assert.doesNotMatch(markup, /class="worked-for"/u)
     assert.match(markup, /live reasoning/u)
     assert.match(markup, /partial/u)
+  })
+
+  it('keeps Leader text and tool records in one Leader surface instead of process dividers', () => {
+    const markup = renderLeader({
+      live: false,
+      discussionMode: true,
+      parts: [
+        { type: 'text', text: '先确认任务边界。' },
+        {
+          type: 'tool-bash',
+          toolCallId: 't1',
+          state: 'output-available',
+          input: { command: 'pwd' },
+          output: { stdout: '/tmp' },
+        } as never,
+        { type: 'text', text: '接着等待 Worker 返回。' },
+      ],
+    })
+
+    assert.match(markup, /discussion-leader-flow/u)
+    assert.equal((markup.match(/class="discussion-leader-card"/g) ?? []).length, 1)
+    assert.match(markup, /discussion-leader-card[\s\S]*?chat-tool-worker-stack/u)
+    assert.doesNotMatch(markup, /discussion-process-divider/u)
+    assert.doesNotMatch(markup, /class="worked-for/u)
+    assert.doesNotMatch(markup, /已处理 1m 13s/u)
+    assert.ok(
+      markup.indexOf('先确认任务边界。') < markup.indexOf('bash') &&
+        markup.indexOf('bash') < markup.indexOf('接着等待 Worker 返回。'),
+    )
+  })
+
+  it('keeps an active Worker visible when its card is anchored to the dispatch tool row', () => {
+    const placementByJobId: MessageItemProps['placementByJobId'] = new Map([
+      [
+        'job-1',
+        {
+          jobId: 'job-1',
+          source: 'message',
+          messageIndex: 1,
+          partIndex: 0,
+          state: {
+            jobId: 'job-1',
+            workerName: 'Implementation Worker',
+            workerKind: 'codex',
+            reusedSession: false,
+            sequence: 0,
+            output: '',
+            status: 'running',
+            truncated: false,
+            startedAt: 0,
+            lastDeltaAt: 0,
+            pendingApprovals: [],
+          },
+        },
+      ],
+    ])
+    const markup = renderLeader({
+      live: false,
+      parts: [
+        {
+          type: 'tool-dispatch-worker',
+          toolCallId: 'dispatch-1',
+          state: 'output-available',
+          input: { task: '实现群组讨论' },
+          output: { jobId: 'job-1' },
+        } as never,
+      ],
+      placementByJobId,
+    })
+
+    assert.match(markup, /worked-for is-open/u)
+    assert.match(markup, /worker-run worker-run-running is-open/u)
+    assert.match(markup, /worker-card-head/u)
+    assert.match(markup, /tool-row/u)
+  })
+})
+
+describe('MessageItem task-list snapshots', () => {
+  it('uses only the latest valid task snapshot in a Leader turn, including an empty one', () => {
+    const parts = [
+      {
+        type: 'data-signal',
+        data: {
+          tagName: 'current-task-list',
+          metadata: {
+            value: {
+              tasks: [{ id: 'task-1', content: '旧任务', status: 'in_progress' }],
+            },
+          },
+        },
+      },
+      { type: 'data-signal', data: { tagName: 'other-signal' } },
+      {
+        type: 'data-signal',
+        data: { tagName: 'task-list-update', metadata: { value: { tasks: [] } } },
+      },
+    ]
+
+    assert.equal(latestTaskListSignalIndex(parts), 2)
+  })
+
+  it('ignores malformed task signals instead of replacing the current valid snapshot', () => {
+    const parts = [
+      {
+        type: 'data-signal',
+        data: {
+          tagName: 'current-task-list',
+          metadata: {
+            value: {
+              tasks: [{ id: 'task-1', content: '当前任务', status: 'in_progress' }],
+            },
+          },
+        },
+      },
+      { type: 'data-signal', data: { tagName: 'task-list-update', metadata: { value: {} } } },
+    ]
+
+    assert.equal(latestTaskListSignalIndex(parts), 0)
   })
 })
 

@@ -18,7 +18,13 @@ export type LeaderViewPart =
       errorText?: string
     }
   | { type: 'data-worker-run'; data: unknown }
-  | { type: 'data-signal'; data: { metadata?: { value?: { tasks?: LeaderTaskItem[] } } } }
+  | {
+      type: 'data-signal'
+      data: {
+        tagName?: 'task-list-update' | 'current-task-list'
+        metadata?: { value?: { tasks?: LeaderTaskItem[] } }
+      }
+    }
   | { type: 'data-leader-run-meta'; data: unknown }
 
 export type LeaderViewMessage = {
@@ -170,7 +176,10 @@ export function toLeaderViewMessages(messages: LeaderChatMessage[]): LeaderViewM
       } else if (message.custom.kind === 'task-list') {
         current!.parts.push({
           type: 'data-signal',
-          data: { metadata: { value: { tasks: message.custom.data as LeaderTaskItem[] } } },
+          data: {
+            tagName: 'current-task-list',
+            metadata: { value: { tasks: message.custom.data as LeaderTaskItem[] } },
+          },
         })
       } else if (message.custom.kind === 'leader-run-meta') {
         current!.parts.push({ type: 'data-leader-run-meta', data: message.custom.data })
@@ -225,8 +234,16 @@ export function applyLeaderChatEvent(
   if (event.type === 'snapshot') {
     return mergeLeaderSnapshot(messages, event.messages)
   }
-  if (event.type === 'message_start' || event.type === 'message_update' || event.type === 'message_end') {
-    if (event.type === 'message_start' && event.message.role === 'assistant' && !hasVisibleContent(event.message)) {
+  if (
+    event.type === 'message_start' ||
+    event.type === 'message_update' ||
+    event.type === 'message_end'
+  ) {
+    if (
+      event.type === 'message_start' &&
+      event.message.role === 'assistant' &&
+      !hasVisibleContent(event.message)
+    ) {
       return messages
     }
     const index = messages.findIndex((item) => item.id === event.message.id)

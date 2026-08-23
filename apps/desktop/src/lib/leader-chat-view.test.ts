@@ -56,7 +56,10 @@ describe('leader chat view', () => {
     const views = toLeaderViewMessages(messages)
     assert.equal(views.map((item) => item.role).join(','), 'user,assistant,user,assistant')
     assert.match(views[1]!.parts.map((part) => ('text' in part ? part.text : '')).join(''), /hi/u)
-    assert.match(views[3]!.parts.map((part) => ('text' in part ? part.text : '')).join(''), /Team 为空/u)
+    assert.match(
+      views[3]!.parts.map((part) => ('text' in part ? part.text : '')).join(''),
+      /Team 为空/u,
+    )
   })
 
   it('attaches parsed JSON from Leader text-block tool results', () => {
@@ -97,17 +100,51 @@ describe('leader chat view', () => {
     ])
     assert.equal(views.length, 2)
     assert.equal(views[1]!.role, 'assistant')
-    assert.equal(views[1]!.parts.some((part) => part.type === 'text' && part.text === '你好'), true)
     assert.equal(
-      views[1]!.parts.some((part) => part.type === 'tool-set-session-title' && part.state === 'output-available'),
+      views[1]!.parts.some((part) => part.type === 'text' && part.text === '你好'),
       true,
     )
+    assert.equal(
+      views[1]!.parts.some(
+        (part) => part.type === 'tool-set-session-title' && part.state === 'output-available',
+      ),
+      true,
+    )
+  })
+
+  it('marks persisted task-list snapshots with the TaskListCard signal tag', () => {
+    const views = toLeaderViewMessages([
+      {
+        id: 'a1',
+        role: 'assistant',
+        timestamp: 1,
+        content: [{ type: 'text', text: '正在拆解任务' }],
+      },
+      {
+        id: 'tasks-1',
+        role: 'custom',
+        timestamp: 2,
+        custom: {
+          kind: 'task-list',
+          data: [{ id: 'task-1', content: '实现群组讨论', status: 'in_progress' }],
+        },
+      },
+    ])
+    const signal = views[0]!.parts.find((part) => part.type === 'data-signal')
+    assert.equal(signal?.type, 'data-signal')
+    if (signal?.type !== 'data-signal') return
+    assert.equal(signal.data.tagName, 'current-task-list')
   })
 
   it('does not replay snapshot users already shown as optimistic bubbles', () => {
     const existing: LeaderChatMessage[] = [
       { id: 'delivery-1', role: 'user', timestamp: 1, content: 'hey' },
-      { id: 'assistant-live', role: 'assistant', timestamp: 2, content: [{ type: 'text', text: '你好' }] },
+      {
+        id: 'assistant-live',
+        role: 'assistant',
+        timestamp: 2,
+        content: [{ type: 'text', text: '你好' }],
+      },
       { id: 'delivery-2', role: 'user', timestamp: 3, content: '写象棋脚本' },
     ]
     const snapshot: LeaderChatMessage[] = [

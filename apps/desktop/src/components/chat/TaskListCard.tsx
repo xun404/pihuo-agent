@@ -12,7 +12,7 @@
  * 全用 CSS 变量，内置及用户主题自动适配。
  */
 import { memo, useCallback, useState } from 'react'
-import { ChevronRight, ListTodo } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Circle, Clock3, ListTodo } from 'lucide-react'
 import { useI18n } from '../../i18n/I18nProvider'
 import { useCollapsible } from './useCollapsible'
 
@@ -25,7 +25,7 @@ export type TaskItem = {
 }
 
 /** 从 content 前缀解析角色标签，如 "[architect] 设计分层" → { role:'architect', text:'设计分层' } */
-function parseRole(content: string): { role: string | null; text: string } {
+export function parseRole(content: string): { role: string | null; text: string } {
   const m = content.match(/^\s*\[([a-zA-Z_-]+)\]\s*(.*)$/)
   if (!m) return { role: null, text: content }
   return { role: m[1].toLowerCase(), text: m[2] || content }
@@ -112,8 +112,70 @@ export function TaskProcessRow({ task, open, onToggle }: TaskProcessRowProps) {
   )
 }
 
-function TaskListCardImpl({ tasks }: { tasks: TaskItem[] }) {
+function DiscussionTaskList({ tasks }: { tasks: TaskItem[] }) {
   const { t } = useI18n()
+  if (tasks.length === 0) return null
+  const completed = tasks.filter((task) => task.status === 'completed').length
+  const statusLabel = (status: TaskItem['status']) => {
+    if (status === 'completed') return t('chat.discussionTaskCompleted')
+    if (status === 'in_progress') return t('chat.discussionTaskInProgress')
+    return t('chat.discussionTaskPending')
+  }
+
+  return (
+    <section
+      className="discussion-task-card"
+      data-discussion-task-card
+      role="group"
+      aria-label={t('chat.discussionTodo')}
+    >
+      <header className="discussion-task-card-head">
+        <span className="discussion-task-card-title">
+          <ListTodo size={16} aria-hidden />
+          {t('chat.discussionTodo')}
+        </span>
+        <span className="discussion-task-card-count">
+          {completed} / {tasks.length} {t('chat.discussionTaskCompleted')}
+        </span>
+      </header>
+      <div className="discussion-task-list">
+        {tasks.map((task) => {
+          const { role, text } = parseRole(task.content)
+          const Icon =
+            task.status === 'completed'
+              ? CheckCircle2
+              : task.status === 'in_progress'
+                ? Circle
+                : Clock3
+          return (
+            <div
+              className={`discussion-task-row is-${task.status}`}
+              key={task.id}
+              data-status={task.status}
+            >
+              <Icon className="discussion-task-status-icon" size={20} aria-hidden />
+              <span className="discussion-task-content">
+                <span>{text}</span>
+                {role && <span className="discussion-task-role">{role}</span>}
+              </span>
+              <span className="discussion-task-state">{statusLabel(task.status)}</span>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function TaskListCardImpl({
+  tasks,
+  discussionMode = false,
+}: {
+  tasks: TaskItem[]
+  discussionMode?: boolean
+}) {
+  const { t } = useI18n()
+  if (discussionMode) return <DiscussionTaskList tasks={tasks} />
   const inProgress = tasks.filter((t) => t.status === 'in_progress')
   if (inProgress.length === 0) return null
 

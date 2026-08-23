@@ -1,6 +1,6 @@
 /**
  * Generate apps/desktop/src/i18n/zh-TW.catalog.ts from the simplified `zh` dict
- * in locales.ts using OpenCC (cn → tw).
+ * in catalogs/zh.ts using OpenCC (cn → tw).
  *
  * Usage: node scripts/generate-zh-tw-locale.mjs
  * Requires: opencc-js (devDependency or temporarily installed).
@@ -9,17 +9,17 @@ import * as OpenCC from 'opencc-js'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { format, resolveConfig } from 'prettier'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const localesPath = join(root, 'apps/desktop/src/i18n/locales.ts')
+const sourcePath = join(root, 'apps/desktop/src/i18n/catalogs/zh.ts')
 const outPath = join(root, 'apps/desktop/src/i18n/zh-TW.catalog.ts')
 
-const src = readFileSync(localesPath, 'utf8')
-const startMarker = 'const zh: Dict = {'
-const endMarker = '\nconst en: Dict = {'
+const src = readFileSync(sourcePath, 'utf8')
+const startMarker = 'export const zh: Dict = {'
 const start = src.indexOf(startMarker)
-const end = src.indexOf(endMarker)
-if (start < 0 || end < 0) throw new Error('Could not locate zh/en dict markers in locales.ts')
+const end = src.lastIndexOf('\n}')
+if (start < 0 || end < start) throw new Error('Could not locate the simplified zh catalog')
 const body = src.slice(start + startMarker.length, end)
 
 /** Parse TS object body of string entries (supports string concatenation). */
@@ -109,5 +109,9 @@ for (const key of keys) {
 }
 lines.push('}')
 lines.push('')
-writeFileSync(outPath, lines.join('\n'))
+const prettierConfig = (await resolveConfig(outPath)) ?? {}
+writeFileSync(
+  outPath,
+  await format(lines.join('\n'), { ...prettierConfig, filepath: outPath, parser: 'typescript' }),
+)
 console.log(`wrote ${outPath} (${keys.length} keys)`)

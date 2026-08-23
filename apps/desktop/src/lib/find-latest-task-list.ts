@@ -24,14 +24,16 @@ type DataSignalPart = {
   }
 }
 
-/** 从单个 data-signal part 解析 tasks，非 task 快照或无内容返回 null */
+/** 从单个 data-signal part 解析完整 tasks 快照，非 task 快照返回 null。 */
 function tasksOf(part: unknown): TaskItem[] | null {
   const p = part as DataSignalPart
   if (!p || p.type !== 'data-signal') return null
   const tagName = p.data?.tagName
   if (tagName && tagName !== 'task-list-update' && tagName !== 'current-task-list') return null
   const raw = p.data?.metadata?.value?.tasks ?? p.data?.value?.tasks
-  if (!Array.isArray(raw) || raw.length === 0) return null
+  // An empty array is still an authoritative snapshot: it clears task UI that
+  // was shown for an earlier in-progress snapshot in the same session.
+  if (!Array.isArray(raw)) return null
   return raw as TaskItem[]
 }
 
@@ -51,7 +53,7 @@ export function findLatestTaskList(messages: AnyMessage[]): TaskItem[] | null {
     if (!Array.isArray(parts)) continue
     for (let j = parts.length - 1; j >= 0; j--) {
       const tasks = tasksOf(parts[j])
-      if (tasks) return tasks
+      if (tasks !== null) return tasks
     }
   }
   return null

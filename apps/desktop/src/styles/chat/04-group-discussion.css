@@ -1,0 +1,736 @@
+/*
+ * Group discussion is a dedicated presentation of the existing chat stream.
+ * It stays in the center column: these rules add hierarchy, never a sidebar or
+ * a second source of task/worker state.
+ */
+.chat-panel.is-group-discussion {
+  /* A discussion should still read as a conversation, not a full-width
+     dashboard. Keeping the stream deliberately narrow also makes the
+     participant rhythm line up with the composer. */
+  --messages-max: 780px;
+}
+
+/* ── Group header: title → read-only roster → lightweight context ── */
+.chat-head.is-group-discussion {
+  height: auto;
+  min-height: 84px;
+  padding: 14px 28px 10px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+  border-bottom: none;
+}
+.group-discussion-title-row {
+  display: flex;
+  align-items: center;
+  width: min(var(--messages-max), calc(100% - 56px));
+  align-self: center;
+  min-width: 0;
+}
+.group-discussion-title-row .title-wrap {
+  max-width: min(100%, 680px);
+}
+.group-discussion-title-row .title,
+.group-discussion-title-row .title-input {
+  font-size: var(--fs-lg);
+  line-height: 1.25;
+}
+.group-discussion-title-row .title-input {
+  flex-basis: min(100%, 680px);
+}
+.group-discussion-participants {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-left: 8px;
+}
+.group-discussion-participants .group-member-avatar {
+  width: 28px;
+  height: 28px;
+  margin-left: -7px;
+  border: 2px solid var(--bg-main);
+}
+.group-discussion-participants .group-member-avatar:first-child {
+  margin-left: 0;
+}
+.group-discussion-participants .group-member-avatar svg {
+  width: 14px;
+  height: 14px;
+}
+.group-discussion-participants .group-member-avatar-more {
+  font-size: var(--fs-2xs);
+}
+.group-discussion-participants .group-member-agent-badge {
+  right: -3px;
+  bottom: -3px;
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+.group-discussion-participants .group-member-agent-badge svg,
+.group-discussion-participants .group-member-agent-badge .worker-brand-icon {
+  max-width: 9px;
+  max-height: 9px;
+}
+.group-discussion-title-row .chat-head-tools {
+  margin-left: var(--sp-2);
+}
+.group-discussion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(var(--messages-max), calc(100% - 56px));
+  align-self: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.25;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.group-discussion-roster,
+.group-discussion-live-fact,
+.group-discussion-coordination,
+.group-discussion-coordination-main,
+.group-discussion-coordination-status {
+  display: inline-flex;
+  align-items: center;
+}
+.group-discussion-roster {
+  min-width: 0;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-discussion-roster svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--text-4);
+}
+.group-discussion-live-fact {
+  flex: 0 0 auto;
+  gap: 5px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.group-discussion-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 2px var(--green-soft);
+}
+.group-discussion-coordination {
+  width: fit-content;
+  max-width: min(var(--messages-max), calc(100% - 48px));
+  align-self: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  margin: 2px auto 0;
+  padding: 0 11px;
+  border: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--blue) 2.5%, var(--bg-main));
+  color: var(--text-2);
+  box-sizing: border-box;
+}
+.group-discussion-coordination-main {
+  min-width: 0;
+  gap: 7px;
+}
+.group-discussion-coordination-main strong {
+  flex: 0 0 auto;
+  color: var(--text-1);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+.group-discussion-coordination-main > :last-child {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-discussion-coordination-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--blue);
+}
+.group-discussion-coordination-status {
+  flex: 0 0 auto;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.group-discussion-coordination-status.is-approval {
+  color: var(--accent);
+}
+
+/* ── Participant identity tokens ── */
+.group-member-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  line-height: 0;
+}
+.group-member-avatar-leader,
+.discussion-speaker-avatar.is-leader {
+  background: color-mix(in srgb, var(--purple) 82%, var(--bg-surface));
+  color: var(--text-inv, #fff);
+}
+.group-member-role-icon,
+.discussion-speaker-role-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.group-member-avatar[data-role='plan'],
+.discussion-speaker-avatar[data-role='plan'] {
+  background: color-mix(in srgb, var(--purple) 82%, var(--bg-surface));
+  color: var(--text-inv, #fff);
+}
+.group-member-avatar[data-role='coder'],
+.discussion-speaker-avatar[data-role='coder'] {
+  background: color-mix(in srgb, var(--green) 78%, var(--bg-surface));
+  color: var(--text-inv, #fff);
+}
+.group-member-avatar[data-role='review'],
+.discussion-speaker-avatar[data-role='review'] {
+  background: color-mix(in srgb, var(--accent) 80%, var(--bg-surface));
+  color: var(--text-inv, #fff);
+}
+.group-member-avatar[data-role='test'],
+.group-member-avatar[data-role='research'],
+.discussion-speaker-avatar[data-role='test'],
+.discussion-speaker-avatar[data-role='research'] {
+  background: color-mix(in srgb, var(--blue) 74%, var(--bg-surface));
+  color: var(--text-inv, #fff);
+}
+.group-member-agent-badge,
+.discussion-message-agent-badge {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  color: var(--text-1);
+  line-height: 0;
+}
+.discussion-message-agent-badge {
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--bg-main);
+}
+.discussion-message-agent-badge svg,
+.discussion-message-agent-badge .worker-brand-icon {
+  display: block;
+  max-width: 9px;
+  max-height: 9px;
+}
+
+/* ── Timeline and conversation cards ── */
+.chat-panel.is-group-discussion .messages {
+  padding-top: 18px;
+  padding-bottom: var(--sp-6);
+  gap: 18px;
+  margin-right: auto;
+  margin-left: auto;
+}
+.chat-panel.is-group-discussion .composer-dock {
+  margin-top: 0;
+  padding-top: var(--sp-2);
+  background: var(--bg-main);
+}
+.chat-panel.is-group-discussion .msg {
+  gap: 7px;
+}
+.chat-panel.is-group-discussion .msg.user + .msg.leader,
+.chat-panel.is-group-discussion .msg.leader + .msg.user,
+.chat-panel.is-group-discussion .msg.leader + .msg.leader {
+  margin-top: 0;
+}
+.discussion-date-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 16px;
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: 1.2;
+}
+.discussion-date-divider span {
+  flex: 0 0 auto;
+}
+.discussion-message-author {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  gap: 8px;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+}
+.discussion-speaker-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  line-height: 0;
+}
+.discussion-speaker-avatar svg {
+  width: 17px;
+  height: 17px;
+}
+.discussion-speaker-avatar.is-user {
+  border-radius: 50%;
+  background: #e7842d;
+  color: var(--text-inv, #fff);
+}
+.discussion-message-name {
+  white-space: nowrap;
+}
+.discussion-message-time {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  font-variant-numeric: tabular-nums;
+}
+.msg.user .discussion-message-author {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.msg.user .discussion-message-time {
+  margin-left: 0;
+}
+.chat-panel.is-group-discussion .msg.user .bubble {
+  max-width: min(610px, calc(100% - 42px));
+  padding: 10px 13px;
+  border-color: transparent;
+  border-radius: 12px 5px 12px 12px;
+  background: var(--chat-user-message-background, var(--blue-soft));
+  box-shadow: none;
+  font-size: var(--fs-base);
+  line-height: 1.55;
+}
+.chat-panel.is-group-discussion .msg-user-actions,
+.chat-panel.is-group-discussion .lead-footer {
+  display: none;
+}
+.discussion-leader-flow,
+.discussion-leader-flow-item,
+.discussion-worker-flow-item,
+.discussion-leader-card {
+  display: flex;
+  flex-direction: column;
+}
+.discussion-leader-flow {
+  width: calc(100% - 42px);
+  margin-left: 42px;
+  gap: 14px;
+}
+.discussion-leader-flow-item {
+  width: 100%;
+}
+.discussion-leader-card {
+  width: 100%;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--purple) 3%, var(--bg-surface));
+  box-sizing: border-box;
+}
+.discussion-leader-card .sup-text {
+  padding: 0;
+}
+.discussion-leader-card .md-content {
+  font-size: var(--fs-base);
+  line-height: 1.6;
+}
+
+/* A dispatch is Leader-owned process content. It remains a durable tool row,
+   but now lives inside the same Leader surface instead of becoming a detached
+   card. The Worker it starts remains a separate participant item. */
+.discussion-leader-card .chat-tool-worker-stack {
+  gap: 0;
+}
+.discussion-leader-card .chat-tool-worker-stack.is-discussion-dispatch > .tool-row {
+  width: 100%;
+  margin: 0;
+}
+.discussion-leader-card .is-discussion-dispatch > .tool-row .process-row-summary {
+  min-height: 24px;
+  padding: 1px 0;
+  color: var(--text-3);
+}
+.discussion-leader-card .is-discussion-dispatch > .tool-row .process-icon-slot {
+  display: none;
+}
+.discussion-leader-card .is-discussion-dispatch > .tool-row .tool-row-name::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 1px;
+  content: '';
+}
+.discussion-leader-card .is-discussion-dispatch > .tool-row .tool-row-name {
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+.discussion-worker-flow-item {
+  width: calc(100% + 42px);
+  margin-left: -42px;
+}
+
+/* Full Todo snapshot. Normal chat keeps its compact in-progress process rows. */
+.discussion-task-card {
+  width: 100%;
+  margin-left: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--bg-surface);
+  box-sizing: border-box;
+}
+.discussion-task-card-head,
+.discussion-task-card-title,
+.discussion-task-row {
+  display: flex;
+  align-items: center;
+}
+.discussion-task-card-head {
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+.discussion-task-card-title {
+  gap: 10px;
+  color: var(--text-1);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+}
+.discussion-task-card-title svg {
+  color: var(--text-3);
+}
+.discussion-task-card-count {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.discussion-task-row {
+  min-height: 54px;
+  gap: 11px;
+  padding: 0 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+}
+.discussion-task-row:last-child {
+  border-bottom: none;
+}
+.discussion-task-status-icon {
+  flex: 0 0 auto;
+  color: var(--text-4);
+}
+.discussion-task-row.is-in_progress .discussion-task-status-icon,
+.discussion-task-row.is-in_progress .discussion-task-state {
+  color: var(--accent);
+}
+.discussion-task-row.is-completed .discussion-task-status-icon,
+.discussion-task-row.is-completed .discussion-task-state {
+  color: var(--green);
+}
+.discussion-task-content {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 7px;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.discussion-task-content > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.discussion-task-role {
+  flex: 0 0 auto;
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
+.discussion-task-row.is-completed .discussion-task-content > :first-child {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+.discussion-task-state {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+/* Worker identity and result card. The content and approval controls remain
+   the original WorkerRunCard body; only its visual hierarchy changes. */
+.worker-run.is-discussion-worker {
+  gap: 0;
+}
+.worker-run.is-discussion-worker .discussion-message-author {
+  width: 100%;
+  margin-bottom: 2px;
+}
+.discussion-worker-kind {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+}
+.discussion-worker-context {
+  display: flex;
+  width: calc(100% - 42px);
+  min-width: 0;
+  gap: 6px;
+  margin-top: 0;
+  margin-bottom: 6px;
+  margin-left: 42px;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+}
+.discussion-worker-context > :last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-run.is-discussion-worker .worker-card-head {
+  width: calc(100% - 42px);
+  min-height: 36px;
+  margin-left: 42px;
+  padding: 0 12px;
+  margin-top: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 10px 10px 0 0;
+  background: color-mix(in srgb, var(--bg-hover) 38%, var(--bg-surface));
+  box-sizing: border-box;
+}
+.worker-run.is-discussion-worker > .discussion-message-author + .worker-card-head {
+  margin-top: 6px;
+}
+.worker-run.is-discussion-worker:not(.is-open) .worker-card-head {
+  border-radius: 10px;
+}
+.worker-run.is-discussion-worker .worker-card-head .worker-icon-slot {
+  display: none;
+}
+.worker-run.is-discussion-worker .worker-card-head .worker-card-config {
+  margin-left: 0;
+}
+.worker-run.is-discussion-worker .worker-card-head .status {
+  margin-left: auto;
+}
+.worker-run.is-discussion-worker .worker-card-collapse {
+  width: calc(100% - 42px);
+  margin-left: 42px;
+  margin-top: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: color-mix(in srgb, var(--bg-hover) 24%, var(--bg-surface));
+  box-sizing: border-box;
+}
+.worker-run.is-discussion-worker .worker-card-collapse .node-body-inner {
+  max-height: min(440px, 50vh);
+  gap: 7px;
+  padding: 11px 12px 13px;
+}
+.worker-run.is-discussion-worker .worker-activity-list,
+.worker-run.is-discussion-worker .worker-action-label {
+  padding-left: 0;
+}
+.worker-run.is-discussion-worker .worker-action-label {
+  font-size: var(--fs-2xs);
+}
+.worker-run.is-discussion-worker .worker-action-section {
+  gap: 4px;
+}
+.worker-run.is-discussion-worker .worker-action-block {
+  border-radius: 7px;
+}
+.worker-run.is-discussion-worker .worker-action-input .tool-row-block-content {
+  padding: 4px 6px;
+  border-color: color-mix(in srgb, var(--border) 38%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 40%, transparent);
+}
+.worker-run.is-discussion-worker .worker-action-approval-item {
+  gap: 6px;
+  padding: 8px 10px 9px 12px;
+  border-color: color-mix(in srgb, var(--warn) 24%, var(--border));
+  border-radius: 9px;
+  box-shadow: none;
+}
+.worker-run.is-discussion-worker .worker-action-approval-item::before {
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+}
+.worker-run.is-discussion-worker .worker-action-approval .approval-scope-hint,
+.worker-run.is-discussion-worker .worker-action-approval .approval-agent-hint {
+  padding: 3px 6px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--bg-surface) 62%, transparent);
+}
+.worker-run.is-discussion-worker .worker-action-approval-controls.approval-row {
+  gap: 7px 12px;
+}
+.worker-run.is-discussion-worker .worker-action-approval-controls.approval-row .btn {
+  font-size: var(--fs-xs);
+}
+
+@media (max-width: 840px) {
+  .chat-head.is-group-discussion {
+    min-height: 78px;
+    padding: 12px 20px 9px;
+  }
+  .group-discussion-title-row .title,
+  .group-discussion-title-row .title-input {
+    font-size: var(--fs-lg);
+  }
+  .group-discussion-participants .group-member-avatar:nth-of-type(n + 4) {
+    display: none;
+  }
+  .group-discussion-coordination {
+    max-width: calc(100% - 40px);
+  }
+  .group-discussion-title-row,
+  .group-discussion-header {
+    width: calc(100% - 40px);
+  }
+  .group-discussion-coordination-main > :last-child {
+    display: none;
+  }
+  .group-discussion-coordination-status {
+    font-size: var(--fs-2xs);
+  }
+  .chat-panel.is-group-discussion .messages {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+}
+
+@media (max-width: 620px) {
+  .chat-head.is-group-discussion {
+    min-height: 74px;
+    padding-top: 11px;
+    padding-bottom: 8px;
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+  .group-discussion-title-row .chat-head-tools {
+    margin-left: 4px;
+  }
+  .group-discussion-participants {
+    padding-left: 4px;
+  }
+  .group-discussion-participants .group-member-avatar:nth-of-type(n + 3) {
+    display: none;
+  }
+  .group-discussion-header {
+    font-size: var(--fs-xs);
+  }
+  .group-discussion-live-fact {
+    display: none;
+  }
+  .group-discussion-coordination {
+    max-width: calc(100% - 28px);
+  }
+  .group-discussion-title-row,
+  .group-discussion-header {
+    width: calc(100% - 28px);
+  }
+  .group-discussion-coordination-main {
+    gap: 8px;
+  }
+  .group-discussion-coordination-main strong {
+    font-size: var(--fs-xs);
+  }
+  .discussion-date-divider {
+    font-size: var(--fs-xs);
+  }
+  .discussion-leader-flow {
+    width: calc(100% - 42px);
+    margin-left: 42px;
+  }
+  .discussion-worker-flow-item {
+    width: calc(100% + 42px);
+    margin-left: -42px;
+  }
+  .worker-run.is-discussion-worker .worker-card-head,
+  .worker-run.is-discussion-worker .worker-card-collapse {
+    width: calc(100% - 42px);
+    margin-left: 42px;
+  }
+  .discussion-leader-card {
+    padding: 14px 16px;
+  }
+  .discussion-task-card,
+  .worker-run.is-discussion-worker .worker-card-head,
+  .worker-run.is-discussion-worker .worker-card-collapse {
+    box-sizing: border-box;
+  }
+  .discussion-task-card-head,
+  .discussion-task-row {
+    padding-right: 13px;
+    padding-left: 13px;
+  }
+  .discussion-task-content {
+    gap: 4px;
+  }
+  .discussion-task-role {
+    display: none;
+  }
+  .discussion-task-state {
+    font-size: var(--chat-tiny-size);
+  }
+  .discussion-worker-context {
+    width: calc(100% - 42px);
+    margin-left: 42px;
+  }
+}

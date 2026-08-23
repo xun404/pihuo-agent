@@ -89,4 +89,34 @@ describe('TaskListCard', () => {
     assert.match(html, /class="task-row-detail process-collapse-body"/u)
     assert.match(html, /分析 queryReportPartialFields 代码结构，设计 period_value 支持方案/u)
   })
+
+  it('uses the complete existing snapshot as a bordered Todo card in group discussion', () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        I18nProvider,
+        { serverLocale: 'en' },
+        createElement(TaskListModule.TaskListCard, {
+          discussionMode: true,
+          tasks: [
+            { id: 'task-1', content: '[coder] Restore the test baseline', status: 'in_progress' },
+            { id: 'task-2', content: '[plan] Verify the lifecycle', status: 'completed' },
+            { id: 'task-3', content: 'Publish the result', status: 'pending' },
+          ],
+        }),
+      ),
+    )
+
+    assert.match(html, /data-discussion-task-card="true"/u)
+    assert.match(html, /Round coordination Todo/u)
+    assert.match(html, /1 \/ 3 Completed/u)
+    assert.match(html, /data-status="in_progress"/u)
+    assert.match(html, /data-status="completed"/u)
+    assert.match(html, /data-status="pending"/u)
+    assert.match(html, /Restore the test baseline/u)
+    assert.match(html, /class="discussion-task-role"[^>]*>coder/u)
+    assert.match(html, />In progress</u)
+    assert.match(html, />Completed</u)
+    assert.match(html, />Pending</u)
+    assert.doesNotMatch(html, /task-process-row/u)
+  })
 })

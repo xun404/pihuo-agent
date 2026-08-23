@@ -29,6 +29,11 @@ import { formatChatError, serializeChatErrorForSticky } from '../lib/chat-errors
 import { MessageItem } from './MessageItem'
 import { WorkerRunCard } from './WorkerRunCard'
 import { ComposerStatusRow } from './chat/ComposerStatusRow'
+import {
+  GroupDiscussionCoordinationStrip,
+  GroupDiscussionHeader,
+  GroupDiscussionParticipantStack,
+} from './chat/GroupDiscussionHeader'
 import { TurnNavigator } from './chat/TurnNavigator'
 import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
 import { IconApprovals, IconArrowUp, IconCrew, IconEdit, IconFolder } from './Icons'
@@ -48,10 +53,7 @@ import { findLatestActionableBudget, buildContinuePrompt } from '../lib/leader-s
 import { findLatestTaskList } from '../lib/find-latest-task-list'
 import { formatTokenCountDisplay } from '../lib/context-window'
 import { approvalsForSession } from '../lib/session-approvals'
-import {
-  findCurrentTurnAssistant,
-  type ClientTurnMeta,
-} from '../lib/leader-run-meta'
+import { findCurrentTurnAssistant, type ClientTurnMeta } from '../lib/leader-run-meta'
 import {
   workerRunReducer,
   seedWorkerStates,
@@ -65,6 +67,7 @@ import {
   type WorkerCardPlacement,
 } from '../lib/worker-card-placement'
 import { setRecordKey } from '../lib/chat-state'
+import { deriveGroupDiscussionState } from '../lib/group-discussion'
 import type { WorkerRunEvent, WorkerRunState, LeaderStepBudgetEvent } from '@pihuo-agent/shared'
 import { QueueChips } from './chat/QueueChips'
 
@@ -760,7 +763,11 @@ export function ChatPanel({
           try {
             const res = await api.getThreadMessages(memoryThreadId, memoryResourceId)
             if (cancelled) return
-            if (Array.isArray(res.messages) && res.messages.length > 0 && leaderStore.messages.length === 0) {
+            if (
+              Array.isArray(res.messages) &&
+              res.messages.length > 0 &&
+              leaderStore.messages.length === 0
+            ) {
               setMessages(res.messages)
             }
             historyHydratedChat.current = memoryThreadId
@@ -881,6 +888,20 @@ export function ChatPanel({
   }, [placements])
 
   const livePlacements = useMemo(() => placements.filter((p) => p.source === 'live'), [placements])
+
+  const groupDiscussion = useMemo(
+    () =>
+      deriveGroupDiscussionState(
+        teamMembers,
+        placements.map((placement) => placement.state),
+      ),
+    [placements, teamMembers],
+  )
+  const isGroupDiscussion = groupDiscussion.enabled
+
+  useEffect(() => {
+    if (isGroupDiscussion) setInspectorTab(null)
+  }, [isGroupDiscussion])
 
   const hasRunningWorker = useMemo(() => {
     for (const s of workerStates.values()) {
@@ -1717,6 +1738,7 @@ export function ChatPanel({
               turnTimingRef={turnTimingRef}
               toolStartTimes={toolStartTimes}
               toolDurations={toolDurations}
+              discussionMode={isGroupDiscussion}
             />
             {/* Compaction markers rendered inline at the position they were
                 triggered (after the message whose id matches afterMessageId). */}
@@ -1753,6 +1775,7 @@ export function ChatPanel({
             resolving={resolving}
             onResolveApproval={onResolveApproval}
             onResetContext={onResetContext}
+            discussionMode={isGroupDiscussion}
           />
         ))}
         {activeBudgetEvent && (
@@ -1802,10 +1825,15 @@ export function ChatPanel({
     activeBudgetEvent,
     canContinueBudget,
     handleContinueBudget,
+    isGroupDiscussion,
   ])
 
   // Task list snapshot for composer status row
   const taskSnapshot = useMemo(() => findLatestTaskList(messages), [messages])
+  const activeTaskCount = useMemo(
+    () => taskSnapshot?.filter((task) => task.status === 'in_progress').length ?? 0,
+    [taskSnapshot],
+  )
   const [gitRefreshToken, setGitRefreshToken] = useState(0)
   const handleRefreshGit = useCallback(() => {
     setGitRefreshToken((n) => n + 1)
@@ -1945,172 +1973,204 @@ export function ChatPanel({
     </div>
   )
 
+  const titleControl = editingTitle ? (
+    <input
+      ref={titleInputRef}
+      className="title-input"
+      value={titleDraft}
+      placeholder={t('sidebar.renamePlaceholder')}
+      aria-label={t('sidebar.renameSession')}
+      onChange={(e) => setTitleDraft(e.target.value)}
+      onBlur={commitTitle}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commitTitle()
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          cancelTitle()
+        }
+      }}
+    />
+  ) : (
+    <div className="title-wrap">
+      <span className={'title' + (isPlaceholderSessionTitle(session.title) ? ' untitled' : '')}>
+        {isPlaceholderSessionTitle(session.title)
+          ? t('sidebar.untitledSession')
+          : typingTitle !== null
+            ? typingTitle
+            : session.title}
+      </span>
+      {onRenameSession && (
+        <button
+          type="button"
+          className="title-edit-btn"
+          title={t('sidebar.renameSession')}
+          aria-label={t('sidebar.renameSession')}
+          onClick={beginEditTitle}
+        >
+          <IconEdit />
+        </button>
+      )}
+    </div>
+  )
+
+  // The Inspector remains a transient management surface in group discussion.
+  // It is anchored to the header tools, not mounted as a persistent right column.
+  const inspectorTools = (
+    <div className="chat-head-tools" ref={inspectorAnchorRef}>
+      <button
+        type="button"
+        className={`icon-btn chat-head-tool-btn${inspectorTab === 'roles' ? ' is-active' : ''}`}
+        title={t('right.roles')}
+        aria-label={t('right.roles')}
+        aria-expanded={inspectorTab === 'roles'}
+        aria-pressed={inspectorTab === 'roles'}
+        onClick={() => toggleInspectorTab('roles')}
+      >
+        <IconCrew />
+        {teamMembers.length > 0 && (
+          <span className="chat-head-tool-badge" aria-hidden>
+            {teamMembers.length > 9 ? '9+' : teamMembers.length}
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        className={`icon-btn chat-head-tool-btn${inspectorTab === 'approvals' ? ' is-active' : ''}`}
+        title={t('right.approvals')}
+        aria-label={t('right.approvals')}
+        aria-expanded={inspectorTab === 'approvals'}
+        aria-pressed={inspectorTab === 'approvals'}
+        onClick={() => toggleInspectorTab('approvals')}
+      >
+        <IconApprovals />
+        {pendingApprovalCount > 0 && (
+          <span className="chat-head-tool-badge is-warn" aria-hidden>
+            {pendingApprovalCount > 9 ? '9+' : pendingApprovalCount}
+          </span>
+        )}
+      </button>
+      {project && isActive && !hasPendingNewSession && (
+        <button
+          type="button"
+          className={`icon-btn chat-head-tool-btn chat-head-tool-memory${
+            inspectorTab === 'memory' ? ' is-active' : ''
+          }${memoryEnabled ? ' is-memory-on' : ' is-memory-off'}`}
+          title={t(memoryEnabled ? 'memory.openEnabled' : 'memory.openDisabled')}
+          aria-label={t(memoryEnabled ? 'memory.openEnabled' : 'memory.openDisabled')}
+          aria-expanded={inspectorTab === 'memory'}
+          aria-pressed={inspectorTab === 'memory'}
+          data-memory-enabled={memoryEnabled}
+          onClick={() => toggleInspectorTab('memory')}
+        >
+          <AnimatePresence initial={false} mode="wait">
+            {memoryEnabled ? (
+              <motion.span key="memory-on" {...memoryIconMotion} aria-hidden>
+                <DatabaseCheck className="i" strokeWidth={1.75} />
+              </motion.span>
+            ) : (
+              <motion.span key="memory-off" {...memoryIconMotion} aria-hidden>
+                <DatabaseX className="i" strokeWidth={1.75} />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
+      )}
+      <AnimatePresence>
+        {inspectorTab &&
+          (inspectorTab === 'memory' ||
+            (onCreateTeamMember &&
+              onUpdateTeamMember &&
+              onArchiveTeamMember &&
+              onResetTeamMemberSession &&
+              onResolveApproval)) && (
+            <motion.div
+              key="chat-inspector-bubble"
+              className="chat-inspector-bubble"
+              role="dialog"
+              aria-label={
+                inspectorTab === 'roles'
+                  ? t('right.roles')
+                  : inspectorTab === 'approvals'
+                    ? t('right.approvals')
+                    : t('memory.title')
+              }
+              {...inspectorBubbleMotion}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={inspectorTab}
+                  className="chat-inspector-bubble-pane"
+                  {...inspectorPanelMotion}
+                >
+                  <RightPanel
+                    tab={inspectorTab}
+                    workers={snapshotWorkers}
+                    teamMembers={teamMembers}
+                    approvals={sessionApprovals}
+                    projectId={project?.id ?? null}
+                    projectName={project?.name ?? t('memory.noProject')}
+                    sessionId={session.id}
+                    memoryEnabled={memoryEnabled}
+                    memory={currentProjectMemory}
+                    memoryLoading={projectMemoryLoading}
+                    memorySaving={projectMemorySaving}
+                    memoryError={projectMemoryError}
+                    onToggleMemory={handleMemoryToggle}
+                    onSaveMemory={handleMemorySave}
+                    onCreateTeamMember={onCreateTeamMember ?? (async () => {})}
+                    onUpdateTeamMember={onUpdateTeamMember ?? (async () => {})}
+                    onArchiveTeamMember={onArchiveTeamMember ?? (async () => {})}
+                    onResetTeamMemberSession={onResetTeamMemberSession ?? (async () => {})}
+                    onResolveApproval={onResolveApproval ?? (() => {})}
+                    resolving={resolving}
+                    onRefreshSnapshot={() => onRefreshSnapshot?.()}
+                  />
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+          )}
+      </AnimatePresence>
+    </div>
+  )
+
   return (
     <main
-      className="main chat-panel"
+      className={`main chat-panel${isGroupDiscussion ? ' is-group-discussion' : ''}`}
       style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}
     >
-      <div className="chat-head">
-        {editingTitle ? (
-          <input
-            ref={titleInputRef}
-            className="title-input"
-            value={titleDraft}
-            placeholder={t('sidebar.renamePlaceholder')}
-            aria-label={t('sidebar.renameSession')}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                commitTitle()
-              } else if (e.key === 'Escape') {
-                e.preventDefault()
-                cancelTitle()
-              }
-            }}
-          />
-        ) : (
-          <div className="title-wrap">
-            <span
-              className={'title' + (isPlaceholderSessionTitle(session.title) ? ' untitled' : '')}
-            >
-              {isPlaceholderSessionTitle(session.title)
-                ? t('sidebar.untitledSession')
-                : typingTitle !== null
-                  ? typingTitle
-                  : session.title}
-            </span>
-            {onRenameSession && (
-              <button
-                type="button"
-                className="title-edit-btn"
-                title={t('sidebar.renameSession')}
-                aria-label={t('sidebar.renameSession')}
-                onClick={beginEditTitle}
-              >
-                <IconEdit />
-              </button>
-            )}
+      <div className={`chat-head${isGroupDiscussion ? ' is-group-discussion' : ''}`}>
+        {isGroupDiscussion ? (
+          <div className="group-discussion-title-row">
+            {titleControl}
+            <div className="spacer" />
+            <GroupDiscussionParticipantStack teamMembers={teamMembers} workers={snapshotWorkers} />
+            {inspectorTools}
           </div>
+        ) : (
+          <>
+            {titleControl}
+            <div className="spacer" />
+            {inspectorTools}
+          </>
         )}
-        <div className="spacer" />
-        <div className="chat-head-tools" ref={inspectorAnchorRef}>
-          <button
-            type="button"
-            className={`icon-btn chat-head-tool-btn${inspectorTab === 'roles' ? ' is-active' : ''}`}
-            title={t('right.roles')}
-            aria-label={t('right.roles')}
-            aria-expanded={inspectorTab === 'roles'}
-            aria-pressed={inspectorTab === 'roles'}
-            onClick={() => toggleInspectorTab('roles')}
-          >
-            <IconCrew />
-            {teamMembers.length > 0 && (
-              <span className="chat-head-tool-badge" aria-hidden>
-                {teamMembers.length > 9 ? '9+' : teamMembers.length}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            className={`icon-btn chat-head-tool-btn${inspectorTab === 'approvals' ? ' is-active' : ''}`}
-            title={t('right.approvals')}
-            aria-label={t('right.approvals')}
-            aria-expanded={inspectorTab === 'approvals'}
-            aria-pressed={inspectorTab === 'approvals'}
-            onClick={() => toggleInspectorTab('approvals')}
-          >
-            <IconApprovals />
-            {pendingApprovalCount > 0 && (
-              <span className="chat-head-tool-badge is-warn" aria-hidden>
-                {pendingApprovalCount > 9 ? '9+' : pendingApprovalCount}
-              </span>
-            )}
-          </button>
-          {project && isActive && !hasPendingNewSession && (
-            <button
-              type="button"
-              className={`icon-btn chat-head-tool-btn chat-head-tool-memory${
-                inspectorTab === 'memory' ? ' is-active' : ''
-              }${memoryEnabled ? ' is-memory-on' : ' is-memory-off'}`}
-              title={t(memoryEnabled ? 'memory.openEnabled' : 'memory.openDisabled')}
-              aria-label={t(memoryEnabled ? 'memory.openEnabled' : 'memory.openDisabled')}
-              aria-expanded={inspectorTab === 'memory'}
-              aria-pressed={inspectorTab === 'memory'}
-              data-memory-enabled={memoryEnabled}
-              onClick={() => toggleInspectorTab('memory')}
-            >
-              <AnimatePresence initial={false} mode="wait">
-                {memoryEnabled ? (
-                  <motion.span key="memory-on" {...memoryIconMotion} aria-hidden>
-                    <DatabaseCheck className="i" strokeWidth={1.75} />
-                  </motion.span>
-                ) : (
-                  <motion.span key="memory-off" {...memoryIconMotion} aria-hidden>
-                    <DatabaseX className="i" strokeWidth={1.75} />
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-          )}
-          <AnimatePresence>
-            {inspectorTab &&
-              (inspectorTab === 'memory' ||
-                (onCreateTeamMember &&
-                  onUpdateTeamMember &&
-                  onArchiveTeamMember &&
-                  onResetTeamMemberSession &&
-                  onResolveApproval)) && (
-                <motion.div
-                  key="chat-inspector-bubble"
-                  className="chat-inspector-bubble"
-                  role="dialog"
-                  aria-label={
-                    inspectorTab === 'roles'
-                      ? t('right.roles')
-                      : inspectorTab === 'approvals'
-                        ? t('right.approvals')
-                        : t('memory.title')
-                  }
-                  {...inspectorBubbleMotion}
-                >
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.div
-                      key={inspectorTab}
-                      className="chat-inspector-bubble-pane"
-                      {...inspectorPanelMotion}
-                    >
-                      <RightPanel
-                        tab={inspectorTab}
-                        workers={snapshotWorkers}
-                        teamMembers={teamMembers}
-                        approvals={sessionApprovals}
-                        projectId={project?.id ?? null}
-                        projectName={project?.name ?? t('memory.noProject')}
-                        sessionId={session.id}
-                        memoryEnabled={memoryEnabled}
-                        memory={currentProjectMemory}
-                        memoryLoading={projectMemoryLoading}
-                        memorySaving={projectMemorySaving}
-                        memoryError={projectMemoryError}
-                        onToggleMemory={handleMemoryToggle}
-                        onSaveMemory={handleMemorySave}
-                        onCreateTeamMember={onCreateTeamMember ?? (async () => {})}
-                        onUpdateTeamMember={onUpdateTeamMember ?? (async () => {})}
-                        onArchiveTeamMember={onArchiveTeamMember ?? (async () => {})}
-                        onResetTeamMemberSession={onResetTeamMemberSession ?? (async () => {})}
-                        onResolveApproval={onResolveApproval ?? (() => {})}
-                        resolving={resolving}
-                        onRefreshSnapshot={() => onRefreshSnapshot?.()}
-                      />
-                    </motion.div>
-                  </AnimatePresence>
-                </motion.div>
-              )}
-          </AnimatePresence>
-        </div>
+        {isGroupDiscussion ? (
+          <GroupDiscussionHeader
+            teamMembers={teamMembers}
+            workers={snapshotWorkers}
+            activeWorkerCount={groupDiscussion.activeWorkerCount}
+            activeTaskCount={activeTaskCount}
+          />
+        ) : null}
       </div>
+
+      {isGroupDiscussion ? (
+        <GroupDiscussionCoordinationStrip
+          activeTaskCount={activeTaskCount}
+          pendingApprovalCount={pendingApprovalCount}
+        />
+      ) : null}
 
       {!hasMessages || (!historyLoading && messages.length === 0) ? (
         <div className="home" style={{ flex: 1 }}>

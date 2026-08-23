@@ -18,6 +18,7 @@ import { useStickScrollBottom } from '../lib/use-stick-scroll-bottom'
 import { useCollapsible } from './chat/useCollapsible'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { ToolCallRow } from './chat/ToolCallRow'
+import { DiscussionSpeakerAvatar } from './chat/GroupParticipantAvatar'
 
 function ChevronIcon() {
   return (
@@ -91,6 +92,8 @@ interface Props {
    * Absent for standalone worker cards.
    */
   taskPrompt?: string
+  /** Adds a participant label while the card is rendered in a group discussion. */
+  discussionMode?: boolean
 }
 
 function formatLocations(locations: ApprovalItem['locations']): string | null {
@@ -186,6 +189,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
   onResetContext,
   registryIdentity,
   taskPrompt,
+  discussionMode = false,
 }: Props) {
   const { t, locale } = useI18n()
   const [internalOpen, setInternalOpen] = useState(
@@ -216,6 +220,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
       ? state.workerName
       : (KIND_LABELS[state.workerKind] ?? state.workerName)
   const memberLabel = state.teamMemberName?.trim() || state.workerName || workerLabel
+  const discussionTask = (taskPrompt || state.task || '').trim()
   const statusText = STATUS_LABELS[status]?.zh ?? status
   const pendingApprovals = sortPendingApprovals(
     Array.isArray(state.pendingApprovals)
@@ -278,7 +283,36 @@ export const WorkerRunCard = memo(function WorkerRunCard({
           : ''
 
   return (
-    <div className={`worker-run worker-run-${status}${isOpen ? ' is-open' : ''}`}>
+    <div
+      className={`worker-run worker-run-${status}${isOpen ? ' is-open' : ''}${
+        discussionMode ? ' is-discussion-worker' : ''
+      }`}
+      data-discussion-worker={discussionMode || undefined}
+    >
+      {discussionMode && (
+        <>
+          <div className="discussion-message-author">
+            <DiscussionSpeakerAvatar
+              participant="worker"
+              role={state.role ?? 'general'}
+              title={state.workerName || memberLabel}
+              worker={{
+                id: state.workerId,
+                kind: state.workerKind,
+                name: state.workerName,
+              }}
+            />
+            <span>{memberLabel}</span>
+            <span className="discussion-worker-kind">{t('chat.discussionWorker')}</span>
+          </div>
+          {discussionTask && (
+            <div className="discussion-worker-context" title={discussionTask}>
+              <span aria-hidden>↳</span>
+              <span>{discussionTask}</span>
+            </div>
+          )}
+        </>
+      )}
       <div
         className="worker-card-head process-row-summary"
         role="button"
@@ -305,17 +339,19 @@ export const WorkerRunCard = memo(function WorkerRunCard({
             <ChevronIcon />
           </span>
         </span>
-        <span className="name">
-          {memberLabel}
-          {isRunning && (
-            <span className="busy-dots" aria-hidden>
-              <span className="d" />
-              <span className="d" />
-              <span className="d" />
-            </span>
-          )}
-        </span>
-        {state.role && (
+        {!discussionMode && (
+          <span className="name">
+            {memberLabel}
+            {isRunning && (
+              <span className="busy-dots" aria-hidden>
+                <span className="d" />
+                <span className="d" />
+                <span className="d" />
+              </span>
+            )}
+          </span>
+        )}
+        {state.role && !discussionMode && (
           <span className="node-cap role-cap" data-role={state.role}>
             {ROLE_LABELS[state.role] ?? state.role}
           </span>

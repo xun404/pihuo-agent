@@ -32,6 +32,7 @@ import { MarkdownContent } from './MarkdownContent'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkedForSection } from './chat/WorkedForSection'
+import { DiscussionSpeakerAvatar } from './chat/GroupParticipantAvatar'
 import { WorkerRunCard } from './WorkerRunCard'
 import { TaskListCard, type TaskItem } from './chat/TaskListCard'
 import { IconClock, Zap, ZapOff, Calendar } from './Icons'
@@ -140,10 +141,50 @@ export interface MessageItemProps {
   turnTimingRef: RefObject<Map<string, ClientTurnMeta>>
   toolStartTimes: RefObject<Map<string, number>>
   toolDurations: RefObject<Map<string, number>>
+  discussionMode?: boolean
 }
 
 const metaKey = (msgId: string, partIdx: number) => `${msgId}:${partIdx}`
 const workedMetaKey = (msgId: string) => `worked:${msgId}`
+
+type DiscussionFlowNode = {
+  kind: 'leader' | 'worker'
+  node: ReactNode
+}
+
+type RenderedLeaderPart = {
+  node: ReactNode
+  discussionNodes: DiscussionFlowNode[]
+}
+
+/** Returns the complete task snapshot carried by a task-list signal, if valid. */
+function taskListSnapshot(part: unknown): TaskItem[] | null {
+  const signal = part as {
+    type?: unknown
+    data?: {
+      tagName?: unknown
+      metadata?: { value?: { tasks?: unknown } }
+      value?: { tasks?: unknown }
+    }
+  }
+  if (signal.type !== 'data-signal') return null
+  const tagName = signal.data?.tagName
+  if (tagName !== 'task-list-update' && tagName !== 'current-task-list') return null
+  const tasks = signal.data?.metadata?.value?.tasks ?? signal.data?.value?.tasks
+  return Array.isArray(tasks) ? (tasks as TaskItem[]) : null
+}
+
+/**
+ * Task-list signals are complete snapshots, not an append-only task history.
+ * A Leader turn therefore renders only its last valid snapshot. An empty
+ * snapshot deliberately wins so a later completion clears an earlier card.
+ */
+export function latestTaskListSignalIndex(parts: readonly unknown[]): number {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    if (taskListSnapshot(parts[index]) !== null) return index
+  }
+  return -1
+}
 
 /** Process trail vs final answer (turn-level process collapse). */
 function leaderPartBucket(part: { type: string }): 'process' | 'result' | 'other' {
@@ -186,11 +227,13 @@ function MessageItemImpl({
   turnTimingRef,
   toolStartTimes,
   toolDurations,
+  discussionMode = false,
 }: MessageItemProps) {
   const msgLive = busy && message.id === lastAssistantId
 
   // ── Supervisor (leader) meta (slim header + footer-anchored) ──
   const isLeader = message.role !== 'user'
+  const latestTaskListPartIndex = isLeader ? latestTaskListSignalIndex(message.parts) : -1
   const leaderMeta = isLeader
     ? (() => {
         const live = msgLive
@@ -243,13 +286,26 @@ function MessageItemImpl({
       })()
     : null
 
-  const renderLeaderPart = (part: AnyMessage['parts'][number], i: number): ReactNode => {
+  const asLeaderPart = (node: ReactNode): RenderedLeaderPart => ({
+    node,
+    discussionNodes: [{ kind: 'leader', node }],
+  })
+
+  const asWorkerPart = (node: ReactNode): RenderedLeaderPart => ({
+    node,
+    discussionNodes: [{ kind: 'worker', node }],
+  })
+
+  const renderLeaderPart = (
+    part: AnyMessage['parts'][number],
+    i: number,
+  ): RenderedLeaderPart | null => {
     if (part.type === 'text') {
       const tp = part as { type: 'text'; text?: string }
-      return (
+      return asLeaderPart(
         <div className="sup-text md-content" key={i}>
           <MarkdownContent>{tp.text ?? ''}</MarkdownContent>
-        </div>
+        </div>,
       )
     }
     if (part.type === 'reasoning') {
@@ -259,7 +315,7 @@ function MessageItemImpl({
       const key = metaKey(message.id, i)
       const streaming = rp.state === 'streaming'
       const open = streaming ? true : metaOpen[key] === true
-      return (
+      return asLeaderPart(
         <ThinkingBlock
           key={i}
           text={text || '…'}
@@ -271,7 +327,7 @@ function MessageItemImpl({
           doneLabelFor={(time) => t('chat.thinkingDoneFor', { time })}
           locale={locale}
           persistKey={key}
-        />
+        />,
       )
     }
 
@@ -287,6 +343,7 @@ function MessageItemImpl({
       const name =
         toolPart.toolName ||
         (toolPart.type === 'dynamic-tool' ? 'tool' : toolPart.type.replace(/^tool-/, ''))
+      const isDiscussionDispatch = discussionMode && /dispatch/i.test(name)
       const key = metaKey(message.id, i)
       const toolOutput =
         toolPart.output && typeof toolPart.output === 'object'
@@ -338,40 +395,17 @@ function MessageItemImpl({
         return null
       }
 
-      // dispatch-team-member: merge tool row + worker card. The tool task
-      // becomes the input section; worker output/approval flow underneath.
+      // Keep dispatch rows as durable process history. The Worker card is an
+      // additive item and receives the task prompt as its input section.
       const toolTask =
         typeof (toolPart.input as { task?: unknown } | null)?.task === 'string'
           ? (toolPart.input as { task: string }).task
           : undefined
-      const isDispatchMerge =
-        showWorkerCard && !!cardPlacement && /dispatch/i.test(name) && Boolean(toolTask)
       const taskPrompt = toolTask
-
-      if (isDispatchMerge && cardPlacement) {
-        return (
-          <WorkerRunCard
-            key={i}
-            state={cardPlacement.state}
-            registryIdentity={registryIdentityFor(cardPlacement.state)}
-            open={isMetaOpen(
-              key,
-              cardPlacement.state.status === 'running' ||
-                cardPlacement.state.status === 'pending_approval',
-            )}
-            onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, key as string, o))}
-            tick={tick}
-            resolving={resolving}
-            onResolveApproval={onResolveApproval}
-            onResetContext={onResetContext}
-            taskPrompt={taskPrompt}
-          />
-        )
-      }
 
       // Expand while the tool is still running; collapse when done unless
       // the user sticky-toggled open via metaOpen.
-      const toolOpen = isMetaOpen(key, !isDone)
+      const toolOpen = isMetaOpen(key, !isDone && !discussionMode)
       const toolShell = (
         <ToolCallRow
           name={name}
@@ -386,33 +420,58 @@ function MessageItemImpl({
         />
       )
 
-      if (showWorkerCard && cardPlacement) {
-        return (
-          <div key={i} className="chat-tool-worker-stack">
-            {toolShell}
-            <WorkerRunCard
-              state={cardPlacement.state}
-              registryIdentity={registryIdentityFor(cardPlacement.state)}
-              open={isMetaOpen(
-                cardPlacement.jobId,
-                cardPlacement.state.status === 'running' ||
-                  cardPlacement.state.status === 'pending_approval',
-              )}
-              onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, cardPlacement.jobId, o))}
-              tick={tick}
-              resolving={resolving}
-              onResolveApproval={onResolveApproval}
-              onResetContext={onResetContext}
-              taskPrompt={taskPrompt}
-            />
-          </div>
-        )
-      }
-
-      return (
-        <div key={i} className="chat-tool-worker-stack">
+      const discussionToolNode = (
+        <div
+          key={`discussion-tool-${i}`}
+          className={`chat-tool-worker-stack${isDiscussionDispatch ? ' is-discussion-dispatch' : ''}`}
+        >
           {toolShell}
         </div>
+      )
+
+      if (showWorkerCard && cardPlacement) {
+        const workerCard = (
+          <WorkerRunCard
+            state={cardPlacement.state}
+            registryIdentity={registryIdentityFor(cardPlacement.state)}
+            open={isMetaOpen(
+              cardPlacement.jobId,
+              cardPlacement.state.status === 'running' ||
+                cardPlacement.state.status === 'pending_approval',
+            )}
+            onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, cardPlacement.jobId, o))}
+            tick={tick}
+            resolving={resolving}
+            onResolveApproval={onResolveApproval}
+            onResetContext={onResetContext}
+            taskPrompt={taskPrompt}
+            discussionMode={discussionMode}
+          />
+        )
+        return {
+          node: (
+            <div
+              key={i}
+              className={`chat-tool-worker-stack${isDiscussionDispatch ? ' is-discussion-dispatch' : ''}`}
+            >
+              {toolShell}
+              {workerCard}
+            </div>
+          ),
+          discussionNodes: [
+            { kind: 'leader', node: discussionToolNode },
+            { kind: 'worker', node: workerCard },
+          ],
+        }
+      }
+
+      return asLeaderPart(
+        <div
+          key={i}
+          className={`chat-tool-worker-stack${isDiscussionDispatch ? ' is-discussion-dispatch' : ''}`}
+        >
+          {toolShell}
+        </div>,
       )
     }
 
@@ -422,7 +481,7 @@ function MessageItemImpl({
       const wp = placementByJobId.get(data.jobId)
       if (!wp || wp.source !== 'message' || wp.messageIndex !== msgIdx || wp.partIndex !== i)
         return null
-      return (
+      return asWorkerPart(
         <WorkerRunCard
           key={i}
           state={wp.state}
@@ -436,43 +495,53 @@ function MessageItemImpl({
           resolving={resolving}
           onResolveApproval={onResolveApproval}
           onResetContext={onResetContext}
-        />
+          discussionMode={discussionMode}
+        />,
       )
     }
-    // data-signal: task-list snapshot pushed by Leader task tools.
-    // tagName='task-list-update' (incremental) / 'current-task-list' (snapshot);
-    // the full tasks live in part.data.metadata.value.tasks.
+    // Task-list signals are full snapshots. Only the latest valid snapshot in
+    // the Leader turn is authoritative; earlier ones would duplicate or leave
+    // stale in-progress rows after a later empty snapshot.
     if (part.type === 'data-signal') {
-      const sp = part as {
-        type: 'data-signal'
-        data?: {
-          tagName?: string
-          metadata?: { value?: { tasks?: unknown } }
-          value?: { tasks?: unknown }
-        }
-      }
-      const tagName = sp.data?.tagName
-      if (tagName === 'task-list-update' || tagName === 'current-task-list') {
-        const rawTasks = sp.data?.metadata?.value?.tasks ?? sp.data?.value?.tasks
-        if (Array.isArray(rawTasks) && rawTasks.length > 0) {
-          const tasks = rawTasks as TaskItem[]
-          return <TaskListCard key={i} tasks={tasks} />
-        }
-      }
-      return null
+      if (i !== latestTaskListPartIndex) return null
+      const tasks = taskListSnapshot(part)
+      return tasks
+        ? asLeaderPart(<TaskListCard key={i} tasks={tasks} discussionMode={discussionMode} />)
+        : null
     }
     return null
   }
 
-  // When turn is done, fold process trail under one summary; final text stays outside.
-  // While live, keep natural part order.
+  // A normal completed turn folds its process trail under one summary. The group
+  // presentation keeps the durable part order, while keeping Leader-owned text,
+  // tools, and task snapshots in the same message surface. Worker cards flush
+  // that surface and become their own participant item.
   const processNodes: ReactNode[] = []
   const resultNodes: ReactNode[] = []
   const liveNodes: ReactNode[] = []
+  const discussionFlow: Array<{ kind: 'leader' | 'worker'; nodes: ReactNode[] }> = []
+  let pendingLeaderNodes: ReactNode[] = []
+  const flushDiscussionLeaderNodes = () => {
+    if (pendingLeaderNodes.length === 0) return
+    discussionFlow.push({ kind: 'leader', nodes: pendingLeaderNodes })
+    pendingLeaderNodes = []
+  }
   for (let i = 0; i < message.parts.length; i += 1) {
     const part = message.parts[i]!
-    const node = renderLeaderPart(part, i)
-    if (!node) continue
+    const rendered = renderLeaderPart(part, i)
+    if (!rendered) continue
+    if (discussionMode) {
+      for (const discussionNode of rendered.discussionNodes) {
+        if (discussionNode.kind === 'leader') {
+          pendingLeaderNodes.push(discussionNode.node)
+        } else {
+          flushDiscussionLeaderNodes()
+          discussionFlow.push({ kind: 'worker', nodes: [discussionNode.node] })
+        }
+      }
+      continue
+    }
+    const node = rendered.node
     if (msgLive) {
       liveNodes.push(node)
       continue
@@ -481,9 +550,19 @@ function MessageItemImpl({
     if (bucket === 'process') processNodes.push(node)
     else if (bucket === 'result') resultNodes.push(node)
   }
+  if (discussionMode) flushDiscussionLeaderNodes()
 
   const workedKey = workedMetaKey(message.id)
-  const workedOpen = metaOpen[workedKey] === true
+  // A Worker card may be anchored either by a worker-run event or by the
+  // dispatch tool row itself. Use the placement rather than inspecting just
+  // one part shape so active cards are never hidden by the outer summary.
+  const hasActiveWorkerInMessage = [...placementByJobId.values()].some(
+    (placement) =>
+      placement.source === 'message' &&
+      placement.messageIndex === msgIdx &&
+      (placement.state.status === 'running' || placement.state.status === 'pending_approval'),
+  )
+  const workedOpen = metaOpen[workedKey] ?? hasActiveWorkerInMessage
   const workedLabel =
     leaderMeta && leaderMeta.durationSec != null && leaderMeta.durationSec >= 1
       ? t('chat.worked.for', { time: formatElapsedCompact(leaderMeta.durationSec) })
@@ -578,6 +657,10 @@ function MessageItemImpl({
 
   const copyAriaLabel = copied ? t('chat.errorCopied') : t('chat.errorCopy')
   const userTimeLabel = userSentAt != null ? formatClockTime(userSentAt, locale) : ''
+  const discussionTimeLabel = isLeader ? leaderMeta?.startLabel || '' : userTimeLabel
+  const discussionDateLabel = discussionTimeLabel
+    ? t('chat.discussionToday', { time: discussionTimeLabel })
+    : t('chat.discussionTodayLabel')
 
   return (
     <div
@@ -585,13 +668,47 @@ function MessageItemImpl({
       data-msg-id={message.id}
       data-msg-role={message.role}
     >
+      {discussionMode && msgIdx === 0 && (
+        <div className="discussion-date-divider" aria-label={discussionDateLabel}>
+          <span>{discussionDateLabel}</span>
+        </div>
+      )}
+      {discussionMode && (
+        <div className="discussion-message-author">
+          <DiscussionSpeakerAvatar
+            participant={isLeader ? 'leader' : 'user'}
+            title={isLeader ? t('chat.discussionLeader') : t('chat.discussionYou')}
+          />
+          <span className="discussion-message-name">
+            {isLeader ? t('chat.discussionLeader') : t('chat.discussionYou')}
+          </span>
+          {discussionTimeLabel && (
+            <span className="discussion-message-time">{discussionTimeLabel}</span>
+          )}
+        </div>
+      )}
       {isLeader && leaderMeta ? (
         /* Leader flat layout: model / thinking / duration / time in footer.
            Thinking, tools, workers, and body text are direct children of .msg.leader. */
         <>
           {/* body: collapsed process (handled) + final body text */}
           <div className="sup-body" onCopy={handleLeaderCopyEvent}>
-            {msgLive ? (
+            {discussionMode ? (
+              <div className="discussion-leader-flow">
+                {discussionFlow.map((item, index) => (
+                  <div
+                    className={`discussion-${item.kind}-flow-item`}
+                    key={`${item.kind}-${index}`}
+                  >
+                    {item.kind === 'leader' ? (
+                      <div className="discussion-leader-card">{item.nodes}</div>
+                    ) : (
+                      item.nodes
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : msgLive ? (
               liveNodes
             ) : (
               <>
@@ -599,6 +716,7 @@ function MessageItemImpl({
                   open={workedOpen}
                   onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, workedKey, o))}
                   label={workedLabel}
+                  keepMounted={hasActiveWorkerInMessage}
                 >
                   {processNodes}
                 </WorkedForSection>
@@ -756,6 +874,7 @@ function areEqual(prev: MessageItemProps, next: MessageItemProps): boolean {
     prev.tick === next.tick &&
     prev.placementByJobId === next.placementByJobId &&
     prev.toolCallJobIds === next.toolCallJobIds &&
+    prev.discussionMode === next.discussionMode &&
     prev.hasRunningWorker === next.hasRunningWorker &&
     prev.resolving === next.resolving &&
     prev.showErrorInThisBubble === next.showErrorInThisBubble &&
