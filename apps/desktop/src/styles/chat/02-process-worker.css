@@ -1,4 +1,3 @@
-
 /* ============ 过程层：思考块 / 工具行（含展开动画） ============ */
 
 .tool-row,
@@ -504,6 +503,7 @@
   transform: rotate(90deg);
 }
 .worked-for-rule {
+  display: none;
   width: 100%;
   height: 0;
   margin: 2px 0 0;

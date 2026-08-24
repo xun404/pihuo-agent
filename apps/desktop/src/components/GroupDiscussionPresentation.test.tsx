@@ -6,6 +6,8 @@ import { I18nProvider } from '../i18n/I18nProvider.js'
 import { MessageItem } from './MessageItem.js'
 import { WorkerRunCard } from './WorkerRunCard.js'
 
+;(globalThis as typeof globalThis & { React: typeof React }).React = React
+
 const discussionLabels: Record<string, string> = {
   'chat.discussionYou': 'You',
   'chat.discussionLeader': 'Leader',
@@ -15,7 +17,7 @@ const discussionLabels: Record<string, string> = {
 const t = (key: string) => discussionLabels[key] ?? key
 
 describe('Group discussion presentation', () => {
-  it('adds a participant identity to user messages without changing the message bubble', () => {
+  it('keeps user messages as right-side bubbles without avatar or identity copy', () => {
     const html = renderToStaticMarkup(
       <MessageItem
         message={
@@ -52,9 +54,12 @@ describe('Group discussion presentation', () => {
       />,
     )
 
-    assert.match(html, /class="discussion-message-author">/u)
-    assert.match(html, /data-discussion-speaker="user"/u)
     assert.match(html, /class="bubble"[^>]*>Hello team</u)
+    assert.match(html, /aria-label="You"/u)
+    assert.doesNotMatch(html, /discussion-message-author/u)
+    assert.doesNotMatch(html, /data-discussion-speaker="user"/u)
+    assert.doesNotMatch(html, /discussion-message-name/u)
+    assert.doesNotMatch(html, /class="msg-row"/u)
   })
 
   it('keeps the existing Worker card and adds its participant identity', () => {

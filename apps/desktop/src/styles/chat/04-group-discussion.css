@@ -253,7 +253,6 @@
 .chat-panel.is-group-discussion .messages {
   padding-top: 18px;
   padding-bottom: var(--sp-6);
-  gap: 18px;
   margin-right: auto;
   margin-left: auto;
 }
@@ -312,11 +311,6 @@
   width: 17px;
   height: 17px;
 }
-.discussion-speaker-avatar.is-user {
-  border-radius: 50%;
-  background: #e7842d;
-  color: var(--text-inv, #fff);
-}
 .discussion-message-name {
   white-space: nowrap;
 }
@@ -327,77 +321,48 @@
   font-weight: var(--fw-regular);
   font-variant-numeric: tabular-nums;
 }
-.msg.user .discussion-message-author {
-  align-self: flex-end;
-  flex-direction: row-reverse;
+.discussion-message-identity {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 18px;
+  width: 100%;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
 }
-.msg.user .discussion-message-time {
-  margin-left: 0;
+.discussion-message-identity .discussion-message-time {
+  font-weight: var(--fw-regular);
 }
-.chat-panel.is-group-discussion .msg.user .bubble {
-  max-width: min(610px, calc(100% - 42px));
-  padding: 10px 13px;
-  border-color: transparent;
-  border-radius: 12px 5px 12px 12px;
-  background: var(--chat-user-message-background, var(--blue-soft));
-  box-shadow: none;
-  font-size: var(--fs-base);
-  line-height: 1.55;
-}
-.chat-panel.is-group-discussion .msg-user-actions,
-.chat-panel.is-group-discussion .lead-footer {
-  display: none;
-}
-.discussion-leader-flow,
 .discussion-leader-flow-item,
-.discussion-worker-flow-item,
-.discussion-leader-card {
+.discussion-worker-flow-item {
   display: flex;
   flex-direction: column;
-}
-.discussion-leader-flow {
-  width: calc(100% - 42px);
-  margin-left: 42px;
-  gap: 14px;
 }
 .discussion-leader-flow-item {
   width: 100%;
 }
-.discussion-leader-card {
-  width: 100%;
-  gap: 8px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--purple) 3%, var(--bg-surface));
-  box-sizing: border-box;
-}
-.discussion-leader-card .sup-text {
-  padding: 0;
-}
-.discussion-leader-card .md-content {
-  font-size: var(--fs-base);
-  line-height: 1.6;
-}
 
 /* A dispatch is Leader-owned process content. It remains a durable tool row,
-   but now lives inside the same Leader surface instead of becoming a detached
+   but now lives inside the same Leader stack instead of becoming a detached
    card. The Worker it starts remains a separate participant item. */
-.discussion-leader-card .chat-tool-worker-stack {
+.msg-stack .chat-tool-worker-stack.is-discussion-dispatch {
   gap: 0;
 }
-.discussion-leader-card .chat-tool-worker-stack.is-discussion-dispatch > .tool-row {
+.msg-stack .is-discussion-dispatch > .tool-row {
   width: 100%;
   margin: 0;
 }
-.discussion-leader-card .is-discussion-dispatch > .tool-row .process-row-summary {
+.msg-stack .is-discussion-dispatch > .tool-row .process-row-summary {
   min-height: 24px;
   padding: 1px 0;
   color: var(--text-3);
 }
-.discussion-leader-card .is-discussion-dispatch > .tool-row .process-icon-slot {
+.msg-stack .is-discussion-dispatch > .tool-row .process-icon-slot {
   display: none;
 }
-.discussion-leader-card .is-discussion-dispatch > .tool-row .tool-row-name::before {
+.msg-stack .is-discussion-dispatch > .tool-row .tool-row-name::before {
   display: inline-block;
   width: 6px;
   height: 6px;
@@ -407,15 +372,14 @@
   vertical-align: 1px;
   content: '';
 }
-.discussion-leader-card .is-discussion-dispatch > .tool-row .tool-row-name {
+.msg-stack .is-discussion-dispatch > .tool-row .tool-row-name {
   color: var(--text-2);
   font-family: var(--font);
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
 }
 .discussion-worker-flow-item {
-  width: calc(100% + 42px);
-  margin-left: -42px;
+  width: 100%;
 }
 
 /* Full Todo snapshot. Normal chat keeps its compact in-progress process rows. */
@@ -524,12 +488,12 @@
 }
 .discussion-worker-context {
   display: flex;
-  width: calc(100% - 42px);
+  width: calc(100% - var(--chat-avatar-col, 42px));
   min-width: 0;
   gap: 6px;
   margin-top: 0;
   margin-bottom: 6px;
-  margin-left: 42px;
+  margin-left: var(--chat-avatar-col, 42px);
   overflow: hidden;
   color: var(--text-3);
   font-size: var(--fs-xs);
@@ -541,9 +505,9 @@
   white-space: nowrap;
 }
 .worker-run.is-discussion-worker .worker-card-head {
-  width: calc(100% - 42px);
+  width: calc(100% - var(--chat-avatar-col, 42px));
   min-height: 36px;
-  margin-left: 42px;
+  margin-left: var(--chat-avatar-col, 42px);
   padding: 0 12px;
   margin-top: 0;
   border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
@@ -567,8 +531,8 @@
   margin-left: auto;
 }
 .worker-run.is-discussion-worker .worker-card-collapse {
-  width: calc(100% - 42px);
-  margin-left: 42px;
+  width: calc(100% - var(--chat-avatar-col, 42px));
+  margin-left: var(--chat-avatar-col, 42px);
   margin-top: 0;
   border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
   border-top: none;
@@ -694,21 +658,10 @@
   .discussion-date-divider {
     font-size: var(--fs-xs);
   }
-  .discussion-leader-flow {
-    width: calc(100% - 42px);
-    margin-left: 42px;
-  }
-  .discussion-worker-flow-item {
-    width: calc(100% + 42px);
-    margin-left: -42px;
-  }
   .worker-run.is-discussion-worker .worker-card-head,
   .worker-run.is-discussion-worker .worker-card-collapse {
-    width: calc(100% - 42px);
-    margin-left: 42px;
-  }
-  .discussion-leader-card {
-    padding: 14px 16px;
+    width: calc(100% - var(--chat-avatar-col, 42px));
+    margin-left: var(--chat-avatar-col, 42px);
   }
   .discussion-task-card,
   .worker-run.is-discussion-worker .worker-card-head,
@@ -730,7 +683,7 @@
     font-size: var(--chat-tiny-size);
   }
   .discussion-worker-context {
-    width: calc(100% - 42px);
-    margin-left: 42px;
+    width: calc(100% - var(--chat-avatar-col, 42px));
+    margin-left: var(--chat-avatar-col, 42px);
   }
 }

@@ -1,4 +1,3 @@
-
 /* 审批操作：文本链接 */
 .approval-row {
   display: flex;
@@ -92,7 +91,7 @@
   word-break: break-word;
 }
 .msg.leader > .chat-error-card,
-.msg.leader .sup-body > .chat-error-card {
+.msg-stack > .chat-error-card {
   align-self: stretch;
 }
 .msg-error-standalone {

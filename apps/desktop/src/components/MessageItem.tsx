@@ -25,7 +25,6 @@ import {
   type RefObject,
   type SetStateAction,
 } from 'react'
-import { Check, Copy } from 'lucide-react'
 import type { LeaderViewMessage } from '../lib/leader-chat-view'
 import type { WorkerRunEvent, WorkerRunState, ApprovalItem } from '@pihuo-agent/shared'
 import { MarkdownContent } from './MarkdownContent'
@@ -33,6 +32,8 @@ import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { WorkedForSection } from './chat/WorkedForSection'
 import { DiscussionSpeakerAvatar } from './chat/GroupParticipantAvatar'
+import { MessageMeta } from './chat/MessageMeta'
+import { paintLeaderSequence, partitionTrailingBubbles } from './chat/paintLeaderSequence'
 import { WorkerRunCard } from './WorkerRunCard'
 import { TaskListCard, type TaskItem } from './chat/TaskListCard'
 import { IconClock, Zap, ZapOff, Calendar } from './Icons'
@@ -146,6 +147,16 @@ export interface MessageItemProps {
 
 const metaKey = (msgId: string, partIdx: number) => `${msgId}:${partIdx}`
 const workedMetaKey = (msgId: string) => `worked:${msgId}`
+
+function BubbleCluster({ bubbles, meta }: { bubbles: ReactNode[]; meta: ReactNode }) {
+  if (bubbles.length === 0 && !meta) return null
+  return (
+    <div className="msg-bubble-row">
+      <div className="msg-bubbles">{bubbles}</div>
+      {meta}
+    </div>
+  )
+}
 
 type DiscussionFlowNode = {
   kind: 'leader' | 'worker'
@@ -526,31 +537,33 @@ function MessageItemImpl({
     discussionFlow.push({ kind: 'leader', nodes: pendingLeaderNodes })
     pendingLeaderNodes = []
   }
-  for (let i = 0; i < message.parts.length; i += 1) {
-    const part = message.parts[i]!
-    const rendered = renderLeaderPart(part, i)
-    if (!rendered) continue
-    if (discussionMode) {
-      for (const discussionNode of rendered.discussionNodes) {
-        if (discussionNode.kind === 'leader') {
-          pendingLeaderNodes.push(discussionNode.node)
-        } else {
-          flushDiscussionLeaderNodes()
-          discussionFlow.push({ kind: 'worker', nodes: [discussionNode.node] })
+  if (isLeader) {
+    for (let i = 0; i < message.parts.length; i += 1) {
+      const part = message.parts[i]!
+      const rendered = renderLeaderPart(part, i)
+      if (!rendered) continue
+      if (discussionMode) {
+        for (const discussionNode of rendered.discussionNodes) {
+          if (discussionNode.kind === 'leader') {
+            pendingLeaderNodes.push(discussionNode.node)
+          } else {
+            flushDiscussionLeaderNodes()
+            discussionFlow.push({ kind: 'worker', nodes: [discussionNode.node] })
+          }
         }
+        continue
       }
-      continue
+      const node = rendered.node
+      if (msgLive) {
+        liveNodes.push(node)
+        continue
+      }
+      const bucket = leaderPartBucket(part)
+      if (bucket === 'process') processNodes.push(node)
+      else if (bucket === 'result') resultNodes.push(node)
     }
-    const node = rendered.node
-    if (msgLive) {
-      liveNodes.push(node)
-      continue
-    }
-    const bucket = leaderPartBucket(part)
-    if (bucket === 'process') processNodes.push(node)
-    else if (bucket === 'result') resultNodes.push(node)
+    if (discussionMode) flushDiscussionLeaderNodes()
   }
-  if (discussionMode) flushDiscussionLeaderNodes()
 
   const workedKey = workedMetaKey(message.id)
   // A Worker card may be anchored either by a worker-run event or by the
@@ -661,194 +674,246 @@ function MessageItemImpl({
   const discussionDateLabel = discussionTimeLabel
     ? t('chat.discussionToday', { time: discussionTimeLabel })
     : t('chat.discussionTodayLabel')
+  const consecutive = msgIdx > 0 && messages[msgIdx - 1]?.role === message.role
+  const pendingNode =
+    msgLive &&
+    !message.parts.some((p) => p.type === 'text' && (p as { text?: string }).text?.trim()) ? (
+      <div className="msg-pending" aria-label={t('chat.runPlaceholder')}>
+        <span className="pdot" />
+        <span className="pdot" />
+        <span className="pdot" />
+      </div>
+    ) : null
+  const copyMeta = (
+    <MessageMeta
+      timeLabel={isLeader ? undefined : userTimeLabel}
+      copyText={isLeader ? leaderCopyText : userCopyText}
+      copied={copied}
+      copyAriaLabel={copyAriaLabel}
+      onCopy={() => void copyToClipboard(isLeader ? leaderCopyText : userCopyText)}
+    />
+  )
+
+  const dateDivider =
+    discussionMode && msgIdx === 0 ? (
+      <div className="discussion-date-divider" aria-label={discussionDateLabel}>
+        <span>{discussionDateLabel}</span>
+      </div>
+    ) : null
+
+  const hasProcessTrail =
+    hasActiveWorkerInMessage ||
+    message.parts.some((part) => {
+      const type = part.type
+      return (
+        type.startsWith('tool-') ||
+        type === 'dynamic-tool' ||
+        type === 'data-worker-run' ||
+        type === 'data-signal'
+      )
+    })
+  const leaderCaption =
+    !discussionMode &&
+    leaderMeta &&
+    (leaderMeta.modelLabel ||
+      leaderMeta.thinkLabel ||
+      leaderMeta.durationLabel ||
+      leaderMeta.startLabel ||
+      leaderMeta.live) ? (
+      <div className={`msg-caption${leaderMeta.live ? ' is-live' : ''}`}>
+        {leaderMeta.modelLabel && (
+          <span className="lead-footer-meta">
+            {leaderMeta.providerId ? (
+              <ProviderLogo
+                providerId={leaderMeta.providerId}
+                size={14}
+                className="lead-footer-provider"
+              />
+            ) : null}
+            <span className="lead-footer-text">{leaderMeta.modelLabel}</span>
+          </span>
+        )}
+        {leaderMeta.live ? (
+          <>
+            {leaderMeta.modelLabel && <span className="lead-footer-separator">·</span>}
+            <span className="lead-footer-action">
+              {t((leaderMeta.currentActivity || 'chat.activity.thinking') as MessageKey)}
+            </span>
+          </>
+        ) : (
+          <>
+            {leaderMeta.thinkLabel && (
+              <>
+                {leaderMeta.modelLabel && <span className="lead-footer-separator">·</span>}
+                <span className="lead-footer-meta">
+                  {leaderMeta.thinking === 'off' ? <ZapOff size={13} /> : <Zap size={13} />}
+                  <span className="lead-footer-text">{leaderMeta.thinkLabel}</span>
+                </span>
+              </>
+            )}
+            {leaderMeta.durationLabel && (
+              <>
+                {(leaderMeta.modelLabel || leaderMeta.thinkLabel) && (
+                  <span className="lead-footer-separator">·</span>
+                )}
+                <span className="lead-footer-meta mono">
+                  <IconClock size={13} />
+                  <span className="lead-footer-text">{leaderMeta.durationLabel}</span>
+                </span>
+              </>
+            )}
+            {leaderMeta.startLabel && (
+              <>
+                {(leaderMeta.modelLabel || leaderMeta.thinkLabel || leaderMeta.durationLabel) && (
+                  <span className="lead-footer-separator">·</span>
+                )}
+                <span className="lead-footer-meta mono">
+                  <Calendar size={13} />
+                  <span className="lead-footer-text">{leaderMeta.startLabel}</span>
+                </span>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    ) : null
+
+  const renderDiscussionLeader = () => {
+    const leaderIndexes = discussionFlow.flatMap((item, index) =>
+      item.kind === 'leader' ? [index] : [],
+    )
+    const firstLeaderIndex = leaderIndexes[0]
+    const lastLeaderIndex = leaderIndexes[leaderIndexes.length - 1]
+    const lastKind = discussionFlow[discussionFlow.length - 1]?.kind
+    const trailingPending = Boolean(pendingNode && lastKind !== 'leader')
+    const rows = discussionFlow.map((item, index) => {
+      if (item.kind === 'worker') {
+        return (
+          <div className="discussion-worker-flow-item" key={`worker-${index}`}>
+            {item.nodes}
+          </div>
+        )
+      }
+      const isFirst = index === firstLeaderIndex
+      const isLastLeader = index === lastLeaderIndex
+      return (
+        <div
+          className={`msg-row discussion-leader-flow-item${isFirst ? ' is-lead-start' : ''}`}
+          key={`leader-${index}`}
+        >
+          <DiscussionSpeakerAvatar participant="leader" title={t('chat.discussionLeader')} />
+          <div className="msg-stack">
+            <div className="discussion-message-identity">
+              <span className="discussion-message-name">{t('chat.discussionLeader')}</span>
+              {isFirst && discussionTimeLabel ? (
+                <span className="discussion-message-time">{discussionTimeLabel}</span>
+              ) : null}
+            </div>
+            {(() => {
+              const painted = paintLeaderSequence(
+                item.nodes,
+                isLastLeader && !trailingPending ? pendingNode : null,
+              )
+              const { head, bubbles } = partitionTrailingBubbles(painted)
+              return (
+                <>
+                  {head}
+                  <BubbleCluster
+                    bubbles={bubbles}
+                    meta={isLastLeader && !trailingPending ? copyMeta : null}
+                  />
+                </>
+              )
+            })()}
+            {isLastLeader && !trailingPending && showErrorInThisBubble ? errorBlock : null}
+          </div>
+        </div>
+      )
+    })
+    if (
+      trailingPending ||
+      (lastLeaderIndex == null && (pendingNode || showErrorInThisBubble || Boolean(leaderCopyText)))
+    ) {
+      rows.push(
+        <div
+          className={`msg-row${lastLeaderIndex == null ? ' is-lead-start' : ''}`}
+          key="leader-pending"
+        >
+          <DiscussionSpeakerAvatar participant="leader" title={t('chat.discussionLeader')} />
+          <div className="msg-stack">
+            <BubbleCluster
+              bubbles={partitionTrailingBubbles(paintLeaderSequence([], pendingNode)).bubbles}
+              meta={copyMeta}
+            />
+            {showErrorInThisBubble ? errorBlock : null}
+          </div>
+        </div>,
+      )
+    }
+    return rows
+  }
 
   return (
     <div
-      className={`msg ${message.role === 'user' ? 'user' : 'leader'}`}
+      className={`msg ${message.role === 'user' ? 'user' : 'leader'}${consecutive ? ' is-consecutive' : ''}${msgLive ? ' is-live' : ''}`}
       data-msg-id={message.id}
       data-msg-role={message.role}
+      aria-label={message.role === 'user' ? t('chat.discussionYou') : undefined}
+      onCopy={isLeader ? handleLeaderCopyEvent : undefined}
     >
-      {discussionMode && msgIdx === 0 && (
-        <div className="discussion-date-divider" aria-label={discussionDateLabel}>
-          <span>{discussionDateLabel}</span>
-        </div>
-      )}
-      {discussionMode && (
-        <div className="discussion-message-author">
-          <DiscussionSpeakerAvatar
-            participant={isLeader ? 'leader' : 'user'}
-            title={isLeader ? t('chat.discussionLeader') : t('chat.discussionYou')}
-          />
-          <span className="discussion-message-name">
-            {isLeader ? t('chat.discussionLeader') : t('chat.discussionYou')}
-          </span>
-          {discussionTimeLabel && (
-            <span className="discussion-message-time">{discussionTimeLabel}</span>
-          )}
-        </div>
-      )}
+      {dateDivider}
       {isLeader && leaderMeta ? (
-        /* Leader flat layout: model / thinking / duration / time in footer.
-           Thinking, tools, workers, and body text are direct children of .msg.leader. */
-        <>
-          {/* body: collapsed process (handled) + final body text */}
-          <div className="sup-body" onCopy={handleLeaderCopyEvent}>
-            {discussionMode ? (
-              <div className="discussion-leader-flow">
-                {discussionFlow.map((item, index) => (
-                  <div
-                    className={`discussion-${item.kind}-flow-item`}
-                    key={`${item.kind}-${index}`}
+        discussionMode ? (
+          renderDiscussionLeader()
+        ) : (
+          <>
+            <div className="msg-row is-lead-start">
+              <DiscussionSpeakerAvatar participant="leader" title={t('chat.discussionLeader')} />
+              <div className="msg-stack">
+                {!msgLive && hasProcessTrail ? (
+                  <WorkedForSection
+                    open={workedOpen}
+                    onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, workedKey, o))}
+                    label={workedLabel}
+                    keepMounted={hasActiveWorkerInMessage}
                   >
-                    {item.kind === 'leader' ? (
-                      <div className="discussion-leader-card">{item.nodes}</div>
-                    ) : (
-                      item.nodes
-                    )}
-                  </div>
-                ))}
+                    {processNodes}
+                  </WorkedForSection>
+                ) : null}
+                {(() => {
+                  const painted = paintLeaderSequence(
+                    msgLive ? liveNodes : resultNodes,
+                    msgLive ? pendingNode : null,
+                  )
+                  const { head, bubbles } = partitionTrailingBubbles(painted)
+                  return (
+                    <>
+                      {head}
+                      <BubbleCluster bubbles={bubbles} meta={copyMeta} />
+                    </>
+                  )
+                })()}
+                {showErrorInThisBubble ? errorBlock : null}
+                {leaderCaption}
               </div>
-            ) : msgLive ? (
-              liveNodes
-            ) : (
-              <>
-                <WorkedForSection
-                  open={workedOpen}
-                  onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, workedKey, o))}
-                  label={workedLabel}
-                  keepMounted={hasActiveWorkerInMessage}
-                >
-                  {processNodes}
-                </WorkedForSection>
-                {resultNodes}
-              </>
-            )}
-            {/* Pending placeholder: shown while busy and this turn has no text
-                body yet. Placed after the parts (at the very end) so it stays
-                below streaming thinking/tools instead of jumping ahead. Keyed
-                off text body, not all parts — it still shows while thinking or
-                tools stream before any text arrives, signaling the reply is
-                coming. */}
-            {msgLive &&
-              !message.parts.some(
-                (p) => p.type === 'text' && (p as { text?: string }).text?.trim(),
-              ) && (
-                <div className="msg-pending" aria-label={t('chat.runPlaceholder')}>
-                  <span className="pdot" />
-                  <span className="pdot" />
-                  <span className="pdot" />
-                </div>
-              )}
-            {/* Same Supervisor card as the failed turn */}
-            {showErrorInThisBubble && errorBlock}
-          </div>
-          {/* /sup-body */}
-          {/* Footer: live shows "model · activity"; done shows model · thinking · duration · start. */}
-          {(leaderMeta.modelLabel ||
-            leaderMeta.thinkLabel ||
-            leaderMeta.durationLabel ||
-            leaderMeta.startLabel ||
-            leaderMeta.live) && (
-            <div className="lead-footer">
-              {leaderMeta.modelLabel && (
-                <span className="lead-footer-meta">
-                  {leaderMeta.providerId ? (
-                    <ProviderLogo
-                      providerId={leaderMeta.providerId}
-                      size={14}
-                      className="lead-footer-provider"
-                    />
-                  ) : null}
-                  <span className="lead-footer-text">{leaderMeta.modelLabel}</span>
-                </span>
-              )}
-              {leaderMeta.live ? (
-                <>
-                  {leaderMeta.modelLabel && <span className="lead-footer-separator">·</span>}
-                  <span className="lead-footer-action">
-                    {t((leaderMeta.currentActivity || 'chat.activity.thinking') as MessageKey)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  {leaderMeta.thinkLabel && (
-                    <>
-                      {leaderMeta.modelLabel && <span className="lead-footer-separator">·</span>}
-                      <span className="lead-footer-meta">
-                        {leaderMeta.thinking === 'off' ? <ZapOff size={13} /> : <Zap size={13} />}
-                        <span className="lead-footer-text">{leaderMeta.thinkLabel}</span>
-                      </span>
-                    </>
-                  )}
-                  {leaderMeta.durationLabel && (
-                    <>
-                      {(leaderMeta.modelLabel || leaderMeta.thinkLabel) && (
-                        <span className="lead-footer-separator">·</span>
-                      )}
-                      <span className="lead-footer-meta mono">
-                        <IconClock size={13} />
-                        <span className="lead-footer-text">{leaderMeta.durationLabel}</span>
-                      </span>
-                    </>
-                  )}
-                  {leaderMeta.startLabel && (
-                    <>
-                      {(leaderMeta.modelLabel ||
-                        leaderMeta.thinkLabel ||
-                        leaderMeta.durationLabel) && (
-                        <span className="lead-footer-separator">·</span>
-                      )}
-                      <span className="lead-footer-meta mono">
-                        <Calendar size={13} />
-                        <span className="lead-footer-text">{leaderMeta.startLabel}</span>
-                      </span>
-                    </>
-                  )}
-                </>
-              )}
-              {leaderCopyText && (
-                <button
-                  type="button"
-                  className="lead-footer-copy"
-                  onClick={() => void copyToClipboard(leaderCopyText)}
-                  aria-label={copyAriaLabel}
-                  title={copyAriaLabel}
-                >
-                  {copied ? <Check size={13} /> : <Copy size={13} />}
-                </button>
-              )}
             </div>
-          )}
-        </>
+          </>
+        )
       ) : (
-        /* User message: bubble + hover-revealed send time & copy */
-        <>
-          {message.parts.map((part, i) => {
-            if (part.type !== 'text') return null
-            const { text: display } = parseRouterUserMessage(part.text)
-            return (
-              <div className="bubble" key={i} title={part.text}>
-                {display || part.text}
-              </div>
-            )
-          })}
-          {(userSentAt != null || userCopyText) && (
-            <div className="msg-user-actions">
-              {userTimeLabel && <span className="msg-user-time">{userTimeLabel}</span>}
-              {userCopyText && (
-                <button
-                  type="button"
-                  className="msg-user-copy"
-                  onClick={() => void copyToClipboard(userCopyText)}
-                  aria-label={copyAriaLabel}
-                  title={copyAriaLabel}
-                >
-                  {copied ? <Check size={13} /> : <Copy size={13} />}
-                </button>
-              )}
-            </div>
-          )}
-        </>
+        <div className="msg-stack">
+          <BubbleCluster
+            bubbles={message.parts.flatMap((part, i) => {
+              if (part.type !== 'text') return []
+              const { text: display } = parseRouterUserMessage(part.text)
+              return [
+                <div className="bubble" key={i} title={part.text}>
+                  {display || part.text}
+                </div>,
+              ]
+            })}
+            meta={copyMeta}
+          />
+        </div>
       )}
     </div>
   )

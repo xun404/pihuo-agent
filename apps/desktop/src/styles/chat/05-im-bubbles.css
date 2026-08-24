@@ -1,0 +1,227 @@
+/*
+ * IM role bubbles: user right, Leader left. Layout tokens live on .chat-panel
+ * so theme JSON is not duplicated. Process rows and structured cards stay
+ * outside .bubble.
+ */
+.chat-panel {
+  --chat-avatar-size: 34px;
+  --chat-avatar-col: 42px;
+  --chat-bubble-radius: var(--r-lg);
+  --chat-bubble-cut: var(--r-xs);
+  --chat-leader-bubble-background: color-mix(in srgb, var(--purple) 8%, var(--bg-surface));
+  --messages-gap: var(--sp-5);
+}
+
+.chat-panel.is-group-discussion {
+  --messages-gap: 18px;
+}
+
+.messages {
+  gap: var(--messages-gap);
+}
+
+.msg.is-consecutive {
+  margin-top: calc(var(--sp-2) - var(--messages-gap));
+}
+
+.msg.user + .msg.leader,
+.msg.leader + .msg.user,
+.msg.leader + .msg.leader {
+  margin-top: 0;
+}
+
+.msg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.msg-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.msg.user .msg-stack {
+  align-items: flex-end;
+  width: 100%;
+}
+
+.msg.leader > .msg-row > .discussion-speaker-avatar {
+  width: var(--chat-avatar-size);
+  height: var(--chat-avatar-size);
+  flex: 0 0 var(--chat-avatar-size);
+}
+
+.msg.leader.is-consecutive > .msg-row.is-lead-start > .discussion-speaker-avatar {
+  visibility: hidden;
+}
+
+.msg.leader.is-consecutive .is-lead-start .discussion-message-identity .discussion-message-name {
+  visibility: hidden;
+}
+
+/* IM default: no border, no shadow. Replaces the 01 generic chrome. */
+.msg .bubble {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--chat-bubble-radius);
+  font-size: var(--fs-base);
+  line-height: var(--lh-relaxed);
+  background: var(--bg-surface);
+  border: none;
+  box-shadow: none;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--text-1);
+  box-sizing: border-box;
+}
+
+.msg.user .bubble {
+  background: var(--chat-user-message-background, var(--blue-soft));
+  color: var(--chat-user-message, var(--text-1));
+  border: none;
+  box-shadow: none;
+  margin-right: 0;
+  margin-left: auto;
+  max-width: min(36em, 100%);
+  width: fit-content;
+  align-self: flex-end;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: var(--lh-relaxed);
+  border-radius: var(--chat-bubble-radius) var(--chat-bubble-cut) var(--chat-bubble-radius)
+    var(--chat-bubble-radius);
+}
+
+.msg.leader .bubble {
+  background: var(--chat-leader-bubble-background);
+  color: var(--chat-assistant-message, var(--text-1));
+  border: none;
+  box-shadow: none;
+  width: fit-content;
+  max-width: 100%;
+  font-size: var(--fs-md);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  box-sizing: border-box;
+  border-radius: var(--chat-bubble-cut) var(--chat-bubble-radius) var(--chat-bubble-radius)
+    var(--chat-bubble-radius);
+}
+
+.msg.leader .bubble .sup-text {
+  padding: 0;
+}
+
+.bubble .msg-pending {
+  padding: 0;
+}
+
+.msg-bubble-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.msg.user .msg-bubble-row {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+}
+
+.msg-bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.msg.user .msg-bubbles {
+  align-items: flex-end;
+}
+
+.msg-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 0;
+  font-size: var(--chat-micro-size);
+  color: var(--text-3);
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast, 0.15s) ease;
+}
+
+.msg:hover .msg-meta,
+.msg:focus-within .msg-meta {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.msg-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0 2px;
+  border: none;
+  margin: 0;
+  font-size: var(--chat-meta-size);
+  color: var(--chat-timestamp, var(--text-3));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast, 0.15s) ease;
+}
+
+.msg.leader.is-live .msg-caption,
+.msg:hover .msg-caption,
+.msg:focus-within .msg-caption {
+  opacity: 0.72;
+  pointer-events: auto;
+}
+
+.msg-caption .lead-footer-provider {
+  opacity: 1;
+}
+
+.msg-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md, 4px);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast, 0.15s) ease,
+    background var(--dur-fast, 0.15s) ease;
+}
+
+.msg-copy:hover {
+  color: var(--text-1);
+  background: var(--bg-hover, var(--border-soft));
+}
+
+.msg-copy svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.msg-stack > .chat-tool-worker-stack {
+  margin-top: 0;
+  margin-bottom: 0;
+}

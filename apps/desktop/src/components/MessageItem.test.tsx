@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { LeaderViewPart } from '../lib/leader-chat-view.js'
+import { I18nProvider } from '../i18n/I18nProvider.js'
 import { formatMessage } from '../i18n/locales.js'
 import {
   latestTaskListSignalIndex,
@@ -31,6 +32,8 @@ const STRINGS: Partial<Record<string, string>> = {
   'chat.think.medium': '中',
   'chat.errorCopy': '复制',
   'chat.errorCopied': '已复制',
+  'chat.discussionYou': '你',
+  'chat.discussionLeader': 'Leader',
 }
 
 const t: MessageItemProps['t'] = (key, vars) => formatMessage(STRINGS[key] ?? key, vars)
@@ -68,37 +71,39 @@ function renderLeader(options: {
   ])
 
   return renderToStaticMarkup(
-    <MessageItem
-      message={messages[1]!}
-      msgIdx={1}
-      messages={messages}
-      busy={options.live}
-      lastAssistantId="a1"
-      isTailMessage
-      showErrorInThisBubble={false}
-      t={t}
-      locale="zh"
-      models={[]}
-      selectedModel="opencode-go/deepseek-v4-flash"
-      thinkingIntensity="high"
-      modelShort="deepseek-v4-flash"
-      thinkShort="高"
-      metaOpen={{}}
-      setMetaOpen={() => undefined}
-      tick={0}
-      placementByJobId={options.placementByJobId ?? new Map()}
-      toolCallJobIds={new Map()}
-      hasRunningWorker={false}
-      resolving={{}}
-      registryIdentityFor={() => undefined}
-      isMetaOpen={(_key, autoOpen) => autoOpen}
-      errorBlock={null}
-      timingEpoch={0}
-      turnTimingRef={{ current: turnTiming }}
-      toolStartTimes={{ current: new Map() }}
-      toolDurations={{ current: new Map() }}
-      discussionMode={options.discussionMode}
-    />,
+    <I18nProvider serverLocale="zh">
+      <MessageItem
+        message={messages[1]!}
+        msgIdx={1}
+        messages={messages}
+        busy={options.live}
+        lastAssistantId="a1"
+        isTailMessage
+        showErrorInThisBubble={false}
+        t={t}
+        locale="zh"
+        models={[]}
+        selectedModel="opencode-go/deepseek-v4-flash"
+        thinkingIntensity="high"
+        modelShort="deepseek-v4-flash"
+        thinkShort="高"
+        metaOpen={{}}
+        setMetaOpen={() => undefined}
+        tick={0}
+        placementByJobId={options.placementByJobId ?? new Map()}
+        toolCallJobIds={new Map()}
+        hasRunningWorker={false}
+        resolving={{}}
+        registryIdentityFor={() => undefined}
+        isMetaOpen={(_key, autoOpen) => autoOpen}
+        errorBlock={null}
+        timingEpoch={0}
+        turnTimingRef={{ current: turnTiming }}
+        toolStartTimes={{ current: new Map() }}
+        toolDurations={{ current: new Map() }}
+        discussionMode={options.discussionMode}
+      />
+    </I18nProvider>,
   )
 }
 
@@ -141,7 +146,7 @@ function renderUser(
 }
 
 function footer(markup: string): string {
-  return markup.match(/<div class="lead-footer">([\s\S]*?)<\/div>/)?.[1] ?? ''
+  return markup.match(/<div class="msg-caption[^"]*">([\s\S]*?)<\/div>/)?.[1] ?? ''
 }
 
 describe('MessageItem Leader footer', () => {
@@ -218,13 +223,13 @@ describe('MessageItem Worked-for collapse', () => {
     assert.doesNotMatch(markup, /worked-for is-open/u)
   })
 
-  it('shows 已处理 for a completed text-only assistant turn', () => {
+  it('does not show 已处理 on a completed text-only assistant turn', () => {
     const markup = renderLeader({
       live: false,
       parts: [{ type: 'text', text: '只有最终正文' }],
     })
-    assert.match(markup, /class="worked-for"/u)
-    assert.match(markup, /已处理 1m 13s/u)
+    assert.doesNotMatch(markup, /class="worked-for"/u)
+    assert.doesNotMatch(markup, /已处理 1m 13s/u)
     assert.match(markup, /只有最终正文/u)
   })
 
@@ -258,12 +263,23 @@ describe('MessageItem Worked-for collapse', () => {
       ],
     })
 
-    assert.match(markup, /discussion-leader-flow/u)
-    assert.equal((markup.match(/class="discussion-leader-card"/g) ?? []).length, 1)
-    assert.match(markup, /discussion-leader-card[\s\S]*?chat-tool-worker-stack/u)
+    assert.equal((markup.match(/class="bubble"/g) ?? []).length, 2)
+    assert.match(markup, /class="bubble"[^>]*>[\s\S]*先确认任务边界。/u)
+    assert.match(markup, /class="bubble"[^>]*>[\s\S]*接着等待 Worker 返回。/u)
+    assert.match(markup, /chat-tool-worker-stack/u)
+    assert.match(
+      markup,
+      /class="bubble"[\s\S]*?先确认任务边界。[\s\S]*?<\/div><\/div><\/div><div class="chat-tool-worker-stack"/u,
+    )
+    assert.match(markup, /discussion-leader-flow-item/u)
+    assert.doesNotMatch(markup, /discussion-leader-card/u)
+    assert.doesNotMatch(markup, /class="sup-body"/u)
     assert.doesNotMatch(markup, /discussion-process-divider/u)
     assert.doesNotMatch(markup, /class="worked-for/u)
     assert.doesNotMatch(markup, /已处理 1m 13s/u)
+    assert.doesNotMatch(markup, /class="lead-footer"/u)
+    assert.doesNotMatch(markup, /class="msg-caption"/u)
+    assert.equal((markup.match(/class="msg-meta"/g) ?? []).length, 1)
     assert.ok(
       markup.indexOf('先确认任务边界。') < markup.indexOf('bash') &&
         markup.indexOf('bash') < markup.indexOf('接着等待 Worker 返回。'),
@@ -371,33 +387,86 @@ describe('MessageItem message actions', () => {
     const markup = renderUser(message, [message])
 
     assert.match(markup, /class="msg user"/u)
+    assert.match(markup, /aria-label="你"/u)
     assert.match(markup, /class="bubble"[^>]*>hello \*\*world\*\*</u)
-    assert.match(markup, /class="msg-user-actions"/u)
+    assert.match(markup, /class="msg-meta"/u)
     assert.match(markup, /class="msg-user-time">[^<]*2026/u)
-    assert.match(markup, /class="msg-user-copy"/u)
+    assert.match(markup, /class="msg-copy"/u)
     assert.match(markup, /lucide-copy/u)
     assert.match(markup, /aria-label="复制"/u)
+    assert.doesNotMatch(markup, /discussion-speaker-avatar/u)
+    assert.doesNotMatch(markup, /discussion-message-name/u)
+    assert.doesNotMatch(markup, /class="msg-row"/u)
   })
 
   it('hides the send time when the message has no timestamp but keeps the copy button', () => {
     const message = { id: 'u3', role: 'user', parts: [{ type: 'text', text: 'hi' }] } as never
     const markup = renderUser(message, [message])
 
-    assert.match(markup, /class="msg-user-actions"/u)
+    assert.match(markup, /class="msg-meta"/u)
     assert.doesNotMatch(markup, /class="msg-user-time"/u)
-    assert.match(markup, /class="msg-user-copy"/u)
+    assert.match(markup, /class="msg-copy"/u)
   })
 
-  it('appends a copy button to the leader footer', () => {
+  it('puts the leader copy button in msg-meta rather than the footer', () => {
     const markup = renderLeader({
       live: false,
       parts: [{ type: 'text', text: 'reply **bold**' }],
     })
     const value = footer(markup)
-    assert.match(value, /class="lead-footer-copy"/u)
-    assert.match(value, /lucide-copy/u)
-    assert.match(value, /aria-label="复制"/u)
+    assert.doesNotMatch(value, /class="msg-copy"/u)
+    assert.doesNotMatch(value, /lead-footer-copy/u)
+    assert.match(markup, /class="msg-bubble-row"[\s\S]*class="msg-meta"[\s\S]*class="msg-copy"/u)
+    assert.match(markup, /class="msg-caption/u)
+    assert.doesNotMatch(markup, /class="lead-footer"/u)
+    assert.doesNotMatch(markup, /class="worked-for"/u)
+    assert.match(markup, /lucide-copy/u)
     assert.match(markup, /<strong>bold<\/strong>/u)
+    assert.match(markup, /class="bubble"/u)
+    assert.doesNotMatch(markup, /class="sup-body"/u)
+    assert.match(markup, /data-discussion-speaker="leader"/u)
+  })
+})
+
+describe('MessageItem IM chrome', () => {
+  it('wraps completed Leader text in a bubble and keeps process outside', () => {
+    const markup = renderLeader({
+      live: false,
+      parts: [
+        { type: 'reasoning', text: 'secret reasoning chain', state: 'done' } as never,
+        { type: 'text', text: '最终结果正文' },
+      ],
+    })
+    assert.doesNotMatch(markup, /class="worked-for"/u)
+    assert.match(markup, /class="bubble"[^>]*>[\s\S]*最终结果正文/u)
+    assert.doesNotMatch(markup, /class="bubble"[^>]*>[\s\S]*secret reasoning chain/u)
+    assert.match(markup, /class="msg-row is-lead-start"/u)
+  })
+
+  it('keeps live thinking outside the text bubble', () => {
+    const markup = renderLeader({
+      live: true,
+      parts: [
+        { type: 'reasoning', text: 'live reasoning', state: 'streaming' } as never,
+        { type: 'text', text: 'partial' },
+      ],
+    })
+    assert.match(markup, /class="bubble"[^>]*>[\s\S]*partial/u)
+    assert.doesNotMatch(markup, /class="bubble"[^>]*>[\s\S]*live reasoning/u)
+  })
+
+  it('marks consecutive same-role messages and never the first', () => {
+    const first = { id: 'u-a', role: 'user', parts: [{ type: 'text', text: 'one' }] }
+    const second = { id: 'u-b', role: 'user', parts: [{ type: 'text', text: 'two' }] }
+    const firstMarkup = renderUser(first as never, [first] as never)
+    const secondMarkup = renderUser(second as never, [first, second] as never)
+    assert.doesNotMatch(firstMarkup, /is-consecutive/u)
+    assert.match(secondMarkup, /class="msg user is-consecutive"/u)
+  })
+
+  it('does not mark a leader consecutive after a user message', () => {
+    const markup = renderLeader({ live: false, parts: [{ type: 'text', text: 'reply' }] })
+    assert.doesNotMatch(markup, /is-consecutive/u)
   })
 })
 

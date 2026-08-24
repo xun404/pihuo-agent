@@ -11,6 +11,8 @@ const chat = [
   '../styles/chat/01-messages-markdown.css',
   '../styles/chat/02-process-worker.css',
   '../styles/chat/03-approvals-errors-navigation.css',
+  '../styles/chat/04-group-discussion.css',
+  '../styles/chat/05-im-bubbles.css',
 ]
   .map(read)
   .join('\n')
@@ -79,4 +81,15 @@ test('worker inspector role colors use theme tokens', () => {
   assert.match(inspector, /\.team-role-tag\.tone-research[\s\S]*var\(--diff-syn-type/u)
   assert.doesNotMatch(inspector, /color:\s*#8a7a9a/u)
   assert.doesNotMatch(inspector, /color:\s*#6a8a9a/u)
+})
+
+test('IM bubbles use tokens without a default shadow or unregistered user hex', () => {
+  assert.match(chat, /--chat-leader-bubble-background:\s*color-mix\(in srgb, var\(--purple\)/u)
+  assert.match(
+    chat,
+    /\.msg\.leader \.bubble\s*\{[\s\S]*?background:\s*var\(--chat-leader-bubble-background\)/u,
+  )
+  assert.match(chat, /\.msg \.bubble\s*\{[\s\S]*?box-shadow:\s*none/u)
+  assert.match(chat, /\.discussion-speaker-avatar\.is-leader[\s\S]*?var\(--purple\)/u)
+  assert.doesNotMatch(chat, /#e7842d/u)
 })
