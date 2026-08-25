@@ -89,11 +89,18 @@ interface Props {
   /**
    * When this card represents a merged dispatchWorkerTool call, the task prompt
    * from the tool input is rendered as the first body section ("Input").
-   * Absent for standalone worker cards.
+   * Absent for standalone worker cards and for the process variant, which
+   * shows the assignment as speaker context instead.
    */
   taskPrompt?: string
-  /** Adds a participant label while the card is rendered in a group discussion. */
+  /** Adds a participant label while the card is rendered as a standalone card. */
   discussionMode?: boolean
+  /**
+   * `process` is the trail under a Worker speaker item: identity, assignment,
+   * and visible reply live on WorkerMessageItem. `card` keeps the legacy
+   * self-contained run card.
+   */
+  variant?: 'card' | 'process'
 }
 
 function formatLocations(locations: ApprovalItem['locations']): string | null {
@@ -190,6 +197,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
   registryIdentity,
   taskPrompt,
   discussionMode = false,
+  variant = 'card',
 }: Props) {
   const { t, locale } = useI18n()
   const [internalOpen, setInternalOpen] = useState(
@@ -220,6 +228,8 @@ export const WorkerRunCard = memo(function WorkerRunCard({
       ? state.workerName
       : (KIND_LABELS[state.workerKind] ?? state.workerName)
   const memberLabel = state.teamMemberName?.trim() || state.workerName || workerLabel
+  const processLayout = variant === 'process'
+  const discussionChrome = discussionMode || processLayout
   const discussionTask = (taskPrompt || state.task || '').trim()
   const statusText = STATUS_LABELS[status]?.zh ?? status
   const pendingApprovals = sortPendingApprovals(
@@ -285,11 +295,11 @@ export const WorkerRunCard = memo(function WorkerRunCard({
   return (
     <div
       className={`worker-run worker-run-${status}${isOpen ? ' is-open' : ''}${
-        discussionMode ? ' is-discussion-worker' : ''
-      }`}
-      data-discussion-worker={discussionMode || undefined}
+        discussionChrome ? ' is-discussion-worker' : ''
+      }${processLayout ? ' is-worker-process' : ''}`}
+      data-discussion-worker={discussionChrome || undefined}
     >
-      {discussionMode && (
+      {discussionMode && !processLayout && (
         <>
           <div className="discussion-message-author">
             <DiscussionSpeakerAvatar
@@ -339,7 +349,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
             <ChevronIcon />
           </span>
         </span>
-        {!discussionMode && (
+        {!discussionChrome && (
           <span className="name">
             {memberLabel}
             {isRunning && (
@@ -351,7 +361,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
             )}
           </span>
         )}
-        {state.role && !discussionMode && (
+        {state.role && !discussionChrome && (
           <span className="node-cap role-cap" data-role={state.role}>
             {ROLE_LABELS[state.role] ?? state.role}
           </span>
@@ -392,7 +402,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
           >
             {/* Input: taskPrompt from dispatch merge, or state.task from started/job hydrate.
                 Shown while running — do not wait for terminal output. */}
-            {(taskPrompt || state.task) && (
+            {!processLayout && (taskPrompt || state.task) && (
               <WorkerActionSection kind="input" label={t('workers.runInput')} marker="$">
                 {taskPrompt || state.task}
               </WorkerActionSection>
@@ -534,7 +544,7 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 </div>
               </WorkerActionSection>
             )}
-            {state.output && (
+            {!processLayout && state.output && (
               <WorkerActionSection
                 kind="output"
                 label={t('workers.runOutput')}

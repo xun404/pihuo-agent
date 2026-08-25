@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Copy, DatabaseCheck, DatabaseX } from 'lucide-react'
 import { useMotionPreference } from '../motion/MotionPreferenceProvider'
@@ -26,8 +26,9 @@ import { THINKING_INTENSITY_OPTIONS, type ThinkingIntensity } from '../lib/setti
 import { resolveModelThinkingIntensity } from '../lib/model-thinking-memory'
 import { formatChatError, serializeChatErrorForSticky } from '../lib/chat-errors'
 
-import { MessageItem } from './MessageItem'
-import { WorkerRunCard } from './WorkerRunCard'
+import { ChatMessageList } from './chat/ChatMessageList'
+import { ImComposerChrome, ImMentionPicker, ImQuoteDock } from './chat/ImComposerChrome'
+import { useImComposer } from '../hooks/useImComposer'
 import { ComposerStatusRow } from './chat/ComposerStatusRow'
 import {
   GroupDiscussionCoordinationStrip,
@@ -35,14 +36,13 @@ import {
   GroupDiscussionParticipantStack,
 } from './chat/GroupDiscussionHeader'
 import { TurnNavigator } from './chat/TurnNavigator'
-import { LeaderStepBudgetNotice } from './LeaderStepBudgetNotice'
 import { IconApprovals, IconArrowUp, IconCrew, IconEdit, IconFolder } from './Icons'
 import { RightPanel, type InspectorTab } from './RightPanel'
 import type { MemoryPanelError } from './MemoryPanel'
 import { BrandLockup } from './BrandLockup'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
-import { CompactionMarker, type CompactionMarkerData } from './CompactionMarker'
+import { type CompactionMarkerData } from './CompactionMarker'
 import { useToast } from './Toast'
 import { useSendShortcut } from '../hooks/useSendShortcut'
 import { useFollowUpBehavior } from '../hooks/useFollowUpBehavior'
@@ -61,12 +61,7 @@ import {
   seedAcpResetMarkers,
   seedWorkerStatesFromSnapshot,
 } from '../lib/worker-run-reducer'
-import {
-  projectWorkerCardPlacements,
-  buildToolCallJobIdMap,
-  type WorkerCardPlacement,
-} from '../lib/worker-card-placement'
-import { setRecordKey } from '../lib/chat-state'
+import { projectWorkerCardPlacements, type WorkerCardPlacement } from '../lib/worker-card-placement'
 import { deriveGroupDiscussionState } from '../lib/group-discussion'
 import type { WorkerRunEvent, WorkerRunState, LeaderStepBudgetEvent } from '@pihuo-agent/shared'
 import { QueueChips } from './chat/QueueChips'
@@ -217,6 +212,10 @@ export function ChatPanel({
   const { followUpBehavior } = useFollowUpBehavior()
   const { composing, onCompositionStart, onCompositionEnd } = useComposing()
   const [input, setInput] = useState('')
+  const im = useImComposer({
+    teamMembers,
+    leaderName: t('chat.discussionLeader'),
+  })
   /** Tracks the initialInput value already consumed, so we apply each text once. */
   const consumedInitialInputRef = useRef<string | undefined>(undefined)
   /** When initialInput arrives with autoSendInitialInput, the text is staged
@@ -879,8 +878,6 @@ export function ChatPanel({
     [messages, workerStates],
   )
 
-  const toolCallJobIds = useMemo(() => buildToolCallJobIdMap(messages as never), [messages])
-
   const placementByJobId = useMemo(() => {
     const map = new Map<string, WorkerCardPlacement>()
     for (const p of placements) map.set(p.jobId, p)
@@ -1049,7 +1046,7 @@ export function ChatPanel({
     // update cards without always rewriting `messages`.
     pinMessagesToBottom()
     requestAnimationFrame(() => pinMessagesToBottom())
-  }, [messages, status, isActive, workerTailSig, hasRunningWorker, tick, pinMessagesToBottom])
+  }, [messages, status, isActive, workerTailSig, hasRunningWorker, pinMessagesToBottom])
 
   // While following the tail, any content-height growth (approval card expand,
   // tool list, thinking open) must re-pin — effect deps alone miss CSS/layout
@@ -1488,18 +1485,19 @@ export function ChatPanel({
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const text = input.trim()
-    if (!text) return
+    const typed = input.trim()
+    if (!typed) return
 
     // /compact slash command: trigger context compression inline. Unlike a
     // normal send this is allowed while busy (compression is a memory-thread
     // op, independent of any in-flight leader turn). Don't transmit the slash
     // text to the model — clear the composer and run the compressor.
-    if (text === '/compact' || text === '/compress') {
+    if (typed === '/compact' || typed === '/compress') {
       setInput('')
       void runCompressContext()
       return
     }
+    const text = im.applyChrome(typed)
     const nativeEvent = e.nativeEvent as unknown as { ctrlKey?: boolean; metaKey?: boolean }
     const result = followUp.submit(text, {
       behavior: followUpBehavior,
@@ -1508,6 +1506,7 @@ export function ChatPanel({
     })
     if (result === 'wait' || result === 'blocked_model') return
     setInput('')
+    im.clearQuote()
   }
 
   /**
@@ -1686,147 +1685,56 @@ export function ChatPanel({
     [metaOpen],
   )
 
-  // 消息列表 JSX 缓存：只在真正影响渲染的数据变化时重建（不含 input）。
-  // 按键（setInput）时所有 deps 引用都不变 → 返回缓存 JSX → React 完全跳过
-  // 66 个 MessageItem 的 element 创建 + reconciliation。根治输入卡顿。
-  const messageList = useMemo(() => {
-    const lastAssistantId = (() => {
-      for (let k = messages.length - 1; k >= 0; k--) {
-        if (messages[k]!.role === 'assistant') return messages[k]!.id
-      }
-      return undefined
-    })()
-    return (
-      <>
-        {historyLoading && messages.length === 0 && (
-          <div className="chat-history-loading">{t('app.loading')}</div>
-        )}
-        {messages.map((message, msgIdx) => (
-          <Fragment key={message.id}>
-            <MessageItem
-              message={message}
-              msgIdx={msgIdx}
-              messages={messages}
-              busy={busy}
-              lastAssistantId={lastAssistantId}
-              isTailMessage={lastMessage?.id === message.id}
-              showErrorInThisBubble={
-                errorBelongsInLastAssistant &&
-                lastMessage?.id === message.id &&
-                message.role !== 'user'
-              }
-              t={t}
-              locale={locale}
-              models={models}
-              selectedModel={selectedModel}
-              thinkingIntensity={thinkingIntensity}
-              modelShort={modelShort}
-              thinkShort={thinkShort}
-              metaOpen={metaOpen}
-              setMetaOpen={setMetaOpen}
-              tick={tick}
-              placementByJobId={placementByJobId}
-              toolCallJobIds={toolCallJobIds}
-              hasRunningWorker={hasRunningWorker}
-              resolving={resolving}
-              onResolveApproval={onResolveApproval}
-              onResetContext={onResetContext}
-              registryIdentityFor={registryIdentityFor}
-              isMetaOpen={isMetaOpen}
-              errorBlock={errorBlock}
-              timingEpoch={timingEpoch}
-              turnTimingRef={turnTimingRef}
-              toolStartTimes={toolStartTimes}
-              toolDurations={toolDurations}
-              discussionMode={isGroupDiscussion}
-            />
-            {/* Compaction markers rendered inline at the position they were
-                triggered (after the message whose id matches afterMessageId). */}
-            {compactionMarkers
-              .filter((m) => m.afterMessageId === message.id)
-              .map((m) => (
-                <CompactionMarker key={m.id} status={m.status} freedTokens={m.freedTokens} />
-              ))}
-          </Fragment>
-        ))}
-        {/* Markers with no anchor (afterMessageId null/undefined) render at the
-            very end of the stream — e.g. a compress triggered when messages
-            were empty, or anchored to an id no longer present after a reload. */}
-        {compactionMarkers
-          .filter((m) => !m.afterMessageId || !messages.some((msg) => msg.id === m.afterMessageId))
-          .map((m) => (
-            <CompactionMarker key={m.id} status={m.status} freedTokens={m.freedTokens} />
-          ))}
-        {/* 尚无 assistant 回复时（失败在首包前）：与 Leader 扁平样式一致，无 sup-card 旧壳 */}
-        {displayError && !errorBelongsInLastAssistant && (
-          <div className="msg leader msg-error-standalone">{errorBlock}</div>
-        )}
-        {livePlacements.map((wp) => (
-          <WorkerRunCard
-            key={wp.jobId}
-            state={wp.state}
-            registryIdentity={registryIdentityFor(wp.state)}
-            open={isMetaOpen(
-              wp.jobId,
-              wp.state.status === 'running' || wp.state.status === 'pending_approval',
-            )}
-            onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, wp.jobId, o))}
-            tick={tick}
-            resolving={resolving}
-            onResolveApproval={onResolveApproval}
-            onResetContext={onResetContext}
-            discussionMode={isGroupDiscussion}
-          />
-        ))}
-        {activeBudgetEvent && (
-          <LeaderStepBudgetNotice
-            event={activeBudgetEvent}
-            canContinue={canContinueBudget}
-            busy={busy}
-            onContinue={handleContinueBudget}
-            continueLabel={t('chat.continueTask')}
-            description={t('chat.budgetExhausted', {
-              used: String(activeBudgetEvent.data.usedSteps),
-              max: String(activeBudgetEvent.data.maxSteps),
-            })}
-          />
-        )}
-        <div ref={bottomRef} />
-      </>
-    )
-  }, [
-    messages,
-    historyLoading,
-    busy,
-    lastMessage,
-    errorBelongsInLastAssistant,
-    displayError,
-    errorBlock,
-    t,
-    locale,
-    models,
-    selectedModel,
-    thinkingIntensity,
-    modelShort,
-    thinkShort,
-    metaOpen,
-    setMetaOpen,
-    tick,
-    placementByJobId,
-    toolCallJobIds,
-    hasRunningWorker,
-    resolving,
-    onResolveApproval,
-    onResetContext,
-    registryIdentityFor,
-    isMetaOpen,
-    timingEpoch,
-    livePlacements,
-    activeBudgetEvent,
-    canContinueBudget,
-    handleContinueBudget,
-    isGroupDiscussion,
-  ])
+  const messageList = (
+    <ChatMessageList
+      messages={messages}
+      historyLoading={historyLoading}
+      busy={busy}
+      discussionMode={isGroupDiscussion}
+      lastMessageId={lastMessage?.id}
+      errorBelongsInLastAssistant={errorBelongsInLastAssistant}
+      displayError={displayError}
+      errorBlock={errorBlock}
+      models={models}
+      selectedModel={selectedModel}
+      thinkingIntensity={thinkingIntensity}
+      modelShort={modelShort}
+      thinkShort={thinkShort}
+      metaOpen={metaOpen}
+      setMetaOpen={setMetaOpen}
+      tick={tick}
+      placementByJobId={placementByJobId}
+      livePlacements={livePlacements}
+      resolving={resolving}
+      onResolveApproval={onResolveApproval}
+      onResetContext={onResetContext}
+      registryIdentityFor={registryIdentityFor}
+      isMetaOpen={isMetaOpen}
+      timingEpoch={timingEpoch}
+      turnTimingRef={turnTimingRef}
+      toolStartTimes={toolStartTimes}
+      toolDurations={toolDurations}
+      compactionMarkers={compactionMarkers}
+      activeBudgetEvent={activeBudgetEvent}
+      canContinueBudget={canContinueBudget}
+      onContinueBudget={handleContinueBudget}
+      bottomRef={bottomRef}
+      mentionNames={im.mentionNames}
+      onMentionClick={(name) => {
+        const root = messagesScrollRef.current
+        if (!root) return
+        const rows = [...root.querySelectorAll('.msg.worker-speaker')]
+        const hit = rows.reverse().find(
+          (el) => el.querySelector('.discussion-message-name')?.textContent?.trim() === name,
+        )
+        if (hit instanceof HTMLElement) {
+          followTailRef.current = false
+          hit.scrollIntoView({ block: 'center' })
+        }
+      }}
+      onQuote={im.setQuote}
+    />
+  )
 
   // Task list snapshot for composer status row
   const taskSnapshot = useMemo(() => findLatestTaskList(messages), [messages])
@@ -1872,6 +1780,7 @@ export function ChatPanel({
         onReturnToInput={returnQueuedMessageToInput}
         onSendNow={followUp.sendNow}
       />
+      <ImQuoteDock quote={im.quote} onClear={im.clearQuote} closeLabel={t('common.cancel')} />
       <form className="composer-card" onSubmit={onSubmit}>
         <div className="context-bar">
           {project && (
@@ -1889,27 +1798,47 @@ export function ChatPanel({
             />
           )}
         </div>
-        <textarea
-          className="composer-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={
-            hasMessages
-              ? t('chat.placeholder', {
-                  shortcut: sendShortcut === 'enter' ? '↵' : '⌘↵',
-                })
-              : t('chat.placeholderHome')
+        <ImComposerChrome
+          mentionPicker={
+            <ImMentionPicker
+              open={Boolean(im.queryAt(input) && im.visibleCandidates(input).length > 0)}
+              candidates={im.visibleCandidates(input)}
+              activeIndex={im.activeIndex}
+              onPick={(candidate) => {
+                const next = im.pickMention(input, candidate.name)
+                setInput(next.text)
+              }}
+              title={t('chat.mentionPicker')}
+            />
           }
-          rows={hasMessages ? 2 : 3}
-          onKeyDown={(e) => {
-            if (isComposerSendKey(e, sendShortcut, composing())) {
-              e.preventDefault()
-              onSubmit(e)
+        >
+          <textarea
+            className="composer-input"
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value)
+              im.onCaret(e.target.selectionStart ?? e.target.value.length)
+            }}
+            onSelect={(e) => im.onCaret(e.currentTarget.selectionStart ?? 0)}
+            placeholder={
+              hasMessages
+                ? t('chat.placeholder', {
+                    shortcut: sendShortcut === 'enter' ? '↵' : '⌘↵',
+                  })
+                : t('chat.placeholderHome')
             }
-          }}
-          onCompositionStart={onCompositionStart}
-          onCompositionEnd={onCompositionEnd}
-        />
+            rows={hasMessages ? 2 : 3}
+            onKeyDown={(e) => {
+              if (im.onKeyDown(e, input, setInput)) return
+              if (isComposerSendKey(e, sendShortcut, composing())) {
+                e.preventDefault()
+                onSubmit(e)
+              }
+            }}
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={onCompositionEnd}
+          />
+        </ImComposerChrome>
         <div className="composer-tools">
           <ComposerToolbar
             permissionMode={permissionMode}

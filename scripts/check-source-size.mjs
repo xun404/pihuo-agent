@@ -66,6 +66,7 @@ function trackedAndUntrackedFiles() {
 function isProductionSource(file) {
   if (!SOURCE_EXTENSIONS.has(extname(file))) return false
   if (GENERATED_FILES.has(file) || file.includes('/bundled/')) return false
+  if (file.startsWith('docs/')) return false
   if (EXCLUDED_PATH_PARTS.some((part) => file.includes(part))) return false
   return !/\.(?:test|spec)\.[^.]+$/u.test(file)
 }

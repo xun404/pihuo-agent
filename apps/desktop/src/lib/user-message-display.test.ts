@@ -40,6 +40,20 @@ describe('user-message-display', () => {
     assert.equal(displayUserMessageText(wire), '修一下登录')
   })
 
+  it('strips quote chrome from visible text and keeps the quote payload', () => {
+    const raw = `[quote speaker=worker speakerName=OpenCode job=job-1]
+Hey. 我是 OpenCode。
+[/quote]
+
+请先列一下当前仓库结构。`
+    const parsed = parseRouterUserMessage(raw)
+    assert.equal(parsed.text, '请先列一下当前仓库结构。')
+    assert.equal(parsed.quote?.speaker, 'worker')
+    assert.equal(parsed.quote?.speakerName, 'OpenCode')
+    assert.match(parsed.quote?.text ?? '', /我是 OpenCode/)
+    assert.doesNotMatch(parsed.text, /\[quote/)
+  })
+
   it('enriches last user message parts for wire without double-wrapping', () => {
     const msg = {
       role: 'user' as const,

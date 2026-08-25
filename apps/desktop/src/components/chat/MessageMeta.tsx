@@ -6,14 +6,18 @@ export function MessageMeta({
   copied,
   copyAriaLabel,
   onCopy,
+  quoteLabel,
+  onQuote,
 }: {
   timeLabel?: string
   copyText?: string
   copied: boolean
   copyAriaLabel: string
   onCopy: () => void
+  quoteLabel?: string
+  onQuote?: () => void
 }) {
-  if (!timeLabel && !copyText) return null
+  if (!timeLabel && !copyText && !onQuote) return null
   return (
     <div className="msg-meta">
       {timeLabel ? <span className="msg-user-time">{timeLabel}</span> : null}
@@ -26,6 +30,11 @@ export function MessageMeta({
           title={copyAriaLabel}
         >
           {copied ? <Check size={13} /> : <Copy size={13} />}
+        </button>
+      ) : null}
+      {onQuote && quoteLabel ? (
+        <button type="button" className="msg-quote" onClick={onQuote}>
+          {quoteLabel}
         </button>
       ) : null}
     </div>

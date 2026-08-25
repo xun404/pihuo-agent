@@ -37,6 +37,31 @@ const MODE_PREFIXES: { re: RegExp; mode: string }[] = [
 
 const CONTEXT_BLOCK = /\n\n\[context\][^\n]*\s*$/i
 const CONTEXT_LINE = /(?:^|\n)\[context\]\s*([^\n]*)\s*$/i
+const QUOTE_BLOCK = /^\[quote\s+([^\]]*)\]\n([\s\S]*?)\n\[\/quote\](?:\n+|$)/i
+
+export type UserQuoteChrome = {
+  speaker: string
+  speakerName?: string
+  job?: string
+  text: string
+}
+
+function parseQuoteAttrs(raw: string): Pick<UserQuoteChrome, 'speaker' | 'speakerName' | 'job'> {
+  const take = (key: string) => raw.match(new RegExp(`\\b${key}=([^\\s\\]]+)`, 'i'))?.[1]
+  return {
+    speaker: take('speaker') || 'leader',
+    speakerName: take('speakerName'),
+    job: take('job'),
+  }
+}
+
+export function wrapQuoteChrome(quote: UserQuoteChrome, body: string): string {
+  const attrs = [`speaker=${quote.speaker}`]
+  if (quote.speakerName) attrs.push(`speakerName=${quote.speakerName.replace(/\s+/g, '_')}`)
+  if (quote.job) attrs.push(`job=${quote.job}`)
+  const safe = quote.text.replace(/\[\/quote\]/gi, '[ /quote ]').trim()
+  return `[quote ${attrs.join(' ')}]\n${safe}\n[/quote]\n\n${body}`
+}
 
 function parseContextLine(line: string): RouterMessageMeta {
   const meta: RouterMessageMeta = {}
@@ -60,11 +85,13 @@ function parseContextLine(line: string): RouterMessageMeta {
 export function parseRouterUserMessage(raw: string): {
   text: string
   meta: RouterMessageMeta
+  quote?: UserQuoteChrome
 } {
   if (!raw) return { text: '', meta: {} }
 
   let s = raw
   const meta: RouterMessageMeta = {}
+  let quote: UserQuoteChrome | undefined
 
   const ctxLine = s.match(CONTEXT_LINE)
   if (ctxLine?.[1]) {
@@ -91,7 +118,13 @@ export function parseRouterUserMessage(raw: string): {
   s = s.replace(CONTEXT_BLOCK, '')
   s = s.replace(CONTEXT_LINE, '')
 
-  return { text: s.trim(), meta }
+  const quoted = s.match(QUOTE_BLOCK)
+  if (quoted) {
+    quote = { ...parseQuoteAttrs(quoted[1] ?? ''), text: (quoted[2] ?? '').trim() }
+    s = s.slice(quoted[0].length)
+  }
+
+  return { text: s.trim(), meta, quote }
 }
 
 /** Display-only helper */

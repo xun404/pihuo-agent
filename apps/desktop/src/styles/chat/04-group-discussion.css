@@ -223,6 +223,11 @@
   background: color-mix(in srgb, var(--blue) 74%, var(--bg-surface));
   color: var(--text-inv, #fff);
 }
+.group-member-avatar[data-role='general'],
+.discussion-speaker-avatar[data-role='general'] {
+  background: color-mix(in srgb, var(--blue) 74%, var(--bg-surface));
+  color: var(--text-inv, #fff);
+}
 .group-member-agent-badge,
 .discussion-message-agent-badge {
   position: absolute;
@@ -265,8 +270,13 @@
   gap: 7px;
 }
 .chat-panel.is-group-discussion .msg.user + .msg.leader,
+.chat-panel.is-group-discussion .msg.user + .msg.worker-speaker,
 .chat-panel.is-group-discussion .msg.leader + .msg.user,
-.chat-panel.is-group-discussion .msg.leader + .msg.leader {
+.chat-panel.is-group-discussion .msg.leader + .msg.leader,
+.chat-panel.is-group-discussion .msg.leader + .msg.worker-speaker,
+.chat-panel.is-group-discussion .msg.worker-speaker + .msg.user,
+.chat-panel.is-group-discussion .msg.worker-speaker + .msg.leader,
+.chat-panel.is-group-discussion .msg.worker-speaker + .msg.worker-speaker {
   margin-top: 0;
 }
 .discussion-date-divider {
@@ -299,10 +309,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 50%;
   background: var(--bg-hover);
   color: var(--text-2);
   line-height: 0;
@@ -335,15 +345,6 @@
 .discussion-message-identity .discussion-message-time {
   font-weight: var(--fw-regular);
 }
-.discussion-leader-flow-item,
-.discussion-worker-flow-item {
-  display: flex;
-  flex-direction: column;
-}
-.discussion-leader-flow-item {
-  width: 100%;
-}
-
 /* A dispatch is Leader-owned process content. It remains a durable tool row,
    but now lives inside the same Leader stack instead of becoming a detached
    card. The Worker it starts remains a separate participant item. */
@@ -378,10 +379,6 @@
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
 }
-.discussion-worker-flow-item {
-  width: 100%;
-}
-
 /* Full Todo snapshot. Normal chat keeps its compact in-progress process rows. */
 .discussion-task-card {
   width: 100%;

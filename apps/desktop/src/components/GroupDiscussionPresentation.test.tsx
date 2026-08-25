@@ -27,7 +27,6 @@ describe('Group discussion presentation', () => {
         messages={[]}
         busy={false}
         lastAssistantId={undefined}
-        isTailMessage
         showErrorInThisBubble={false}
         t={t as never}
         locale="en"
@@ -38,12 +37,6 @@ describe('Group discussion presentation', () => {
         thinkShort=""
         metaOpen={{}}
         setMetaOpen={() => undefined}
-        tick={0}
-        placementByJobId={new Map()}
-        toolCallJobIds={new Map()}
-        hasRunningWorker={false}
-        resolving={{}}
-        registryIdentityFor={() => undefined}
         isMetaOpen={() => false}
         errorBlock={null}
         timingEpoch={0}

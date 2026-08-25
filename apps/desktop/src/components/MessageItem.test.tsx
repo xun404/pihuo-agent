@@ -34,6 +34,12 @@ const STRINGS: Partial<Record<string, string>> = {
   'chat.errorCopied': '已复制',
   'chat.discussionYou': '你',
   'chat.discussionLeader': 'Leader',
+  'chat.quote': '引用',
+  'chat.activityThought': '已思考',
+  'chat.activityThoughtLive': '思考中',
+  'chat.activityTool': '调用了 {name}',
+  'chat.activityTools': '{count} 个工具',
+  'chat.activityDispatched': '派给 {name}',
 }
 
 const t: MessageItemProps['t'] = (key, vars) => formatMessage(STRINGS[key] ?? key, vars)
@@ -41,7 +47,6 @@ const t: MessageItemProps['t'] = (key, vars) => formatMessage(STRINGS[key] ?? ke
 function renderLeader(options: {
   live: boolean
   parts: LeaderViewPart[]
-  placementByJobId?: MessageItemProps['placementByJobId']
   discussionMode?: boolean
 }): string {
   const messages = [
@@ -78,7 +83,6 @@ function renderLeader(options: {
         messages={messages}
         busy={options.live}
         lastAssistantId="a1"
-        isTailMessage
         showErrorInThisBubble={false}
         t={t}
         locale="zh"
@@ -89,12 +93,6 @@ function renderLeader(options: {
         thinkShort="高"
         metaOpen={{}}
         setMetaOpen={() => undefined}
-        tick={0}
-        placementByJobId={options.placementByJobId ?? new Map()}
-        toolCallJobIds={new Map()}
-        hasRunningWorker={false}
-        resolving={{}}
-        registryIdentityFor={() => undefined}
         isMetaOpen={(_key, autoOpen) => autoOpen}
         errorBlock={null}
         timingEpoch={0}
@@ -118,7 +116,6 @@ function renderUser(
       messages={messages}
       busy={false}
       lastAssistantId={undefined}
-      isTailMessage
       showErrorInThisBubble={false}
       t={t}
       locale="zh"
@@ -129,12 +126,6 @@ function renderUser(
       thinkShort=""
       metaOpen={{}}
       setMetaOpen={() => undefined}
-      tick={0}
-      placementByJobId={new Map()}
-      toolCallJobIds={new Map()}
-      hasRunningWorker={false}
-      resolving={{}}
-      registryIdentityFor={() => undefined}
       isMetaOpen={() => false}
       errorBlock={null}
       timingEpoch={0}
@@ -199,8 +190,8 @@ describe('MessageItem Leader footer', () => {
   })
 })
 
-describe('MessageItem Worked-for collapse', () => {
-  it('folds process trail under 已处理 and keeps final text outside when turn is done', () => {
+describe('MessageItem process quote', () => {
+  it('puts completed process in an in-bubble quote and keeps the body text', () => {
     const markup = renderLeader({
       live: false,
       parts: [
@@ -215,12 +206,13 @@ describe('MessageItem Worked-for collapse', () => {
         { type: 'text', text: '最终结果正文' },
       ],
     })
-    assert.match(markup, /class="worked-for"/u)
-    assert.match(markup, /已处理 1m 13s/u)
+    assert.match(markup, /im-activity-quote/u)
+    assert.match(markup, /已思考/u)
+    assert.match(markup, /调用了 bash/u)
     assert.match(markup, /最终结果正文/u)
-    // Default collapsed: process body unmounted
     assert.doesNotMatch(markup, /secret reasoning chain/u)
-    assert.doesNotMatch(markup, /worked-for is-open/u)
+    assert.doesNotMatch(markup, /thinking-block is-open/u)
+    assert.doesNotMatch(markup, /class="worked-for"/u)
   })
 
   it('does not show 已处理 on a completed text-only assistant turn', () => {
@@ -233,7 +225,7 @@ describe('MessageItem Worked-for collapse', () => {
     assert.match(markup, /只有最终正文/u)
   })
 
-  it('keeps process rows visible in document order while the turn is live', () => {
+  it('keeps live reasoning behind a 思考中 quote instead of showing the chain', () => {
     const markup = renderLeader({
       live: true,
       parts: [
@@ -242,11 +234,12 @@ describe('MessageItem Worked-for collapse', () => {
       ],
     })
     assert.doesNotMatch(markup, /class="worked-for"/u)
-    assert.match(markup, /live reasoning/u)
+    assert.match(markup, /思考中/u)
     assert.match(markup, /partial/u)
+    assert.doesNotMatch(markup, /live reasoning/u)
   })
 
-  it('keeps Leader text and tool records in one Leader surface instead of process dividers', () => {
+  it('keeps Leader text in one bubble and process as an in-bubble quote', () => {
     const markup = renderLeader({
       live: false,
       discussionMode: true,
@@ -263,72 +256,64 @@ describe('MessageItem Worked-for collapse', () => {
       ],
     })
 
-    assert.equal((markup.match(/class="bubble"/g) ?? []).length, 2)
-    assert.match(markup, /class="bubble"[^>]*>[\s\S]*先确认任务边界。/u)
-    assert.match(markup, /class="bubble"[^>]*>[\s\S]*接着等待 Worker 返回。/u)
-    assert.match(markup, /chat-tool-worker-stack/u)
-    assert.match(
-      markup,
-      /class="bubble"[\s\S]*?先确认任务边界。[\s\S]*?<\/div><\/div><\/div><div class="chat-tool-worker-stack"/u,
-    )
-    assert.match(markup, /discussion-leader-flow-item/u)
+    assert.equal((markup.match(/class="bubble"/g) ?? []).length, 1)
+    assert.match(markup, /im-activity-quote/u)
+    assert.match(markup, /调用了 bash|1 个工具/u)
+    assert.match(markup, /先确认任务边界。/u)
+    assert.match(markup, /接着等待 Worker 返回。/u)
+    assert.doesNotMatch(markup, /chat-tool-worker-stack/u)
+    assert.match(markup, /class="msg-row is-lead-start"/u)
     assert.doesNotMatch(markup, /discussion-leader-card/u)
     assert.doesNotMatch(markup, /class="sup-body"/u)
     assert.doesNotMatch(markup, /discussion-process-divider/u)
     assert.doesNotMatch(markup, /class="worked-for/u)
-    assert.doesNotMatch(markup, /已处理 1m 13s/u)
     assert.doesNotMatch(markup, /class="lead-footer"/u)
     assert.doesNotMatch(markup, /class="msg-caption"/u)
     assert.equal((markup.match(/class="msg-meta"/g) ?? []).length, 1)
-    assert.ok(
-      markup.indexOf('先确认任务边界。') < markup.indexOf('bash') &&
-        markup.indexOf('bash') < markup.indexOf('接着等待 Worker 返回。'),
-    )
   })
 
-  it('keeps an active Worker visible when its card is anchored to the dispatch tool row', () => {
-    const placementByJobId: MessageItemProps['placementByJobId'] = new Map([
-      [
-        'job-1',
-        {
-          jobId: 'job-1',
-          source: 'message',
-          messageIndex: 1,
-          partIndex: 0,
-          state: {
-            jobId: 'job-1',
-            workerName: 'Implementation Worker',
-            workerKind: 'codex',
-            reusedSession: false,
-            sequence: 0,
-            output: '',
-            status: 'running',
-            truncated: false,
-            startedAt: 0,
-            lastDeltaAt: 0,
-            pendingApprovals: [],
-          },
-        },
-      ],
-    ])
+  it('shows dispatch as a quote without an @ chip and does not nest a Worker card', () => {
     const markup = renderLeader({
       live: false,
+      discussionMode: true,
       parts: [
         {
-          type: 'tool-dispatch-worker',
+          type: 'tool-dispatch-team-member',
           toolCallId: 'dispatch-1',
           state: 'output-available',
-          input: { task: '实现群组讨论' },
+          input: { task: '实现群组讨论', teamMemberName: 'OpenCode' },
+          output: { jobId: 'job-1' },
+        } as never,
+        { type: 'text', text: '已派 OpenCode 去打招呼。' },
+      ],
+    })
+
+    assert.match(markup, /im-activity-quote/u)
+    assert.match(markup, /派给 OpenCode/u)
+    assert.doesNotMatch(markup, /@OpenCode/u)
+    assert.doesNotMatch(markup, /tool-row/u)
+    assert.match(markup, /class="msg leader"/u)
+    assert.doesNotMatch(markup, /worker-run/u)
+    assert.doesNotMatch(markup, /discussion-worker-flow-item/u)
+  })
+
+  it('does not render an empty Leader bubble when the fragment is only process', () => {
+    const markup = renderLeader({
+      live: false,
+      discussionMode: true,
+      parts: [
+        {
+          type: 'tool-dispatch-team-member',
+          toolCallId: 'dispatch-1',
+          state: 'output-available',
+          input: { task: '打招呼', teamMemberName: 'OpenCode' },
           output: { jobId: 'job-1' },
         } as never,
       ],
-      placementByJobId,
     })
-
-    assert.match(markup, /worked-for is-open/u)
-    assert.match(markup, /worker-run worker-run-running is-open/u)
-    assert.match(markup, /worker-card-head/u)
-    assert.match(markup, /tool-row/u)
+    assert.equal(markup, '')
+    assert.doesNotMatch(markup, /class="bubble"/u)
+    assert.doesNotMatch(markup, /im-activity-quote/u)
   })
 })
 
@@ -377,6 +362,43 @@ describe('MessageItem task-list snapshots', () => {
 })
 
 describe('MessageItem message actions', () => {
+  it('renders @mentions as chips in the user bubble body', () => {
+    const message = {
+      id: 'u-mention',
+      role: 'user',
+      parts: [{ type: 'text', text: '请 @OpenCode 看一下登录页。' }],
+    } as never
+    const markup = renderToStaticMarkup(
+      <MessageItem
+        message={message}
+        msgIdx={0}
+        messages={[message]}
+        busy={false}
+        lastAssistantId={undefined}
+        showErrorInThisBubble={false}
+        t={t}
+        locale="zh"
+        models={[]}
+        selectedModel=""
+        thinkingIntensity="off"
+        modelShort=""
+        thinkShort=""
+        metaOpen={{}}
+        setMetaOpen={() => undefined}
+        isMetaOpen={() => false}
+        errorBlock={null}
+        timingEpoch={0}
+        turnTimingRef={{ current: new Map() }}
+        toolStartTimes={{ current: new Map() }}
+        toolDurations={{ current: new Map() }}
+        mentionNames={['OpenCode']}
+      />,
+    )
+    assert.match(markup, /class="im-mention"/u)
+    assert.match(markup, /@OpenCode/u)
+    assert.match(markup, /请 /u)
+  })
+
   it('renders user bubble with send time and a hover copy button', () => {
     const message = {
       id: 'u2',

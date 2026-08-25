@@ -84,12 +84,20 @@ test('worker inspector role colors use theme tokens', () => {
 })
 
 test('IM bubbles use tokens without a default shadow or unregistered user hex', () => {
-  assert.match(chat, /--chat-leader-bubble-background:\s*color-mix\(in srgb, var\(--purple\)/u)
+  assert.match(chat, /--chat-peer-bubble-background:\s*color-mix\(in srgb, var\(--text-1\)/u)
+  assert.match(chat, /--chat-self-bubble-background:\s*color-mix\(in srgb, var\(--green\)/u)
   assert.match(
     chat,
-    /\.msg\.leader \.bubble\s*\{[\s\S]*?background:\s*var\(--chat-leader-bubble-background\)/u,
+    /\.msg\.leader \.bubble,\s*\.msg\.worker-speaker \.bubble\s*\{[\s\S]*?background:\s*var\(--chat-peer-bubble-background\)/u,
+  )
+  assert.match(
+    chat,
+    /\.msg\.user \.bubble\s*\{[\s\S]*?background:\s*var\(\s*--chat-self-bubble-background/u,
   )
   assert.match(chat, /\.msg \.bubble\s*\{[\s\S]*?box-shadow:\s*none/u)
+  assert.match(chat, /\.discussion-speaker-avatar\s*\{[\s\S]*?border-radius:\s*50%/u)
   assert.match(chat, /\.discussion-speaker-avatar\.is-leader[\s\S]*?var\(--purple\)/u)
+  assert.match(chat, /\.discussion-speaker-avatar\[data-role='general'\][\s\S]*?var\(--blue\)/u)
+  assert.match(chat, /\.msg-row\s*\{[\s\S]*?flex-direction:\s*row/u)
   assert.doesNotMatch(chat, /#e7842d/u)
 })

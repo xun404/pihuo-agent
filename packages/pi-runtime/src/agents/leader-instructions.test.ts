@@ -60,6 +60,9 @@ describe('Leader instructions', () => {
     assert.match(instructions, /task_check/u)
     assert.match(instructions, /execution order/u)
     assert.match(instructions, /\[<role type>\]/u)
+    assert.match(instructions, /@MemberName/u)
+    assert.match(instructions, /dispatch-team-member/u)
+    assert.match(instructions, /never open a direct user-to-worker ACP session/u)
   })
 
   it('limits the Leader to role-level coordination and faithful handoffs', () => {
@@ -165,15 +168,28 @@ describe('Leader instructions', () => {
     )
   })
 
+  it('tells the Leader not to quote Worker replies that chat already shows as Worker messages', () => {
+    const instructions = buildLeaderInstructions({})
+
+    assert.match(
+      instructions,
+      /Chat already shows the Worker's reply as that Worker's own message/u,
+    )
+    assert.match(
+      instructions,
+      /do not quote, blockquote, paraphrase, or wrap it as "X 已回复" \/ "X replied"/u,
+    )
+    assert.doesNotMatch(instructions, /WorkerRunCard in chat already shows the full raw output/u)
+    assert.match(instructions, /Chat already shows that Worker's reply as their own message/u)
+  })
+
   it('uses a pragmatic focused tone and limits unnecessary emoji without banning them', () => {
     const instructions = buildLeaderInstructions({})
 
     assert.match(instructions, /## Tone & communication style/u)
     assert.match(instructions, /Be pragmatic, concise, direct, and focused/u)
-    assert.match(
-      instructions,
-      /Lead with status, decisions, blockers, and Worker-provided evidence/u,
-    )
+    assert.match(instructions, /Lead with status, decisions, and blockers/u)
+    assert.match(instructions, /Do not repeat Worker-visible replies/u)
     assert.match(instructions, /Use emoji sparingly/u)
     assert.match(instructions, /not a prohibition/u)
   })

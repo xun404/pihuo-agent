@@ -1,18 +1,10 @@
 /**
- * Renders a single message (user bubble / Supervisor card).
- *
- * Extracted from ChatPanel and wrapped in React.memo with a custom areEqual —
- * so when typing in the composer (setInput) re-renders ChatPanel, this
- * component skips re-rendering as long as the message itself (message
- * reference, busy, workerStates, metaOpen, and other core data) is unchanged.
- * This fixes the "typing more makes it slower" issue — every keystroke used to
- * rebuild ~340 lines of JSX.
- *
- * areEqual deliberately ignores unstable props (t / callbacks / derived
- * functions): they get fresh references on each keystroke, but their output is
- * unchanged; only core data changes warrant a re-render.
+ * One chat message: user bubble or Leader speaker.
+ * Worker speech is a sibling timeline item, not a child of this tree.
+ * memo + areEqual skip composer keystroke rerenders.
  */
 import {
+  isValidElement,
   memo,
   useCallback,
   useEffect,
@@ -26,20 +18,28 @@ import {
   type SetStateAction,
 } from 'react'
 import type { LeaderViewMessage } from '../lib/leader-chat-view'
-import type { WorkerRunEvent, WorkerRunState, ApprovalItem } from '@pihuo-agent/shared'
+
 import { MarkdownContent } from './MarkdownContent'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { ThinkingBlock } from './chat/ThinkingBlock'
-import { WorkedForSection } from './chat/WorkedForSection'
+
 import { DiscussionSpeakerAvatar } from './chat/GroupParticipantAvatar'
 import { MessageMeta } from './chat/MessageMeta'
-import { paintLeaderSequence, partitionTrailingBubbles } from './chat/paintLeaderSequence'
-import { WorkerRunCard } from './WorkerRunCard'
+import { paintLeaderSequence } from './chat/paintLeaderSequence'
 import { TaskListCard, type TaskItem } from './chat/TaskListCard'
 import { IconClock, Zap, ZapOff, Calendar } from './Icons'
 import { setRecordKey } from '../lib/chat-state'
 import type { MessageKey } from '../i18n/locales'
-import { parseRouterUserMessage } from '../lib/user-message-display'
+import { parseRouterUserMessage, type UserQuoteChrome } from '../lib/user-message-display'
+import {
+  formatImActivityLabel,
+  hasImActivity,
+  summarizeLeaderActivity,
+  thinkMetaKey,
+  toolMetaKey,
+} from '../lib/im-activity'
+import { ImActivityQuote } from './chat/ImActivityQuote'
+import { ImMentionText } from './chat/ImMentionText'
 import {
   formatClockTime,
   parseMessageTimestamp,
@@ -50,11 +50,8 @@ import {
   type ClientTurnMeta,
 } from '../lib/leader-run-meta'
 import { ProviderLogo } from '../lib/provider-icons'
-import { formatElapsedCompact, formatElapsedHms } from '../lib/format-elapsed'
-import {
-  shouldRenderGenericToolShell,
-  type WorkerCardPlacement,
-} from '../lib/worker-card-placement'
+import { formatElapsedHms } from '../lib/format-elapsed'
+
 import type { ThinkingIntensity } from '../lib/settings'
 
 // i18n: reuse the MessageKey union from locales, aligned with I18nProvider's t signature.
@@ -111,9 +108,7 @@ export interface MessageItemProps {
   messages: AnyMessage[]
   busy: boolean
   lastAssistantId: string | undefined
-  isTailMessage: boolean
   showErrorInThisBubble: boolean
-  // — the following are ignored in areEqual (they don't affect output on keystrokes) —
   t: TFunc
   locale: string
   models: ModelOption[]
@@ -123,19 +118,6 @@ export interface MessageItemProps {
   thinkShort: string
   metaOpen: Record<string, boolean>
   setMetaOpen: Dispatch<SetStateAction<Record<string, boolean>>>
-  tick: number
-  placementByJobId: Map<string, WorkerCardPlacement>
-  toolCallJobIds: Map<string, string>
-  hasRunningWorker: boolean
-  resolving: Record<string, boolean>
-  onResolveApproval?: (
-    approvalId: string,
-    optionId: string | undefined,
-    decision: 'allow' | 'deny' | 'cancel',
-    surface: 'chat' | 'panel',
-  ) => void
-  onResetContext?: (jobId: string) => void
-  registryIdentityFor: (state: WorkerRunState) => string | undefined
   isMetaOpen: (key: string, autoOpen: boolean) => boolean
   errorBlock: ReactNode | null
   timingEpoch: number
@@ -143,29 +125,25 @@ export interface MessageItemProps {
   toolStartTimes: RefObject<Map<string, number>>
   toolDurations: RefObject<Map<string, number>>
   discussionMode?: boolean
+  /** When set, only these part indexes render. Used by the speaker timeline. */
+  partIndexes?: number[]
+  /** Timeline-provided consecutive; falls back to adjacent persisted roles. */
+  isConsecutive?: boolean
+  showDateDivider?: boolean
+  isLiveFragment?: boolean
+  mentionNames?: readonly string[]
+  onMentionClick?: (name: string) => void
+  onQuote?: (quote: UserQuoteChrome) => void
 }
 
-const metaKey = (msgId: string, partIdx: number) => `${msgId}:${partIdx}`
-const workedMetaKey = (msgId: string) => `worked:${msgId}`
-
 function BubbleCluster({ bubbles, meta }: { bubbles: ReactNode[]; meta: ReactNode }) {
-  if (bubbles.length === 0 && !meta) return null
+  if (bubbles.length === 0) return null
   return (
     <div className="msg-bubble-row">
       <div className="msg-bubbles">{bubbles}</div>
       {meta}
     </div>
   )
-}
-
-type DiscussionFlowNode = {
-  kind: 'leader' | 'worker'
-  node: ReactNode
-}
-
-type RenderedLeaderPart = {
-  node: ReactNode
-  discussionNodes: DiscussionFlowNode[]
 }
 
 /** Returns the complete task snapshot carried by a task-list signal, if valid. */
@@ -197,23 +175,12 @@ export function latestTaskListSignalIndex(parts: readonly unknown[]): number {
   return -1
 }
 
-/** Process trail vs final answer (turn-level process collapse). */
-function leaderPartBucket(part: { type: string }): 'process' | 'result' | 'other' {
-  if (part.type === 'text') return 'result'
-  if (part.type === 'reasoning') return 'process'
-  if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') return 'process'
-  if (part.type === 'data-worker-run') return 'process'
-  if (part.type === 'data-signal') return 'process'
-  return 'other'
-}
-
 function MessageItemImpl({
   message,
   msgIdx,
   messages,
   busy,
   lastAssistantId,
-  isTailMessage,
   showErrorInThisBubble,
   t,
   locale,
@@ -224,14 +191,6 @@ function MessageItemImpl({
   thinkShort,
   metaOpen,
   setMetaOpen,
-  tick,
-  placementByJobId,
-  toolCallJobIds,
-  hasRunningWorker,
-  resolving,
-  onResolveApproval,
-  onResetContext,
-  registryIdentityFor,
   isMetaOpen,
   errorBlock,
   timingEpoch,
@@ -239,8 +198,15 @@ function MessageItemImpl({
   toolStartTimes,
   toolDurations,
   discussionMode = false,
+  partIndexes,
+  isConsecutive,
+  showDateDivider,
+  isLiveFragment,
+  mentionNames = [],
+  onMentionClick,
+  onQuote,
 }: MessageItemProps) {
-  const msgLive = busy && message.id === lastAssistantId
+  const msgLive = isLiveFragment ?? (busy && message.id === lastAssistantId)
 
   // ── Supervisor (leader) meta (slim header + footer-anchored) ──
   const isLeader = message.role !== 'user'
@@ -297,36 +263,23 @@ function MessageItemImpl({
       })()
     : null
 
-  const asLeaderPart = (node: ReactNode): RenderedLeaderPart => ({
-    node,
-    discussionNodes: [{ kind: 'leader', node }],
-  })
-
-  const asWorkerPart = (node: ReactNode): RenderedLeaderPart => ({
-    node,
-    discussionNodes: [{ kind: 'worker', node }],
-  })
-
-  const renderLeaderPart = (
-    part: AnyMessage['parts'][number],
-    i: number,
-  ): RenderedLeaderPart | null => {
+  const renderLeaderPart = (part: AnyMessage['parts'][number], i: number): ReactNode => {
     if (part.type === 'text') {
       const tp = part as { type: 'text'; text?: string }
-      return asLeaderPart(
+      return (
         <div className="sup-text md-content" key={i}>
           <MarkdownContent>{tp.text ?? ''}</MarkdownContent>
-        </div>,
+        </div>
       )
     }
     if (part.type === 'reasoning') {
       const rp = part as { type: 'reasoning'; text?: string; state?: string }
       const text = rp.text?.trim() ?? ''
       if (!text && rp.state !== 'streaming') return null
-      const key = metaKey(message.id, i)
+      const key = thinkMetaKey(message.id, i)
       const streaming = rp.state === 'streaming'
-      const open = streaming ? true : metaOpen[key] === true
-      return asLeaderPart(
+      const open = true
+      return (
         <ThinkingBlock
           key={i}
           text={text || '…'}
@@ -338,7 +291,7 @@ function MessageItemImpl({
           doneLabelFor={(time) => t('chat.thinkingDoneFor', { time })}
           locale={locale}
           persistKey={key}
-        />,
+        />
       )
     }
 
@@ -355,28 +308,12 @@ function MessageItemImpl({
         toolPart.toolName ||
         (toolPart.type === 'dynamic-tool' ? 'tool' : toolPart.type.replace(/^tool-/, ''))
       const isDiscussionDispatch = discussionMode && /dispatch/i.test(name)
-      const key = metaKey(message.id, i)
+      const key = toolMetaKey(part, message.id, i)
       const toolOutput =
         toolPart.output && typeof toolPart.output === 'object'
           ? (toolPart.output as Record<string, unknown>)
           : null
       const workerJobId = typeof toolOutput?.jobId === 'string' ? toolOutput.jobId : null
-      const cardPlacement = workerJobId ? placementByJobId.get(workerJobId) : undefined
-      const showWorkerCard =
-        cardPlacement &&
-        cardPlacement.source === 'message' &&
-        cardPlacement.messageIndex === msgIdx &&
-        cardPlacement.partIndex === i
-
-      // Always keep tool row (ACP/dispatch included); worker card is additive
-      if (
-        !shouldRenderGenericToolShell(toolPart, hasRunningWorker, {
-          placedJobIds: new Set(placementByJobId.keys()),
-          toolCallJobIds,
-        })
-      ) {
-        return null
-      }
 
       // Track tool execution duration (live)
       const isDone =
@@ -399,24 +336,12 @@ function MessageItemImpl({
       const showDuration = finalDuration != null ? finalDuration : liveMs > 0 ? liveMs / 1000 : null
 
       // While dispatch is still streaming without output.jobId, suppress the
-      // tool row — the worker is rendered by livePlacements at the tail.
-      // Rendering both would split tool-row and worker-card with a large gap.
-      // Once jobId exists, isDispatchMerge below merges them into one node.
+      // tool row — the worker speaker is rendered from livePlacements at the tail.
       if (/dispatch/i.test(name) && !workerJobId && !isDone) {
         return null
       }
 
-      // Keep dispatch rows as durable process history. The Worker card is an
-      // additive item and receives the task prompt as its input section.
-      const toolTask =
-        typeof (toolPart.input as { task?: unknown } | null)?.task === 'string'
-          ? (toolPart.input as { task: string }).task
-          : undefined
-      const taskPrompt = toolTask
-
-      // Expand while the tool is still running; collapse when done unless
-      // the user sticky-toggled open via metaOpen.
-      const toolOpen = isMetaOpen(key, !isDone && !discussionMode)
+      const toolOpen = isMetaOpen(key, false)
       const toolShell = (
         <ToolCallRow
           name={name}
@@ -431,155 +356,51 @@ function MessageItemImpl({
         />
       )
 
-      const discussionToolNode = (
+      return (
         <div
-          key={`discussion-tool-${i}`}
+          key={i}
           className={`chat-tool-worker-stack${isDiscussionDispatch ? ' is-discussion-dispatch' : ''}`}
         >
           {toolShell}
         </div>
       )
-
-      if (showWorkerCard && cardPlacement) {
-        const workerCard = (
-          <WorkerRunCard
-            state={cardPlacement.state}
-            registryIdentity={registryIdentityFor(cardPlacement.state)}
-            open={isMetaOpen(
-              cardPlacement.jobId,
-              cardPlacement.state.status === 'running' ||
-                cardPlacement.state.status === 'pending_approval',
-            )}
-            onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, cardPlacement.jobId, o))}
-            tick={tick}
-            resolving={resolving}
-            onResolveApproval={onResolveApproval}
-            onResetContext={onResetContext}
-            taskPrompt={taskPrompt}
-            discussionMode={discussionMode}
-          />
-        )
-        return {
-          node: (
-            <div
-              key={i}
-              className={`chat-tool-worker-stack${isDiscussionDispatch ? ' is-discussion-dispatch' : ''}`}
-            >
-              {toolShell}
-              {workerCard}
-            </div>
-          ),
-          discussionNodes: [
-            { kind: 'leader', node: discussionToolNode },
-            { kind: 'worker', node: workerCard },
-          ],
-        }
-      }
-
-      return asLeaderPart(
-        <div
-          key={i}
-          className={`chat-tool-worker-stack${isDiscussionDispatch ? ' is-discussion-dispatch' : ''}`}
-        >
-          {toolShell}
-        </div>,
-      )
     }
 
-    // Worker run events: rendered from accumulated state
-    if (part.type === 'data-worker-run') {
-      const data = (part as { type: 'data-worker-run'; data: WorkerRunEvent }).data
-      const wp = placementByJobId.get(data.jobId)
-      if (!wp || wp.source !== 'message' || wp.messageIndex !== msgIdx || wp.partIndex !== i)
-        return null
-      return asWorkerPart(
-        <WorkerRunCard
-          key={i}
-          state={wp.state}
-          registryIdentity={registryIdentityFor(wp.state)}
-          open={isMetaOpen(
-            data.jobId,
-            wp.state.status === 'running' || wp.state.status === 'pending_approval',
-          )}
-          onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, data.jobId, o))}
-          tick={tick}
-          resolving={resolving}
-          onResolveApproval={onResolveApproval}
-          onResetContext={onResetContext}
-          discussionMode={discussionMode}
-        />,
-      )
-    }
-    // Task-list signals are full snapshots. Only the latest valid snapshot in
-    // the Leader turn is authoritative; earlier ones would duplicate or leave
-    // stale in-progress rows after a later empty snapshot.
+    if (part.type === 'data-worker-run') return null
     if (part.type === 'data-signal') {
       if (i !== latestTaskListPartIndex) return null
       const tasks = taskListSnapshot(part)
-      return tasks
-        ? asLeaderPart(<TaskListCard key={i} tasks={tasks} discussionMode={discussionMode} />)
-        : null
+      return tasks ? <TaskListCard key={i} tasks={tasks} discussionMode={discussionMode} /> : null
     }
     return null
   }
 
-  // A normal completed turn folds its process trail under one summary. The group
-  // presentation keeps the durable part order, while keeping Leader-owned text,
-  // tools, and task snapshots in the same message surface. Worker cards flush
-  // that surface and become their own participant item.
   const processNodes: ReactNode[] = []
-  const resultNodes: ReactNode[] = []
-  const liveNodes: ReactNode[] = []
-  const discussionFlow: Array<{ kind: 'leader' | 'worker'; nodes: ReactNode[] }> = []
-  let pendingLeaderNodes: ReactNode[] = []
-  const flushDiscussionLeaderNodes = () => {
-    if (pendingLeaderNodes.length === 0) return
-    discussionFlow.push({ kind: 'leader', nodes: pendingLeaderNodes })
-    pendingLeaderNodes = []
-  }
+  const textNodes: ReactNode[] = []
+  const structuralNodes: ReactNode[] = []
+  const indexes = partIndexes ?? message.parts.map((_, index) => index)
   if (isLeader) {
-    for (let i = 0; i < message.parts.length; i += 1) {
-      const part = message.parts[i]!
-      const rendered = renderLeaderPart(part, i)
-      if (!rendered) continue
-      if (discussionMode) {
-        for (const discussionNode of rendered.discussionNodes) {
-          if (discussionNode.kind === 'leader') {
-            pendingLeaderNodes.push(discussionNode.node)
-          } else {
-            flushDiscussionLeaderNodes()
-            discussionFlow.push({ kind: 'worker', nodes: [discussionNode.node] })
-          }
-        }
+    for (const i of indexes) {
+      const part = message.parts[i]
+      if (!part) continue
+      const node = renderLeaderPart(part, i)
+      if (!node) continue
+      if (part.type === 'reasoning' || part.type.startsWith('tool-')) {
+        processNodes.push(node)
         continue
       }
-      const node = rendered.node
-      if (msgLive) {
-        liveNodes.push(node)
+      if (part.type === 'text') {
+        textNodes.push(node)
         continue
       }
-      const bucket = leaderPartBucket(part)
-      if (bucket === 'process') processNodes.push(node)
-      else if (bucket === 'result') resultNodes.push(node)
+      structuralNodes.push(node)
     }
-    if (discussionMode) flushDiscussionLeaderNodes()
   }
-
-  const workedKey = workedMetaKey(message.id)
-  // A Worker card may be anchored either by a worker-run event or by the
-  // dispatch tool row itself. Use the placement rather than inspecting just
-  // one part shape so active cards are never hidden by the outer summary.
-  const hasActiveWorkerInMessage = [...placementByJobId.values()].some(
-    (placement) =>
-      placement.source === 'message' &&
-      placement.messageIndex === msgIdx &&
-      (placement.state.status === 'running' || placement.state.status === 'pending_approval'),
-  )
-  const workedOpen = metaOpen[workedKey] ?? hasActiveWorkerInMessage
-  const workedLabel =
-    leaderMeta && leaderMeta.durationSec != null && leaderMeta.durationSec >= 1
-      ? t('chat.worked.for', { time: formatElapsedCompact(leaderMeta.durationSec) })
-      : t('chat.worked.done')
+  const activitySummary = isLeader ? summarizeLeaderActivity(message.parts, indexes) : null
+  const activityLabel =
+    activitySummary && hasImActivity(activitySummary)
+      ? formatImActivityLabel(activitySummary, (key, vars) => t(key as MessageKey, vars))
+      : ''
 
   // ── Message actions: user bubble (send time + copy) and leader footer copy, shown on hover ──
   const [copied, setCopied] = useState(false)
@@ -628,12 +449,13 @@ function MessageItemImpl({
   // Leader message: all text parts joined, used for the copy button and selection copy.
   const leaderCopyText = useMemo(() => {
     if (message.role === 'user') return ''
+    const allowed = partIndexes ? new Set(partIndexes) : null
     return message.parts
-      .filter((p) => p.type === 'text')
+      .filter((p, index) => p.type === 'text' && (allowed ? allowed.has(index) : true))
       .map((p) => (p as { text?: string }).text ?? '')
       .join('\n\n')
       .trim()
-  }, [message])
+  }, [message, partIndexes])
 
   // Intercept native copy (Cmd/Ctrl+C, context menu) over the leader markdown body:
   // only rewrite the clipboard when the selection covers EVERY rendered text part
@@ -674,16 +496,26 @@ function MessageItemImpl({
   const discussionDateLabel = discussionTimeLabel
     ? t('chat.discussionToday', { time: discussionTimeLabel })
     : t('chat.discussionTodayLabel')
-  const consecutive = msgIdx > 0 && messages[msgIdx - 1]?.role === message.role
+  const consecutive = isConsecutive ?? (msgIdx > 0 && messages[msgIdx - 1]?.role === message.role)
   const pendingNode =
     msgLive &&
-    !message.parts.some((p) => p.type === 'text' && (p as { text?: string }).text?.trim()) ? (
+    !indexes.some((index) => {
+      const part = message.parts[index]
+      return part?.type === 'text' && Boolean((part as { text?: string }).text?.trim())
+    }) ? (
       <div className="msg-pending" aria-label={t('chat.runPlaceholder')}>
         <span className="pdot" />
         <span className="pdot" />
         <span className="pdot" />
       </div>
     ) : null
+  const quotePayload: UserQuoteChrome | null = isLeader
+    ? leaderCopyText
+      ? { speaker: 'leader', speakerName: t('chat.discussionLeader'), text: leaderCopyText }
+      : null
+    : userCopyText
+      ? { speaker: 'user', text: userCopyText }
+      : null
   const copyMeta = (
     <MessageMeta
       timeLabel={isLeader ? undefined : userTimeLabel}
@@ -691,27 +523,18 @@ function MessageItemImpl({
       copied={copied}
       copyAriaLabel={copyAriaLabel}
       onCopy={() => void copyToClipboard(isLeader ? leaderCopyText : userCopyText)}
+      quoteLabel={onQuote && quotePayload ? t('chat.quote') : undefined}
+      onQuote={onQuote && quotePayload ? () => onQuote(quotePayload) : undefined}
     />
   )
 
   const dateDivider =
-    discussionMode && msgIdx === 0 ? (
+    (showDateDivider ?? (discussionMode && msgIdx === 0)) ? (
       <div className="discussion-date-divider" aria-label={discussionDateLabel}>
         <span>{discussionDateLabel}</span>
       </div>
     ) : null
 
-  const hasProcessTrail =
-    hasActiveWorkerInMessage ||
-    message.parts.some((part) => {
-      const type = part.type
-      return (
-        type.startsWith('tool-') ||
-        type === 'dynamic-tool' ||
-        type === 'data-worker-run' ||
-        type === 'data-signal'
-      )
-    })
   const leaderCaption =
     !discussionMode &&
     leaderMeta &&
@@ -778,80 +601,38 @@ function MessageItemImpl({
       </div>
     ) : null
 
-  const renderDiscussionLeader = () => {
-    const leaderIndexes = discussionFlow.flatMap((item, index) =>
-      item.kind === 'leader' ? [index] : [],
+  const painted = paintLeaderSequence(textNodes, msgLive ? pendingNode : null)
+  const speechBubbles = painted.map((node, index) => {
+    if (!isValidElement(node)) return node
+    const className = (node.props as { className?: string }).className
+    if (!className || !/(^|\s)bubble(\s|$)/.test(className)) return node
+    if (!activityLabel || index > 0) return node
+    const inner = (node.props as { children?: ReactNode }).children
+    return (
+      <div className="bubble" key={(node.key as string) || `im-bubble-${index}`}>
+        <ImActivityQuote label={activityLabel}>{processNodes}</ImActivityQuote>
+        {inner}
+      </div>
     )
-    const firstLeaderIndex = leaderIndexes[0]
-    const lastLeaderIndex = leaderIndexes[leaderIndexes.length - 1]
-    const lastKind = discussionFlow[discussionFlow.length - 1]?.kind
-    const trailingPending = Boolean(pendingNode && lastKind !== 'leader')
-    const rows = discussionFlow.map((item, index) => {
-      if (item.kind === 'worker') {
-        return (
-          <div className="discussion-worker-flow-item" key={`worker-${index}`}>
-            {item.nodes}
-          </div>
-        )
-      }
-      const isFirst = index === firstLeaderIndex
-      const isLastLeader = index === lastLeaderIndex
-      return (
-        <div
-          className={`msg-row discussion-leader-flow-item${isFirst ? ' is-lead-start' : ''}`}
-          key={`leader-${index}`}
-        >
-          <DiscussionSpeakerAvatar participant="leader" title={t('chat.discussionLeader')} />
-          <div className="msg-stack">
-            <div className="discussion-message-identity">
-              <span className="discussion-message-name">{t('chat.discussionLeader')}</span>
-              {isFirst && discussionTimeLabel ? (
-                <span className="discussion-message-time">{discussionTimeLabel}</span>
+  })
+  const bubbles =
+    speechBubbles.length > 0
+      ? speechBubbles
+      : msgLive && pendingNode
+        ? [
+            <div className="bubble" key="im-pending-bubble">
+              {activityLabel ? (
+                <ImActivityQuote label={activityLabel}>{processNodes}</ImActivityQuote>
               ) : null}
-            </div>
-            {(() => {
-              const painted = paintLeaderSequence(
-                item.nodes,
-                isLastLeader && !trailingPending ? pendingNode : null,
-              )
-              const { head, bubbles } = partitionTrailingBubbles(painted)
-              return (
-                <>
-                  {head}
-                  <BubbleCluster
-                    bubbles={bubbles}
-                    meta={isLastLeader && !trailingPending ? copyMeta : null}
-                  />
-                </>
-              )
-            })()}
-            {isLastLeader && !trailingPending && showErrorInThisBubble ? errorBlock : null}
-          </div>
-        </div>
-      )
-    })
-    if (
-      trailingPending ||
-      (lastLeaderIndex == null && (pendingNode || showErrorInThisBubble || Boolean(leaderCopyText)))
-    ) {
-      rows.push(
-        <div
-          className={`msg-row${lastLeaderIndex == null ? ' is-lead-start' : ''}`}
-          key="leader-pending"
-        >
-          <DiscussionSpeakerAvatar participant="leader" title={t('chat.discussionLeader')} />
-          <div className="msg-stack">
-            <BubbleCluster
-              bubbles={partitionTrailingBubbles(paintLeaderSequence([], pendingNode)).bubbles}
-              meta={copyMeta}
-            />
-            {showErrorInThisBubble ? errorBlock : null}
-          </div>
-        </div>,
-      )
-    }
-    return rows
-  }
+              {pendingNode}
+            </div>,
+          ]
+        : []
+  const head = structuralNodes
+  const leaderHasSurface =
+    bubbles.length > 0 || head.length > 0 || Boolean(showErrorInThisBubble)
+
+  if (isLeader && !leaderHasSurface) return null
 
   return (
     <div
@@ -863,51 +644,43 @@ function MessageItemImpl({
     >
       {dateDivider}
       {isLeader && leaderMeta ? (
-        discussionMode ? (
-          renderDiscussionLeader()
-        ) : (
-          <>
-            <div className="msg-row is-lead-start">
-              <DiscussionSpeakerAvatar participant="leader" title={t('chat.discussionLeader')} />
-              <div className="msg-stack">
-                {!msgLive && hasProcessTrail ? (
-                  <WorkedForSection
-                    open={workedOpen}
-                    onToggle={(o) => setMetaOpen((prev) => setRecordKey(prev, workedKey, o))}
-                    label={workedLabel}
-                    keepMounted={hasActiveWorkerInMessage}
-                  >
-                    {processNodes}
-                  </WorkedForSection>
-                ) : null}
-                {(() => {
-                  const painted = paintLeaderSequence(
-                    msgLive ? liveNodes : resultNodes,
-                    msgLive ? pendingNode : null,
-                  )
-                  const { head, bubbles } = partitionTrailingBubbles(painted)
-                  return (
-                    <>
-                      {head}
-                      <BubbleCluster bubbles={bubbles} meta={copyMeta} />
-                    </>
-                  )
-                })()}
-                {showErrorInThisBubble ? errorBlock : null}
-                {leaderCaption}
-              </div>
+        <div className="msg-row is-lead-start">
+          <DiscussionSpeakerAvatar participant="leader" title={t('chat.discussionLeader')} />
+          <div className="msg-stack">
+            <div className="discussion-message-identity">
+              <span className="discussion-message-name">{t('chat.discussionLeader')}</span>
+              {discussionTimeLabel ? (
+                <span className="discussion-message-time">{discussionTimeLabel}</span>
+              ) : null}
             </div>
-          </>
-        )
+            {head}
+            <BubbleCluster bubbles={bubbles} meta={copyMeta} />
+            {showErrorInThisBubble ? errorBlock : null}
+            {leaderCaption}
+          </div>
+        </div>
       ) : (
         <div className="msg-stack">
           <BubbleCluster
             bubbles={message.parts.flatMap((part, i) => {
               if (part.type !== 'text') return []
-              const { text: display } = parseRouterUserMessage(part.text)
+              const { text: display, quote } = parseRouterUserMessage(part.text)
+              const visible = display || part.text
               return [
                 <div className="bubble" key={i} title={part.text}>
-                  {display || part.text}
+                  {quote ? (
+                    <div className="im-quote">
+                      <span className="im-quote-bar" aria-hidden />
+                      <span className="im-quote-text">
+                        {quote.speakerName || quote.speaker} {quote.text}
+                      </span>
+                    </div>
+                  ) : null}
+                  <ImMentionText
+                    text={visible}
+                    names={mentionNames}
+                    onMentionClick={onMentionClick}
+                  />
                 </div>,
               ]
             })}
@@ -919,29 +692,13 @@ function MessageItemImpl({
   )
 }
 
-/**
- * Custom shallow comparison: only core data that actually affects the rendered
- * output is checked.
- *
- * On keystrokes (setInput) none of these change → returns true → skips re-render.
- * On streaming/state changes the message reference / busy / tick / metaOpen /
- * placements do change → returns false → re-renders normally.
- *
- * Deliberately ignored: t / setMetaOpen / onResolveApproval / registryIdentityFor /
- * isMetaOpen / callbacks — they get fresh references on every render, but their
- * output is unchanged on keystrokes; only the data they ultimately consume matters.
- */
+/** Keystrokes skip this component. Streaming and metaOpen still rerender. */
 function areEqual(prev: MessageItemProps, next: MessageItemProps): boolean {
   return (
     prev.message === next.message &&
     prev.busy === next.busy &&
     prev.metaOpen === next.metaOpen &&
-    prev.tick === next.tick &&
-    prev.placementByJobId === next.placementByJobId &&
-    prev.toolCallJobIds === next.toolCallJobIds &&
     prev.discussionMode === next.discussionMode &&
-    prev.hasRunningWorker === next.hasRunningWorker &&
-    prev.resolving === next.resolving &&
     prev.showErrorInThisBubble === next.showErrorInThisBubble &&
     prev.errorBlock === next.errorBlock &&
     prev.lastAssistantId === next.lastAssistantId &&
@@ -952,7 +709,13 @@ function areEqual(prev: MessageItemProps, next: MessageItemProps): boolean {
     prev.timingEpoch === next.timingEpoch &&
     prev.msgIdx === next.msgIdx &&
     prev.messages === next.messages &&
-    prev.isTailMessage === next.isTailMessage
+    prev.partIndexes === next.partIndexes &&
+    prev.isConsecutive === next.isConsecutive &&
+    prev.showDateDivider === next.showDateDivider &&
+    prev.isLiveFragment === next.isLiveFragment &&
+    prev.mentionNames === next.mentionNames &&
+    prev.onMentionClick === next.onMentionClick &&
+    prev.onQuote === next.onQuote
   )
 }
 
