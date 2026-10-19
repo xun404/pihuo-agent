@@ -41,16 +41,14 @@ Built-in presets plus **ACP Registry** agents. Registry availability depends on 
 ### ACP Registry (bundled catalog)
 
 <p>
-  <kbd>Agoragentic</kbd> &nbsp; <kbd>Amp</kbd> &nbsp; <kbd>Auggie CLI</kbd> &nbsp; <kbd>Autohand Code</kbd> &nbsp;
-  <kbd>Claude Agent</kbd> &nbsp; <kbd>Cline</kbd> &nbsp; <kbd>Codebuddy Code</kbd> &nbsp; <kbd>Codex</kbd> &nbsp;
-  <kbd>Cortex Code</kbd> &nbsp; <kbd>Corust Agent</kbd> &nbsp; <kbd>crow-cli</kbd> &nbsp; <kbd>Cursor</kbd> &nbsp;
-  <kbd>DeepAgents</kbd> &nbsp; <kbd>Devin</kbd> &nbsp; <kbd>DimCode</kbd> &nbsp; <kbd>Dirac</kbd> &nbsp;
-  <kbd>Factory Droid</kbd> &nbsp; <kbd>fast-agent</kbd> &nbsp; <kbd>Gemini CLI</kbd> &nbsp; <kbd>GitHub Copilot</kbd> &nbsp;
-  <kbd>GLM Agent</kbd> &nbsp; <kbd>goose</kbd> &nbsp; <kbd>Grok Build</kbd> &nbsp; <kbd>Harn</kbd> &nbsp;
-  <kbd>Junie</kbd> &nbsp; <kbd>Kilo</kbd> &nbsp; <kbd>Kimi CLI</kbd> &nbsp; <kbd>Minion Code</kbd> &nbsp;
-  <kbd>Mistral Vibe</kbd> &nbsp; <kbd>Nova</kbd> &nbsp; <kbd>OpenCode</kbd> &nbsp; <kbd>pi ACP</kbd> &nbsp;
-  <kbd>Poolside</kbd> &nbsp; <kbd>Qoder CLI</kbd> &nbsp; <kbd>Qwen Code</kbd> &nbsp; <kbd>siGit Code</kbd> &nbsp;
-  <kbd>Stakpak</kbd> &nbsp; <kbd>VT Code</kbd>
+  <kbd>Agoragentic</kbd> <kbd>Amp</kbd> <kbd>Auggie CLI</kbd> <kbd>Autohand Code</kbd> <kbd>Claude Agent</kbd><br>
+  <kbd>Cline</kbd> <kbd>Codebuddy Code</kbd> <kbd>Codex</kbd> <kbd>Cortex Code</kbd> <kbd>Corust Agent</kbd><br>
+  <kbd>crow-cli</kbd> <kbd>Cursor</kbd> <kbd>DeepAgents</kbd> <kbd>Devin</kbd> <kbd>DimCode</kbd><br>
+  <kbd>Dirac</kbd> <kbd>Factory Droid</kbd> <kbd>fast-agent</kbd> <kbd>Gemini CLI</kbd> <kbd>GitHub Copilot</kbd><br>
+  <kbd>GLM Agent</kbd> <kbd>goose</kbd> <kbd>Grok Build</kbd> <kbd>Harn</kbd> <kbd>Junie</kbd><br>
+  <kbd>Kilo</kbd> <kbd>Kimi CLI</kbd> <kbd>Minion Code</kbd> <kbd>Mistral Vibe</kbd> <kbd>Nova</kbd><br>
+  <kbd>OpenCode</kbd> <kbd>pi ACP</kbd> <kbd>Poolside</kbd> <kbd>Qoder CLI</kbd> <kbd>Qwen Code</kbd><br>
+  <kbd>siGit Code</kbd> <kbd>Stakpak</kbd> <kbd>VT Code</kbd>
 </p>
 
 ---
@@ -88,9 +86,31 @@ Configure in **Settings** (encrypted on disk). Leader uses `provider/model` ids.
 
 ---
 
-## Developing
+## Run and build locally
 
-Want to contribute or run from source? See [CONTRIBUTING.md](../../CONTRIBUTING.md).
+Node.js 22.19 or newer.
+
+```bash
+npm ci
+npm run desktop
+```
+
+`npm run desktop` starts the desktop app and the local API.
+
+```bash
+npm run build
+npm run build:runtime
+```
+
+Installers:
+
+```bash
+npm run package:mac
+npm run package:win
+npm run package:linux
+```
+
+More checks are in [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ---
 

@@ -34,7 +34,16 @@
 
 ### ACP Registry（安装包内目录）
 
-Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Codebuddy Code · Codex · Cortex Code · Corust Agent · crow-cli · Cursor · DeepAgents · Devin · DimCode · Dirac · Factory Droid · fast-agent · Gemini CLI · GitHub Copilot · GLM Agent · goose · Grok Build · Harn · Junie · Kilo · Kimi CLI · Minion Code · Mistral Vibe · Nova · OpenCode · pi ACP · Poolside · Qoder CLI · Qwen Code · siGit Code · Stakpak · VT Code
+<p>
+  <kbd>Agoragentic</kbd> <kbd>Amp</kbd> <kbd>Auggie CLI</kbd> <kbd>Autohand Code</kbd> <kbd>Claude Agent</kbd><br>
+  <kbd>Cline</kbd> <kbd>Codebuddy Code</kbd> <kbd>Codex</kbd> <kbd>Cortex Code</kbd> <kbd>Corust Agent</kbd><br>
+  <kbd>crow-cli</kbd> <kbd>Cursor</kbd> <kbd>DeepAgents</kbd> <kbd>Devin</kbd> <kbd>DimCode</kbd><br>
+  <kbd>Dirac</kbd> <kbd>Factory Droid</kbd> <kbd>fast-agent</kbd> <kbd>Gemini CLI</kbd> <kbd>GitHub Copilot</kbd><br>
+  <kbd>GLM Agent</kbd> <kbd>goose</kbd> <kbd>Grok Build</kbd> <kbd>Harn</kbd> <kbd>Junie</kbd><br>
+  <kbd>Kilo</kbd> <kbd>Kimi CLI</kbd> <kbd>Minion Code</kbd> <kbd>Mistral Vibe</kbd> <kbd>Nova</kbd><br>
+  <kbd>OpenCode</kbd> <kbd>pi ACP</kbd> <kbd>Poolside</kbd> <kbd>Qoder CLI</kbd> <kbd>Qwen Code</kbd><br>
+  <kbd>siGit Code</kbd> <kbd>Stakpak</kbd> <kbd>VT Code</kbd>
+</p>
 
 ---
 
@@ -62,9 +71,31 @@ Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Co
 
 ---
 
-## 开发
+## 本地运行与编译
 
-见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+需要 Node.js 22.19 或更高版本。
+
+```bash
+npm ci
+npm run desktop
+```
+
+`npm run desktop` 会同时拉起桌面和本地 API。
+
+```bash
+npm run build
+npm run build:runtime
+```
+
+打安装包：
+
+```bash
+npm run package:mac
+npm run package:win
+npm run package:linux
+```
+
+更多检查见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ## 许可证
 
