@@ -4,7 +4,14 @@
  * friendly summaries are used for well-known kinds and keep `detail` for the raw text.
  */
 
-export type ChatErrorKind = 'missing_key' | 'billing' | 'network' | 'offline' | 'model' | 'generic'
+export type ChatErrorKind =
+  | 'missing_key'
+  | 'billing'
+  | 'rate_limit'
+  | 'network'
+  | 'offline'
+  | 'model'
+  | 'generic'
 
 export type FriendlyChatError = {
   kind: ChatErrorKind
@@ -100,6 +107,7 @@ export function formatChatError(
   copy: {
     missingKey: string
     billing: string
+    rateLimit: string
     network: string
     offline: string
     model: string
@@ -132,6 +140,12 @@ export function formatChatError(
     if (summary === copy.billing.trim()) {
       return withDetail({ kind: 'billing', message: copy.billing, action: 'open_settings' }, detail)
     }
+    if (summary === copy.rateLimit.trim()) {
+      return withDetail(
+        { kind: 'rate_limit', message: copy.rateLimit, action: 'open_settings' },
+        detail,
+      )
+    }
     // Prefer original as primary when sticky was stored that way
     if (detail) {
       return formatChatError(detail, copy, { log: false })
@@ -147,6 +161,9 @@ export function formatChatError(
   }
   if (trimmed && trimmed === copy.billing.trim()) {
     return { kind: 'billing', message: copy.billing, action: 'open_settings' }
+  }
+  if (trimmed && trimmed === copy.rateLimit.trim()) {
+    return { kind: 'rate_limit', message: copy.rateLimit, action: 'open_settings' }
   }
   if (trimmed && trimmed === copy.network.trim()) {
     return { kind: 'network', message: copy.network }
@@ -193,6 +210,17 @@ export function formatChatError(
       },
       original,
     )
+  }
+
+  // Free-tier / rate limiting (e.g. OpenCode Zen 429 FreeUsageLimitError).
+  // Deliberately after billing: balance texts sometimes mention quota too, and
+  // "rate limit" alone never means wallet trouble.
+  if (
+    /(^|[^0-9])429\s*:|\bFreeUsageLimitError\b|\bRateLimitError\b|rate limit|too many requests/i.test(
+      hay,
+    )
+  ) {
+    return withDetail({ kind: 'rate_limit', message: copy.rateLimit, action: 'open_settings' }, original)
   }
 
   if (

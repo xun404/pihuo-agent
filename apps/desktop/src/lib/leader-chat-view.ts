@@ -91,7 +91,10 @@ function lastAssistantInCurrentTurn(messages: LeaderChatMessage[]): number {
 }
 
 /** All assistant / tool rows between two user turns belong to one Leader bubble. */
-export function toLeaderViewMessages(messages: LeaderChatMessage[]): LeaderViewMessage[] {
+export function toLeaderViewMessages(
+  messages: LeaderChatMessage[],
+  options: { streaming?: boolean } = {},
+): LeaderViewMessage[] {
   const views: LeaderViewMessage[] = []
   let current: LeaderViewMessage | undefined
   const toolIndex = new Map<string, { message: LeaderViewMessage; part: number }>()
@@ -185,6 +188,11 @@ export function toLeaderViewMessages(messages: LeaderChatMessage[]): LeaderViewM
         current!.parts.push({ type: 'data-leader-run-meta', data: message.custom.data })
       }
     }
+  }
+  const tail = views.at(-1)
+  const lastPart = tail?.parts.at(-1)
+  if (options.streaming && tail?.role === 'assistant' && lastPart?.type === 'reasoning') {
+    lastPart.state = 'streaming'
   }
   return views
 }

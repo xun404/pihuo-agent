@@ -46,7 +46,7 @@ const liveEnabled = process.env.ACP_LIVE_TESTS === '1'
 describe('opencode-models live CLI', { skip: !(hasOpenCode && liveEnabled) }, () => {
   it('lists more than Zen free presets', () => {
     const r = listOpenCodeModelsViaCli({ timeoutMs: 60_000 })
-    assert.equal(r.ok, true, r.error)
+    assert.equal(r.ok, true, r.error ?? 'OpenCode model discovery failed')
     assert.ok(r.models.length > 5, `expected >5 models, got ${r.models.length}`)
     assert.ok(r.models.some((m) => m.modelId.startsWith('opencode/')))
   })

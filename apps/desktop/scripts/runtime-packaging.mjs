@@ -1,36 +1,26 @@
-import { createRequire, isBuiltin } from 'node:module'
-import { chmod, cp, mkdir, readFile } from 'node:fs/promises'
-import { dirname, join, parse, resolve } from 'node:path'
+import { isBuiltin } from 'node:module'
+import { chmod } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { stagePackageClosure } from './runtime-package-closure.mjs'
 
-const require = createRequire(import.meta.url)
-const OPTIONAL_RUNTIME_IMPORTS = new Set([
-  'bufferutil',
-  'utf-8-validate',
-  // Mastra workspace_ast_edit optional native probe (lazy import, try/catch)
-  '@ast-grep/napi',
-])
+const OPTIONAL_RUNTIME_IMPORTS = new Set(['bufferutil', 'utf-8-validate'])
 
-export function resolveLibsqlNativePackage(platform, arch, libcFamily = 'glibc') {
+export function assertSupportedRuntimeTarget(platform, arch, libcFamily = 'glibc') {
   if (platform === 'darwin' && arch === 'arm64') {
-    return '@libsql/darwin-arm64'
+    return
   }
   if (platform === 'win32' && arch === 'x64') {
-    return '@libsql/win32-x64-msvc'
+    return
   }
   if (platform === 'linux' && arch === 'x64' && libcFamily === 'glibc') {
-    return '@libsql/linux-x64-gnu'
+    return
   }
   throw new Error(`Unsupported desktop runtime target: ${platform}-${arch}-${libcFamily}`)
 }
 
 export function requiredRuntimePackageNames(target) {
-  return [
-    'libsql',
-    '@neon-rs/load',
-    'detect-libc',
-    resolveLibsqlNativePackage(target.platform, target.arch, target.libcFamily ?? 'glibc'),
-    'node-pty',
-  ]
+  assertSupportedRuntimeTarget(target.platform, target.arch, target.libcFamily)
+  return ['node-pty', '@earendil-works/pi-coding-agent']
 }
 
 export function runtimeExternalPackageNames(target) {
@@ -77,10 +67,6 @@ export function currentLibcFamily() {
     return 'glibc'
   }
   return 'musl'
-}
-
-export function isLoadedLibsqlModule(value) {
-  return typeof value === 'function'
 }
 
 export function isLoadedNodePtyModule(value) {
@@ -211,57 +197,35 @@ export async function verifyNodePtyRoundTrip(input) {
   })
 }
 
-async function findPackageRoot(packageName) {
-  let current = dirname(require.resolve(packageName))
-  const filesystemRoot = parse(current).root
-  while (current !== filesystemRoot) {
-    const packagePath = join(current, 'package.json')
-    try {
-      const parsed = JSON.parse(await readFile(packagePath, 'utf8'))
-      if (parsed?.name === packageName) return current
-    } catch {
-      // Continue walking toward the filesystem root.
-    }
-    current = dirname(current)
-  }
-  throw new Error(`Cannot locate package root for ${packageName}`)
-}
-
 export async function stageRuntimePackages(input) {
   const packageNames = requiredRuntimePackageNames(input.target)
   const nodeModulesDir = resolve(input.outputDir, 'node_modules')
-  await mkdir(nodeModulesDir, { recursive: true })
-
-  for (const packageName of packageNames) {
-    const source = await findPackageRoot(packageName)
-    const destination = resolve(nodeModulesDir, ...packageName.split('/'))
-    await mkdir(dirname(destination), { recursive: true })
-    await cp(source, destination, {
-      recursive: true,
-      dereference: true,
-      force: true,
-    })
-    if (packageName === 'node-pty' && input.target.platform !== 'win32') {
-      // Some registry mirrors strip the prebuilt helper's executable bit. The
-      // helper is part of node-pty's native runtime closure and posix_spawnp
-      // fails unless the staged copy is executable.
-      for (const helper of [
-        resolve(
-          destination,
-          'prebuilds',
-          `${input.target.platform}-${input.target.arch}`,
-          'spawn-helper',
-        ),
-        resolve(destination, 'build', 'Release', 'spawn-helper'),
-      ]) {
-        try {
-          await chmod(helper, 0o755)
-        } catch {
-          /* target uses the other layout */
-        }
+  const staged = await stagePackageClosure({
+    names: packageNames,
+    sourceNodeModules: resolve(import.meta.dirname, '../../../node_modules'),
+    outputNodeModules: nodeModulesDir,
+  })
+  const destination = resolve(nodeModulesDir, 'node-pty')
+  if (input.target.platform !== 'win32') {
+    // Some registry mirrors strip the prebuilt helper's executable bit. The
+    // helper is part of node-pty's native runtime closure and posix_spawnp
+    // fails unless the staged copy is executable.
+    for (const helper of [
+      resolve(
+        destination,
+        'prebuilds',
+        `${input.target.platform}-${input.target.arch}`,
+        'spawn-helper',
+      ),
+      resolve(destination, 'build', 'Release', 'spawn-helper'),
+    ]) {
+      try {
+        await chmod(helper, 0o755)
+      } catch {
+        /* target uses the other layout */
       }
     }
   }
 
-  return packageNames
+  return staged
 }

@@ -5,6 +5,7 @@ import {
   enrichLastUserMessageForWire,
   enrichUserMessageForLeader,
   parseRouterUserMessage,
+  wrapQuoteChrome,
 } from './user-message-display.js'
 
 const sample = `Respond in Chinese. [mode=build] Prefer role=coder then role=test/review as needed. hey
@@ -52,6 +53,17 @@ Hey. 我是 OpenCode。
     assert.equal(parsed.quote?.speakerName, 'OpenCode')
     assert.match(parsed.quote?.text ?? '', /我是 OpenCode/)
     assert.doesNotMatch(parsed.text, /\[quote/)
+  })
+
+  it('round-trips quote speaker names that contain spaces', () => {
+    const wire = wrapQuoteChrome(
+      { speaker: 'worker', speakerName: 'Code Reviewer', job: 'job-2', text: 'done' },
+      'thanks',
+    )
+    const parsed = parseRouterUserMessage(wire)
+    assert.equal(parsed.text, 'thanks')
+    assert.equal(parsed.quote?.speakerName, 'Code Reviewer')
+    assert.equal(parsed.quote?.job, 'job-2')
   })
 
   it('enriches last user message parts for wire without double-wrapping', () => {

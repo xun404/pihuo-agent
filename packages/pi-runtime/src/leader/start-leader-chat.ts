@@ -158,7 +158,8 @@ export async function startLeaderChat(input: {
         text: body.text,
         mode: 'prompt',
         abortSignal: lease.abortSignal,
-        systemPrompt: handle.session.agent.state.systemPrompt,
+        modelId: leaderModel,
+        thinking: body.thinking,
       })
       return new ReadableStream<LeaderChatEvent>({
         async start(controller) {

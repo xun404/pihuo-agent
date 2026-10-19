@@ -46,7 +46,6 @@ describe('acp-worker-registration', () => {
     name: 'Reg Agent',
     version: '1.0.0',
     description: 'from test catalog',
-    icon: 'https://example.com/i.svg',
     distribution: {
       npx: { package: '@example/reg-agent@1.0.0', args: ['--acp'] },
     },
@@ -63,7 +62,6 @@ describe('acp-worker-registration', () => {
         name: 'Reg Agent',
         version: '1.0.0',
         description: 'from test catalog',
-        icon: 'https://example.com/i.svg',
         distributions: [
           {
             kind: 'npx',

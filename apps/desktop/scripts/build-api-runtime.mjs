@@ -4,7 +4,6 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   currentLibcFamily,
-  resolveLibsqlNativePackage,
   runtimeExternalPackageNames,
   stageRuntimePackages,
 } from './runtime-packaging.mjs'
@@ -89,9 +88,15 @@ const stagedPackages = await stageRuntimePackages({
   outputDir: runtimeDir,
   target,
 })
-const nativePackage = resolveLibsqlNativePackage(target.platform, target.arch, target.libcFamily)
+const nativePackage = 'node-pty'
 const nodePtyPackage = JSON.parse(
   await readFile(resolve(repoRoot, 'node_modules/node-pty/package.json'), 'utf8'),
+)
+const leaderSdkPackage = JSON.parse(
+  await readFile(
+    resolve(repoRoot, 'node_modules/@earendil-works/pi-coding-agent/package.json'),
+    'utf8',
+  ),
 )
 await writeFile(
   resolve(runtimeDir, 'runtime-manifest.json'),
@@ -103,10 +108,10 @@ await writeFile(
       libcFamily: target.libcFamily ?? null,
       nativePackage,
       nativePackages: {
-        libsql: nativePackage,
         pty: 'node-pty',
       },
       ptyVersion: nodePtyPackage.version,
+      leaderSdkVersion: leaderSdkPackage.version,
       bundledRegistryVerifier: 'verify-bundled-registry.mjs',
       bundledRegistry,
       bundledRegistryExternalImports,

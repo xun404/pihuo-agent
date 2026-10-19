@@ -112,7 +112,7 @@ export const ToolCallRow = memo(function ToolCallRow({
     view.outputFields.length,
   )
   const isOpen = open
-  const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: running })
+  const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: running && open })
   const ToolIconComp = getToolIcon(name)
   const bodyScrollRef = useStickScrollBottom(
     running && isOpen,
@@ -179,7 +179,7 @@ export const ToolCallRow = memo(function ToolCallRow({
       </div>
 
       {shouldRender && hasDetail && (
-        <div ref={contentRef} aria-hidden={!isOpen} className="tool-row-collapse">
+        <div ref={contentRef} aria-hidden={!isOpen} inert={!isOpen} className="tool-row-collapse">
           <div
             ref={bodyScrollRef}
             className="node-body-inner process-collapse-body"

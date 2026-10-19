@@ -39,7 +39,6 @@ import { TurnNavigator } from './chat/TurnNavigator'
 import { IconApprovals, IconArrowUp, IconCrew, IconEdit, IconFolder } from './Icons'
 import { RightPanel, type InspectorTab } from './RightPanel'
 import type { MemoryPanelError } from './MemoryPanel'
-import { BrandLockup } from './BrandLockup'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar } from './ComposerToolbar'
 import { type CompactionMarkerData } from './CompactionMarker'
@@ -214,6 +213,7 @@ export function ChatPanel({
   const [input, setInput] = useState('')
   const im = useImComposer({
     teamMembers,
+    workers: snapshotWorkers,
     leaderName: t('chat.discussionLeader'),
   })
   /** Tracks the initialInput value already consumed, so we apply each text once. */
@@ -641,6 +641,7 @@ export function ChatPanel({
   const errorCopyRef = useRef({
     missingKey: 'Missing API key',
     billing: 'Insufficient balance or inactive subscription',
+    rateLimit: 'Provider rate limit hit — retry later or switch models',
     network: 'Network error',
     offline: 'Offline',
     model: 'Model error',
@@ -1297,6 +1298,7 @@ export function ChatPanel({
     () => ({
       missingKey: t('chat.errorMissingKey'),
       billing: t('chat.errorBilling'),
+      rateLimit: t('chat.errorRateLimit'),
       network: t('chat.errorNetwork'),
       offline: t('chat.errorOffline'),
       model: t('chat.errorModel'),
@@ -1323,9 +1325,15 @@ export function ChatPanel({
 
   // One card only: embed error in the tail assistant turn when present;
   // otherwise a single standalone Supervisor card at the end (failed before any reply).
+  // A trailing assistant view with no parts is an invisible streaming ghost
+  // (e.g. a model failure that produced zero output) — it hosts no bubble, so
+  // the error must fall through to the standalone card instead.
   const lastMessage = messages[messages.length - 1]
   const errorBelongsInLastAssistant =
-    Boolean(displayError) && Boolean(lastMessage) && lastMessage!.role !== 'user'
+    Boolean(displayError) &&
+    Boolean(lastMessage) &&
+    lastMessage!.role !== 'user' &&
+    lastMessage!.parts.length > 0
 
   // Credentials rotation clears lastChatError while idle → drop useChat error too.
   // Do NOT clear when user re-sends (status→running) or while busy — that hid the next failure.
@@ -1479,6 +1487,16 @@ export function ChatPanel({
               {t('chat.openSettings')}
             </button>
           )}
+      </div>
+      <div className="chat-error-troubleshoot">
+        <div className="chat-error-trouble-title">{t('chat.troubleTitle')}</div>
+        <ul className="chat-error-trouble-list">
+          {[t('chat.troubleKeyMissing'), t('chat.troubleBilling'), t('chat.troubleRateLimited'), t('chat.troubleNetwork'), t('chat.troubleModelCheck')].map(
+            (line) => (
+              <li key={line}>{line}</li>
+            ),
+          )}
+        </ul>
       </div>
     </div>
   ) : null
@@ -1724,9 +1742,9 @@ export function ChatPanel({
         const root = messagesScrollRef.current
         if (!root) return
         const rows = [...root.querySelectorAll('.msg.worker-speaker')]
-        const hit = rows.reverse().find(
-          (el) => el.querySelector('.discussion-message-name')?.textContent?.trim() === name,
-        )
+        const hit = rows
+          .reverse()
+          .find((el) => el.querySelector('.discussion-message-name')?.textContent?.trim() === name)
         if (hit instanceof HTMLElement) {
           followTailRef.current = false
           hit.scrollIntoView({ block: 'center' })
@@ -2103,10 +2121,6 @@ export function ChatPanel({
 
       {!hasMessages || (!historyLoading && messages.length === 0) ? (
         <div className="home" style={{ flex: 1 }}>
-          {/* 线稿 home：logo-cloud（品牌标）→ 问候 → Composer */}
-          <div className="logo-cloud">
-            <BrandLockup className="brand-lockup" size={40} label={t('sidebar.brand')} />
-          </div>
           <h1 className="greeting">
             {project ? (
               <>

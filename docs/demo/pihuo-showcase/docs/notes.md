@@ -4,4 +4,4 @@
 - Keep permission mode on **Default** for demos that show the approval shield.
 - Seed via `POST /api/demo/seed` then run `node scripts/capture-readme-shots.mjs`.
 
-- Pending: refresh feature-wall screenshots after UI polish.
+- README uses one compressed figure at `docs/assets/readme-hero.webp`. Do not rebuild a feature wall for it.

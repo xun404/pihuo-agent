@@ -157,14 +157,7 @@ export const ChatMessageList = memo(function ChatMessageList({
               taskPrompt={item.taskPrompt}
               consecutive={consecutive}
               registryIdentity={registryIdentityFor(item.placement.state)}
-              open={isMetaOpen(
-                item.jobId,
-                item.placement.state.status === 'running' ||
-                  item.placement.state.status === 'pending_approval' ||
-                  ((item.placement.state.status === 'failed' ||
-                    item.placement.state.status === 'timed_out') &&
-                    !item.placement.state.output?.trim()),
-              )}
+              open={isMetaOpen(item.jobId, false)}
               onToggle={(open) => setMetaOpen((prev) => setRecordKey(prev, item.jobId, open))}
               tick={tick}
               resolving={resolving}
@@ -175,7 +168,8 @@ export const ChatMessageList = memo(function ChatMessageList({
                   ? () =>
                       onQuote({
                         speaker: 'worker',
-                        speakerName: item.placement.state.teamMemberName || item.placement.state.workerName,
+                        speakerName:
+                          item.placement.state.teamMemberName || item.placement.state.workerName,
                         job: item.jobId,
                         text: item.placement.state.output.trim(),
                       })

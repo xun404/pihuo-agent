@@ -38,7 +38,7 @@
   width: min(var(--messages-max), 100%);
   flex-shrink: 0;
 }
-/* 空态品牌标：积木锁；外层只负责入场/浮动 */
+/* 空态品牌标：提示符字标；外层只负责入场/浮动 */
 .logo-cloud {
   position: relative;
   display: flex;

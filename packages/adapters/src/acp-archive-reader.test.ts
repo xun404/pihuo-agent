@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import tar, { type Headers as TarHeader } from 'tar-stream'
+import tar from 'tar-stream'
 import {
   AcpArchiveError,
   assertExecutableInsideStaging,
@@ -20,6 +20,8 @@ import {
   extractArchiveSafe,
   safeResolveEntryPath,
 } from './acp-archive-reader.js'
+
+type TarHeader = Parameters<ReturnType<typeof tar.pack>['entry']>[0]
 
 function crc32(data: Buffer): number {
   let crc = 0xffffffff
@@ -84,7 +86,10 @@ function zipFixture(
 async function tarFixture(entries: Array<{ header: TarHeader; body?: Buffer }>): Promise<Buffer> {
   const pack = tar.pack()
   const chunks: Buffer[] = []
-  pack.on('data', (chunk: Buffer) => chunks.push(chunk))
+  pack.on('data', (chunk) => {
+    assert.ok(Buffer.isBuffer(chunk))
+    chunks.push(chunk)
+  })
   const ended = new Promise<Buffer>((resolvePromise, rejectPromise) => {
     pack.once('end', () => resolvePromise(Buffer.concat(chunks)))
     pack.once('error', rejectPromise)

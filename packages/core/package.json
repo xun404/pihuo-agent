@@ -22,8 +22,8 @@
     "@pihuo-agent/shared": "0.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.20.1",
-    "tsx": "^4.23.1",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
     "typescript": "7.0.2"
   }
 }

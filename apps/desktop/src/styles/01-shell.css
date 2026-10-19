@@ -129,86 +129,38 @@
   border: 0;
   background: transparent;
   color: var(--text-1);
-  cursor: pointer;
   flex-shrink: 0;
-  line-height: 0;
+  line-height: 1;
+  user-select: none;
 }
-.brand-lockup:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--text-1) 35%, transparent);
-  outline-offset: 3px;
+.brand-prompt {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.14em;
+  font-family: ui-rounded, "SF Pro Rounded", "Avenir Next", "Nunito", sans-serif;
+  font-size: calc(var(--pi-size) * 0.78);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text-1);
 }
-.brand-lockup[data-phase='pi'] .brand-huo-word {
-  opacity: 0;
+.brand-prompt-sigil {
+  color: color-mix(in srgb, var(--text-1) 55%, transparent);
+  font-size: 0.72em;
+  line-height: 1;
+  margin-bottom: 0.28em;
 }
-.brand-pi-stage {
-  position: relative;
-  width: var(--pi-size);
-  height: var(--pi-size);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  flex-shrink: 0;
-  overflow: hidden;
-  isolation: isolate;
-  clip-path: inset(0);
+.brand-prompt-mark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
 }
-.brand-pi-stage:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--text-1) 35%, transparent);
-  outline-offset: 3px;
-}
-.brand-pi-stage-clip {
-  position: relative;
-  display: block;
-  width: var(--pi-size);
-  height: var(--pi-size);
-  overflow: hidden;
-  clip-path: inset(0);
-}
-.brand-pi-stage-canvas {
-  position: absolute;
-  left: calc(var(--pi-size) * -2 / 4);
-  top: calc(var(--pi-size) * -3 / 4);
-  width: calc(var(--pi-size) * 8 / 4);
-  height: calc(var(--pi-size) * 9 / 4);
-  image-rendering: pixelated;
-  pointer-events: none;
-  opacity: 0;
-}
-.brand-pi-stage-canvas[data-playing='true'] {
-  opacity: 1;
-}
-.brand-pi-stage-mark {
-  position: relative;
-  display: block;
-  width: var(--pi-size);
-  height: var(--pi-size);
-  color: inherit;
-}
-.brand-pi-stage:has(.brand-pi-stage-canvas[data-playing='true']) .brand-pi-stage-mark {
-  opacity: 0;
-}
-.brand-huo-word {
-  display: block;
-  height: var(--pi-size);
-  width: auto;
-  margin-left: 1px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  flex-shrink: 0;
-  line-height: 0;
-  transition: opacity 0.12s ease;
-}
-.brand-huo-word:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--text-1) 35%, transparent);
-  outline-offset: 3px;
-}
-.brand-huo-word-canvas {
-  display: block;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+.brand-prompt-line {
+  width: 72%;
+  height: 0.1em;
+  margin-top: 0.08em;
+  border-radius: 1px;
+  background: currentColor;
 }
 .nav-actions {
   display: flex;

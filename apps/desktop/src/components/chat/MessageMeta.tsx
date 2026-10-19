@@ -7,6 +7,7 @@ export function MessageMeta({
   copyAriaLabel,
   onCopy,
   quoteLabel,
+  quoteAriaLabel,
   onQuote,
 }: {
   timeLabel?: string
@@ -15,6 +16,7 @@ export function MessageMeta({
   copyAriaLabel: string
   onCopy: () => void
   quoteLabel?: string
+  quoteAriaLabel?: string
   onQuote?: () => void
 }) {
   if (!timeLabel && !copyText && !onQuote) return null
@@ -33,7 +35,12 @@ export function MessageMeta({
         </button>
       ) : null}
       {onQuote && quoteLabel ? (
-        <button type="button" className="msg-quote" onClick={onQuote}>
+        <button
+          type="button"
+          className="msg-quote"
+          onClick={onQuote}
+          aria-label={quoteAriaLabel || quoteLabel}
+        >
           {quoteLabel}
         </button>
       ) : null}

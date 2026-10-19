@@ -4,7 +4,6 @@
  * memo + areEqual skip composer keystroke rerenders.
  */
 import {
-  isValidElement,
   memo,
   useCallback,
   useEffect,
@@ -27,7 +26,8 @@ import { DiscussionSpeakerAvatar } from './chat/GroupParticipantAvatar'
 import { MessageMeta } from './chat/MessageMeta'
 import { paintLeaderSequence } from './chat/paintLeaderSequence'
 import { TaskListCard, type TaskItem } from './chat/TaskListCard'
-import { IconClock, Zap, ZapOff, Calendar } from './Icons'
+import { IconClock, Zap, ZapOff } from './Icons'
+import { Check, Copy } from 'lucide-react'
 import { setRecordKey } from '../lib/chat-state'
 import type { MessageKey } from '../i18n/locales'
 import { parseRouterUserMessage, type UserQuoteChrome } from '../lib/user-message-display'
@@ -268,7 +268,9 @@ function MessageItemImpl({
       const tp = part as { type: 'text'; text?: string }
       return (
         <div className="sup-text md-content" key={i}>
-          <MarkdownContent>{tp.text ?? ''}</MarkdownContent>
+          <MarkdownContent mentionNames={mentionNames} onMentionClick={onMentionClick}>
+            {tp.text ?? ''}
+          </MarkdownContent>
         </div>
       )
     }
@@ -278,7 +280,7 @@ function MessageItemImpl({
       if (!text && rp.state !== 'streaming') return null
       const key = thinkMetaKey(message.id, i)
       const streaming = rp.state === 'streaming'
-      const open = true
+      const open = singleReasoningIndex === i || metaOpen[key] === true
       return (
         <ThinkingBlock
           key={i}
@@ -291,6 +293,7 @@ function MessageItemImpl({
           doneLabelFor={(time) => t('chat.thinkingDoneFor', { time })}
           locale={locale}
           persistKey={key}
+          hideSummary={singleReasoningIndex === i}
         />
       )
     }
@@ -379,6 +382,14 @@ function MessageItemImpl({
   const textNodes: ReactNode[] = []
   const structuralNodes: ReactNode[] = []
   const indexes = partIndexes ?? message.parts.map((_, index) => index)
+  const processIndexes = indexes.filter((index) => {
+    const part = message.parts[index]
+    return part?.type === 'reasoning' || part?.type.startsWith('tool-')
+  })
+  const singleReasoningIndex =
+    processIndexes.length === 1 && message.parts[processIndexes[0]!]?.type === 'reasoning'
+      ? processIndexes[0]
+      : undefined
   if (isLeader) {
     for (const i of indexes) {
       const part = message.parts[i]
@@ -509,6 +520,7 @@ function MessageItemImpl({
         <span className="pdot" />
       </div>
     ) : null
+  // Quote-back targets Leader replies only; quoting one's own message is noise.
   const quotePayload: UserQuoteChrome | null = isLeader
     ? leaderCopyText
       ? { speaker: 'leader', speakerName: t('chat.discussionLeader'), text: leaderCopyText }
@@ -516,15 +528,15 @@ function MessageItemImpl({
     : userCopyText
       ? { speaker: 'user', text: userCopyText }
       : null
-  const copyMeta = (
+  // User rows keep a simple hover meta (time + copy); Leader actions moved into
+  // the footer caption: 模型 · 思考 · 耗时 · 复制 · 引用.
+  const userMeta = (
     <MessageMeta
-      timeLabel={isLeader ? undefined : userTimeLabel}
-      copyText={isLeader ? leaderCopyText : userCopyText}
+      timeLabel={userTimeLabel}
+      copyText={userCopyText}
       copied={copied}
       copyAriaLabel={copyAriaLabel}
-      onCopy={() => void copyToClipboard(isLeader ? leaderCopyText : userCopyText)}
-      quoteLabel={onQuote && quotePayload ? t('chat.quote') : undefined}
-      onQuote={onQuote && quotePayload ? () => onQuote(quotePayload) : undefined}
+      onCopy={() => void copyToClipboard(userCopyText)}
     />
   )
 
@@ -535,14 +547,40 @@ function MessageItemImpl({
       </div>
     ) : null
 
+  const leaderActions = isLeader ? (
+    <>
+      {leaderCopyText ? (
+        <button
+          type="button"
+          className="msg-copy"
+          onClick={() => void copyToClipboard(leaderCopyText)}
+          aria-label={copyAriaLabel}
+          title={copyAriaLabel}
+        >
+          {copied ? <Check size={13} /> : <Copy size={13} />}
+        </button>
+      ) : null}
+      {onQuote && quotePayload ? (
+        <button
+          type="button"
+          className="msg-quote"
+          onClick={() => onQuote(quotePayload)}
+          aria-label={t('chat.quoteAria')}
+          title={t('chat.quote')}
+        >
+          {t('chat.quote')}
+        </button>
+      ) : null}
+    </>
+  ) : null
+
   const leaderCaption =
-    !discussionMode &&
     leaderMeta &&
     (leaderMeta.modelLabel ||
       leaderMeta.thinkLabel ||
       leaderMeta.durationLabel ||
-      leaderMeta.startLabel ||
-      leaderMeta.live) ? (
+      leaderMeta.live ||
+      leaderActions) ? (
       <div className={`msg-caption${leaderMeta.live ? ' is-live' : ''}`}>
         {leaderMeta.modelLabel && (
           <span className="lead-footer-meta">
@@ -585,52 +623,38 @@ function MessageItemImpl({
                 </span>
               </>
             )}
-            {leaderMeta.startLabel && (
-              <>
-                {(leaderMeta.modelLabel || leaderMeta.thinkLabel || leaderMeta.durationLabel) && (
-                  <span className="lead-footer-separator">·</span>
-                )}
-                <span className="lead-footer-meta mono">
-                  <Calendar size={13} />
-                  <span className="lead-footer-text">{leaderMeta.startLabel}</span>
-                </span>
-              </>
-            )}
           </>
         )}
+        {leaderActions ? (
+          <>
+            {(leaderMeta.modelLabel || leaderMeta.thinkLabel || leaderMeta.durationLabel) && (
+              <span className="lead-footer-separator">·</span>
+            )}
+            <span className="lead-footer-actions">{leaderActions}</span>
+          </>
+        ) : null}
+        {/* Start timestamp intentionally lives only in the identity row —
+            rendering it here too duplicated the same time twice per bubble. */}
       </div>
     ) : null
 
-  const painted = paintLeaderSequence(textNodes, msgLive ? pendingNode : null)
-  const speechBubbles = painted.map((node, index) => {
-    if (!isValidElement(node)) return node
-    const className = (node.props as { className?: string }).className
-    if (!className || !/(^|\s)bubble(\s|$)/.test(className)) return node
-    if (!activityLabel || index > 0) return node
-    const inner = (node.props as { children?: ReactNode }).children
-    return (
-      <div className="bubble" key={(node.key as string) || `im-bubble-${index}`}>
-        <ImActivityQuote label={activityLabel}>{processNodes}</ImActivityQuote>
-        {inner}
-      </div>
-    )
-  })
-  const bubbles =
-    speechBubbles.length > 0
-      ? speechBubbles
-      : msgLive && pendingNode
-        ? [
-            <div className="bubble" key="im-pending-bubble">
-              {activityLabel ? (
-                <ImActivityQuote label={activityLabel}>{processNodes}</ImActivityQuote>
-              ) : null}
-              {pendingNode}
-            </div>,
-          ]
-        : []
+  const activityKey = `activity:${message.id}:${partIndexes?.[0] ?? 0}`
+  const processTrail = activityLabel ? (
+    <ImActivityQuote
+      label={activityLabel}
+      running={msgLive}
+      previewRows={singleReasoningIndex == null ? 3 : 0}
+      open={metaOpen[activityKey] === true}
+      onToggle={(open) => setMetaOpen((prev) => setRecordKey(prev, activityKey, open))}
+      earlierLabel={(count) => t('chat.activityEarlier', { count })}
+    >
+      {processNodes}
+    </ImActivityQuote>
+  ) : null
+  const bubbles = paintLeaderSequence(textNodes, msgLive && !activityLabel ? pendingNode : null)
   const head = structuralNodes
   const leaderHasSurface =
-    bubbles.length > 0 || head.length > 0 || Boolean(showErrorInThisBubble)
+    Boolean(processTrail) || bubbles.length > 0 || head.length > 0 || Boolean(showErrorInThisBubble)
 
   if (isLeader && !leaderHasSurface) return null
 
@@ -649,12 +673,18 @@ function MessageItemImpl({
           <div className="msg-stack">
             <div className="discussion-message-identity">
               <span className="discussion-message-name">{t('chat.discussionLeader')}</span>
+              {msgLive ? (
+                <span className="discussion-live-ellipsis" aria-hidden>
+                  …
+                </span>
+              ) : null}
               {discussionTimeLabel ? (
                 <span className="discussion-message-time">{discussionTimeLabel}</span>
               ) : null}
             </div>
+            {processTrail}
             {head}
-            <BubbleCluster bubbles={bubbles} meta={copyMeta} />
+            <BubbleCluster bubbles={bubbles} meta={null} />
             {showErrorInThisBubble ? errorBlock : null}
             {leaderCaption}
           </div>
@@ -667,12 +697,13 @@ function MessageItemImpl({
               const { text: display, quote } = parseRouterUserMessage(part.text)
               const visible = display || part.text
               return [
-                <div className="bubble" key={i} title={part.text}>
+                <div className="bubble" key={i}>
                   {quote ? (
                     <div className="im-quote">
                       <span className="im-quote-bar" aria-hidden />
                       <span className="im-quote-text">
-                        {quote.speakerName || quote.speaker} {quote.text}
+                        <span className="im-quote-who">{quote.speakerName || quote.speaker}</span>{' '}
+                        {quote.text}
                       </span>
                     </div>
                   ) : null}
@@ -684,7 +715,7 @@ function MessageItemImpl({
                 </div>,
               ]
             })}
-            meta={copyMeta}
+            meta={userMeta}
           />
         </div>
       )}

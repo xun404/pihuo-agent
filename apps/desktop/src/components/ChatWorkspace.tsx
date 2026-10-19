@@ -18,7 +18,6 @@ import type {
 import type { PendingNewSession } from '../hooks/useAppState'
 import { api } from '../lib/api'
 import { ChatPanel } from './ChatPanel'
-import { BrandLockup } from './BrandLockup'
 import { BranchSwitcher } from './BranchSwitcher'
 import { ComposerToolbar, type ModelOption, type TeamTemplateOption } from './ComposerToolbar'
 import { useI18n } from '../i18n/I18nProvider'
@@ -447,9 +446,6 @@ export function ChatWorkspace({
             {/* Titleband only — content must not be window-drag */}
             <div className="window-drag-top" aria-hidden />
             <div className="home">
-              <div className="logo-cloud">
-                <BrandLockup className="brand-lockup" size={40} label={t('sidebar.brand')} />
-              </div>
               <h1 className="greeting">
                 {homeProject ? (
                   <>

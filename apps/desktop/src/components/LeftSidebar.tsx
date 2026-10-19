@@ -24,7 +24,6 @@ import {
   Folder,
   FolderOpen,
 } from './Icons'
-import { BrandLockup } from './BrandLockup'
 import { Modal } from './ui/Modal'
 import { Expandable } from './ui/Expandable'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
@@ -216,10 +215,6 @@ export function LeftSidebar({
     <aside className="sidebar">
       {/* 系统 traffic lights 占位 + 拖拽区；不自绘彩色圆点 */}
       <div className="sidebar-top" aria-hidden />
-
-      <div className="brand">
-        <BrandLockup className="brand-lockup" size={32} label={t('sidebar.brand')} />
-      </div>
 
       <div className="nav-actions">
         <button type="button" className="nav-item" onClick={onOpenProject}>

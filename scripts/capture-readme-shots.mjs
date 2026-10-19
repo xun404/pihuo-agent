@@ -6,12 +6,12 @@
  *   npm run desktop   # CDP :8315, API :4111
  *
  * Usage:
+ *   node scripts/capture-readme-shots.mjs
  *   node scripts/capture-readme-shots.mjs --locale en
- *   node scripts/capture-readme-shots.mjs --locale zh --out docs/assets/zh
- *   node scripts/capture-readme-shots.mjs --out docs/assets
  *
- * Seeds docs/demo/pihuo-showcase via POST /api/demo/seed, then drives the UI.
- * Default: locale=en → docs/assets ; locale=zh → docs/assets/zh
+ * Seeds docs/demo/pihuo-showcase via POST /api/demo/seed, then captures one
+ * window. Default locale is zh. The published figure is
+ * docs/assets/readme-hero.webp.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -27,16 +27,10 @@ function argValue(flag) {
   return process.argv[i + 1]
 }
 
-const LOCALE = (argValue('--locale') || process.env.CAPTURE_LOCALE || 'en').startsWith('zh')
+const LOCALE = (argValue('--locale') || process.env.CAPTURE_LOCALE || 'zh').startsWith('zh')
   ? 'zh'
   : 'en'
-const OUT = argValue('--out')
-  ? resolve(argValue('--out'))
-  : LOCALE === 'zh'
-    ? join(ROOT, 'docs/assets/zh')
-    : join(ROOT, 'docs/assets')
-
-const FEATURE = join(OUT, 'feature-wall')
+const OUT = argValue('--out') ? resolve(argValue('--out')) : join(ROOT, 'docs/assets')
 console.log(`capture locale=${LOCALE} out=${OUT}`)
 
 let WebSocketImpl
@@ -61,9 +55,11 @@ function sleep(ms) {
 async function getPageTarget() {
   const res = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`)
   const list = await res.json()
+  const pages = list.filter((t) => t.type === 'page' && t.title !== 'DevTools')
   const page =
-    list.find((t) => t.type === 'page' && t.title !== 'DevTools') ??
-    list.find((t) => t.type === 'page')
+    pages.find((t) => /localhost:5173|127\.0\.0\.1:5173/.test(t.url || '')) ??
+    pages.find((t) => t.url && !t.url.startsWith('devtools://')) ??
+    pages[0]
   if (!page) throw new Error('No CDP page target — is `npm run desktop` running with CDP :8315?')
   return page
 }
@@ -95,7 +91,7 @@ async function screenshot(ws, filePath, { clip } = {}) {
 }
 
 async function main() {
-  mkdirSync(FEATURE, { recursive: true })
+  mkdirSync(OUT, { recursive: true })
   const page = await getPageTarget()
   const ws = new WebSocketImpl(page.webSocketDebuggerUrl)
   await new Promise((r, rej) => {
@@ -112,6 +108,18 @@ async function main() {
 
   await send(ws, 'Runtime.enable')
   await send(ws, 'Page.enable')
+
+  let ready = null
+  for (let i = 0; i < 40; i++) {
+    ready = await evalInPage(
+      ws,
+      `(() => ({ href: location.href, title: document.title, hasApi: !!window.routerAgents }))()`,
+    )
+    if (ready?.hasApi && /5173/.test(ready.href || '')) break
+    await sleep(500)
+  }
+  console.log('page', ready)
+  if (!ready?.hasApi) throw new Error('Renderer API bridge not ready: ' + JSON.stringify(ready))
 
   // Set UI + server locale first so seed titles and chrome match the README language.
   const localeResult = await evalInPage(
@@ -239,114 +247,21 @@ async function main() {
   }
   await sleep(500)
 
-  // Metrics for cropping
-  const layout = await evalInPage(
-    ws,
-    `(() => {
-      const dpr = window.devicePixelRatio || 1;
-      const full = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
-      const sidebar = document.querySelector('.sidebar')?.getBoundingClientRect();
-      const main = document.querySelector('.main-column, .chat-workspace, .messages')?.getBoundingClientRect();
-      const composer = document.querySelector('.composer-card, .composer')?.getBoundingClientRect();
-      return {
-        dpr,
-        full,
-        sidebar: sidebar && { x: sidebar.x, y: sidebar.y, width: sidebar.width, height: sidebar.height },
-        main: main && { x: main.x, y: main.y, width: main.width, height: Math.min(main.height, window.innerHeight - main.y) },
-        composer: composer && { x: composer.x, y: composer.y, width: composer.width, height: composer.height },
-      };
-    })()`,
-  )
-  console.log('layout', layout)
-
-  const clipOf = (r) =>
-    r
-      ? {
-          x: Math.max(0, Math.floor(r.x)),
-          y: Math.max(0, Math.floor(r.y)),
-          width: Math.max(1, Math.floor(r.width)),
-          height: Math.max(1, Math.floor(r.height)),
-        }
-      : undefined
-
-  // 1) Hero — full window
-  await screenshot(ws, join(OUT, 'readme-hero.png'))
-
-  // 2) Sessions — left sidebar
-  if (layout.sidebar) {
-    await screenshot(ws, join(FEATURE, 'sessions.png'), { clip: clipOf(layout.sidebar) })
-  }
-
-  // 3) Leader chat — main column
-  if (layout.main) {
-    await screenshot(ws, join(FEATURE, 'leader-chat.png'), { clip: clipOf(layout.main) })
-    // Worker cards share the same chat surface when tools are present
-    await screenshot(ws, join(FEATURE, 'worker-cards.png'), { clip: clipOf(layout.main) })
-  }
-
-  // 4) Approvals — open inspector if possible, else full chat with permission shield
-  await evalInPage(
-    ws,
-    `(() => {
-      const btn = [...document.querySelectorAll('button, [role=button]')]
-        .find(b => /协作|Team|Inspector|面板|审批|Worker/.test(b.textContent||'') || /inspector|team/i.test(b.getAttribute('aria-label')||''));
-      btn?.click();
-      return btn?.textContent?.trim()?.slice(0,40) || null;
-    })()`,
-  )
-  await sleep(500)
-  await screenshot(ws, join(FEATURE, 'approvals.png'))
-
-  // 5) Settings — models
-  await evalInPage(
-    ws,
-    `(() => {
-      window.dispatchEvent(new CustomEvent('pihuo-agent:open-settings', { detail: { tab: 'model' } }));
-      return true;
-    })()`,
-  )
-  await sleep(700)
-  await screenshot(ws, join(FEATURE, 'settings-models.png'))
-
-  // 6) Registry — workers tab → register / catalog surface
-  await evalInPage(
-    ws,
-    `(() => {
-      window.dispatchEvent(new CustomEvent('pihuo-agent:open-settings', { detail: { tab: 'workers' } }));
-      return true;
-    })()`,
-  )
-  await sleep(700)
-  await evalInPage(
-    ws,
-    `(() => {
-      // Prefer the "注册 / Register" rail action if present
-      const reg = [...document.querySelectorAll('button, a, [role=tab]')]
-        .find((b) => /注册|Register|添加|Add/.test(b.textContent || ''));
-      reg?.click();
-      return reg?.textContent?.trim()?.slice(0, 40) || null;
-    })()`,
-  )
-  await sleep(500)
-  await evalInPage(
-    ws,
-    `(() => {
-      const input = document.querySelector(
-        '.worker-registry-input, .settings-search-combobox input, input[placeholder*="Registry"], input[placeholder*="Agent"], input[placeholder*="搜索"]',
-      );
-      input?.focus();
-      input?.click();
-      return !!input;
-    })()`,
-  )
-  await sleep(450)
-  await screenshot(ws, join(FEATURE, 'registry.png'))
-
-  // Leave settings closed for the user's session
-  await evalInPage(ws, `document.querySelector('.settings-back')?.click(); true`)
-
+  const heroPng = join(OUT, 'readme-hero.png')
+  const heroWebp = join(OUT, 'readme-hero.webp')
+  await screenshot(ws, heroPng)
   ws.close()
-  console.log('\\nDone. Images under', OUT)
+
+  const { spawnSync } = await import('node:child_process')
+  const compressed = spawnSync(
+    'cwebp',
+    ['-q', '60', '-m', '6', heroPng, '-o', heroWebp],
+    { stdio: 'inherit' },
+  )
+  if (compressed.status !== 0) {
+    console.warn('cwebp failed; README still needs', heroWebp)
+  }
+  console.log('\\nDone.', heroWebp)
 }
 
 main().catch((e) => {

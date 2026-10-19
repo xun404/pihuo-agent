@@ -2,7 +2,7 @@
  * ACP authentication helpers: auth_required detection, method sanitization,
  * agent authenticate flow helpers. No secret values in public surfaces.
  */
-import { RequestError, type AuthMethod } from '@agentclientprotocol/sdk'
+import { RequestError } from '@agentclientprotocol/sdk'
 
 export type SanitizedAuthMethod = {
   id: string
@@ -144,7 +144,7 @@ export function isRequestError(error: unknown): error is RequestError {
  * Unknown method shapes become type=unsupported (display only; never auto-run).
  */
 export function sanitizeAuthMethods(
-  methods: AuthMethod[] | undefined | null,
+  methods: readonly unknown[] | undefined | null,
 ): SanitizedAuthMethod[] {
   if (!methods || methods.length === 0) return []
   const boundedMethods = methods.slice(0, AUTH_LIMITS.methods)

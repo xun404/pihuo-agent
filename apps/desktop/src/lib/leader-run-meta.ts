@@ -408,29 +408,42 @@ export function extractPrecedingUserMeta(
 }
 
 /**
- * Format a run start time with the **system local timezone** (no CST / fixed-zone label).
- * Example: 2026/08/01 09:20:06
+ * Format a message/run timestamp:
+ * - same local calendar day → `HH:mm:ss`
+ * - older → `MM-DD HH:mm:ss` (year omitted; dates joined with `-`)
  *
- * Optional `timeZone` overrides the zone (IANA). Labels like "CST" are intentionally omitted.
+ * Uses the system local timezone unless `opts.timeZone` (IANA) overrides it.
+ * `opts.now` lets callers pin "today" (tests). Zone labels are omitted.
  */
-export function formatClockTime(ts: number, locale: string, opts?: { timeZone?: string }): string {
+export function formatClockTime(
+  ts: number,
+  _locale?: string,
+  opts?: { timeZone?: string; now?: number },
+): string {
   try {
-    const loc =
-      locale === 'zh-TW' || locale.toLowerCase().includes('hant') || locale.toLowerCase() === 'zh-tw'
-        ? 'zh-TW'
-        : locale === 'zh' || locale.startsWith('zh')
-          ? 'zh-CN'
-          : 'en-US'
-    return new Date(ts).toLocaleString(loc, {
-      ...(opts?.timeZone ? { timeZone: opts.timeZone } : {}),
+    const date = new Date(ts)
+    const zone = opts?.timeZone ? { timeZone: opts.timeZone } : {}
+    const stamp = new Intl.DateTimeFormat('en-US', {
+      ...zone,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: false,
+      hourCycle: 'h23',
     })
+    const collect = (d: Date) =>
+      Object.fromEntries(
+        stamp.formatToParts(d)
+          .filter((p) => p.type !== 'literal')
+          .map((p) => [p.type, p.value]),
+      )
+    const t = collect(date)
+    const today = collect(new Date(opts?.now ?? Date.now()))
+    const sameDay = t.year === today.year && t.month === today.month && t.day === today.day
+    const time = `${t.hour}:${t.minute}:${t.second}`
+    return sameDay ? time : `${t.month}-${t.day} ${time}`
   } catch {
     return new Date(ts).toISOString().replace('T', ' ').slice(0, 19)
   }

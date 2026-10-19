@@ -35,6 +35,47 @@ function render(overrides: Partial<WorkerRunState> = {}, taskPrompt?: string) {
 }
 
 describe('WorkerMessageItem', () => {
+  const activities: WorkerRunState['activityItems'] = [1, 2, 3, 4, 5].map((index) => ({
+    id: `tool:${index}`,
+    type: 'tool',
+    sequence: index,
+    toolCall: {
+      toolCallId: String(index),
+      title: `Read fixture ${index}`,
+      kind: 'read',
+      status: 'completed',
+    },
+  }))
+
+  it('folds completed activity while keeping the Worker reply visible', () => {
+    const html = render({ activityItems: activities })
+    assert.match(html, /活动记录 · 5 条/u)
+    assert.match(html, /你好！我是 OpenCode/u)
+    assert.doesNotMatch(html, /Read fixture/u)
+    assert.match(html, /im-activity-quote" aria-expanded="false"/u)
+  })
+
+  it('previews the newest three running records without opening tool details', () => {
+    const html = render({ status: 'running', activityItems: activities })
+    assert.doesNotMatch(html, /Read fixture [12]/u)
+    assert.match(html, /Read fixture 3[\s\S]*Read fixture 4[\s\S]*Read fixture 5/u)
+    assert.doesNotMatch(html, /tool-row is-open/u)
+  })
+
+  it('keeps authentication and recovery actions outside a folded failed trail', () => {
+    const html = render({
+      status: 'failed',
+      output: '',
+      activityItems: activities,
+      error: 'Authentication required',
+      errorCode: 'WORKER_AUTH_REQUIRED',
+    })
+    assert.doesNotMatch(html, /Read fixture/u)
+    assert.match(html, /Authentication required/u)
+    assert.match(html, /worker-card-auth-btn/u)
+    assert.match(html, /worker-card-collapse/u)
+  })
+
   it('renders Worker speech as its own message bubble, not a Leader child', () => {
     const html = render({}, '用户想跟你（OpenCode）打个招呼。')
 

@@ -4,7 +4,39 @@ export type MentionCandidate = {
   subtitle?: string
 }
 
-export function mentionQueryAt(text: string, caret: number): { start: number; query: string } | null {
+type MentionMember = {
+  id: string
+  name: string
+  roleType: string
+  workerId: string
+  enabled: boolean
+  archivedAt?: string
+}
+
+/** Leader first, then enabled unarchived members. Subtitle is `role · Worker`. */
+export function teamMentionCandidates(
+  leaderName: string,
+  members: readonly MentionMember[],
+  workers: readonly { id: string; name: string }[] = [],
+): MentionCandidate[] {
+  const workerName = new Map(workers.map((worker) => [worker.id, worker.name]))
+  const people = members
+    .filter((member) => member.enabled && !member.archivedAt)
+    .map((member) => {
+      const worker = workerName.get(member.workerId)
+      return {
+        id: member.id,
+        name: member.name,
+        subtitle: worker ? `${member.roleType} · ${worker}` : member.roleType,
+      }
+    })
+  return [{ id: 'leader', name: leaderName }, ...people]
+}
+
+export function mentionQueryAt(
+  text: string,
+  caret: number,
+): { start: number; query: string } | null {
   const before = text.slice(0, Math.max(0, caret))
   const match = before.match(/(^|[\s])@([^\s@]*)$/)
   if (!match) return null

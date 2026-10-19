@@ -45,6 +45,14 @@ export function verifyRuntimeManifestContract(manifest) {
   if (!manifest?.externalImports?.includes?.('node-pty')) {
     throw new Error('Runtime manifest must keep node-pty external')
   }
+  if (
+    !manifest?.stagedPackages?.includes?.('@earendil-works/pi-coding-agent') ||
+    !manifest?.externalImports?.includes?.('@earendil-works/pi-coding-agent') ||
+    typeof manifest?.leaderSdkVersion !== 'string' ||
+    !manifest.leaderSdkVersion.trim()
+  ) {
+    throw new Error('Runtime manifest must stage the Pi SDK and identify its version')
+  }
   if (manifest?.bundledRegistryVerifier !== 'verify-bundled-registry.mjs') {
     throw new Error('Runtime manifest must include the bundled Registry verifier')
   }

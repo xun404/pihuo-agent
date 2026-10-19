@@ -35,6 +35,7 @@ const STRINGS: Partial<Record<string, string>> = {
   'chat.discussionYou': '你',
   'chat.discussionLeader': 'Leader',
   'chat.quote': '引用',
+  'chat.quoteAria': '引用这条消息',
   'chat.activityThought': '已思考',
   'chat.activityThoughtLive': '思考中',
   'chat.activityTool': '调用了 {name}',
@@ -48,6 +49,7 @@ function renderLeader(options: {
   live: boolean
   parts: LeaderViewPart[]
   discussionMode?: boolean
+  mentionNames?: string[]
 }): string {
   const messages = [
     {
@@ -96,10 +98,12 @@ function renderLeader(options: {
         isMetaOpen={(_key, autoOpen) => autoOpen}
         errorBlock={null}
         timingEpoch={0}
+        onQuote={() => undefined}
         turnTimingRef={{ current: turnTiming }}
         toolStartTimes={{ current: new Map() }}
         toolDurations={{ current: new Map() }}
         discussionMode={options.discussionMode}
+        mentionNames={options.mentionNames}
       />
     </I18nProvider>,
   )
@@ -157,14 +161,15 @@ describe('MessageItem Leader footer', () => {
     assert.doesNotMatch(value, /CST/)
   })
 
-  it('shows model, thinking, duration and start time with separators after completion', () => {
+  it('shows model, thinking and duration after completion, with no duplicate date', () => {
     const markup = renderLeader({ live: false, parts: [{ type: 'text', text: 'done' }] })
     const value = footer(markup)
     assert.match(value, /deepseek-v4-flash/)
     assert.match(value, />高</)
     assert.match(value, /1分13秒/)
     assert.doesNotMatch(value, /CST/)
-    assert.match(value, /2026/)
+    // Start time renders once, in the identity row — never repeated in the footer.
+    assert.doesNotMatch(value, /2026/)
     assert.equal((value.match(/lead-footer-separator/g) ?? []).length, 3)
   })
 
@@ -188,10 +193,35 @@ describe('MessageItem Leader footer', () => {
     assert.match(value, /2分/)
     assert.doesNotMatch(value, /1分13秒/)
   })
+
+  it('renders a thinking-only turn with a single 已思考 header (no activity-quote nesting)', () => {
+    const markup = renderLeader({
+      live: false,
+      parts: [
+        { type: 'reasoning', text: 'figuring out the greeting', state: 'done' } as never,
+        { type: 'text', text: 'hey!' },
+      ],
+    })
+    assert.equal((markup.match(/已思考/g) ?? []).length, 1)
+    assert.match(markup, /im-activity-quote/)
+    assert.doesNotMatch(markup, /figuring out the greeting/)
+  })
+
+  it('still wraps thinking+tools under one activity quote', () => {
+    const markup = renderLeader({
+      live: false,
+      parts: [
+        { type: 'reasoning', text: 'plan', state: 'done' } as never,
+        { type: 'tool-bash', toolName: 'bash', state: 'output-available' } as never,
+        { type: 'text', text: 'ok' },
+      ],
+    })
+    assert.match(markup, /im-activity/)
+  })
 })
 
 describe('MessageItem process quote', () => {
-  it('puts completed process in an in-bubble quote and keeps the body text', () => {
+  it('folds completed process before the answer and keeps the body text', () => {
     const markup = renderLeader({
       live: false,
       parts: [
@@ -210,6 +240,7 @@ describe('MessageItem process quote', () => {
     assert.match(markup, /已思考/u)
     assert.match(markup, /调用了 bash/u)
     assert.match(markup, /最终结果正文/u)
+    assert.ok(markup.indexOf('im-activity-quote') < markup.indexOf('class="bubble"'))
     assert.doesNotMatch(markup, /secret reasoning chain/u)
     assert.doesNotMatch(markup, /thinking-block is-open/u)
     assert.doesNotMatch(markup, /class="worked-for"/u)
@@ -239,7 +270,7 @@ describe('MessageItem process quote', () => {
     assert.doesNotMatch(markup, /live reasoning/u)
   })
 
-  it('keeps Leader text in one bubble and process as an in-bubble quote', () => {
+  it('keeps Leader text in one bubble with a separate activity fold', () => {
     const markup = renderLeader({
       live: false,
       discussionMode: true,
@@ -268,8 +299,10 @@ describe('MessageItem process quote', () => {
     assert.doesNotMatch(markup, /discussion-process-divider/u)
     assert.doesNotMatch(markup, /class="worked-for/u)
     assert.doesNotMatch(markup, /class="lead-footer"/u)
-    assert.doesNotMatch(markup, /class="msg-caption"/u)
-    assert.equal((markup.match(/class="msg-meta"/g) ?? []).length, 1)
+    assert.match(markup, /class="msg-caption"/u)
+    assert.match(markup, /引用/u)
+    // Leader actions moved into the footer caption; the hover meta row is gone.
+    assert.equal((markup.match(/class="msg-meta"/g) ?? []).length, 0)
   })
 
   it('shows dispatch as a quote without an @ chip and does not nest a Worker card', () => {
@@ -297,7 +330,7 @@ describe('MessageItem process quote', () => {
     assert.doesNotMatch(markup, /discussion-worker-flow-item/u)
   })
 
-  it('does not render an empty Leader bubble when the fragment is only process', () => {
+  it('keeps a process-only Leader fragment as an activity quote, not an empty pending bubble', () => {
     const markup = renderLeader({
       live: false,
       discussionMode: true,
@@ -311,9 +344,11 @@ describe('MessageItem process quote', () => {
         } as never,
       ],
     })
-    assert.equal(markup, '')
     assert.doesNotMatch(markup, /class="bubble"/u)
-    assert.doesNotMatch(markup, /im-activity-quote/u)
+    assert.match(markup, /im-activity-quote/u)
+    assert.match(markup, /派给 OpenCode/u)
+    assert.doesNotMatch(markup, /msg-pending/u)
+    assert.doesNotMatch(markup, /class="sup-text"/u)
   })
 })
 
@@ -362,6 +397,68 @@ describe('MessageItem task-list snapshots', () => {
 })
 
 describe('MessageItem message actions', () => {
+  it('chips @mentions in Leader markdown without turning dispatch into a chip', () => {
+    const markup = renderLeader({
+      live: false,
+      discussionMode: true,
+      mentionNames: ['OpenCode'],
+      parts: [
+        { type: 'text', text: '请 @OpenCode 先看登录页。' },
+        {
+          type: 'tool-dispatch-team-member',
+          toolCallId: 'dispatch-1',
+          state: 'output-available',
+          input: { task: '看登录页', teamMemberName: 'OpenCode' },
+          output: { jobId: 'job-1' },
+        } as never,
+      ],
+    })
+    assert.match(markup, /class="im-mention"[^>]*>@OpenCode</u)
+    assert.match(markup, /class="im-activity-label">派给 OpenCode</u)
+    assert.doesNotMatch(markup, /im-activity-label">[^<]*@OpenCode/u)
+  })
+
+  it('renders quoted speaker name separately from the quoted body', () => {
+    const message = {
+      id: 'u-quote',
+      role: 'user',
+      parts: [
+        {
+          type: 'text',
+          text: '[quote speaker=worker speakerName=OpenCode]\n你好\n[/quote]\n\n继续。',
+        },
+      ],
+    } as never
+    const markup = renderToStaticMarkup(
+      <MessageItem
+        message={message}
+        msgIdx={0}
+        messages={[message]}
+        busy={false}
+        lastAssistantId={undefined}
+        showErrorInThisBubble={false}
+        t={t}
+        locale="zh"
+        models={[]}
+        selectedModel=""
+        thinkingIntensity="off"
+        modelShort=""
+        thinkShort=""
+        metaOpen={{}}
+        setMetaOpen={() => undefined}
+        isMetaOpen={() => false}
+        errorBlock={null}
+        timingEpoch={0}
+        turnTimingRef={{ current: new Map() }}
+        toolStartTimes={{ current: new Map() }}
+        toolDurations={{ current: new Map() }}
+      />,
+    )
+    assert.match(markup, /class="im-quote-who">OpenCode</u)
+    assert.match(markup, /继续。/u)
+    assert.doesNotMatch(markup, /class="bubble"[^>]*>[\s\S]*\[quote/u)
+  })
+
   it('renders @mentions as chips in the user bubble body', () => {
     const message = {
       id: 'u-mention',
@@ -412,7 +509,7 @@ describe('MessageItem message actions', () => {
     assert.match(markup, /aria-label="你"/u)
     assert.match(markup, /class="bubble"[^>]*>hello \*\*world\*\*</u)
     assert.match(markup, /class="msg-meta"/u)
-    assert.match(markup, /class="msg-user-time">[^<]*2026/u)
+    assert.match(markup, /class="msg-user-time">08-07 \d{2}:\d{2}/u)
     assert.match(markup, /class="msg-copy"/u)
     assert.match(markup, /lucide-copy/u)
     assert.match(markup, /aria-label="复制"/u)
@@ -430,15 +527,16 @@ describe('MessageItem message actions', () => {
     assert.match(markup, /class="msg-copy"/u)
   })
 
-  it('puts the leader copy button in msg-meta rather than the footer', () => {
+  it('puts the leader copy and quote actions in the footer caption', () => {
     const markup = renderLeader({
       live: false,
       parts: [{ type: 'text', text: 'reply **bold**' }],
     })
     const value = footer(markup)
-    assert.doesNotMatch(value, /class="msg-copy"/u)
-    assert.doesNotMatch(value, /lead-footer-copy/u)
-    assert.match(markup, /class="msg-bubble-row"[\s\S]*class="msg-meta"[\s\S]*class="msg-copy"/u)
+    assert.match(value, /class="msg-copy"/u)
+    assert.match(value, /aria-label="复制"/u)
+    assert.match(value, /引用/u)
+    assert.doesNotMatch(markup, /class="msg-meta"/u)
     assert.match(markup, /class="msg-caption/u)
     assert.doesNotMatch(markup, /class="lead-footer"/u)
     assert.doesNotMatch(markup, /class="worked-for"/u)
@@ -475,6 +573,7 @@ describe('MessageItem IM chrome', () => {
     })
     assert.match(markup, /class="bubble"[^>]*>[\s\S]*partial/u)
     assert.doesNotMatch(markup, /class="bubble"[^>]*>[\s\S]*live reasoning/u)
+    assert.match(markup, /discussion-live-ellipsis/u)
   })
 
   it('marks consecutive same-role messages and never the first', () => {

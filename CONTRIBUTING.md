@@ -6,7 +6,7 @@ Thanks for helping improve PiHuo.
 
 Requirements:
 
-- Node.js 22.13 or newer (CI pins 22.13.0)
+- Node.js 22.19 or newer (CI pins 22.19.0)
 - npm only — do not introduce pnpm/yarn lockfiles
 - Git
 - The ACP Agent CLIs needed for any integration you want to exercise

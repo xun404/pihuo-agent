@@ -2,65 +2,57 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   isLoadedNodePtyModule,
-  isLoadedLibsqlModule,
   requiredRuntimePackageNames,
-  resolveLibsqlNativePackage,
+  assertSupportedRuntimeTarget,
   runtimeExternalPackageNames,
   unstagedRuntimeImportSpecifiers,
   verifyNodePtyRoundTrip,
 } from './runtime-packaging.mjs'
 
 describe('desktop runtime native packages', () => {
-  it('maps supported release targets to exact libsql packages', () => {
-    assert.equal(resolveLibsqlNativePackage('darwin', 'arm64'), '@libsql/darwin-arm64')
-    assert.equal(resolveLibsqlNativePackage('win32', 'x64'), '@libsql/win32-x64-msvc')
-    assert.equal(resolveLibsqlNativePackage('linux', 'x64', 'glibc'), '@libsql/linux-x64-gnu')
+  it('accepts the supported release targets', () => {
+    assert.doesNotThrow(() => assertSupportedRuntimeTarget('darwin', 'arm64'))
+    assert.doesNotThrow(() => assertSupportedRuntimeTarget('win32', 'x64'))
+    assert.doesNotThrow(() => assertSupportedRuntimeTarget('linux', 'x64', 'glibc'))
   })
 
   it('rejects unsupported release targets instead of guessing', () => {
     assert.throws(
-      () => resolveLibsqlNativePackage('darwin', 'x64'),
+      () => assertSupportedRuntimeTarget('darwin', 'x64'),
       /Unsupported desktop runtime target/,
     )
     assert.throws(
-      () => resolveLibsqlNativePackage('linux', 'arm64', 'glibc'),
+      () => assertSupportedRuntimeTarget('linux', 'arm64', 'glibc'),
       /Unsupported desktop runtime target/,
     )
     assert.throws(
-      () => resolveLibsqlNativePackage('linux', 'x64', 'musl'),
+      () => assertSupportedRuntimeTarget('linux', 'x64', 'musl'),
       /Unsupported desktop runtime target/,
     )
   })
 
-  it('stages libsql and node-pty native packages beside the bundle', () => {
+  it('stages node-pty and the Pi SDK with its package resources', () => {
     assert.deepEqual(
       requiredRuntimePackageNames({
         platform: 'darwin',
         arch: 'arm64',
       }),
-      ['libsql', '@neon-rs/load', 'detect-libc', '@libsql/darwin-arm64', 'node-pty'],
+      ['node-pty', '@earendil-works/pi-coding-agent'],
     )
   })
 
-  it('externalizes only staged native packages, not bundleable libsql clients', () => {
+  it('externalizes the native PTY and the resource-dependent Pi SDK', () => {
     const external = runtimeExternalPackageNames({
       platform: 'darwin',
       arch: 'arm64',
     })
 
-    assert.deepEqual(external, [
-      'libsql',
-      '@neon-rs/load',
-      'detect-libc',
-      '@libsql/darwin-arm64',
-      'node-pty',
-    ])
-    assert.equal(external.includes('@libsql/*'), false)
-    assert.equal(external.includes('@libsql/client'), false)
+    assert.deepEqual(external, ['node-pty', '@earendil-works/pi-coding-agent'])
+    assert.equal(external.includes('@earendil-works/*'), false)
   })
 
   it('detects bare bundle imports that are not present in the staged runtime', () => {
-    const staged = ['libsql', '@neon-rs/load', 'detect-libc', 'node-pty']
+    const staged = ['node-pty', '@earendil-works/pi-coding-agent']
 
     assert.deepEqual(
       unstagedRuntimeImportSpecifiers(
@@ -68,25 +60,16 @@ describe('desktop runtime native packages', () => {
           'node:fs',
           'fs/promises',
           './local.mjs',
-          'libsql',
-          '@neon-rs/load',
+          '@earendil-works/pi-coding-agent',
           'bufferutil',
           'utf-8-validate',
-          '@ast-grep/napi',
-          '@libsql/client',
+          'missing-package',
           'node-pty',
         ],
         staged,
       ),
-      ['@libsql/client'],
+      ['missing-package'],
     )
-  })
-
-  it('recognizes the libsql CommonJS constructor export', () => {
-    function Database() {}
-    assert.equal(isLoadedLibsqlModule(Database), true)
-    assert.equal(isLoadedLibsqlModule({ Database }), false)
-    assert.equal(isLoadedLibsqlModule(null), false)
   })
 
   it('recognizes node-pty only when its native PTY spawn API is present', () => {

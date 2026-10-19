@@ -8,13 +8,15 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
 const library = readFileSync(new URL('./TeamTemplateLibrary.tsx', import.meta.url), 'utf8')
 const shellStyles = readFileSync(new URL('../styles/01-shell.css', import.meta.url), 'utf8')
 
-test('sidebar and about use the official Pi mark plus Huo lockup', () => {
+test('about uses the terminal prompt lockup; the sidebar does not', () => {
   const about = readFileSync(new URL('./settings/SettingsAboutTab.tsx', import.meta.url), 'utf8')
-  assert.match(sidebar, /<BrandLockup/u)
+  const lockup = readFileSync(new URL('./BrandLockup.tsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(sidebar, /BrandLockup/u)
   assert.match(about, /<BrandLockup/u)
   assert.doesNotMatch(sidebar, /BrandLogo/u)
-  assert.match(shellStyles, /brand-pi-stage/u)
-  assert.match(shellStyles, /brand-huo-word/u)
+  assert.match(lockup, />_Pi_/u)
+  assert.match(shellStyles, /brand-prompt/u)
+  assert.doesNotMatch(lockup, /HuoMark|PiLogoStage/u)
 })
 
 test('left sidebar exposes a Crews section under Agent Worker', () => {

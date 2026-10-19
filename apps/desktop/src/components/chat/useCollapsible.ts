@@ -77,52 +77,55 @@ export function useCollapsible({ open, keepMounted = false }: CollapsibleOptions
     el.style.overflow = 'visible'
   }, [])
 
-  const runExpand = useCallback((el: HTMLElement) => {
-    if (prefersReducedMotion()) {
-      snapOpen(el)
-      return
-    }
-    el.style.height = '0px'
-    el.style.overflow = 'hidden'
-    void el.offsetHeight // 强制 reflow 让起点 0px 生效
-    const target = el.scrollHeight
-    if (target <= 0) {
-      requestAnimationFrame(() => {
-        const retry = el.scrollHeight
-        if (retry <= 0) {
-          snapOpen(el)
-          return
-        }
-        const a = animate(el, { height: retry }, TRANSITION)
-        animationRef.current = a
-        a.finished
-          .then(() => {
-            if (animationRef.current !== a) return
-            animationRef.current = null
+  const runExpand = useCallback(
+    (el: HTMLElement) => {
+      if (document.hidden || prefersReducedMotion()) {
+        snapOpen(el)
+        return
+      }
+      el.style.height = '0px'
+      el.style.overflow = 'hidden'
+      void el.offsetHeight // 强制 reflow 让起点 0px 生效
+      const target = el.scrollHeight
+      if (target <= 0) {
+        requestAnimationFrame(() => {
+          const retry = el.scrollHeight
+          if (retry <= 0) {
             snapOpen(el)
-          })
-          .catch(() => snapOpen(el))
-      })
-      return
-    }
-    const a = animate(el, { height: target }, TRANSITION)
-    animationRef.current = a
-    a.finished
-      .then(() => {
-        if (animationRef.current !== a) {
-          if (el.style.height === '0px') snapOpen(el)
-          return
-        }
-        animationRef.current = null
-        snapOpen(el)
-      })
-      .catch(() => {
-        snapOpen(el)
-      })
-  }, [snapOpen])
+            return
+          }
+          const a = animate(el, { height: retry }, TRANSITION)
+          animationRef.current = a
+          a.finished
+            .then(() => {
+              if (animationRef.current !== a) return
+              animationRef.current = null
+              snapOpen(el)
+            })
+            .catch(() => snapOpen(el))
+        })
+        return
+      }
+      const a = animate(el, { height: target }, TRANSITION)
+      animationRef.current = a
+      a.finished
+        .then(() => {
+          if (animationRef.current !== a) {
+            if (el.style.height === '0px') snapOpen(el)
+            return
+          }
+          animationRef.current = null
+          snapOpen(el)
+        })
+        .catch(() => {
+          snapOpen(el)
+        })
+    },
+    [snapOpen],
+  )
 
   const runCollapse = useCallback((el: HTMLElement) => {
-    if (prefersReducedMotion()) {
+    if (document.hidden || prefersReducedMotion()) {
       el.style.height = '0px'
       el.style.overflow = 'hidden'
       return

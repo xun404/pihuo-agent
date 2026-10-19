@@ -19,6 +19,7 @@ import { useCollapsible } from './chat/useCollapsible'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { ToolCallRow } from './chat/ToolCallRow'
 import { DiscussionSpeakerAvatar } from './chat/GroupParticipantAvatar'
+import { ImActivityQuote } from './chat/ImActivityQuote'
 
 function ChevronIcon() {
   return (
@@ -200,10 +201,13 @@ export const WorkerRunCard = memo(function WorkerRunCard({
   variant = 'card',
 }: Props) {
   const { t, locale } = useI18n()
+  const processLayout = variant === 'process'
   const [internalOpen, setInternalOpen] = useState(
-    state.status === 'running' || state.status === 'pending_approval',
+    !processLayout && (state.status === 'running' || state.status === 'pending_approval'),
   )
-  const isOpen = open !== undefined ? open : internalOpen
+  // The process body keeps approval and recovery controls visible; only its
+  // activity trail folds. Standalone cards retain their whole-card toggle.
+  const isOpen = processLayout ? true : open !== undefined ? open : internalOpen
   const status = state.status
   const isTerminal = status !== 'running' && status !== 'pending_approval'
   const isRunning = status === 'running' || status === 'pending_approval'
@@ -228,7 +232,6 @@ export const WorkerRunCard = memo(function WorkerRunCard({
       ? state.workerName
       : (KIND_LABELS[state.workerKind] ?? state.workerName)
   const memberLabel = state.teamMemberName?.trim() || state.workerName || workerLabel
-  const processLayout = variant === 'process'
   const discussionChrome = discussionMode || processLayout
   const discussionTask = (taskPrompt || state.task || '').trim()
   const statusText = STATUS_LABELS[status]?.zh ?? status
@@ -267,8 +270,9 @@ export const WorkerRunCard = memo(function WorkerRunCard({
     [isRunning, state.activeActivityItemId],
   )
   const isActivityOpen = useCallback(
-    (item: WorkerActivityItem) => isActivityActive(item) || activityOpen[item.id] === true,
-    [activityOpen, isActivityActive],
+    (item: WorkerActivityItem) =>
+      activityOpen[item.id] ?? (!processLayout && isActivityActive(item)),
+    [activityOpen, isActivityActive, processLayout],
   )
   const toggleActivity = useCallback((id: string, nextOpen: boolean) => {
     setActivityOpen((previous) => ({ ...previous, [id]: nextOpen }))
@@ -291,6 +295,41 @@ export const WorkerRunCard = memo(function WorkerRunCard({
         : status === 'completed'
           ? 'done'
           : ''
+
+  const activityRows = activityItems.map((item) => {
+    const active = isActivityActive(item)
+    const itemOpen = isActivityOpen(item)
+    if (item.type === 'thought') {
+      return (
+        <ThinkingBlock
+          key={item.id}
+          text={item.text}
+          streaming={active}
+          open={itemOpen}
+          onToggle={(nextOpen) => toggleActivity(item.id, nextOpen)}
+          streamingLabel={t('chat.thinkingLive')}
+          doneLabel={t('chat.thinkingDone')}
+          doneLabelFor={(time) => t('chat.thinkingDoneFor', { time })}
+          locale={locale}
+          persistKey={`${state.jobId}:${item.id}`}
+        />
+      )
+    }
+    const tool = item.toolCall
+    const toolName = tool.title || (tool.kind ? TOOL_KIND_LABELS[tool.kind] : '') || 'Tool'
+    return (
+      <ToolCallRow
+        key={item.id}
+        name={toolName}
+        input={workerToolDetails(item)}
+        durationSec={null}
+        running={active}
+        open={itemOpen}
+        onToggle={(nextOpen) => toggleActivity(item.id, nextOpen)}
+        errorLabel={t('chat.toolError')}
+      />
+    )
+  })
 
   return (
     <div
@@ -323,71 +362,73 @@ export const WorkerRunCard = memo(function WorkerRunCard({
           )}
         </>
       )}
-      <div
-        className="worker-card-head process-row-summary"
-        role="button"
-        tabIndex={0}
-        aria-expanded={isOpen}
-        onClick={handleToggle}
-        onKeyDown={handleKeyDown}
-      >
-        {/* Icon slot: logo ↔ chevron cross-fade (same pattern as tool/thinking .tr-icon-slot).
+      {!processLayout && (
+        <div
+          className="worker-card-head process-row-summary"
+          role="button"
+          tabIndex={0}
+          aria-expanded={isOpen}
+          onClick={handleToggle}
+          onKeyDown={handleKeyDown}
+        >
+          {/* Icon slot: logo ↔ chevron cross-fade (same pattern as tool/thinking .tr-icon-slot).
             Collapsed shows logo; hover fades logo out and chevron in; open rotates chevron. */}
-        <span className="worker-icon-slot process-icon-slot" aria-hidden>
-          <span
-            className={`worker-logo process-icon-type ${kindClass(state.workerKind, state.workerName)}`}
-            title={state.workerName || workerLabel}
-          >
-            <WorkerBrandLogo
-              kind={state.workerKind}
-              name={state.workerName}
-              size={10}
-              workerId={state.workerId}
-            />
+          <span className="worker-icon-slot process-icon-slot" aria-hidden>
+            <span
+              className={`worker-logo process-icon-type ${kindClass(state.workerKind, state.workerName)}`}
+              title={state.workerName || workerLabel}
+            >
+              <WorkerBrandLogo
+                kind={state.workerKind}
+                name={state.workerName}
+                size={10}
+                workerId={state.workerId}
+              />
+            </span>
+            <span className="worker-chevron process-icon-chevron">
+              <ChevronIcon />
+            </span>
           </span>
-          <span className="worker-chevron process-icon-chevron">
-            <ChevronIcon />
+          {!discussionChrome && (
+            <span className="name">
+              {memberLabel}
+              {isRunning && (
+                <span className="busy-dots" aria-hidden>
+                  <span className="d" />
+                  <span className="d" />
+                  <span className="d" />
+                </span>
+              )}
+            </span>
+          )}
+          {state.role && !discussionChrome && (
+            <span className="node-cap role-cap" data-role={state.role}>
+              {ROLE_LABELS[state.role] ?? state.role}
+            </span>
+          )}
+          {(state.model || state.reasoning) && (
+            <span className="worker-card-config mono">
+              {state.model && (
+                <span className="model" title={state.model.trim()}>
+                  {shortModelId(state.model)}
+                </span>
+              )}
+              {state.model && state.reasoning && (
+                <span className="worker-card-config-separator">·</span>
+              )}
+              {state.reasoning && (
+                <span className="model reasoning-tag" title={state.reasoning.trim()}>
+                  {state.reasoning}
+                </span>
+              )}
+            </span>
+          )}
+          <span className={`status${statusClass ? ` ${statusClass}` : ''}`}>
+            {statusText}
+            {showDuration ? ` · ${formatElapsedSeconds(durationSec)}` : ''}
           </span>
-        </span>
-        {!discussionChrome && (
-          <span className="name">
-            {memberLabel}
-            {isRunning && (
-              <span className="busy-dots" aria-hidden>
-                <span className="d" />
-                <span className="d" />
-                <span className="d" />
-              </span>
-            )}
-          </span>
-        )}
-        {state.role && !discussionChrome && (
-          <span className="node-cap role-cap" data-role={state.role}>
-            {ROLE_LABELS[state.role] ?? state.role}
-          </span>
-        )}
-        {(state.model || state.reasoning) && (
-          <span className="worker-card-config mono">
-            {state.model && (
-              <span className="model" title={state.model.trim()}>
-                {shortModelId(state.model)}
-              </span>
-            )}
-            {state.model && state.reasoning && (
-              <span className="worker-card-config-separator">·</span>
-            )}
-            {state.reasoning && (
-              <span className="model reasoning-tag" title={state.reasoning.trim()}>
-                {state.reasoning}
-              </span>
-            )}
-          </span>
-        )}
-        <span className={`status${statusClass ? ` ${statusClass}` : ''}`}>
-          {statusText}
-          {showDuration ? ` · ${formatElapsedSeconds(durationSec)}` : ''}
-        </span>
-      </div>
+        </div>
+      )}
 
       {shouldRender && (
         <div ref={contentRef} aria-hidden={!isOpen} className="worker-card-collapse">
@@ -407,46 +448,22 @@ export const WorkerRunCard = memo(function WorkerRunCard({
                 {taskPrompt || state.task}
               </WorkerActionSection>
             )}
-            {activityItems.length > 0 && (
-              <div className="worker-activity-list">
-                {activityItems.map((item) => {
-                  const active = isActivityActive(item)
-                  const itemOpen = isActivityOpen(item)
-                  if (item.type === 'thought') {
-                    return (
-                      <ThinkingBlock
-                        key={item.id}
-                        text={item.text}
-                        streaming={active}
-                        open={itemOpen}
-                        onToggle={(nextOpen) => toggleActivity(item.id, nextOpen)}
-                        streamingLabel={t('chat.thinkingLive')}
-                        doneLabel={t('chat.thinkingDone')}
-                        doneLabelFor={(time) => t('chat.thinkingDoneFor', { time })}
-                        locale={locale}
-                        persistKey={`${state.jobId}:${item.id}`}
-                      />
-                    )
+            {activityItems.length > 0 &&
+              (processLayout ? (
+                <ImActivityQuote
+                  label={t('chat.activityRecords', { count: activityItems.length })}
+                  running={isRunning}
+                  open={open ?? internalOpen}
+                  onToggle={(nextOpen) =>
+                    onToggle ? onToggle(nextOpen) : setInternalOpen(nextOpen)
                   }
-
-                  const tool = item.toolCall
-                  const toolName =
-                    tool.title || (tool.kind ? TOOL_KIND_LABELS[tool.kind] : '') || 'Tool'
-                  return (
-                    <ToolCallRow
-                      key={item.id}
-                      name={toolName}
-                      input={workerToolDetails(item)}
-                      durationSec={null}
-                      running={active}
-                      open={itemOpen}
-                      onToggle={(nextOpen) => toggleActivity(item.id, nextOpen)}
-                      errorLabel={t('chat.toolError')}
-                    />
-                  )
-                })}
-              </div>
-            )}
+                  earlierLabel={(count) => t('chat.activityEarlier', { count })}
+                >
+                  {activityRows}
+                </ImActivityQuote>
+              ) : (
+                <div className="worker-activity-list">{activityRows}</div>
+              ))}
             {Array.isArray(state.planEntries) && state.planEntries.length > 0 && (
               <WorkerActionSection kind="plan" label={t('workers.runPlan')} marker="≡">
                 <ul className="worker-action-plan-list">
@@ -493,56 +510,54 @@ export const WorkerRunCard = memo(function WorkerRunCard({
               </WorkerActionSection>
             )}
             {hasPublicError && (
-              <WorkerActionSection kind="error" label={t('workers.runError')} marker="✗">
-                <div>
-                  {state.errorCode === 'RUNTIME_RESTARTED' ? (
-                    <>
-                      <code>RUNTIME_RESTARTED</code>
-                      <span className="worker-card-runtime-hint">
-                        {t('workers.runRuntimeRestarted')}
-                      </span>
-                    </>
-                  ) : (
-                    publicError
-                  )}
-                  {state.errorCode === 'WORKER_AUTH_REQUIRED' && (
-                    <>
-                      <span className="worker-card-auth-hint">
-                        {t('workers.runAuthHint', {
-                          name: state.workerName,
-                          identity: registryIdentity ?? state.workerId ?? state.workerName,
-                        })}
-                      </span>
-                      <button
-                        type="button"
-                        className="worker-card-auth-btn"
-                        onClick={() => {
-                          window.dispatchEvent(
-                            new CustomEvent('pihuo-agent:open-settings', {
-                              detail: {
-                                tab: 'workers',
-                                workerId: state.workerId,
-                                workerName: state.workerName,
-                              },
-                            }),
-                          )
-                        }}
-                      >
-                        {t('workers.runAuthenticate')}
-                      </button>
-                    </>
-                  )}
-                  {state.recoveryError && state.canResetAcpContext && onResetContext && (
+              <WorkerErrorSection plain={processLayout} label={t('workers.runError')}>
+                {state.errorCode === 'RUNTIME_RESTARTED' ? (
+                  <>
+                    <code>RUNTIME_RESTARTED</code>
+                    <span className="worker-card-runtime-hint">
+                      {t('workers.runRuntimeRestarted')}
+                    </span>
+                  </>
+                ) : (
+                  publicError
+                )}
+                {state.errorCode === 'WORKER_AUTH_REQUIRED' && (
+                  <>
+                    <span className="worker-card-auth-hint">
+                      {t('workers.runAuthHint', {
+                        name: state.workerName,
+                        identity: registryIdentity ?? state.workerId ?? state.workerName,
+                      })}
+                    </span>
                     <button
                       type="button"
                       className="worker-card-auth-btn"
-                      onClick={() => onResetContext(state.jobId)}
+                      onClick={() => {
+                        window.dispatchEvent(
+                          new CustomEvent('pihuo-agent:open-settings', {
+                            detail: {
+                              tab: 'workers',
+                              workerId: state.workerId,
+                              workerName: state.workerName,
+                            },
+                          }),
+                        )
+                      }}
                     >
-                      {t('workers.runRestartContext')}
+                      {t('workers.runAuthenticate')}
                     </button>
-                  )}
-                </div>
-              </WorkerActionSection>
+                  </>
+                )}
+                {state.recoveryError && state.canResetAcpContext && onResetContext && (
+                  <button
+                    type="button"
+                    className="worker-card-auth-btn"
+                    onClick={() => onResetContext(state.jobId)}
+                  >
+                    {t('workers.runRestartContext')}
+                  </button>
+                )}
+              </WorkerErrorSection>
             )}
             {!processLayout && state.output && (
               <WorkerActionSection
@@ -589,6 +604,44 @@ export const WorkerRunCard = memo(function WorkerRunCard({
           </div>
         </div>
       )}
+      {processLayout && (
+        <div className="msg-caption worker-run-caption">
+          {state.model && (
+            <span className="lead-footer-text mono" title={state.model.trim()}>
+              {shortModelId(state.model)}
+            </span>
+          )}
+          {state.reasoning && (
+            <span className="lead-footer-text mono" title={state.reasoning.trim()}>
+              {state.reasoning}
+            </span>
+          )}
+          <span
+            className={`lead-footer-text worker-run-caption-status status-${statusClass || 'live'}`}
+          >
+            {statusText}
+            {showDuration ? ` · ${formatElapsedSeconds(durationSec)}` : ''}
+          </span>
+        </div>
+      )}
     </div>
   )
 })
+
+function WorkerErrorSection({
+  plain,
+  label,
+  children,
+}: {
+  plain: boolean
+  label: string
+  children: React.ReactNode
+}) {
+  return plain ? (
+    <div className="worker-error-plain">{children}</div>
+  ) : (
+    <WorkerActionSection kind="error" label={label} marker="✗">
+      {children}
+    </WorkerActionSection>
+  )
+}

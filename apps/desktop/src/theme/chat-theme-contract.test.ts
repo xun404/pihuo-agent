@@ -10,9 +10,11 @@ const chat = [
   '../styles/chat/00-header.css',
   '../styles/chat/01-messages-markdown.css',
   '../styles/chat/02-process-worker.css',
+  '../styles/chat/02-worker-process-layout.css',
   '../styles/chat/03-approvals-errors-navigation.css',
   '../styles/chat/04-group-discussion.css',
   '../styles/chat/05-im-bubbles.css',
+  '../styles/chat/06-activity-trail.css',
 ]
   .map(read)
   .join('\n')

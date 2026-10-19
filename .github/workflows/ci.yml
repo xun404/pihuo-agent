@@ -22,13 +22,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.13.0
+          node-version: 22.19.0
           cache: npm
       - run: npm ci
-      # libsql optional native bindings must resolve for the runner platform
-      # (lockfile must list each @libsql/* package — not only the host that generated it).
-      - name: Verify libsql native binding
-        run: node -e "require('libsql'); console.log('libsql ok', process.platform, process.arch)"
       # electron@43 has no postinstall binary fetch — cache + ensure before vite build.
       - name: Cache Electron binary
         uses: actions/cache@v4

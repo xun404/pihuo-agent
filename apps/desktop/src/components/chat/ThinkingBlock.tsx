@@ -28,6 +28,8 @@ type Props = {
    * When set, frozen ms is stored in a module map and restored on remount.
    */
   persistKey?: string
+  /** A parent activity summary already controls this single reasoning body. */
+  hideSummary?: boolean
 }
 
 /** Survives ThinkingBlock unmount when parent collapses process trail. */
@@ -135,8 +137,9 @@ function ChevronIcon() {
 /**
  * Reasoning block. Expand/collapse via useCollapsible (JS height animation).
  *
- * - Streaming: body open, live label
- * - Complete: auto-collapse by default; summary shows elapsed when available
+ * - Open state is controlled by the owning activity trail
+ * - Streaming: live label; the user can keep the reasoning body collapsed
+ * - Complete: summary shows elapsed when available
  * - Collapsed: summary row only (no body preview); final answer is a sibling text part
  * - Stream body height-capped so long reasoning does not dominate the viewport
  */
@@ -150,9 +153,10 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   doneLabelFor,
   locale = 'zh',
   persistKey,
+  hideSummary = false,
 }: Props) {
   const isOpen = open
-  const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: streaming })
+  const { shouldRender, contentRef } = useCollapsible({ open, keepMounted: streaming && open })
   const elapsedMs = useThinkingElapsedMs(streaming, persistKey)
   // If a height cap is reintroduced later, keep the live body pinned to the tail.
   const bodyScrollRef = useStickScrollBottom(streaming && isOpen, text.length)
@@ -179,27 +183,34 @@ export const ThinkingBlock = memo(function ThinkingBlock({
 
   return (
     <div className={`thinking-block${streaming ? ' live' : ''}${isOpen ? ' is-open' : ''}`}>
-      <div
-        className="thinking-block-summary process-row-summary"
-        role="button"
-        tabIndex={0}
-        aria-expanded={isOpen}
-        onClick={toggle}
-        onKeyDown={onKeyDown}
-      >
-        <span className="tb-icon-slot process-icon-slot" aria-hidden>
-          <span className="tb-icon tb-icon-type process-icon-type">
-            <Brain aria-hidden="true" />
+      {!hideSummary && (
+        <div
+          className="thinking-block-summary process-row-summary"
+          role="button"
+          tabIndex={0}
+          aria-expanded={isOpen}
+          onClick={toggle}
+          onKeyDown={onKeyDown}
+        >
+          <span className="tb-icon-slot process-icon-slot" aria-hidden>
+            <span className="tb-icon tb-icon-type process-icon-type">
+              <Brain aria-hidden="true" />
+            </span>
+            <span className="tb-icon tb-icon-chevron process-icon-chevron">
+              <ChevronIcon />
+            </span>
           </span>
-          <span className="tb-icon tb-icon-chevron process-icon-chevron">
-            <ChevronIcon />
-          </span>
-        </span>
-        <span className="thinking-block-label">{summaryLabel}</span>
-      </div>
+          <span className="thinking-block-label">{summaryLabel}</span>
+        </div>
+      )}
 
       {shouldRender && (
-        <div ref={contentRef} aria-hidden={!isOpen} className="thinking-block-collapse">
+        <div
+          ref={contentRef}
+          aria-hidden={!isOpen}
+          inert={!isOpen}
+          className="thinking-block-collapse"
+        >
           <div
             className="thinking-block-inner process-collapse-body"
             style={{

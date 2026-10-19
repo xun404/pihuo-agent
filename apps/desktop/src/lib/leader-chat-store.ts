@@ -20,12 +20,20 @@ import {
 
 export type LeaderChatStatus = 'ready' | 'submitted' | 'streaming' | 'error'
 
+export type LeaderChatSnapshot = {
+  messages: LeaderChatMessage[]
+  viewMessages: LeaderViewMessage[]
+  status: LeaderChatStatus
+  error: Error | undefined
+}
+
 export class LeaderChatStore {
   messages: LeaderChatMessage[] = []
   status: LeaderChatStatus = 'ready'
   error: Error | undefined
   private listeners = new Set<() => void>()
   private abort: AbortController | null = null
+  private cachedSnapshot: LeaderChatSnapshot | undefined
 
   constructor(readonly threadId: string) {}
 
@@ -35,11 +43,21 @@ export class LeaderChatStore {
   }
 
   private emit() {
+    this.cachedSnapshot = undefined
     for (const listener of this.listeners) listener()
   }
 
+  getSnapshot(): LeaderChatSnapshot {
+    return (this.cachedSnapshot ??= {
+      messages: this.messages,
+      viewMessages: this.viewMessages,
+      status: this.status,
+      error: this.error,
+    })
+  }
+
   get viewMessages(): LeaderViewMessage[] {
-    return toLeaderViewMessages(this.messages)
+    return toLeaderViewMessages(this.messages, { streaming: this.status === 'streaming' })
   }
 
   setMessages(messages: LeaderChatMessage[]) {
@@ -89,9 +107,7 @@ export class LeaderChatStore {
     if (!response.ok) {
       const payload = await response.json().catch(() => ({ error: response.statusText }))
       this.status = 'error'
-      this.error = new Error(
-        typeof payload.error === 'string' ? payload.error : 'Chat failed',
-      )
+      this.error = new Error(typeof payload.error === 'string' ? payload.error : 'Chat failed')
       this.emit()
       throw this.error
     }
@@ -134,9 +150,7 @@ export class LeaderChatStore {
   }
 }
 
-export function workerEventsFromLeaderMessages(
-  messages: LeaderChatMessage[],
-): WorkerRunEvent[] {
+export function workerEventsFromLeaderMessages(messages: LeaderChatMessage[]): WorkerRunEvent[] {
   const events: WorkerRunEvent[] = []
   for (const message of messages) {
     if (message.custom?.kind === 'worker-run' && message.custom.data) {

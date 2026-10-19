@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type {
   CustomAcpLaunchKind,
@@ -56,6 +64,8 @@ const SETTINGS_TAB_EASE = [0.4, 0, 0.2, 1] as const
 
 import { IconCrew, resolveWorkerIconAgentId, WorkerBrandLogo } from './Icons'
 import { SettingsAboutTab } from './settings/SettingsAboutTab'
+import { SettingsCatalogModelList } from './settings/SettingsCatalogModelList'
+import { formatModelContextLabel } from './settings/settings-model-window'
 import { type SettingsTabId, SettingsNavigation } from './settings/SettingsNavigation'
 import { TeamTemplateLibrary } from './TeamTemplateLibrary'
 import type { Locale } from '../i18n/locales'
@@ -167,13 +177,6 @@ const emptyAddModelForm = (): AddModelForm => ({
   contextWindow: '',
   thinkingIntensities: [...DEFAULT_CUSTOM_THINKING_SUPPORT],
 })
-
-function formatCtx(n?: number): string | null {
-  if (n == null || !Number.isFinite(n) || n <= 0) return null
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
-  if (n >= 1000) return `${Math.round(n / 1000)}k`
-  return String(n)
-}
 
 export function SettingsPanel({
   onClose,
@@ -599,27 +602,29 @@ export function SettingsPanel({
   }
 
   const pickProvider = (p: SettingsProvider) => {
-    setFocusProviderId(p.id)
-    setCustomModel(false)
-    // Browsing a provider must NOT change the persisted default model — only
-    // pickModel / set-default does. Otherwise switching rails makes the default
-    // appear to "jump" and a later Save can clobber leaderModel.
-    // Hand-built custom: editable form. Built-in + models.dev: readonly panel.
-    if (isHandCustomProvider(p)) {
-      const cp = customProviders.find((c) => c.id === p.id)
-      if (cp) startEdit(cp)
-      else {
-        setEditingId(p.id)
-        setForm({
-          ...emptySimpleForm(),
-          name: p.name,
-          baseURL: '',
-          apiStyle: 'openai',
-        })
+    startTransition(() => {
+      setFocusProviderId(p.id)
+      setCustomModel(false)
+      // Browsing a provider must NOT change the persisted default model — only
+      // pickModel / set-default does. Otherwise switching rails makes the default
+      // appear to "jump" and a later Save can clobber leaderModel.
+      // Hand-built custom: editable form. Built-in + models.dev: readonly panel.
+      if (isHandCustomProvider(p)) {
+        const cp = customProviders.find((c) => c.id === p.id)
+        if (cp) startEdit(cp)
+        else {
+          setEditingId(p.id)
+          setForm({
+            ...emptySimpleForm(),
+            name: p.name,
+            baseURL: '',
+            apiStyle: 'openai',
+          })
+        }
+      } else {
+        resetForm()
       }
-    } else {
-      resetForm()
-    }
+    })
   }
 
   const workerLogoClass = (kind?: string) => {
@@ -628,6 +633,28 @@ export function SettingsPanel({
     if (k === 'codex' || k.includes('codex')) return 'codex'
     if (k === 'opencode' || k.includes('opencode')) return 'opencode'
     return 'custom'
+  }
+
+  // Rail dot states: yellow = toggled off via disabledProviderIds, green =
+  // enabled with key configured, gray = enabled but missing key.
+  const disabledProviderIdSet = useMemo(
+    () => new Set(data?.settings.disabledProviderIds ?? []),
+    [data],
+  )
+  const railDotFor = (p: SettingsProvider) => {
+    const disabled = disabledProviderIdSet.has(p.id)
+    return (
+      <span
+        className={`settings-rail-dot${p.configured ? ' on' : ''}${disabled ? ' off' : ''}`}
+        title={
+          disabled
+            ? t('settings.providerDisabled')
+            : p.configured
+              ? t('settings.configured')
+              : t('settings.needKey')
+        }
+      />
+    )
   }
 
   const pickModel = (id: string) => {
@@ -2249,10 +2276,7 @@ export function SettingsPanel({
                       <span className="settings-rail-text">
                         <span className="settings-rail-name">{p.name}</span>
                       </span>
-                      <span
-                        className={`settings-rail-dot${p.configured ? ' on' : ''}`}
-                        title={p.configured ? t('settings.configured') : t('settings.needKey')}
-                      />
+                      {railDotFor(p)}
                     </button>
                   )
                 })}
@@ -2278,10 +2302,7 @@ export function SettingsPanel({
                       <span className="settings-rail-text">
                         <span className="settings-rail-name">{p.name}</span>
                       </span>
-                      <span
-                        className={`settings-rail-dot${p.configured ? ' on' : ''}`}
-                        title={p.configured ? t('settings.configured') : t('settings.needKey')}
-                      />
+                      {railDotFor(p)}
                     </button>
                   )
                 })}
@@ -2564,7 +2585,9 @@ export function SettingsPanel({
                         return models.map((m) => {
                           const active = leaderModel === m.id
                           const isEditing = editingModelId === m.id
-                          const ctx = formatCtx((m as { contextWindow?: number }).contextWindow)
+                          const ctx = formatModelContextLabel(
+                            (m as { contextWindow?: number }).contextWindow,
+                          )
                           const thinks =
                             (m as { thinkingIntensities?: ThinkingIntensity[] })
                               .thinkingIntensities ?? DEFAULT_CUSTOM_THINKING_SUPPORT
@@ -2946,66 +2969,14 @@ export function SettingsPanel({
                         {(selectedProvider?.models ?? []).length}
                       </span>
                     </div>
-                    <div
-                      className="settings-model-list"
-                      role="listbox"
-                      aria-label={t('settings.pickModel')}
-                    >
-                      {(selectedProvider?.models ?? []).map((m) => {
-                        const active = leaderModel === m.id
-                        const ctx = formatCtx((m as { contextWindow?: number }).contextWindow)
-                        const meta = m as {
-                          thinkingIntensities?: ThinkingIntensity[]
-                          toolCall?: boolean
-                          multimodal?: boolean
-                        }
-                        const thinks =
-                          meta.thinkingIntensities ?? selectedProvider?.thinkingIntensities
-                        return (
-                          <div key={m.id} className={`model-card${active ? ' is-default' : ''}`}>
-                            <div className="model-card-head">
-                              <span className="m-mid">
-                                <span className="m-name">{m.label}</span>
-                                <span className="m-id">{m.id}</span>
-                              </span>
-                              <span className="meta">
-                                {meta.toolCall && (
-                                  <span className="model-tag">{t('settings.modelTagTools')}</span>
-                                )}
-                                {meta.multimodal && (
-                                  <span className="model-tag">
-                                    {t('settings.modelTagMultimodal')}
-                                  </span>
-                                )}
-                                {ctx && <span className="ctx">{ctx}</span>}
-                                {thinks && thinks.length > 0 && (
-                                  <span className="think-tags">
-                                    {thinks.slice(0, 4).map((lv) => (
-                                      <span key={lv} className={lv === 'off' ? 'off' : ''}>
-                                        {lv}
-                                      </span>
-                                    ))}
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                            {!active && (
-                              <button
-                                type="button"
-                                className="set-default-btn"
-                                disabled={saving}
-                                onClick={() => pickModel(m.id)}
-                              >
-                                {t('settings.setDefaultModel')}
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })}
-                      {(selectedProvider?.models ?? []).length === 0 && (
-                        <p className="settings-muted">{t('settings.customEmpty')}</p>
-                      )}
-                    </div>
+                    <SettingsCatalogModelList
+                      key={selectedProvider?.id ?? 'none'}
+                      models={selectedProvider?.models ?? []}
+                      leaderModel={leaderModel}
+                      providerThinking={selectedProvider?.thinkingIntensities}
+                      saving={saving}
+                      onPickDefault={pickModel}
+                    />
                   </section>
                 </>
               )}

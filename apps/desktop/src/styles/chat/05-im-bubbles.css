@@ -1,6 +1,6 @@
 /*
  * Standard IM chrome: circular avatars, name above bubble, one peer surface
- * for every left-side speaker. Process rows stay outside .bubble.
+ * for every left-side speaker. Process is a collapsed quote inside .bubble.
  */
 .chat-panel {
   --chat-avatar-size: 36px;
@@ -28,7 +28,7 @@
 }
 
 .msg.is-consecutive {
-  margin-top: calc(var(--sp-2) - var(--messages-gap));
+  margin-top: calc(4px - var(--messages-gap));
 }
 
 .msg.user + .msg.leader,
@@ -96,6 +96,11 @@
 
 .msg .discussion-message-time {
   margin-left: 0;
+}
+.discussion-live-ellipsis {
+  color: var(--text-3);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0.12em;
 }
 
 .msg .discussion-worker-kind {
@@ -185,6 +190,7 @@
 
 button.im-activity-quote {
   display: flex;
+  align-items: center;
   width: 100%;
   margin: 0 0 8px;
   padding: 0;
@@ -192,6 +198,18 @@ button.im-activity-quote {
   background: transparent;
   text-align: left;
   cursor: pointer;
+  gap: 6px;
+}
+.im-activity-chev {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  opacity: 0.7;
+  color: var(--text-3);
+  transition: transform var(--dur-fast, 0.15s) ease;
+}
+.im-activity.is-open .im-activity-chev {
+  transform: rotate(90deg);
 }
 
 .im-activity-detail {

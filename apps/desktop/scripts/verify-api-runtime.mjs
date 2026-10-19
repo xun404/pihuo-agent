@@ -6,10 +6,8 @@ import { dirname, extname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   currentLibcFamily,
-  isLoadedLibsqlModule,
   isLoadedNodePtyModule,
   requiredRuntimePackageNames,
-  resolveLibsqlNativePackage,
   unstagedRuntimeImportSpecifiers,
   verifyNodePtyRoundTrip,
 } from './runtime-packaging.mjs'
@@ -43,11 +41,7 @@ const target = {
   arch: process.arch,
   libcFamily: currentLibcFamily(),
 }
-const expectedNativePackage = resolveLibsqlNativePackage(
-  target.platform,
-  target.arch,
-  target.libcFamily,
-)
+const expectedNativePackage = 'node-pty'
 
 if (manifest.version !== packageJson.version) {
   throw new Error(
@@ -115,10 +109,26 @@ const nodePtyResolved = runtimeRequire.resolve('node-pty')
 if (!nodePtyResolved.startsWith(resolve(runtimeDir, 'node_modules', 'node-pty'))) {
   throw new Error('Staged node-pty resolved outside dist-runtime')
 }
-const loaded = runtimeRequire('libsql')
-if (!isLoadedLibsqlModule(loaded)) {
-  throw new Error('Staged libsql package did not load its native module')
+const sdkRoot = resolve(runtimeDir, 'node_modules/@earendil-works/pi-coding-agent')
+const sdkPackage = JSON.parse(await readFile(resolve(sdkRoot, 'package.json'), 'utf8'))
+if (sdkPackage.version !== manifest.leaderSdkVersion) {
+  throw new Error('Staged Pi SDK version does not match the runtime manifest')
 }
+const sdkPath = resolve(sdkRoot, sdkPackage.exports['.'].import)
+const sdkSmoke = spawnSync(
+  process.execPath,
+  [
+    '--input-type=module',
+    '-e',
+    [
+      `const sdk = await import(${JSON.stringify(pathToFileURL(sdkPath).href)})`,
+      'if (typeof sdk.createAgentSession !== "function") throw new Error("Pi SDK entrypoint unavailable")',
+    ].join(';'),
+  ],
+  { cwd: tmpdir(), encoding: 'utf8', timeout: 20_000 },
+)
+if (sdkSmoke.error) throw sdkSmoke.error
+if (sdkSmoke.status !== 0) throw new Error(`Staged Pi SDK failed to load: ${sdkSmoke.stderr}`)
 const nodePty = runtimeRequire('node-pty')
 if (!isLoadedNodePtyModule(nodePty)) {
   throw new Error('Staged node-pty package did not load its native module')

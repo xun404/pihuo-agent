@@ -28,7 +28,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.13.0
+          node-version: 22.19.0
           cache: npm
       - run: npm ci
       - run: npm run verify:release-tag
@@ -67,7 +67,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.13.0
+          node-version: 22.19.0
           cache: npm
       - if: runner.os == 'Linux'
         run: |
@@ -75,7 +75,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y xvfb libopenjp2-tools
       - run: npm ci
       - run: npm run verify:release-tag
-      # Pull latest @mastra/core provider models into bundled catalog before package.
+      # Refresh the bundled provider model catalog before packaging.
       - run: npm run sync:model-registry
       - run: npm run build
       - run: npm run build:runtime

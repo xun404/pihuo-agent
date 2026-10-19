@@ -48,9 +48,10 @@ export type UserQuoteChrome = {
 
 function parseQuoteAttrs(raw: string): Pick<UserQuoteChrome, 'speaker' | 'speakerName' | 'job'> {
   const take = (key: string) => raw.match(new RegExp(`\\b${key}=([^\\s\\]]+)`, 'i'))?.[1]
+  const speakerName = take('speakerName')
   return {
     speaker: take('speaker') || 'leader',
-    speakerName: take('speakerName'),
+    speakerName: speakerName ? speakerName.replace(/_/g, ' ') : undefined,
     job: take('job'),
   }
 }

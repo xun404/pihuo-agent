@@ -4,28 +4,24 @@ import {
   filterMentionCandidates,
   insertMention,
   mentionQueryAt,
+  teamMentionCandidates,
   type MentionCandidate,
 } from '../lib/im-mentions'
 import { wrapQuoteChrome, type UserQuoteChrome } from '../lib/user-message-display'
 
 export function useImComposer(args: {
   teamMembers: readonly TeamMember[]
+  workers?: readonly { id: string; name: string }[]
   leaderName: string
 }) {
   const [quote, setQuote] = useState<UserQuoteChrome | null>(null)
   const [caret, setCaret] = useState(0)
   const [activeIndex, setActiveIndex] = useState(0)
 
-  const candidates = useMemo<MentionCandidate[]>(() => {
-    const members = args.teamMembers
-      .filter((member) => member.enabled && !member.archivedAt)
-      .map((member) => ({
-        id: member.id,
-        name: member.name,
-        subtitle: member.roleType,
-      }))
-    return [{ id: 'leader', name: args.leaderName }, ...members]
-  }, [args.leaderName, args.teamMembers])
+  const candidates = useMemo<MentionCandidate[]>(
+    () => teamMentionCandidates(args.leaderName, args.teamMembers, args.workers),
+    [args.leaderName, args.teamMembers, args.workers],
+  )
 
   const mentionNames = useMemo(() => candidates.map((item) => item.name), [candidates])
 

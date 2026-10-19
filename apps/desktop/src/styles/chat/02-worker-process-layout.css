@@ -1,0 +1,75 @@
+/* 聊天时间线里的 process 变体：错误平铺（无「错误」标签/✗ 标记/内嵌框）。 */
+.worker-run.is-worker-process .worker-error-plain {
+  padding: 0;
+  font-size: var(--fs-md);
+  line-height: var(--chat-code-line-height, 1.5);
+  color: var(--danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.worker-run.is-worker-process .worker-error-plain code {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+}
+
+/* 模型 / 推理强度 / 状态脚注：与 Leader 气泡的 msg-caption 同层级同观感。 */
+.worker-run.is-worker-process .worker-run-caption {
+  gap: 4px;
+}
+
+.worker-run-caption-status.status-pending {
+  color: color-mix(in srgb, var(--danger) 80%, var(--text-2));
+}
+
+.worker-run-caption > * + *::before {
+  content: '·';
+  margin-right: 4px;
+  opacity: 0.6;
+}
+
+/* 失败态的模型/状态脚注默认可见（弱化），hover 提亮；不同于 msg-caption 的隐藏式。 */
+.worker-run.is-worker-process .msg-caption.worker-run-caption {
+  opacity: 0.72;
+  pointer-events: auto;
+}
+
+.msg:hover .msg-caption.worker-run-caption,
+.msg:focus-within .msg-caption.worker-run-caption {
+  opacity: 1;
+}
+
+/* process 变体铺平：去掉折叠卡时代的双缩进、描边底衬与时间线竖轨，
+   让失败文本与身份行左对齐、观感同普通聊天气泡。 */
+.msg.worker-speaker .worker-run.is-discussion-worker.is-worker-process .worker-card-collapse {
+  width: fit-content;
+  max-width: min(36em, 100%);
+  margin-left: 0;
+  border: none;
+  border-radius: var(--chat-bubble-radius);
+  background: var(--chat-peer-bubble-background);
+}
+
+/* 气泡化后内距对齐 .bubble,错误行用对话正文(prose)字体而非面板等宽。 */
+.msg.worker-speaker
+  .worker-run.is-discussion-worker.is-worker-process
+  .worker-card-collapse
+  .node-body-inner {
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.msg.worker-speaker .worker-run .worker-error-plain,
+.worker-run.is-worker-process .worker-error-plain {
+  padding: 0;
+  font-family: var(--font-prose, var(--font-sans, var(--font)));
+}
+
+.worker-run.is-worker-process .process-collapse-body {
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.worker-run.is-worker-process .process-collapse-body::before {
+  display: none;
+}

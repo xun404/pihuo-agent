@@ -270,17 +270,32 @@ describe('leader-run-meta', () => {
     )
   })
 
-  it('formatClockTime uses system local zone without a CST suffix', () => {
-    const s = formatClockTime(Date.UTC(2026, 6, 16, 8, 30, 5), 'zh')
-    assert.match(s, /2026/)
-    assert.doesNotMatch(s, /CST/)
+  it('formatClockTime shows time only for same-day stamps', () => {
+    const now = Date.UTC(2026, 7, 27, 10, 0, 0)
+    const s = formatClockTime(Date.UTC(2026, 7, 27, 8, 30, 5), 'zh', {
+      now,
+      timeZone: 'UTC',
+    })
+    assert.equal(s, '08:30:05')
+    assert.doesNotMatch(s, /2026|-/)
+  })
+
+  it('formatClockTime prefixes MM-DD (dash-joined) for other-day stamps', () => {
+    const now = Date.UTC(2026, 7, 27, 10, 0, 0)
+    const s = formatClockTime(Date.UTC(2026, 6, 16, 8, 30, 5), 'zh', {
+      now,
+      timeZone: 'UTC',
+    })
+    assert.equal(s, '07-16 08:30:05')
   })
 
   it('formatClockTime can pin an explicit IANA zone without a label', () => {
+    const now = Date.UTC(2026, 6, 16, 2, 0, 0)
     const s = formatClockTime(Date.UTC(2026, 6, 16, 8, 30, 5), 'zh', {
       timeZone: 'Asia/Shanghai',
+      now,
     })
-    assert.match(s, /16:30:05/)
+    assert.equal(s, '16:30:05')
     assert.doesNotMatch(s, /CST/)
   })
 })

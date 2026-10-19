@@ -87,6 +87,12 @@ function parseDict(bodyText) {
 
 const obj = parseDict(body)
 const converter = OpenCC.Converter({ from: 'cn', to: 'tw' })
+// These UI terms need Taiwan wording beyond character conversion.
+const contextualTranslations = {
+  'settings.notifications.mode': '視窗聚焦時也顯示通知',
+  'settings.notifications.test': '傳送測試通知',
+  'settings.notifications.testFailed': '測試通知未能顯示：請在系統設定中允許本應用程式的通知',
+}
 const keys = Object.keys(obj)
 
 const lines = [
@@ -99,7 +105,7 @@ const lines = [
   'export const zhTW: Record<string, string> = {',
 ]
 for (const key of keys) {
-  const converted = converter(String(obj[key]))
+  const converted = contextualTranslations[key] ?? converter(String(obj[key]))
   const escaped = converted
     .replace(/\\/g, '\\\\')
     .replace(/'/g, "\\'")

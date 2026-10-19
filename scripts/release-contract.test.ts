@@ -91,10 +91,10 @@ describe('desktop release contract', () => {
   it('requires node-pty 1.1.0 to be external and staged in the native runtime', () => {
     const manifest = {
       nativePackages: {
-        libsql: '@libsql/darwin-arm64',
         pty: 'node-pty',
       },
       ptyVersion: '1.1.0',
+      leaderSdkVersion: '1.3.0',
       bundledRegistryVerifier: 'verify-bundled-registry.mjs',
       bundledRegistry: {
         schemaVersion: '1.0.0',
@@ -103,15 +103,15 @@ describe('desktop release contract', () => {
         agentCount: 38,
       },
       bundledRegistryExternalImports: ['node:crypto'],
-      stagedPackages: ['libsql', '@libsql/darwin-arm64', 'node-pty'],
-      externalImports: ['libsql', 'node-pty'],
+      stagedPackages: ['node-pty', '@earendil-works/pi-coding-agent'],
+      externalImports: ['node-pty', '@earendil-works/pi-coding-agent'],
     }
     assert.doesNotThrow(() => verifyRuntimeManifestContract(manifest))
     assert.throws(
       () =>
         verifyRuntimeManifestContract({
           ...manifest,
-          externalImports: ['libsql'],
+          externalImports: ['@earendil-works/pi-coding-agent'],
         }),
       /node-pty.*external/i,
     )
@@ -141,7 +141,7 @@ describe('desktop release contract', () => {
     const rootPackage = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'))
 
     // npm is the sole package manager; keep @electron/get on the API electron-builder expects.
-    assert.equal(rootPackage.overrides?.['@electron/get'], '5.0.0')
+    assert.equal(rootPackage.overrides?.['@electron/get'], '5.1.0')
   })
 
   it('regenerates the complete ACP Registry snapshot before packaging', () => {

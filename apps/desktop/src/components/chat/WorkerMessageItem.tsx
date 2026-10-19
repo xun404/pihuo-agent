@@ -125,6 +125,7 @@ export const WorkerMessageItem = memo(function WorkerMessageItem({
                   copyAriaLabel={copied ? t('chat.errorCopied') : t('chat.errorCopy')}
                   onCopy={() => void copySpeech()}
                   quoteLabel={onQuote ? t('chat.quote') : undefined}
+                  quoteAriaLabel={onQuote ? t('chat.quoteAria') : undefined}
                   onQuote={onQuote}
                 />
               ) : null}

@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type {
-  ChatRunAbortDecision,
-  ChatRunStatus,
-  FollowUpRequestMeta,
-} from '@pihuo-agent/shared'
+import type { ChatRunAbortDecision, ChatRunStatus, FollowUpRequestMeta } from '@pihuo-agent/shared'
 import {
   FOLLOW_UP_RETRY_MAX_MS,
   FOLLOW_UP_TERMINATION_MAX_POLLS,
@@ -348,37 +344,25 @@ describe('FollowUpCoordinator', () => {
     assert.equal(noModel.sent.length, 0)
   })
 
-  it('keeps a Steer successor behind the server terminal barrier, then refreshes history before dispatch', async () => {
+  it('delivers Steer to the active Pi session without stopping it or refreshing history', async () => {
     const active: FollowUpRequestMeta = {
       deliveryId: 'delivery-active-0001',
       clientRunId: 'client-run-active-0001',
       source: 'direct',
     }
     const harness = makeHarness({ status: activeStatus('thread-0001', active) })
-    harness.setAbort({
-      accepted: true,
-      outcome: 'waiting',
-      status: activeStatus('thread-0001', active, {
-        phase: 'aborting',
-        canSteer: false,
-      }),
-    })
     await harness.coordinator.bootstrap()
     assert.equal(
       harness.coordinator.submit('successor', { behavior: 'steer', preferSteer: false }),
       'request_steer',
     )
     await flush()
-    assert.equal(harness.stopped.count, 1)
-    assert.equal(harness.sent.length, 0)
-    assert.equal(harness.coordinator.snapshot.phase, 'terminating')
-
-    await harness.clock.advance(1_000)
-    assert.equal(harness.sent.length, 0)
-    harness.setStatus(idleStatus(harness.threadId))
-    await harness.clock.advance(1_000)
-    assert.equal(harness.refreshed.count, 1)
+    assert.equal(harness.stopped.count, 0)
+    assert.equal(harness.refreshed.count, 0)
     assert.equal(harness.sent.length, 1)
+    assert.equal(harness.sent[0]!.text, 'successor')
+    assert.equal(harness.sent[0]!.followUp.source, 'steer')
+    assert.equal(harness.items[0]!.state, 'dispatching')
   })
 
   it('bounds termination polling while retaining the no-successor barrier', async () => {

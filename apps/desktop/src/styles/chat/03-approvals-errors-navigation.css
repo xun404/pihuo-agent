@@ -385,3 +385,79 @@
     display: none;
   }
 }
+
+/* 错误卡内的常用问题排查清单（通用，所有错误类别都会带）。 */
+.chat-error-troubleshoot {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.chat-error-trouble-title {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium, 500);
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+
+.chat-error-trouble-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-error-trouble-list li {
+  position: relative;
+  padding-left: 12px;
+  font-size: var(--fs-2xs);
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.chat-error-trouble-list li::before {
+  content: '·';
+  position: absolute;
+  left: 2px;
+  color: var(--text-4, var(--text-3));
+}
+
+/* 页脚动作组：复制/引用 必须同行、与模型·思考·耗时垂直居中对齐。 */
+.msg-caption .lead-footer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.msg-caption .lead-footer-actions .msg-copy {
+  width: 16px;
+  height: 16px;
+}
+
+.msg-caption .lead-footer-actions .msg-copy svg {
+  width: 12px;
+  height: 12px;
+}
+
+.msg-caption .lead-footer-actions .msg-quote {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: inherit;
+  line-height: 1;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.msg-caption .lead-footer-actions .msg-quote:hover {
+  color: var(--text-1);
+}
+
+.msg-caption .lead-footer-actions {
+  line-height: 0;
+}

@@ -82,7 +82,6 @@ describe('acp-registry-api', () => {
     name: 'API Agent',
     version: '1.0.0',
     description: 'api test',
-    icon: 'https://example.com/i.svg',
     distribution: {
       npx: { package: '@example/api-agent@1.0.0', args: ['--acp'] },
     },
@@ -222,7 +221,6 @@ describe('acp-registry-api', () => {
           name: 'API Agent',
           version: '1.0.0',
           description: 'api test',
-          icon: 'https://example.com/i.svg',
           distributions: [
             {
               kind: 'npx',
@@ -239,7 +237,6 @@ describe('acp-registry-api', () => {
           name: 'API Agent',
           version: '2.0.0',
           description: 'api test v2',
-          icon: 'https://example.com/i.svg',
           distributions: [
             {
               kind: 'npx',

@@ -61,13 +61,18 @@ export function piMessageToLeader(message: unknown, fallbackId: string): LeaderC
       : typeof record.toolCallId === 'string'
         ? record.toolCallId
         : fallbackId
-  const customKind = record.kind
+  // Hydrated pi custom messages carry the type on `customType`; live event
+  // payloads carry `kind`. Accept both so persisted entries survive reloads.
+  const customKind = record.kind ?? record.customType
   if (role === 'custom' && typeof customKind === 'string') {
     return {
       id,
       role: 'custom',
       timestamp,
-      custom: { kind: customKind as LeaderCustomKind, data: record.data ?? record },
+      custom: {
+        kind: customKind as LeaderCustomKind,
+        data: record.data ?? record.details ?? record,
+      },
     }
   }
   return {

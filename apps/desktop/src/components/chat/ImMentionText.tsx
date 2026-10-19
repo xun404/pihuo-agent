@@ -1,3 +1,4 @@
+import { cloneElement, Fragment, isValidElement, type ReactNode } from 'react'
 import { splitMentions } from '../../lib/im-mentions'
 
 export function ImMentionText({
@@ -29,4 +30,27 @@ export function ImMentionText({
       )}
     </>
   )
+}
+
+/** Chip @Name tokens in markdown children; leave code / custom nodes alone. */
+export function mentionifyChildren(
+  node: ReactNode,
+  names: readonly string[],
+  onMentionClick?: (name: string) => void,
+): ReactNode {
+  if (node == null || typeof node === 'boolean') return node
+  if (typeof node === 'string' || typeof node === 'number') {
+    return <ImMentionText text={String(node)} names={names} onMentionClick={onMentionClick} />
+  }
+  if (Array.isArray(node)) {
+    return node.map((child, index) => (
+      <Fragment key={index}>{mentionifyChildren(child, names, onMentionClick)}</Fragment>
+    ))
+  }
+  if (!isValidElement(node)) return node
+  if (typeof node.type !== 'string') return node
+  if (node.type === 'code' || node.type === 'pre') return node
+  const children = (node.props as { children?: ReactNode }).children
+  if (children == null) return node
+  return cloneElement(node, undefined, mentionifyChildren(children, names, onMentionClick))
 }

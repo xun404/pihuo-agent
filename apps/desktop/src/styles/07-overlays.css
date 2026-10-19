@@ -538,3 +538,8 @@
   flex-direction: column;
   gap: 6px;
 }
+
+/* 停用的供应商:黄点(绿=已配置,灰=缺 Key)。 */
+.settings-rail-dot.off {
+  background: var(--warn);
+}

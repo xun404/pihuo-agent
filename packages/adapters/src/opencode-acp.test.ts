@@ -174,7 +174,7 @@ describe('opencode-acp live', { skip: !(hasOpenCode && liveEnabled) }, () => {
     if (!r.ok) {
       console.error('ACP failed:', r.error)
     }
-    assert.equal(r.ok, true, r.error)
+    assert.equal(r.ok, true, r.error ?? 'OpenCode ACP task failed')
     assert.match((r.output ?? '').toLowerCase(), /pong/)
   })
 

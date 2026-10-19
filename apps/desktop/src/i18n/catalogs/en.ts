@@ -82,6 +82,18 @@ export const en: Dict = {
   'chat.errorBilling':
     'This API account has insufficient balance or an inactive subscription (not a local session glitch). Top up or switch to a funded key, then retry.',
   'chat.errorGeneric': 'Request failed. Details were logged to the developer console.',
+  'chat.errorRateLimit':
+    'Provider rate limit hit (free quota temporarily exhausted). Retry in a moment, or switch to another available model in Settings.',
+  'chat.troubleTitle': 'Common fixes',
+  'chat.troubleKeyMissing':
+    'API key missing or expired — paste it again on the Providers page and save',
+  'chat.troubleBilling':
+    'Balance or subscription drained — top up / swap the key in the provider console',
+  'chat.troubleRateLimited':
+    'Free model rate-limited — retry later or switch to a paid / alternative model',
+  'chat.troubleNetwork':
+    'Network or proxy trouble — check the system proxy and firewall, then retry',
+  'chat.troubleModelCheck': 'Just switched models — send one chat message to verify connectivity',
   'chat.errorMissingKey': 'No API key for this model. Add one in Settings and try again.',
   'chat.errorModel': 'Model unavailable or invalid. Pick another in Settings.',
   'chat.errorNetwork': 'Cannot reach the local API. Make sure it is running.',
@@ -213,6 +225,8 @@ export const en: Dict = {
   'chat.activityThoughtLive': 'Thinking',
   'chat.activityTool': 'Used {name}',
   'chat.activityTools': '{count} tools',
+  'chat.activityRecords': 'Activity · {count} records',
+  'chat.activityEarlier': '{count} earlier',
   'chat.activityDispatched': 'Assigned {name}',
   'chat.worked.done': 'Worked',
   'chat.worked.for': 'Worked for {time}',
@@ -536,6 +550,7 @@ export const en: Dict = {
   'settings.cancelEdit': 'Cancel',
   'settings.clear': 'Clear',
   'settings.configured': 'Ready',
+  'settings.providerDisabled': 'Provider disabled',
   'settings.enabled': 'Enabled',
   'settings.disabled': 'Disabled',
   'settings.enableProvider': 'Enable / disable this provider',

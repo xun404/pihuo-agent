@@ -27,7 +27,7 @@ describe('acp-live Claude smoke', { skip: !(hasClaude && liveEnabled) }, () => {
     if (!result.ok) {
       console.error('Claude models error:', result.error)
     }
-    assert.ok(result.ok, result.error)
+    assert.ok(result.ok, result.error ?? 'Claude model discovery failed')
     assert.ok(result.models.length > 0, 'Should return some models from configOptions')
   })
 

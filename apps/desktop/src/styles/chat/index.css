@@ -2,6 +2,8 @@
 @import './00-header.css';
 @import './01-messages-markdown.css';
 @import './02-process-worker.css';
+@import './02-worker-process-layout.css';
 @import './03-approvals-errors-navigation.css';
 @import './04-group-discussion.css';
 @import './05-im-bubbles.css';
+@import './06-activity-trail.css';

@@ -16,12 +16,38 @@ function hasVisibleContent(message: LeaderChatMessage): boolean {
   })
 }
 
+/**
+ * Terminal model failure of a finished run: the last assistant message carries
+ * `stopReason: 'error'` and the agent gave up retrying (`willRetry: false`).
+ * Without this, provider outages (4xx/429 upstream errors) reach persistence but
+ * never the chat UI — the turn silently ends with empty assistant bubbles.
+ * Only surfaces after retries are exhausted so transient blips don't flash an
+ * error card that the next successful attempt would leave stale.
+ */
+function terminalModelErrorMessage(event: unknown): string | null {
+  const record = asRecord(event)
+  if (!record || record.willRetry !== false) return null
+  const messages = Array.isArray(record.messages) ? record.messages : []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = asRecord(messages[i])
+    if (!message || message.role !== 'assistant') continue
+    if (message.stopReason !== 'error') return null
+    const detail = typeof message.errorMessage === 'string' ? message.errorMessage.trim() : ''
+    return detail || 'Assistant turn failed (stopReason: error).'
+  }
+  return null
+}
+
 export function mapSessionEvent(event: AgentSessionEvent): LeaderChatEvent[] {
   switch (event.type) {
     case 'agent_start':
       return [{ type: 'agent_start' }]
-    case 'agent_end':
-      return [{ type: 'agent_end' }]
+    case 'agent_end': {
+      const events: LeaderChatEvent[] = [{ type: 'agent_end' }]
+      const fatal = terminalModelErrorMessage(event)
+      if (fatal) events.push({ type: 'error', message: fatal })
+      return events
+    }
     case 'turn_start':
       return [{ type: 'turn_start' }]
     case 'turn_end':
@@ -37,7 +63,11 @@ export function mapSessionEvent(event: AgentSessionEvent): LeaderChatEvent[] {
       const message = piMessageToLeader(raw, stableId)
       if (!message) return []
       if (!asRecord(raw)?.id) message.id = stableId
-      if (event.type === 'message_start' && message.role === 'assistant' && !hasVisibleContent(message)) {
+      if (
+        event.type === 'message_start' &&
+        message.role === 'assistant' &&
+        !hasVisibleContent(message)
+      ) {
         return []
       }
       return [{ type: event.type, message }]
@@ -109,8 +139,10 @@ export function createLeaderEventStream(input: {
   text: string
   mode: 'prompt' | 'steer'
   abortSignal: AbortSignal
-  systemPrompt?: string
   extraEvents?: AsyncIterable<LeaderChatEvent>
+  /** Persisted per turn as a leader-run-meta custom message (footer timing). */
+  modelId?: string
+  thinking?: string
 }): ReadableStream<LeaderChatEvent> {
   return new ReadableStream<LeaderChatEvent>({
     start(controller) {
@@ -130,13 +162,9 @@ export function createLeaderEventStream(input: {
         void input.session.abort()
       }
       input.abortSignal.addEventListener('abort', onAbort, { once: true })
-      if (input.systemPrompt) {
-        input.session.agent.state.systemPrompt = input.systemPrompt
-      }
+      const startedAtMs = Date.now()
       const run =
-        input.mode === 'steer'
-          ? input.session.steer(input.text)
-          : input.session.prompt(input.text)
+        input.mode === 'steer' ? input.session.steer(input.text) : input.session.prompt(input.text)
       void run
         .catch((error) => {
           enqueue({
@@ -147,6 +175,27 @@ export function createLeaderEventStream(input: {
         .finally(() => {
           input.abortSignal.removeEventListener('abort', onAbort)
           unsubscribe()
+          // Durable footer timing: the renderer's client-side clock is volatile
+          // (gone after reload), so the completed turn appends its run meta to
+          // the session transcript for later hydration.
+          void input.session
+            .sendCustomMessage(
+              {
+                customType: 'leader-run-meta',
+                content: [],
+                display: false,
+                details: {
+                  startedAt: startedAtMs,
+                  completedAt: Date.now(),
+                  model: input.modelId,
+                  thinking: input.thinking,
+                },
+              },
+              { triggerTurn: false },
+            )
+            .catch(() => {
+              /* best-effort; timing is non-critical */
+            })
           controller.close()
         })
     },

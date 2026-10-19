@@ -5,6 +5,7 @@ import {
   insertMention,
   mentionQueryAt,
   splitMentions,
+  teamMentionCandidates,
 } from './im-mentions.js'
 
 describe('im-mentions', () => {
@@ -25,6 +26,37 @@ describe('im-mentions', () => {
       { type: 'mention', value: 'OpenCode' },
       { type: 'text', value: ' 看一下登录页。' },
     ])
+  })
+
+  it('lists Leader first and labels members with role and Worker name', () => {
+    const found = teamMentionCandidates(
+      'Leader',
+      [
+        {
+          id: 'm1',
+          name: 'OpenCode',
+          roleType: 'coder',
+          workerId: 'w1',
+          enabled: true,
+        },
+        {
+          id: 'm2',
+          name: 'Archived',
+          roleType: 'review',
+          workerId: 'w2',
+          enabled: true,
+          archivedAt: '2026-08-25T00:00:00.000Z',
+        },
+      ],
+      [{ id: 'w1', name: 'Claude Code' }],
+    )
+    assert.deepEqual(
+      found.map((item) => ({ name: item.name, subtitle: item.subtitle })),
+      [
+        { name: 'Leader', subtitle: undefined },
+        { name: 'OpenCode', subtitle: 'coder · Claude Code' },
+      ],
+    )
   })
 
   it('filters candidates by name', () => {

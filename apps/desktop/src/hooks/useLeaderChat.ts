@@ -1,5 +1,9 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
-import type { FollowUpRequestMeta, LeaderThinkingIntensity, LeaderWorkMode } from '@pihuo-agent/shared'
+import type {
+  FollowUpRequestMeta,
+  LeaderThinkingIntensity,
+  LeaderWorkMode,
+} from '@pihuo-agent/shared'
 import { LeaderChatStore } from '../lib/leader-chat-store'
 
 const stores = new Map<string, LeaderChatStore>()
@@ -16,8 +20,8 @@ export function useLeaderChat(threadId: string) {
   const store = useMemo(() => getLeaderChatStore(threadId), [threadId])
   const snapshot = useSyncExternalStore(
     (listener) => store.subscribe(listener),
-    () => store,
-    () => store,
+    () => store.getSnapshot(),
+    () => store.getSnapshot(),
   )
   const send = useCallback(
     (input: {
