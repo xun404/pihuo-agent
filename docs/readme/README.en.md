@@ -1,6 +1,6 @@
 <h1 align="center">
   <a href="https://github.com/xun404/pihuo-agent">
-    <img src="../assets/icon.png" alt="PiHuo" width="64" valign="middle" />
+    <img src="../assets/readme-mark.png" alt="PiHuo" height="36" valign="middle" />
   </a>
   PiHuo
 </h1>
