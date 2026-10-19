@@ -1,8 +1,5 @@
 <h1 align="center">
-  <a href="https://github.com/xun404/pihuo-agent">
-    <img src="docs/assets/readme-mark.png" alt="Pi活儿" height="36" valign="middle" />
-  </a>
-  Pi活儿
+  <a href="https://github.com/xun404/pihuo-agent">Pi活儿</a>
 </h1>
 
 <p align="center">
