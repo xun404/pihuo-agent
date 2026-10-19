@@ -90,7 +90,7 @@ jobs:
             release/PiHuo-*
             release/latest*.yml
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
   release:
     name: Publish complete GitHub Release
@@ -99,6 +99,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -133,3 +134,16 @@ jobs:
               --notes-file "$NOTES_FILE" \
               --title "$TITLE"
           fi
+
+      # Actions storage is billed hourly and the monthly free allowance is only
+      # 0.5 GB while these intermediates are ~4 GB, so purge them as soon as the
+      # release is published. On failure they survive the 1-day recovery window.
+      - name: Purge intermediate artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --paginate -q '.artifacts[].id' |
+            while read -r id; do
+              gh api -X DELETE "/repos/${{ github.repository }}/actions/artifacts/$id"
+            done
