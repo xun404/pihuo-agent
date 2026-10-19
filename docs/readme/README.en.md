@@ -23,7 +23,7 @@
 <h3 align="center"><a href="https://github.com/xun404/pihuo-agent/releases/latest"><ins>Download PiHuo</ins></a></h3>
 
 <p align="center">
-  <img src="../assets/readme-hero.webp" alt="PiHuo desktop" width="960" />
+  <img src="../assets/readme-hero.png" alt="PiHuo desktop" width="960" />
 </p>
 
 ## Supported Agents

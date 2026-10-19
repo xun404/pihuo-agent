@@ -23,7 +23,7 @@
 <h3 align="center"><a href="https://github.com/xun404/pihuo-agent/releases/latest"><ins>下载 Pi活儿</ins></a></h3>
 
 <p align="center">
-  <img src="docs/assets/readme-hero.webp" alt="Pi活儿 桌面界面" width="960" />
+  <img src="docs/assets/readme-hero.png" alt="Pi活儿 桌面界面" width="960" />
 </p>
 
 ## 支持的 Agent
