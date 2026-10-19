@@ -11,7 +11,7 @@
  *
  * Seeds docs/demo/pihuo-showcase via POST /api/demo/seed, then captures one
  * window. Default locale is zh. The published figure is
- * docs/assets/readme-hero.webp.
+ * docs/assets/readme-hero.png.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -248,20 +248,9 @@ async function main() {
   await sleep(500)
 
   const heroPng = join(OUT, 'readme-hero.png')
-  const heroWebp = join(OUT, 'readme-hero.webp')
   await screenshot(ws, heroPng)
   ws.close()
-
-  const { spawnSync } = await import('node:child_process')
-  const compressed = spawnSync(
-    'cwebp',
-    ['-q', '60', '-m', '6', heroPng, '-o', heroWebp],
-    { stdio: 'inherit' },
-  )
-  if (compressed.status !== 0) {
-    console.warn('cwebp failed; README still needs', heroWebp)
-  }
-  console.log('\\nDone.', heroWebp)
+  console.log('\\nDone.', heroPng)
 }
 
 main().catch((e) => {
