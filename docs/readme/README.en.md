@@ -7,7 +7,6 @@
 
 <p align="center">
   <a href="https://github.com/xun404/pihuo-agent/stargazers"><img src="https://img.shields.io/github/stars/xun404/pihuo-agent?style=flat&label=%E2%98%85" alt="GitHub stars" /></a>
-  <a href="https://github.com/xun404/pihuo-agent/releases"><img src="https://img.shields.io/github/v/release/xun404/pihuo-agent?label=release" alt="Latest release" /></a>
   <a href="https://github.com/xun404/pihuo-agent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/xun404/pihuo-agent" alt="License" /></a>
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="Supported platforms: macOS, Windows, and Linux" />
 </p>
@@ -19,8 +18,6 @@
 <p align="center">
   <strong>PiHuo: you name the job, Pi breaks it up and hands it out, local workers finish it.</strong>
 </p>
-
-<h3 align="center"><a href="https://github.com/xun404/pihuo-agent/releases/latest"><ins>Download PiHuo</ins></a></h3>
 
 <p align="center">
   <img src="../assets/readme-hero.png" alt="PiHuo desktop" width="960" />
@@ -86,42 +83,11 @@ Configure in **Settings** (encrypted on disk). Leader uses `provider/model` ids.
 
 ---
 
-## Install
-
-### Desktop — macOS, Windows, Linux
-
-- **[Download the latest release](https://github.com/xun404/pihuo-agent/releases/latest)**
-- Builds (names match `PiHuo-${version}-…`):
-
-  | Platform | Arch                  | Package       |
-  | -------- | --------------------- | ------------- |
-  | macOS    | Apple Silicon (arm64) | DMG, ZIP      |
-  | Windows  | x64                   | NSIS EXE      |
-  | Linux    | x64                   | AppImage, DEB |
-
-- Prefer verifying `SHA256SUMS` in the same release.
-
-```bash
-# macOS / Linux
-shasum -a 256 -c SHA256SUMS
-
-# Windows PowerShell
-Get-FileHash .\PiHuo-0.1.0-win-x64.exe -Algorithm SHA256
-```
-
-> Installers are currently **unsigned** (no macOS notarization / Windows code signing). Gatekeeper or SmartScreen may warn — download only from this repo’s Releases.
-
-**After install:** open the app → **Settings** (Leader API keys) → open a project → register workers → chat.
-
----
-
 ## Community &amp; Support
 
 - **Issues &amp; ideas:** [Open an issue](https://github.com/xun404/pihuo-agent/issues)
 - **Show support:** [Star](https://github.com/xun404/pihuo-agent) the repo
 - **Maintainers:** [CONTRIBUTING.md](../../CONTRIBUTING.md)
-
-Local data lives under `~/.config/pihuo-agent/` (settings, encrypted secrets, sessions, registry LKG).
 
 ---
 

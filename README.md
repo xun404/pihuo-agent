@@ -7,7 +7,6 @@
 
 <p align="center">
   <a href="https://github.com/xun404/pihuo-agent/stargazers"><img src="https://img.shields.io/github/stars/xun404/pihuo-agent?style=flat&label=%E2%98%85" alt="GitHub stars" /></a>
-  <a href="https://github.com/xun404/pihuo-agent/releases"><img src="https://img.shields.io/github/v/release/xun404/pihuo-agent?label=release" alt="Latest release" /></a>
   <a href="https://github.com/xun404/pihuo-agent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/xun404/pihuo-agent" alt="License" /></a>
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="macOS · Windows · Linux" />
 </p>
@@ -19,8 +18,6 @@
 <p align="center">
   <strong>Pi活儿：你说要干什么，Pi 拆开派出去，本机 Worker 接着干。</strong>
 </p>
-
-<h3 align="center"><a href="https://github.com/xun404/pihuo-agent/releases/latest"><ins>下载 Pi活儿</ins></a></h3>
 
 <p align="center">
   <img src="docs/assets/readme-hero.png" alt="Pi活儿 桌面界面" width="960" />
@@ -60,40 +57,11 @@ Agoragentic · Amp · Auggie CLI · Autohand Code · Claude Agent · Cline · Co
 
 ---
 
-## 安装
-
-### 桌面 — macOS / Windows / Linux
-
-- **[下载最新 Release](https://github.com/xun404/pihuo-agent/releases/latest)**
-- 安装包命名：`PiHuo-${version}-…`
-
-| 系统    | 架构                   | 格式          |
-| ------- | ---------------------- | ------------- |
-| macOS   | Apple Silicon（arm64） | DMG、ZIP      |
-| Windows | x64                    | NSIS EXE      |
-| Linux   | x64                    | AppImage、DEB |
-
-```bash
-# macOS / Linux
-shasum -a 256 -c SHA256SUMS
-
-# Windows PowerShell
-Get-FileHash .\PiHuo-0.1.0-win-x64.exe -Algorithm SHA256
-```
-
-> 当前安装包**未签名 / 未 notarize**。请仅从本仓库 Releases 下载。
-
-**安装后：** 打开应用 → **设置**填写 Leader API Key → 打开项目 → 注册 Worker → 对话。
-
----
-
 ## 社区与支持
 
 - **问题与建议：** [Issues](https://github.com/xun404/pihuo-agent/issues)
 - **支持项目：** [Star](https://github.com/xun404/pihuo-agent) 本仓库
 - **贡献：** [CONTRIBUTING.md](./CONTRIBUTING.md)
-
-本地数据：`~/.config/pihuo-agent/`
 
 ---
 
