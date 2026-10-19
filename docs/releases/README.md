@@ -97,5 +97,3 @@ Optional footer (not validated):
 1. `node scripts/verify-release-notes.mjs docs/releases/${RELEASE_TAG}.md ${RELEASE_TAG}`
 2. Create or update the GitHub Release with `--notes-file` that path (not `--generate-notes`)
 3. Upload installers + `SHA256SUMS.txt` as today
-
-See also: `docs/superpowers/specs/2026-07-16-github-actions-desktop-packaging-design.md` §6.2.

@@ -24,8 +24,10 @@ dist-electron/
 apps/*/dist-electron/
 apps/*/dist-runtime/
 
-# Execution plans stay local; design specs are normal project documentation.
-docs/superpowers/plans/
+# Handover and design documents stay on disk only. Do not commit.
+docs/HANDOVER.md
+docs/superpowers/
+docs/2026-08-13-replace-mastra-with-pi-leader.md
 .superpowers/
 .opencode/
 
